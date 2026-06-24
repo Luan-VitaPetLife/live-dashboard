@@ -18,7 +18,7 @@
   body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
 
   /* ── Sidebar ── */
-  .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200}
+  .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:3000}
   .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
   .brand-logo{width:72px;height:72px;object-fit:contain}
   .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
@@ -33,7 +33,7 @@
   .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh}
 
   /* ── Topbar ── */
-  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:100}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:2000}
   .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-right:4px}
   .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
   .ldot.loading{background:var(--amber)} .ldot.error{background:var(--red);animation:none}
@@ -46,7 +46,7 @@
   .csel{position:relative}
   .csel.open .arr{transform:rotate(180deg)}
   .csel.open{border-color:var(--ink)}
-  .csel-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+  .csel-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:2500;display:none;flex-direction:column;overflow:hidden}
   .csel.open .csel-pop{display:flex}
   .csel-opt{padding:9px 14px;font-size:12px;color:var(--sub);cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:8px}
   .csel-opt:hover{background:var(--surface2);color:var(--text)}
@@ -59,7 +59,7 @@
   .period-pill-active .lbl{color:rgba(240,235,224,.5)!important}
   .period-pill-active .val{color:var(--side-text)!important}
   .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
-  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:2500;display:none;flex-direction:column;gap:12px}
   .period-pop.open{display:flex}
   .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
@@ -97,7 +97,12 @@
   .mode-btn{height:28px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .12s}
   .mode-btn:hover{border-color:var(--ink);color:var(--text)}
   .mode-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
-  #map{width:100%;height:540px;background:#f0ebe4}
+  #map{width:100%;height:540px;background:#f0ebe4;position:relative}
+  .map-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(242,238,232,.88);z-index:800;backdrop-filter:blur(2px)}
+  .map-overlay-icon{font-size:38px;opacity:.35}
+  .map-overlay-text{font-size:13px;color:var(--sub);text-align:center;max-width:320px;line-height:1.7}
+  .map-overlay-btn{height:32px;padding:0 18px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;margin-top:4px;transition:all .15s}
+  .map-overlay-btn:hover{border-color:var(--ink);color:var(--text)}
 
   /* ── Leaflet overrides ── */
   .leaflet-container{font-family:inherit}
@@ -368,13 +373,25 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png
 let geojsonData = null;   // Brazil states GeoJSON (loaded once)
 let stateData   = {};     // { UF: { revenue, orders } }
 let mapLayers   = [];     // active Leaflet layers
+let lastApiData = null;   // last /api/dashboard response for local re-renders
+
+// ── Overlay helpers ──
+function showMapOverlay(icon, html, btnLabel, btnFn) {
+  removeMapOverlay();
+  const d = document.createElement('div');
+  d.className = 'map-overlay'; d.id = 'mapOverlay';
+  d.innerHTML = `<div class="map-overlay-icon">${icon}</div><div class="map-overlay-text">${html}</div>${btnLabel ? `<button class="map-overlay-btn" id="moBtn">${btnLabel}</button>` : ''}`;
+  document.getElementById('map').appendChild(d);
+  if (btnLabel && btnFn) document.getElementById('moBtn').addEventListener('click', btnFn);
+}
+function removeMapOverlay() { document.getElementById('mapOverlay')?.remove(); }
 
 // ── Load GeoJSON ──
 async function loadGeoJSON() {
   try {
     const res = await fetch('https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intrarregiao=UF&formato=application/vnd.geo+json&qualidade=minima');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     geojsonData = await res.json();
-    // Attach UF code to each feature
     geojsonData.features.forEach(f => {
       const code = f.properties?.codarea;
       f.properties._uf = IBGE_UF[String(code)] || null;
@@ -394,10 +411,20 @@ function clearLayers() {
 
 function drawMap() {
   clearLayers();
-  if (!geojsonData) return;
+  removeMapOverlay();
+
+  if (!geojsonData) {
+    showMapOverlay('🗺', 'Não foi possível carregar o mapa do Brasil.<br>Verifique sua conexão e tente novamente.', '↺ Tentar novamente', async () => {
+      const ok = await loadGeoJSON();
+      if (ok) drawMap();
+      else showMapOverlay('🗺', 'Falha ao carregar mapa. Tente recarregar a página.', null, null);
+    });
+    return;
+  }
 
   const isMoney  = metric === 'receita';
   const getValue = s => isMoney ? s.revenue : s.orders;
+  const entries  = Object.keys(stateData);
   const allVals  = Object.values(stateData).map(getValue);
   const maxVal   = Math.max(1, ...allVals);
 
@@ -405,6 +432,14 @@ function drawMap() {
     drawChoropleth(isMoney, getValue, maxVal);
   } else {
     drawHeatmap(isMoney, getValue, maxVal);
+  }
+
+  // Overlay when no state data (draw gray map behind it)
+  if (entries.length === 0) {
+    showMapOverlay('📍',
+      'Nenhum pedido com estado de entrega encontrado neste período.<br>' +
+      'Clique em <strong>↻ Sincronizar</strong> na barra superior para buscar os dados mais recentes.',
+      null, null);
   }
 }
 
@@ -534,6 +569,7 @@ function drawHeatmap(isMoney, getValue, maxVal) {
 
 // ── Render ──
 function render(d) {
+  lastApiData = d;
   stateData = d.byState || {};
   const isMoney = metric === 'receita';
   const label   = rangeLabel(d.period.since, d.period.until);
@@ -672,7 +708,9 @@ document.querySelectorAll('.csel').forEach(el => {
       if (el.id==='cselChannel') { channel=val; localStorage.setItem('coco_channel',channel); }
       el.classList.remove('open');
       syncControls();
-      loadData();
+      // Métrica só muda a exibição local; canal requer nova busca na API
+      if (el.id==='cselMetric' && lastApiData) render(lastApiData);
+      else loadData();
     });
   });
 });
