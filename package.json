@@ -1,0 +1,17 @@
+{
+  "name": "coco-luna-dashboard",
+  "version": "0.1.0",
+  "description": "Dashboard de vendas multicanal (Shopify + Shopee) — backend + interface.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "sync": "node src/sync.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
