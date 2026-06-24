@@ -591,16 +591,32 @@ function render(d) {
   document.getElementById('funnelList').innerHTML = steps.map(([l,v,c])=>{ const w=Math.max((v/fmax)*100,v>0?1.5:0); return `<div class="fl-row"><span class="fl-label">${l}</span><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><span class="fl-val">${fmtInt(v)}</span></div>`; }).join('');
 
   // Top products
-  document.getElementById('topProducts').innerHTML = d.topProducts.length
-    ? d.topProducts.map(([nm,ch,v],i)=>{ const last=i===d.topProducts.length-1; const name=nm.length>36?nm.slice(0,36)+'…':nm; return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;${last?'':'border-bottom:1px solid var(--border);'}font-size:12px"><span style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name} ${chBadgeHTML(ch)}</span><span style="font-weight:500;white-space:nowrap">${fmtBRL(v)}</span></div>`; }).join('')
-    : '<div class="muted-state">Sem vendas no período.</div>';
+  const isAllCh = d.channel === 'todos';
+  if (d.topProducts.length) {
+    const prodRows = d.topProducts.map(([nm,ch,v],i) => {
+      const isLast = i === d.topProducts.length - 1;
+      const name = nm.length>36?nm.slice(0,36)+'…':nm;
+      const badge = isAllCh ? ' '+chBadgeHTML(ch) : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name}${badge}</span><span style="font-weight:500;white-space:nowrap">${fmtBRL(v)}</span></div>`;
+    }).join('');
+    const prodTotal = d.topProducts.reduce((a,[,,v])=>a+v, 0);
+    const totalRow = `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px"><span style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">Total top ${d.topProducts.length}</span><span style="font-weight:600">${fmtBRL(prodTotal)}</span></div>`;
+    document.getElementById('topProducts').innerHTML = prodRows + totalRow;
+  } else {
+    document.getElementById('topProducts').innerHTML = '<div class="muted-state">Sem vendas no período.</div>';
+  }
 
   // Recent orders
   const ro = d.recentOrders;
+  const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
   document.getElementById('ordersMeta').textContent = ro.length?`${ro.length} pedidos`:'0 pedidos';
-  document.getElementById('ordersBody').innerHTML = ro.length
-    ? ro.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); return `<tr><td class="mono">${o.name||''}</td><td>${chBadgeHTML(o.channel)}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtBRL(o.total,2)}</td><td style="color:var(--muted)">${fmtBRL(0,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('')
-    : '<tr><td colspan="8" class="muted-state">Nenhum pedido.</td></tr>';
+  if (ro.length) {
+    const orderRows = ro.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=isAllCh?chBadgeHTML(o.channel):`<span style="font-size:10px;color:var(--muted)">${CH[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtBRL(o.total,2)}</td><td style="color:var(--muted)">${fmtBRL(0,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+    const summaryRow = `<tr style="background:var(--surface2)"><td colspan="4" style="padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">Total (${ro.filter(o=>!o.cancelled).length} válidos)</td><td></td><td style="padding:10px 16px;font-weight:600;font-size:13px">${fmtBRL(roValidTotal,2)}</td><td colspan="2"></td></tr>`;
+    document.getElementById('ordersBody').innerHTML = orderRows + summaryRow;
+  } else {
+    document.getElementById('ordersBody').innerHTML = '<tr><td colspan="8" class="muted-state">Nenhum pedido.</td></tr>';
+  }
 
   const now=new Date(), hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
   setLive('ok',`Ao vivo · ${hh}:${mm}`);
