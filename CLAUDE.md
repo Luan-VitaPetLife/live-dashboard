@@ -30,79 +30,83 @@ src/shopee.js           Shopee Open API v2: assinatura HMAC, OAuth, refresh de t
 src/mercadolivre.js     Mercado Livre OAuth 2.0 + API de pedidos
 src/metrics.js          Calcula o payload da dashboard a partir do store (receita SEMPRE exclui cancelados)
 src/sync.js             Orquestra a busca de todos os canais e grava no store
-public/index.html       A dashboard (interface) — lê de /api/dashboard
+public/index.html       Dashboard principal (receita, tendência, canais, marketing, funil, pedidos)
+public/geografia.html   Página de mapa geográfico por estado (Leaflet.js)
 public/Logo.svg         Logotipo exibido no topo do menu lateral
 ```
 
 Fluxo: `sync.js` busca pedidos/sessões → grava em `store` → `metrics.js` calcula → `/api/dashboard`
-devolve JSON → `public/index.html` desenha. A interface NÃO fala com Shopify/Shopee/ML direto.
+devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/Shopee/ML direto.
 
 ### Store (store.js) — detalhes importantes
 - Variável `DATABASE_URL` presente → usa Postgres (Railway). Ausente → JSON em `data/db.json`.
-- `initStore()` é async e DEVE ser chamado com `await` antes de `app.listen()` (top-level await em ESM).
-- Interface pública síncrona: cache em memória carregado no startup; escritas disparam upserts async em background.
+- `initStore()` é async e DEVE ser chamado com `await` antes de `app.listen()`.
 - Tabelas Postgres: `orders` (id TEXT PK, data JSONB), `sessions_daily` (date TEXT PK, data JSONB), `kv` (key TEXT PK, value JSONB).
 - `kv` guarda: `shopeeTokens`, `mlTokens`, `lastSync`.
 
 ## 4. Decisões e conhecimento de domínio (IMPORTANTE — não reinventar)
 
 ### 4.1 Receita precisa EXCLUIR pedidos cancelados/expirados
-- **Bug descoberto:** ShopifyQL (`FROM sales`) **conta pedidos cancelados/expirados**. Não há como filtrar
-  por status no ShopifyQL (colunas `financial_status` etc. não existem no dataset `sales`).
+- **Bug descoberto:** ShopifyQL (`FROM sales`) **conta pedidos cancelados/expirados**. Não há como filtrar por status no ShopifyQL.
 - **Solução adotada:** receita/pedidos/ticket/tendência/top-produtos vêm da **API GraphQL de pedidos**.
   Regra de exclusão (`isCancelled`): `cancelledAt != null` OU `displayFinancialStatus ∈ {EXPIRED, VOIDED, CANCELLED}`.
   Valor do pedido = `currentTotalPriceSet.shopMoney.amount`.
 - **Decisão em aberto:** pedidos **PENDING** (Pix/boleto aguardando) HOJE ainda contam. Luan decide se quer só pagos.
 
 ### 4.2 Sessões / funil / conversão → ShopifyQL (não afetado por cancelamento)
-- Query: `FROM sessions SHOW sessions, online_store_visitors, sessions_with_cart_additions,
-  sessions_that_reached_checkout, sessions_that_completed_checkout TIMESERIES day SINCE -90d UNTIL today`.
-- Guardamos uma linha **por dia** (últimos 90 dias). Conversão = completados/sessões.
+- Query: `FROM sessions SHOW sessions, online_store_visitors, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout TIMESERIES day SINCE -90d UNTIL today`.
 - **Formato da resposta (API 2026-04+):** `shopifyqlQuery { tableData { columns { name } rows } parseErrors }`.
   `rows` é array de objetos com chaves nomeadas. `parseErrors` pode ser `[]` (truthy!) — checar com `.length`.
 - **Escopos necessários:** `read_analytics` + `read_reports`. Sem `read_analytics`, `shopifyqlQuery` some do schema sem aviso.
 
 ### 4.3 Marketing por origem = atribuição, NÃO custo
 - Referrer por pedido: `order.customerJourneySummary.lastVisit.source` (Instagram, Facebook, Google, etc.).
-- O card "Marketing por origem" usa isso (consistente com a receita corrigida, pois sai dos mesmos pedidos válidos).
 
 ### 4.4 Custo de Ads / ROAS → NÃO existe no Shopify
-- Custo, ROAS e ACOS ficam **0** com nota. Próximo passo: integrar Google Ads API e Meta Marketing API (OAuth separados).
+- Custo, ROAS e ACOS ficam **0** com nota. Próximo passo: integrar Google Ads API e Meta Marketing API.
 
 ### 4.5 Shopee
-- Usar **Open Platform API v2** direto (implementada em `src/shopee.js`).
-- Host produção: `https://partner.shopeemobile.com`.
+- Usar **Open Platform API v2** direto (`src/shopee.js`). Host: `https://partner.shopeemobile.com`.
 - Assinatura: `HMAC_SHA256(partner_key, partner_id + path + timestamp [+ access_token + shop_id])` em hex.
-- OAuth: `/shopee/connect` → autoriza → callback troca `code` por `access_token` (~4h) + `refresh_token` (~30d).
-  Token renovado automaticamente em `validToken()`.
-- Enquanto não autorizada, `fetchOrders` retorna `[]` — canal fica 0, nada quebra.
+- OAuth: `/shopee/connect` → autoriza → callback troca `code` por tokens. Token renovado automaticamente.
 - **Pendente:** cadastrar `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY`, `SHOPEE_SHOP_ID` no Railway e autorizar via `/shopee/connect`.
 
 ### 4.6 Mercado Livre
-- Implementado em `src/mercadolivre.js`. OAuth 2.0 (authorization_code + refresh_token automático).
-- **CRÍTICO — domínio correto:** `https://api.mercadolibre.com` (espanhol "libre", NÃO "livre"). A URL errada
-  resulta em `ENOTFOUND` — já corrigido, mas não reverter.
-- `buildAuthUrl()` → redireciona para ML → callback em `/mercadolivre/callback` troca `code` por tokens.
-- Tokens persistidos no Postgres (tabela `kv`, chave `mlTokens`). **Após cada novo deploy no Railway, re-autorizar
-  via `/mercadolivre/connect` se os tokens não estiverem no Postgres.**
-- Cancelados ML: status `cancelled` ou `invalid`.
-- Se não configurado ou sem tokens, retorna `[]` — canal fica 0, nada quebra.
+- Implementado em `src/mercadolivre.js`. OAuth 2.0 com refresh_token automático.
+- **CRÍTICO — domínio correto:** `https://api.mercadolibre.com` (espanhol "libre", NÃO "livre"). Não reverter.
+- Tokens persistidos no Postgres (`kv`, chave `mlTokens`). **Após cada novo deploy, re-autorizar via `/mercadolivre/connect`.**
+- Cancelados ML: status `cancelled` ou `invalid`. Sem tokens → retorna `[]`, canal fica 0, nada quebra.
 
-### 4.7 Canais e UI
-- Canais: `todos`, `shopify`, `shopee`, `amazon`, `mercadolivre`. Amazon é **placeholder** (sem integração) — mostra 0, sem aviso.
-- **Cores de canal — fonte única de verdade (`CH` em `public/index.html`):**
-  ```js
-  const CH = {
-    shopify:      { bg:'#95BF47', text:'#fff',  label:'Shopify' },
-    shopee:       { bg:'#EE4D2D', text:'#fff',  label:'Shopee' },
-    mercadolivre: { bg:'#FFE600', text:'#333',  label:'Mercado Livre' },
-    amazon:       { bg:'#FF9900', text:'#333',  label:'Amazon' },
-  };
-  ```
-  Sempre usar `chBadgeHTML(chKey)` para badges (Top Produtos, Pedidos Recentes) e `CH[k].bg` para o donut de channel split.
-- **Seletores** (Métrica, Canal, Atualizar) são **custom dropdowns** (`.csel`) — não são `<select>` nativos.
-  Frequência de atualização persistida em localStorage (`coco_refresh`), padrão 5 min.
+### 4.7 Canais e UI — `public/index.html`
+- Canais: `todos`, `shopify`, `shopee`, `amazon`, `mercadolivre`. Amazon é placeholder (sem integração).
+- **Cores customizáveis pelo usuário** via painel de configurações (ícone ⚙ no topbar):
+  - Padrão canal: Shopify `#95BF47`, Shopee `#EE4D2D`, ML `#FFE600`, Amazon `#111111`
+  - Padrão marketing: Instagram `#E1306C`, Facebook `#1877F2`, Google `#6a8c6e`, etc.
+  - Cores salvas em `localStorage('coco_colors')`. Reset restaura os padrões.
+  - `DEFAULT_CH` e `DEFAULT_MKT` são as fontes de verdade. `CH` e `MKT_COLORS` são os objetos vivos mutados por `loadColors()`.
+  - `contrastText(hex)` calcula texto branco/escuro por luminância automática.
+  - `chBadgeHTML(chKey)` gera o badge colorido de canal.
+- **Seletores** (Métrica, Canal, Período, Atualizar) são **custom dropdowns** (`.csel`) — não são `<select>` nativos.
+- Frequência de atualização persistida em `localStorage('coco_refresh')`, padrão 5 min.
+- `lastData` armazena último payload da API para re-render ao trocar cores sem nova requisição.
+- Top Produtos: quando canal = `todos`, exibe badge de canal + soma total no rodapé.
+- Pedidos Recentes: linha de resumo com total dos pedidos válidos.
 - Paleta/design: tema "earthy" com variáveis CSS no `:root`. Manter visual.
+
+### 4.8 Página de Geografia — `public/geografia.html`
+- **Biblioteca:** Leaflet.js 1.9.4 (CDN unpkg). Tile layer neutro CartoDB (sem labels de rua).
+- **GeoJSON do Brasil:** carregado da API do IBGE em runtime:
+  `https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intrarregiao=UF&formato=application/vnd.geo+json&qualidade=minima`
+  Cada feature tem `properties.codarea` (código IBGE 2 dígitos) → mapeado para UF via `IBGE_UF` no JS.
+- **Dois modos de visualização:**
+  - **Coropleto:** estados coloridos por intensidade (creme→laranja→vinho escuro). Labels permanentes com UF + R$ sobre cada estado com dados. Hover destaca borda.
+  - **Calor:** bolhas proporcionais nos centroides (`CENTROIDS`) com gradiente verde→amarelo→vermelho + glow externo. Labels em div icon.
+- **Popup ao clicar** (em ambos os modos): receita, pedidos, ticket médio, % do total.
+- **Dados:** campo `byState` do `/api/dashboard` → `{ [UF]: { revenue, orders } }`.
+  Alimentado por `o.state` nos pedidos Shopify, que vem de `shippingAddress.provinceCode`.
+  Pedidos antigos no banco não têm `state` — é preciso sincronizar após o deploy.
+- **Bug de sync corrigido:** layers são removidos (`map.removeLayer`) e redesenhados a cada chamada de `loadData()`.
+  Não reusar instâncias de chart — sempre `clearLayers()` antes de `drawMap()`.
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -114,13 +118,12 @@ devolve JSON → `public/index.html` desenha. A interface NÃO fala com Shopify/
   total,                  // número (BRL)
   source,                 // origem de marketing ('Instagram' | 'Shopee' | 'Mercado Livre' | '')
   customer,
+  state,                  // código UF do endereço de entrega ('SP', 'RJ', ...) — só Shopify por ora
   items: [{ title, qty, amount }]
 }
 ```
 
 ## 6. Configuração (.env)
-
-Veja `.env.example`. Principais variáveis:
 
 | Variável | Descrição |
 |---|---|
@@ -135,17 +138,12 @@ Veja `.env.example`. Principais variáveis:
 | `SHOPEE_PRODUCTION` | `1` para produção Shopee |
 | `ML_CLIENT_ID` | App ID do Mercado Livre |
 | `ML_CLIENT_SECRET` | Secret do app Mercado Livre |
-| `ML_REDIRECT_URL` | URL de callback OAuth do ML (ex: `https://live-dashboard-vitapetlife.up.railway.app/mercadolivre/callback`) |
+| `ML_REDIRECT_URL` | URL de callback OAuth do ML |
 | `DATABASE_URL` | Connection string Postgres (Railway injeta via `${{Postgres.DATABASE_URL}}`) |
 
-**Armadilhas conhecidas do token Shopify:**
-- `read_customers` ausente → campo `customer` vazio nos pedidos, mas receita chega normalmente.
+**Armadilhas conhecidas:**
 - `read_analytics` ausente → `shopifyqlQuery` some do schema sem aviso (não dá erro de permissão).
-
-**Railway — configuração do DATABASE_URL:**
-- O serviço Postgres do Railway NÃO injeta `DATABASE_URL` automaticamente no serviço da app.
-- É preciso adicionar manualmente na aba Variables do serviço `live-dashboard`:
-  `DATABASE_URL = ${{Postgres.DATABASE_URL}}`
+- Railway NÃO injeta `DATABASE_URL` automaticamente — adicionar manualmente: `DATABASE_URL = ${{Postgres.DATABASE_URL}}`.
 
 ## 7. Como rodar / endpoints
 
@@ -157,14 +155,13 @@ Veja `.env.example`. Principais variáveis:
   - `GET /shopee/connect` e `GET /shopee/callback`
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /health`
-- Testado sem credenciais: servidor sobe, `/health` ok, `/api/dashboard` devolve zeros (não quebra).
 
 ## 8. Próximos passos (backlog priorizado)
 
-1. **Autorizar a Shopee** (`SHOPEE_PARTNER_ID/KEY/SHOP_ID` no Railway + `/shopee/connect`) e validar campos de valor/itens com dados reais.
-2. **Google Ads + Meta Ads** para custo/ROAS/ACOS reais (preencher KPI "Custo Campanhas").
+1. **Autorizar a Shopee** (`SHOPEE_PARTNER_ID/KEY/SHOP_ID` no Railway + `/shopee/connect`).
+2. **Google Ads + Meta Ads** para custo/ROAS/ACOS reais.
 3. Decidir tratamento de **PENDING** (contar só pagos?) — ver 4.1.
-4. Amazon como canal real (mesma lógica do ML/Shopee).
+4. Amazon como canal real.
 5. Login/usuários se mais pessoas precisarem acessar.
 
 ## 9. Convenções
