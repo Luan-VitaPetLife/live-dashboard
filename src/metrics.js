@@ -98,10 +98,18 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   let mktEntries = Object.entries(mkt).sort((a, b) => b[1] - a[1]);
   if (mktEntries.length > 5) { const top = mktEntries.slice(0, 4); const rest = mktEntries.slice(4).reduce((a, e) => a + e[1], 0); top.push(['Outros', rest]); mktEntries = top; }
 
-  // top produtos
+  // top produtos (agrupado por título + canal para diferenciar o mesmo produto em marketplaces diferentes)
   const pmap = {};
-  valid.forEach(o => o.items.forEach(it => { if (it.title) pmap[it.title] = (pmap[it.title] || 0) + it.amount; }));
-  const topProducts = Object.entries(pmap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  valid.forEach(o => o.items.forEach(it => {
+    if (it.title) {
+      const key = `${it.title}|||${o.channel}`;
+      pmap[key] = (pmap[key] || 0) + it.amount;
+    }
+  }));
+  const topProducts = Object.entries(pmap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([key, value]) => { const [title, ch] = key.split('|||'); return [title, ch, value]; });
 
   // pedidos recentes (todos os canais, mais novos primeiro)
   const recent = getOrders({ channel, since: null, until: null })
