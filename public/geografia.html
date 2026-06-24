@@ -5,13 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Geografia — Coco and Luna</title>
 <link rel="icon" href="logo.png" type="image/png">
-<script src="https://www.gstatic.com/charts/loader.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  :root{ color-scheme:light;
+  :root{
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
     --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
-    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--tan:#c4b49a;--ink:#2d2a26;
-    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--sage:#6a8c6e;--tan:#c4b49a;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px;
+  }
   *{box-sizing:border-box;margin:0;padding:0}
   body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
 
@@ -49,10 +51,10 @@
   .csel-opt{padding:9px 14px;font-size:12px;color:var(--sub);cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:8px}
   .csel-opt:hover{background:var(--surface2);color:var(--text)}
   .csel-opt.active{color:var(--text);font-weight:600}
-  .csel-opt.active::before{content:'✓';color:var(--ink);font-size:11px;font-weight:700}
+  .csel-opt.active::before{content:'✓';color:var(--ink);font-size:11px}
   .csel-opt:not(.active)::before{content:'';display:inline-block;width:11px}
   .sync-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s}
-  .sync-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+  .sync-btn:hover{border-color:var(--ink);color:var(--text)}
   .period-pill-active{background:var(--ink)!important;border-color:var(--ink)!important}
   .period-pill-active .lbl{color:rgba(240,235,224,.5)!important}
   .period-pill-active .val{color:var(--side-text)!important}
@@ -72,50 +74,67 @@
   .pp-field input[type=date]:focus{border-color:var(--ink)}
   .pp-err{font-size:10px;color:var(--red);min-height:12px}
   .pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer}
-  .pp-apply:hover{opacity:.85}
 
   /* ── Content ── */
   .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
-  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-  .card-pad{padding:18px 20px}
-  .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
-  .ct-title{font-size:12px;font-weight:500} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px}
 
-  /* ── KPI strip (3 cols) ── */
+  /* ── KPI strip ── */
   .kpi-strip{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
   .kpi-cell{padding:16px 20px;border-right:1px solid var(--border)}
   .kpi-cell:last-child{border-right:none}
   .kc-label{font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-  .kc-value{font-size:20px;font-weight:300;letter-spacing:-.5px;margin-bottom:5px}
+  .kc-value{font-size:20px;font-weight:300;letter-spacing:-.5px;margin-bottom:4px}
   .kc-sub{font-size:11px;color:var(--muted)}
 
   /* ── Map card ── */
-  .map-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative}
-  .map-card-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 0}
-  #geochart{width:100%;height:520px}
-  .map-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:400px;color:var(--muted);gap:10px}
-  .map-empty-icon{font-size:40px;opacity:.3}
-  .map-empty-text{font-size:13px;text-align:center;max-width:280px;line-height:1.6}
+  .map-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .map-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px}
+  .map-title{font-size:12px;font-weight:500}
+  .map-sub{font-size:11px;color:var(--muted);margin-top:1px}
+  .map-modes{display:flex;gap:6px}
+  .mode-btn{height:28px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .12s}
+  .mode-btn:hover{border-color:var(--ink);color:var(--text)}
+  .mode-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  #map{width:100%;height:540px;background:#f0ebe4}
 
-  /* ── State ranking grid ── */
-  .state-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-  .state-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;gap:12px}
-  .state-rank{font-size:11px;font-weight:700;color:var(--muted);width:20px;flex-shrink:0}
-  .state-bar-wrap{flex:1;min-width:0}
-  .state-name{font-size:12px;font-weight:500;margin-bottom:4px;display:flex;align-items:center;gap:6px}
-  .state-code{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px}
-  .state-bar-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:4px}
-  .state-bar-fill{height:100%;border-radius:2px;transition:width .4s}
-  .state-val{font-size:12px;font-weight:500}
-  .state-orders{font-size:10px;color:var(--muted)}
+  /* ── Leaflet overrides ── */
+  .leaflet-container{font-family:inherit}
+  .state-tooltip{background:rgba(28,26,22,.88)!important;border:none!important;border-radius:5px!important;color:#f0ebe0!important;font-size:11px!important;font-weight:600!important;padding:5px 9px!important;white-space:nowrap!important;box-shadow:0 2px 8px rgba(0,0,0,.25)!important;pointer-events:none!important}
+  .state-tooltip::before{display:none!important}
+  .leaflet-popup-content-wrapper{border-radius:8px;box-shadow:0 4px 16px rgba(30,28,24,.2)}
+  .leaflet-popup-content{margin:14px 16px;font-size:12px;line-height:1.6}
+  .pop-title{font-size:14px;font-weight:600;margin-bottom:8px;border-bottom:1px solid rgba(30,28,24,.1);padding-bottom:6px}
+  .pop-row{display:flex;justify-content:space-between;gap:20px;color:var(--sub)}
+  .pop-row strong{color:var(--text);font-weight:600}
+  .leaflet-control-zoom{border:1px solid var(--border2)!important;border-radius:var(--radius-sm)!important}
+  .leaflet-control-zoom a{color:var(--text)!important;background:var(--surface)!important;border-color:var(--border)!important}
+  .leaflet-control-zoom a:hover{background:var(--surface2)!important}
 
-  /* ── Legend ── */
-  .map-legend{display:flex;align-items:center;gap:10px;padding:0 20px 16px;font-size:10px;color:var(--muted)}
-  .legend-grad{width:120px;height:8px;border-radius:4px;background:linear-gradient(to right,#e8e3d8,#c4956a,#8c3a20)}
-  .legend-labels{display:flex;justify-content:space-between;width:120px;font-size:9px;color:var(--muted);margin-top:3px}
+  /* ── Map legend ── */
+  .map-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid var(--border);background:var(--surface2)}
+  .legend-wrap{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted)}
+  .legend-grad-choro{width:100px;height:7px;border-radius:4px;background:linear-gradient(to right,#e8e3d8,#c49568,#8c3a20)}
+  .legend-grad-heat{width:100px;height:7px;border-radius:4px;background:linear-gradient(to right,#22c55e,#eab308,#ef4444)}
+  .legend-note{font-size:10px;color:var(--muted)}
 
+  /* ── Ranking card ── */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .card-pad{padding:18px 20px}
+  .ct-title{font-size:12px;font-weight:500}
+  .ct-sub{font-size:11px;color:var(--muted);margin-top:1px}
+  .state-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:14px}
+  .state-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px}
+  .sc-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .sc-rank{font-size:10px;font-weight:700;color:var(--muted);width:18px}
+  .sc-code{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.4px}
+  .sc-name{font-size:12px;font-weight:500;flex:1}
+  .sc-bar-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:6px}
+  .sc-bar-fill{height:100%;border-radius:2px}
+  .sc-foot{display:flex;justify-content:space-between;align-items:baseline}
+  .sc-val{font-size:13px;font-weight:500}
+  .sc-sub{font-size:10px;color:var(--muted)}
   .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
   footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
 </style>
@@ -144,7 +163,6 @@
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
     <button class="sync-btn" id="syncBtn">↻ Sincronizar</button>
 
-    <!-- Metric -->
     <div class="filter-pill csel" id="cselMetric">
       <span class="lbl">Métrica</span>
       <span class="val" id="metricVal">Receita</span>
@@ -155,7 +173,6 @@
       </div>
     </div>
 
-    <!-- Channel -->
     <div class="filter-pill csel" id="cselChannel">
       <span class="lbl">Canal</span>
       <span class="val" id="channelVal">Todos</span>
@@ -169,19 +186,14 @@
       </div>
     </div>
 
-    <!-- Period -->
     <div style="position:relative">
       <div class="filter-pill period-pill-active" id="periodPill">
-        <span class="lbl">Período</span>
-        <span class="val" id="periodValue">Hoje</span>
-        <span class="arr">▾</span>
+        <span class="lbl">Período</span><span class="val" id="periodValue">Hoje</span><span class="arr">▾</span>
       </div>
       <div class="period-pop" id="periodPop">
         <div class="pp-presets">
-          <button data-preset="today">Hoje</button>
-          <button data-preset="7d">7 dias</button>
-          <button data-preset="30d">30 dias</button>
-          <button data-preset="month">Este mês</button>
+          <button data-preset="today">Hoje</button><button data-preset="7d">7 dias</button>
+          <button data-preset="30d">30 dias</button><button data-preset="month">Este mês</button>
         </div>
         <div class="pp-divider"></div>
         <div class="pp-section-label">Intervalo personalizado</div>
@@ -201,17 +213,16 @@
       <div class="page-sub" id="pageSub">Coco and Luna · receita por estado · Brasil</div>
     </div>
 
-    <!-- KPI strip -->
     <div class="kpi-strip">
       <div class="kpi-cell">
         <div class="kc-label">Estados com vendas</div>
         <div class="kc-value" id="kpiStates">—</div>
-        <div class="kc-sub" id="kpiStatesSub">—</div>
+        <div class="kc-sub" id="kpiStatesSub">&nbsp;</div>
       </div>
       <div class="kpi-cell">
         <div class="kc-label">Estado líder</div>
         <div class="kc-value" id="kpiLeader">—</div>
-        <div class="kc-sub" id="kpiLeaderSub">—</div>
+        <div class="kc-sub" id="kpiLeaderSub">&nbsp;</div>
       </div>
       <div class="kpi-cell">
         <div class="kc-label">Concentração top 3</div>
@@ -220,37 +231,36 @@
       </div>
     </div>
 
-    <!-- Map -->
     <div class="map-card">
-      <div class="map-card-head">
+      <div class="map-head">
         <div>
-          <div class="ct-title" id="mapTitle">Mapa de calor · Receita por estado</div>
-          <div class="ct-sub">Intensidade proporcional ao valor — passe o cursor sobre um estado para ver o valor</div>
+          <div class="map-title" id="mapTitle">Mapa de calor · Receita por estado</div>
+          <div class="map-sub">Clique em um estado para mais detalhes · passe o cursor para ver o valor</div>
+        </div>
+        <div class="map-modes">
+          <button class="mode-btn active" id="btnChoropleth">🗺 Coropleto</button>
+          <button class="mode-btn" id="btnHeat">🌡 Calor</button>
         </div>
       </div>
-      <div id="geochart"></div>
-      <div class="map-legend">
-        <span>Menos</span>
-        <div>
-          <div class="legend-grad"></div>
-          <div class="legend-labels"><span>0</span><span>Máximo</span></div>
+      <div id="map"></div>
+      <div class="map-footer">
+        <div class="legend-wrap" id="legendWrap">
+          <span>Baixo</span>
+          <div><div class="legend-grad-choro" id="legendGrad"></div></div>
+          <span>Alto</span>
         </div>
-        <span>Mais</span>
+        <div class="legend-note" id="legendNote">Baseado no endereço de entrega dos pedidos</div>
       </div>
     </div>
 
-    <!-- State ranking -->
     <div class="card">
       <div class="card-pad">
-        <div class="card-top">
-          <div>
-            <div class="ct-title" id="rankingTitle">Ranking de estados</div>
-            <div class="ct-sub">Ordenado por valor — estados sem dados de entrega não aparecem</div>
-          </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><div class="ct-title" id="rankTitle">Ranking de estados · Receita</div>
+          <div class="ct-sub">Ordenado por valor — estados sem endereço de entrega não aparecem</div></div>
+          <span id="rankTotal" style="font-size:12px;color:var(--muted)"></span>
         </div>
-        <div class="state-grid" id="stateGrid">
-          <div class="muted-state">Aguardando dados…</div>
-        </div>
+        <div class="state-grid" id="stateGrid"><div class="muted-state">Aguardando dados…</div></div>
       </div>
     </div>
   </div>
@@ -258,190 +268,339 @@
 </div>
 
 <script>
-// ── State name map ──
+// ── State data ──
 const STATE_NAMES = {
-  AC:'Acre', AL:'Alagoas', AM:'Amazonas', AP:'Amapá', BA:'Bahia',
-  CE:'Ceará', DF:'Distrito Federal', ES:'Espírito Santo', GO:'Goiás',
-  MA:'Maranhão', MG:'Minas Gerais', MS:'Mato Grosso do Sul', MT:'Mato Grosso',
-  PA:'Pará', PB:'Paraíba', PE:'Pernambuco', PI:'Piauí', PR:'Paraná',
-  RJ:'Rio de Janeiro', RN:'Rio Grande do Norte', RO:'Rondônia', RR:'Roraima',
-  RS:'Rio Grande do Sul', SC:'Santa Catarina', SE:'Sergipe', SP:'São Paulo',
-  TO:'Tocantins',
+  AC:'Acre',AL:'Alagoas',AM:'Amazonas',AP:'Amapá',BA:'Bahia',
+  CE:'Ceará',DF:'Distrito Federal',ES:'Espírito Santo',GO:'Goiás',
+  MA:'Maranhão',MG:'Minas Gerais',MS:'Mato Grosso do Sul',MT:'Mato Grosso',
+  PA:'Pará',PB:'Paraíba',PE:'Pernambuco',PI:'Piauí',PR:'Paraná',
+  RJ:'Rio de Janeiro',RN:'Rio Grande do Norte',RO:'Rondônia',RR:'Roraima',
+  RS:'Rio Grande do Sul',SC:'Santa Catarina',SE:'Sergipe',SP:'São Paulo',TO:'Tocantins',
 };
 
+// IBGE 2-digit code → UF abbreviation
+const IBGE_UF = {
+  '11':'RO','12':'AC','13':'AM','14':'RR','15':'PA','16':'AP','17':'TO',
+  '21':'MA','22':'PI','23':'CE','24':'RN','25':'PB','26':'PE','27':'AL','28':'SE','29':'BA',
+  '31':'MG','32':'ES','33':'RJ','35':'SP',
+  '41':'PR','42':'SC','43':'RS',
+  '50':'MS','51':'MT','52':'GO','53':'DF',
+};
+
+// Centroid coordinates [lat, lng] for labels and heatmap bubbles
+const CENTROIDS = {
+  AC:[-9.0,-70.5],AL:[-9.6,-36.8],AM:[-4.0,-62.0],AP:[1.4,-51.8],BA:[-12.5,-41.7],
+  CE:[-5.2,-39.5],DF:[-15.8,-47.9],ES:[-19.2,-40.3],GO:[-16.0,-49.6],MA:[-5.4,-44.4],
+  MG:[-18.5,-44.4],MS:[-20.5,-54.5],MT:[-13.0,-55.9],PA:[-4.5,-52.5],PB:[-7.1,-36.7],
+  PE:[-8.4,-37.9],PI:[-7.7,-43.5],PR:[-24.9,-51.6],RJ:[-22.2,-42.7],RN:[-5.8,-36.6],
+  RO:[-10.9,-62.8],RR:[2.0,-61.4],RS:[-30.2,-53.5],SC:[-27.5,-50.9],SE:[-10.6,-37.5],
+  SP:[-22.5,-48.5],TO:[-10.0,-48.3],
+};
+
+// ── Formatting ──
 const CHAN = { todos:'Todos os canais', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre' };
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos' };
-
-function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
-function parseISO(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d) }
-function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x }
-function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }
 function fmtBRL(v, dec=0) { return 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}) }
 function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
 function pctStr(n) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:1,minimumFractionDigits:1})+'%' }
+function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
+function parseISO(s) { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d) }
+function addDays(d,n) { const x=new Date(d); x.setDate(x.getDate()+n); return x }
+function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }
 
+// ── Color interpolation ──
+function choroColor(t) {
+  // cream → burnt orange → dark rust
+  const stops = [[232,227,216],[196,149,104],[140,58,32]];
+  const s = Math.max(0, Math.min(1, t));
+  const i = s < 0.5 ? 0 : 1;
+  const u = s < 0.5 ? s*2 : (s-0.5)*2;
+  const [r1,g1,b1]=stops[i], [r2,g2,b2]=stops[i+1];
+  return `rgb(${Math.round(r1+(r2-r1)*u)},${Math.round(g1+(g2-g1)*u)},${Math.round(b1+(b2-b1)*u)})`;
+}
+function heatColor(t) {
+  // green → yellow → red
+  const s = Math.max(0, Math.min(1, t));
+  if (s < 0.5) {
+    const u = s * 2;
+    return { r:Math.round(u*235), g:Math.round(200-u*15), b:30, a:0.65+u*0.2 };
+  } else {
+    const u = (s-0.5)*2;
+    return { r:235, g:Math.round(185-u*155), b:30, a:0.75+u*0.15 };
+  }
+}
+
+// ── App state ──
 const todayISO = isoLocal(new Date());
-let sinceDate = localStorage.getItem('coco_since') || todayISO;
+let sinceDate = localStorage.getItem('coco_since') || isoLocal(addDays(new Date(),-29));
 let untilDate = localStorage.getItem('coco_until') || todayISO;
 let channel   = localStorage.getItem('coco_channel') || 'todos';
 let metric    = localStorage.getItem('coco_metric_geo') || 'receita';
+let vizMode   = 'choropleth'; // 'choropleth' | 'heat'
 if (!CHAN[channel]) channel = 'todos';
 if (!METRIC_LABEL[metric]) metric = 'receita';
 
-function rangeLabel(s, u) {
-  if (s === u && s === todayISO) return 'Hoje';
-  if (s === u) return fmtDM(parseISO(s));
-  return fmtDM(parseISO(s)) + ' – ' + fmtDM(parseISO(u));
+function rangeLabel(s,u) {
+  if(s===u&&s===todayISO)return'Hoje'; if(s===u)return fmtDM(parseISO(s));
+  return fmtDM(parseISO(s))+' – '+fmtDM(parseISO(u));
 }
 function presetRange(p) {
-  const n = new Date();
-  if (p === 'today') return [todayISO, todayISO];
-  if (p === '7d')    return [isoLocal(addDays(n,-6)), todayISO];
-  if (p === '30d')   return [isoLocal(addDays(n,-29)), todayISO];
-  if (p === 'month') return [isoLocal(new Date(n.getFullYear(),n.getMonth(),1)), todayISO];
-  return [todayISO, todayISO];
+  const n=new Date();
+  if(p==='today')return[todayISO,todayISO]; if(p==='7d')return[isoLocal(addDays(n,-6)),todayISO];
+  if(p==='30d')return[isoLocal(addDays(n,-29)),todayISO]; if(p==='month')return[isoLocal(new Date(n.getFullYear(),n.getMonth(),1)),todayISO];
+  return[todayISO,todayISO];
 }
-function setLive(s, t) {
-  const d = document.getElementById('liveDot');
-  d.className = 'ldot'+(s==='loading'?' loading':s==='error'?' error':'');
-  if (t) document.getElementById('lastUpdate').textContent = t;
+function setLive(s,t) {
+  const d=document.getElementById('liveDot');
+  d.className='ldot'+(s==='loading'?' loading':s==='error'?' error':'');
+  if(t)document.getElementById('lastUpdate').textContent=t;
 }
 
-// ── Google Charts ──
-let gchartsReady = false;
-let pendingData = null;
+// ── Leaflet map ──
+const map = L.map('map', { center:[-15,-55], zoom:4, minZoom:3, maxZoom:8, zoomControl:true });
 
-google.charts.load('current', { packages: ['geochart'] });
-google.charts.setOnLoadCallback(() => {
-  gchartsReady = true;
-  if (pendingData) { drawMap(pendingData); pendingData = null; }
-});
+// Neutral tile layer (no labels — we add our own)
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+  subdomains:'abcd', maxZoom:19
+}).addTo(map);
 
-let geoChart = null;
+let geojsonData = null;   // Brazil states GeoJSON (loaded once)
+let stateData   = {};     // { UF: { revenue, orders } }
+let mapLayers   = [];     // active Leaflet layers
 
-function drawMap(byState) {
-  if (!gchartsReady) { pendingData = byState; return; }
-
-  const entries = Object.entries(byState);
-  const isMoney = metric === 'receita';
-  const getValue = ([, s]) => isMoney ? s.revenue : s.orders;
-
-  if (entries.length === 0) {
-    document.getElementById('geochart').innerHTML =
-      `<div class="map-empty"><div class="map-empty-icon">🗺</div><div class="map-empty-text">Sem dados de estado disponíveis.<br>Clique em <strong>Sincronizar</strong> para buscar pedidos com endereço de entrega.</div></div>`;
-    return;
+// ── Load GeoJSON ──
+async function loadGeoJSON() {
+  try {
+    const res = await fetch('https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intrarregiao=UF&formato=application/vnd.geo+json&qualidade=minima');
+    geojsonData = await res.json();
+    // Attach UF code to each feature
+    geojsonData.features.forEach(f => {
+      const code = f.properties?.codarea;
+      f.properties._uf = IBGE_UF[String(code)] || null;
+    });
+    return true;
+  } catch(e) {
+    console.error('GeoJSON load failed:', e);
+    return false;
   }
+}
 
-  // Build DataTable: ['Estado', 'Valor', tooltip]
-  const rows = [['Estado', isMoney ? 'Receita (R$)' : 'Pedidos', { role: 'tooltip', p: { html: true } }]];
-  for (const [code, s] of entries) {
-    const name = STATE_NAMES[code] || code;
-    const val  = isMoney ? s.revenue : s.orders;
-    const tip  = `<div style="padding:8px 12px;font-family:inherit;font-size:12px"><strong>${name} (${code})</strong><br>${isMoney ? fmtBRL(val, 2) : fmtInt(val) + ' pedidos'}</div>`;
-    rows.push(['BR-' + code, val, tip]);
+// ── Draw map ──
+function clearLayers() {
+  mapLayers.forEach(l => map.removeLayer(l));
+  mapLayers = [];
+}
+
+function drawMap() {
+  clearLayers();
+  if (!geojsonData) return;
+
+  const isMoney  = metric === 'receita';
+  const getValue = s => isMoney ? s.revenue : s.orders;
+  const allVals  = Object.values(stateData).map(getValue);
+  const maxVal   = Math.max(1, ...allVals);
+
+  if (vizMode === 'choropleth') {
+    drawChoropleth(isMoney, getValue, maxVal);
+  } else {
+    drawHeatmap(isMoney, getValue, maxVal);
   }
+}
 
-  const data = google.visualization.arrayToDataTable(rows);
-
-  const options = {
-    region: 'BR',
-    resolution: 'provinces',
-    displayMode: 'regions',
-    colorAxis: {
-      minValue: 0,
-      colors: ['#e8e3d8', '#c4956a', '#8c3a20'],
+function drawChoropleth(isMoney, getValue, maxVal) {
+  const layer = L.geoJSON(geojsonData, {
+    style: feature => {
+      const uf = feature.properties._uf;
+      const s  = stateData[uf];
+      const t  = s ? getValue(s) / maxVal : 0;
+      return {
+        fillColor:   s ? choroColor(t) : '#e0dbd2',
+        fillOpacity: s ? 0.82 : 0.35,
+        color:       '#bbb5aa',
+        weight:      0.8,
+        opacity:     1,
+      };
     },
-    backgroundColor: '#faf8f4',
-    datalessRegionColor: '#ede8df',
-    defaultColor: '#d4cdc2',
-    legend: 'none',
-    tooltip: { isHtml: true, trigger: 'focus' },
-  };
+    onEachFeature: (feature, layer) => {
+      const uf   = feature.properties._uf;
+      const name = uf ? (STATE_NAMES[uf] || uf) : '?';
+      const s    = uf ? stateData[uf] : null;
 
-  const container = document.getElementById('geochart');
-  container.innerHTML = '';
+      // Permanent label on each state with data
+      if (s) {
+        const val   = getValue(s);
+        const label = isMoney ? fmtBRL(val) : fmtInt(val) + (s.orders === 1 ? ' pedido' : ' pedidos');
+        layer.bindTooltip(
+          `<div style="text-align:center;line-height:1.5"><div style="font-size:11px;font-weight:700;letter-spacing:.3px">${uf}</div><div style="font-size:10px;opacity:.85">${label}</div></div>`,
+          { permanent: true, direction: 'center', className: 'state-tooltip', offset: [0, 0] }
+        );
+      }
 
-  if (!geoChart) geoChart = new google.visualization.GeoChart(container);
-  geoChart.draw(data, options);
+      // Click popup
+      layer.on('click', () => {
+        const val    = s ? getValue(s) : 0;
+        const pct    = s && Object.values(stateData).length
+          ? pctStr(val / Math.max(1, Object.values(stateData).reduce((a, x) => a + getValue(x), 0)) * 100)
+          : '—';
+        layer.bindPopup(`
+          <div class="pop-title">📍 ${name}${uf ? ' · '+uf : ''}</div>
+          ${s ? `
+            <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
+            <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
+            <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue/s.orders,2) : '—'}</strong></div>
+            <div class="pop-row"><span>% do total</span><strong>${pct}</strong></div>
+          ` : '<div style="color:#9c9790;font-size:12px">Sem vendas neste estado no período.</div>'}
+        `).openPopup();
+      });
+
+      // Hover effect
+      layer.on('mouseover', () => { if(!stateData[uf]) return; layer.setStyle({ weight:2, color:'#2d2a26' }); });
+      layer.on('mouseout',  () => { if(!stateData[uf]) return; layer.setStyle({ weight:0.8, color:'#bbb5aa' }); });
+    }
+  }).addTo(map);
+
+  mapLayers.push(layer);
+
+  // Legend
+  document.getElementById('legendGrad').className = 'legend-grad-choro';
 }
 
+function drawHeatmap(isMoney, getValue, maxVal) {
+  // Background polygons (neutral)
+  const baseLayer = L.geoJSON(geojsonData, {
+    style: { fillColor:'#ddd8cf', fillOpacity:0.4, color:'#c4bdb2', weight:0.8 }
+  }).addTo(map);
+  mapLayers.push(baseLayer);
+
+  // Bubble circles at centroids
+  for (const [uf, s] of Object.entries(stateData)) {
+    const pos = CENTROIDS[uf];
+    if (!pos) continue;
+
+    const val  = getValue(s);
+    const t    = val / maxVal;
+    const c    = heatColor(t);
+    const rad  = 40000 + t * 320000; // radius in meters
+
+    // Outer glow
+    const glow = L.circle(pos, {
+      radius: rad * 1.5,
+      fillColor: `rgba(${c.r},${c.g},${c.b},0.12)`,
+      fillOpacity: 1,
+      color: 'transparent',
+      weight: 0,
+    }).addTo(map);
+    mapLayers.push(glow);
+
+    // Main bubble
+    const circle = L.circle(pos, {
+      radius: rad,
+      fillColor: `rgb(${c.r},${c.g},${c.b})`,
+      fillOpacity: c.a,
+      color: `rgba(${c.r},${c.g},${c.b},0.4)`,
+      weight: 1,
+    }).addTo(map);
+    mapLayers.push(circle);
+
+    // Label marker
+    const label = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
+    const icon  = L.divIcon({
+      html: `<div style="background:rgba(28,26,22,.82);color:#f0ebe0;border-radius:4px;padding:3px 7px;font-size:10px;font-weight:700;white-space:nowrap;text-align:center;font-family:inherit">${uf}<br><span style="font-size:9px;font-weight:500;opacity:.85">${label}</span></div>`,
+      className: '',
+      iconAnchor: [35, 20],
+    });
+    const marker = L.marker(pos, { icon, interactive: false }).addTo(map);
+    mapLayers.push(marker);
+
+    // Click popup on circle
+    const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
+    circle.bindPopup(`
+      <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
+      <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue,2)}</strong></div>
+      <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
+      <div class="pop-row"><span>Ticket médio</span><strong>${s.orders?fmtBRL(s.revenue/s.orders,2):'—'}</strong></div>
+      <div class="pop-row"><span>% do total</span><strong>${pctStr(val/Math.max(1,totalAll)*100)}</strong></div>
+    `);
+
+    // Hover
+    circle.on('mouseover', () => circle.setStyle({ fillOpacity: Math.min(c.a + 0.15, 1) }));
+    circle.on('mouseout',  () => circle.setStyle({ fillOpacity: c.a }));
+  }
+
+  // Legend
+  document.getElementById('legendGrad').className = 'legend-grad-heat';
+}
+
+// ── Render ──
 function render(d) {
-  const byState = d.byState || {};
+  stateData = d.byState || {};
   const isMoney = metric === 'receita';
   const label   = rangeLabel(d.period.since, d.period.until);
 
   document.getElementById('pageSub').textContent =
     `Coco and Luna · ${CHAN[d.channel]} · ${label}`;
   document.getElementById('mapTitle').textContent =
-    `Mapa de calor · ${METRIC_LABEL[metric]} por estado`;
-  document.getElementById('rankingTitle').textContent =
+    `${vizMode === 'choropleth' ? 'Coropleto' : 'Mapa de calor'} · ${METRIC_LABEL[metric]} por estado`;
+  document.getElementById('rankTitle').textContent =
     `Ranking de estados · ${METRIC_LABEL[metric]}`;
 
-  // Sort states by selected metric
-  const sorted = Object.entries(byState)
-    .map(([code, s]) => ({ code, revenue: s.revenue, orders: s.orders, val: isMoney ? s.revenue : s.orders }))
+  const sorted = Object.entries(stateData)
+    .map(([code, s]) => ({ code, ...s, val: isMoney ? s.revenue : s.orders }))
     .sort((a, b) => b.val - a.val);
 
   const total = sorted.reduce((a, s) => a + s.val, 0);
+  document.getElementById('rankTotal').textContent = sorted.length
+    ? `Total: ${isMoney ? fmtBRL(total) : fmtInt(total) + ' pedidos'}`
+    : '';
 
   // KPIs
   document.getElementById('kpiStates').textContent = sorted.length || '—';
   document.getElementById('kpiStatesSub').textContent = sorted.length
-    ? `de ${Object.keys(STATE_NAMES).length} estados do Brasil`
-    : 'sem dados de estado';
+    ? `de 27 estados do Brasil`
+    : 'sincronize para carregar';
 
   if (sorted.length) {
-    const leader = sorted[0];
-    const lname  = STATE_NAMES[leader.code] || leader.code;
-    document.getElementById('kpiLeader').textContent = lname;
-    document.getElementById('kpiLeaderSub').textContent = isMoney ? fmtBRL(leader.val) : fmtInt(leader.val) + ' pedidos';
+    document.getElementById('kpiLeader').textContent = STATE_NAMES[sorted[0].code] || sorted[0].code;
+    document.getElementById('kpiLeaderSub').textContent = isMoney
+      ? fmtBRL(sorted[0].val)
+      : fmtInt(sorted[0].val) + ' pedidos';
   } else {
     document.getElementById('kpiLeader').textContent = '—';
     document.getElementById('kpiLeaderSub').textContent = '—';
   }
 
   if (sorted.length >= 3 && total > 0) {
-    const top3 = sorted.slice(0, 3).reduce((a, s) => a + s.val, 0);
-    document.getElementById('kpiTop3').textContent = pctStr(top3 / total * 100);
+    const top3sum = sorted.slice(0,3).reduce((a,s)=>a+s.val,0);
+    document.getElementById('kpiTop3').textContent = pctStr(top3sum/total*100);
   } else {
     document.getElementById('kpiTop3').textContent = '—';
   }
 
-  // Draw map
-  drawMap(byState);
-
-  // State ranking grid
+  // Ranking grid
   const maxVal = sorted[0]?.val || 1;
   if (sorted.length) {
     document.getElementById('stateGrid').innerHTML = sorted.map((s, i) => {
-      const name  = STATE_NAMES[s.code] || s.code;
-      const pct   = total > 0 ? pctStr(s.val / total * 100) : '—';
-      const barW  = Math.max((s.val / maxVal) * 100, 1).toFixed(1);
-      const valTx = isMoney ? fmtBRL(s.val) : fmtInt(s.val) + ' ped.';
-      const subTx = isMoney
-        ? `${fmtInt(s.orders)} pedido${s.orders !== 1 ? 's' : ''} · ${pct}`
-        : `${fmtBRL(s.revenue)} · ${pct}`;
-      return `
-        <div class="state-card">
-          <div class="state-rank">${i + 1}</div>
-          <div class="state-bar-wrap">
-            <div class="state-name">
-              <span>${name}</span>
-              <span class="state-code">${s.code}</span>
-            </div>
-            <div class="state-bar-track">
-              <div class="state-bar-fill" style="width:${barW}%;background:#8c3a20"></div>
-            </div>
-            <div style="display:flex;justify-content:space-between">
-              <span class="state-val">${valTx}</span>
-              <span class="state-orders">${subTx}</span>
-            </div>
-          </div>
-        </div>`;
+      const name   = STATE_NAMES[s.code] || s.code;
+      const barW   = Math.max((s.val / maxVal) * 100, 1).toFixed(1);
+      const valTxt = isMoney ? fmtBRL(s.val) : fmtInt(s.val) + ' ped.';
+      const subTxt = isMoney
+        ? `${fmtInt(s.orders)} pedido${s.orders!==1?'s':''} · ${pctStr(s.val/total*100)}`
+        : `${fmtBRL(s.revenue)} · ${pctStr(s.val/total*100)}`;
+      const barCol = choroColor(s.val / maxVal);
+      return `<div class="state-card">
+        <div class="sc-head">
+          <span class="sc-rank">${i+1}</span>
+          <span class="sc-name">${name}</span>
+          <span class="sc-code">${s.code}</span>
+        </div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:${barW}%;background:${barCol}"></div></div>
+        <div class="sc-foot"><span class="sc-val">${valTxt}</span><span class="sc-sub">${subTxt}</span></div>
+      </div>`;
     }).join('');
   } else {
     document.getElementById('stateGrid').innerHTML =
-      '<div class="muted-state" style="grid-column:1/-1">Nenhum dado de estado. Clique em Sincronizar para atualizar.</div>';
+      '<div class="muted-state" style="grid-column:1/-1">Nenhum dado de estado. Clique em ↻ Sincronizar para atualizar os pedidos com endereço de entrega.</div>';
   }
 
   const now = new Date();
@@ -449,35 +608,49 @@ function render(d) {
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   document.getElementById('footerDate').textContent =
     `Sales HQ · Coco and Luna · ${CHAN[d.channel]} · ${label} · última sincronização: ${up}`;
+
+  drawMap();
 }
 
-// ── Load data ──
+// ── Load dashboard data ──
 async function loadData() {
-  setLive('loading', 'Atualizando…');
+  setLive('loading','Atualizando…');
   try {
-    const p = new URLSearchParams({ channel, metric: 'receita', since: sinceDate, until: untilDate });
-    const r = await fetch('/api/dashboard?' + p);
+    const p = new URLSearchParams({ channel, metric:'receita', since:sinceDate, until:untilDate });
+    const r = await fetch('/api/dashboard?'+p);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     render(d);
   } catch(e) {
-    setLive('error', 'Erro');
-    document.getElementById('footerDate').textContent = 'Erro: ' + e.message;
+    setLive('error','Erro');
+    document.getElementById('footerDate').textContent = 'Erro: '+e.message;
   }
 }
 
-// ── UI controls ──
+// ── Viz mode buttons ──
+document.getElementById('btnChoropleth').addEventListener('click', () => {
+  vizMode = 'choropleth';
+  document.getElementById('btnChoropleth').classList.add('active');
+  document.getElementById('btnHeat').classList.remove('active');
+  drawMap();
+});
+document.getElementById('btnHeat').addEventListener('click', () => {
+  vizMode = 'heat';
+  document.getElementById('btnHeat').classList.add('active');
+  document.getElementById('btnChoropleth').classList.remove('active');
+  drawMap();
+});
+
+// ── Filter controls ──
 function syncControls() {
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
-  document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
-  document.getElementById('channelVal').textContent = CHAN[channel] || channel;
-  document.querySelectorAll('#cselChannel .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === channel));
-  document.getElementById('periodValue').textContent = rangeLabel(sinceDate, untilDate);
+  document.querySelectorAll('#cselMetric .csel-opt').forEach(o=>o.classList.toggle('active',o.dataset.value===metric));
+  document.getElementById('channelVal').textContent = CHAN[channel]||channel;
+  document.querySelectorAll('#cselChannel .csel-opt').forEach(o=>o.classList.toggle('active',o.dataset.value===channel));
+  document.getElementById('periodValue').textContent = rangeLabel(sinceDate,untilDate);
 }
 
-function closeAllDropdowns() {
-  document.querySelectorAll('.csel.open').forEach(el => el.classList.remove('open'));
-}
+function closeAllDropdowns() { document.querySelectorAll('.csel.open').forEach(el=>el.classList.remove('open')); }
 
 document.addEventListener('click', () => {
   closeAllDropdowns();
@@ -495,8 +668,8 @@ document.querySelectorAll('.csel').forEach(el => {
     opt.addEventListener('click', e => {
       e.stopPropagation();
       const val = opt.dataset.value;
-      if (el.id === 'cselMetric') { metric = val; localStorage.setItem('coco_metric_geo', metric); }
-      if (el.id === 'cselChannel') { channel = val; localStorage.setItem('coco_channel', channel); }
+      if (el.id==='cselMetric')  { metric=val; localStorage.setItem('coco_metric_geo',metric); }
+      if (el.id==='cselChannel') { channel=val; localStorage.setItem('coco_channel',channel); }
       el.classList.remove('open');
       syncControls();
       loadData();
@@ -504,56 +677,40 @@ document.querySelectorAll('.csel').forEach(el => {
   });
 });
 
-const pop     = document.getElementById('periodPop');
-const fromInp = document.getElementById('dateFrom');
-const toInp   = document.getElementById('dateTo');
-const ppErr   = document.getElementById('ppErr');
-
+const pop=document.getElementById('periodPop'),fromInp=document.getElementById('dateFrom'),toInp=document.getElementById('dateTo'),ppErr=document.getElementById('ppErr');
 document.getElementById('periodPill').addEventListener('click', e => {
-  e.stopPropagation();
-  closeAllDropdowns();
-  const wasOpen = pop.classList.contains('open');
-  pop.classList.toggle('open', !wasOpen);
-  if (!wasOpen) {
-    ppErr.textContent='';
-    fromInp.value=sinceDate; toInp.value=untilDate;
-    fromInp.max=todayISO; toInp.max=todayISO;
-    document.querySelectorAll('.pp-presets button').forEach(b=>{
-      const[s,u]=presetRange(b.dataset.preset); b.classList.toggle('active',s===sinceDate&&u===untilDate);
-    });
-  }
+  e.stopPropagation(); closeAllDropdowns();
+  const wasOpen=pop.classList.contains('open');
+  pop.classList.toggle('open',!wasOpen);
+  if(!wasOpen){ppErr.textContent='';fromInp.value=sinceDate;toInp.value=untilDate;fromInp.max=todayISO;toInp.max=todayISO;document.querySelectorAll('.pp-presets button').forEach(b=>{const[s,u]=presetRange(b.dataset.preset);b.classList.toggle('active',s===sinceDate&&u===untilDate)});}
 });
-pop.addEventListener('click', e => e.stopPropagation());
-
-document.querySelectorAll('.pp-presets button').forEach(b => b.addEventListener('click', () => {
-  const [s,u] = presetRange(b.dataset.preset);
-  sinceDate=s; untilDate=u;
-  localStorage.setItem('coco_since',s); localStorage.setItem('coco_until',u);
-  pop.classList.remove('open');
-  syncControls(); loadData();
+pop.addEventListener('click',e=>e.stopPropagation());
+document.querySelectorAll('.pp-presets button').forEach(b=>b.addEventListener('click',()=>{
+  const[s,u]=presetRange(b.dataset.preset);sinceDate=s;untilDate=u;
+  localStorage.setItem('coco_since',s);localStorage.setItem('coco_until',u);
+  pop.classList.remove('open');syncControls();loadData();
 }));
-
-document.getElementById('applyRange').addEventListener('click', () => {
-  const s=fromInp.value, u=toInp.value;
+document.getElementById('applyRange').addEventListener('click',()=>{
+  const s=fromInp.value,u=toInp.value;
   if(!s||!u){ppErr.textContent='Selecione as duas datas.';return}
-  if(parseISO(s)>parseISO(u)){ppErr.textContent='A data inicial deve ser anterior à final.';return}
-  ppErr.textContent='';
-  sinceDate=s; untilDate=u;
-  localStorage.setItem('coco_since',s); localStorage.setItem('coco_until',u);
-  pop.classList.remove('open');
-  syncControls(); loadData();
+  if(parseISO(s)>parseISO(u)){ppErr.textContent='Data inicial deve ser anterior à final.';return}
+  ppErr.textContent='';sinceDate=s;untilDate=u;
+  localStorage.setItem('coco_since',s);localStorage.setItem('coco_until',u);
+  pop.classList.remove('open');syncControls();loadData();
 });
-
-document.getElementById('syncBtn').addEventListener('click', async () => {
+document.getElementById('syncBtn').addEventListener('click',async()=>{
   setLive('loading','Sincronizando…');
-  try { await fetch('/api/sync',{method:'POST'}); } catch(e) {}
+  try{await fetch('/api/sync',{method:'POST'});}catch(e){}
   loadData();
 });
 
 // ── Init ──
 syncControls();
-loadData();
-setInterval(loadData, 5*60*1000);
+(async () => {
+  await loadGeoJSON();
+  await loadData();
+  setInterval(loadData, 5*60*1000);
+})();
 </script>
 </body>
 </html>
