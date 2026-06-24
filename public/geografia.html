@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geografia — Coco and Luna</title>
+<link rel="icon" href="logo.png" type="image/png">
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<style>
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--tan:#c4b49a;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* ── Sidebar ── */
+  .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200}
+  .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
+  .brand-logo{width:72px;height:72px;object-fit:contain}
+  .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
+  .nav-group{margin-bottom:24px}
+  .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
+  .nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
+  .nav-item:hover{background:var(--side-hover);color:var(--side-text)}
+  .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
+  .nav-icon{font-size:13px;opacity:.7;width:16px;text-align:center}
+
+  /* ── Main ── */
+  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:100}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-right:4px}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  .ldot.loading{background:var(--amber)} .ldot.error{background:var(--red);animation:none}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  .filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none}
+  .filter-pill:hover{border-color:var(--ink);color:var(--text)}
+  .filter-pill .lbl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .filter-pill .val{font-weight:600;color:var(--text)}
+  .filter-pill .arr{color:var(--muted);font-size:9px;margin-left:1px;transition:transform .15s}
+  .csel{position:relative}
+  .csel.open .arr{transform:rotate(180deg)}
+  .csel.open{border-color:var(--ink)}
+  .csel-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+  .csel.open .csel-pop{display:flex}
+  .csel-opt{padding:9px 14px;font-size:12px;color:var(--sub);cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:8px}
+  .csel-opt:hover{background:var(--surface2);color:var(--text)}
+  .csel-opt.active{color:var(--text);font-weight:600}
+  .csel-opt.active::before{content:'✓';color:var(--ink);font-size:11px;font-weight:700}
+  .csel-opt:not(.active)::before{content:'';display:inline-block;width:11px}
+  .sync-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s}
+  .sync-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+  .period-pill-active{background:var(--ink)!important;border-color:var(--ink)!important}
+  .period-pill-active .lbl{color:rgba(240,235,224,.5)!important}
+  .period-pill-active .val{color:var(--side-text)!important}
+  .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
+  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+  .period-pop.open{display:flex}
+  .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
+  .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .pp-divider{height:1px;background:var(--border)}
+  .pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .pp-dates{display:flex;flex-direction:column;gap:8px}
+  .pp-field{display:flex;align-items:center;gap:10px}
+  .pp-field label{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+  .pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);appearance:none;-webkit-appearance:none;outline:none}
+  .pp-field input[type=date]:focus{border-color:var(--ink)}
+  .pp-err{font-size:10px;color:var(--red);min-height:12px}
+  .pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer}
+  .pp-apply:hover{opacity:.85}
+
+  /* ── Content ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .card-pad{padding:18px 20px}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+  .ct-title{font-size:12px;font-weight:500} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+  /* ── KPI strip (3 cols) ── */
+  .kpi-strip{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .kpi-cell{padding:16px 20px;border-right:1px solid var(--border)}
+  .kpi-cell:last-child{border-right:none}
+  .kc-label{font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .kc-value{font-size:20px;font-weight:300;letter-spacing:-.5px;margin-bottom:5px}
+  .kc-sub{font-size:11px;color:var(--muted)}
+
+  /* ── Map card ── */
+  .map-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative}
+  .map-card-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 0}
+  #geochart{width:100%;height:520px}
+  .map-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:400px;color:var(--muted);gap:10px}
+  .map-empty-icon{font-size:40px;opacity:.3}
+  .map-empty-text{font-size:13px;text-align:center;max-width:280px;line-height:1.6}
+
+  /* ── State ranking grid ── */
+  .state-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  .state-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;gap:12px}
+  .state-rank{font-size:11px;font-weight:700;color:var(--muted);width:20px;flex-shrink:0}
+  .state-bar-wrap{flex:1;min-width:0}
+  .state-name{font-size:12px;font-weight:500;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+  .state-code{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px}
+  .state-bar-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:4px}
+  .state-bar-fill{height:100%;border-radius:2px;transition:width .4s}
+  .state-val{font-size:12px;font-weight:500}
+  .state-orders{font-size:10px;color:var(--muted)}
+
+  /* ── Legend ── */
+  .map-legend{display:flex;align-items:center;gap:10px;padding:0 20px 16px;font-size:10px;color:var(--muted)}
+  .legend-grad{width:120px;height:8px;border-radius:4px;background:linear-gradient(to right,#e8e3d8,#c4956a,#8c3a20)}
+  .legend-labels{display:flex;justify-content:space-between;width:120px;font-size:9px;color:var(--muted);margin-top:3px}
+
+  .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
+  footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="brand">
+    <img src="Logo.svg" alt="Coco and Luna" class="brand-logo">
+    <span class="brand-name">Dashboard<br>Vita Pet Life</span>
+  </div>
+  <div class="nav-group"><div class="nav-label">Visão Geral</div>
+    <a class="nav-item" href="index.html"><span class="nav-icon">↗</span> Revenue</a>
+    <a class="nav-item"><span class="nav-icon">⊞</span> Segmentos</a>
+    <a class="nav-item active"><span class="nav-icon">◎</span> Geografia</a></div>
+  <div class="nav-group"><div class="nav-label">Operações</div>
+    <a class="nav-item"><span class="nav-icon">□</span> Produtos</a>
+    <a class="nav-item"><span class="nav-icon">≡</span> Estoque</a>
+    <a class="nav-item"><span class="nav-icon">$</span> Financeiro</a></div>
+  <div class="nav-group"><div class="nav-label">Marketing</div>
+    <a class="nav-item"><span class="nav-icon">◈</span> Campanhas</a></div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
+    <button class="sync-btn" id="syncBtn">↻ Sincronizar</button>
+
+    <!-- Metric -->
+    <div class="filter-pill csel" id="cselMetric">
+      <span class="lbl">Métrica</span>
+      <span class="val" id="metricVal">Receita</span>
+      <span class="arr">▾</span>
+      <div class="csel-pop">
+        <div class="csel-opt active" data-value="receita">Receita</div>
+        <div class="csel-opt" data-value="pedidos">Pedidos</div>
+      </div>
+    </div>
+
+    <!-- Channel -->
+    <div class="filter-pill csel" id="cselChannel">
+      <span class="lbl">Canal</span>
+      <span class="val" id="channelVal">Todos</span>
+      <span class="arr">▾</span>
+      <div class="csel-pop">
+        <div class="csel-opt active" data-value="todos">Todos</div>
+        <div class="csel-opt" data-value="shopify">Shopify</div>
+        <div class="csel-opt" data-value="shopee">Shopee</div>
+        <div class="csel-opt" data-value="amazon">Amazon</div>
+        <div class="csel-opt" data-value="mercadolivre">Mercado Livre</div>
+      </div>
+    </div>
+
+    <!-- Period -->
+    <div style="position:relative">
+      <div class="filter-pill period-pill-active" id="periodPill">
+        <span class="lbl">Período</span>
+        <span class="val" id="periodValue">Hoje</span>
+        <span class="arr">▾</span>
+      </div>
+      <div class="period-pop" id="periodPop">
+        <div class="pp-presets">
+          <button data-preset="today">Hoje</button>
+          <button data-preset="7d">7 dias</button>
+          <button data-preset="30d">30 dias</button>
+          <button data-preset="month">Este mês</button>
+        </div>
+        <div class="pp-divider"></div>
+        <div class="pp-section-label">Intervalo personalizado</div>
+        <div class="pp-dates">
+          <div class="pp-field"><label>De</label><input type="date" id="dateFrom"></div>
+          <div class="pp-field"><label>Até</label><input type="date" id="dateTo"></div>
+        </div>
+        <div class="pp-err" id="ppErr"></div>
+        <button class="pp-apply" id="applyRange">Aplicar intervalo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div>
+      <div class="page-title">Distribuição geográfica</div>
+      <div class="page-sub" id="pageSub">Coco and Luna · receita por estado · Brasil</div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="kpi-strip">
+      <div class="kpi-cell">
+        <div class="kc-label">Estados com vendas</div>
+        <div class="kc-value" id="kpiStates">—</div>
+        <div class="kc-sub" id="kpiStatesSub">—</div>
+      </div>
+      <div class="kpi-cell">
+        <div class="kc-label">Estado líder</div>
+        <div class="kc-value" id="kpiLeader">—</div>
+        <div class="kc-sub" id="kpiLeaderSub">—</div>
+      </div>
+      <div class="kpi-cell">
+        <div class="kc-label">Concentração top 3</div>
+        <div class="kc-value" id="kpiTop3">—</div>
+        <div class="kc-sub">do total do período</div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="map-card">
+      <div class="map-card-head">
+        <div>
+          <div class="ct-title" id="mapTitle">Mapa de calor · Receita por estado</div>
+          <div class="ct-sub">Intensidade proporcional ao valor — passe o cursor sobre um estado para ver o valor</div>
+        </div>
+      </div>
+      <div id="geochart"></div>
+      <div class="map-legend">
+        <span>Menos</span>
+        <div>
+          <div class="legend-grad"></div>
+          <div class="legend-labels"><span>0</span><span>Máximo</span></div>
+        </div>
+        <span>Mais</span>
+      </div>
+    </div>
+
+    <!-- State ranking -->
+    <div class="card">
+      <div class="card-pad">
+        <div class="card-top">
+          <div>
+            <div class="ct-title" id="rankingTitle">Ranking de estados</div>
+            <div class="ct-sub">Ordenado por valor — estados sem dados de entrega não aparecem</div>
+          </div>
+        </div>
+        <div class="state-grid" id="stateGrid">
+          <div class="muted-state">Aguardando dados…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer id="footerDate"></footer>
+</div>
+
+<script>
+// ── State name map ──
+const STATE_NAMES = {
+  AC:'Acre', AL:'Alagoas', AM:'Amazonas', AP:'Amapá', BA:'Bahia',
+  CE:'Ceará', DF:'Distrito Federal', ES:'Espírito Santo', GO:'Goiás',
+  MA:'Maranhão', MG:'Minas Gerais', MS:'Mato Grosso do Sul', MT:'Mato Grosso',
+  PA:'Pará', PB:'Paraíba', PE:'Pernambuco', PI:'Piauí', PR:'Paraná',
+  RJ:'Rio de Janeiro', RN:'Rio Grande do Norte', RO:'Rondônia', RR:'Roraima',
+  RS:'Rio Grande do Sul', SC:'Santa Catarina', SE:'Sergipe', SP:'São Paulo',
+  TO:'Tocantins',
+};
+
+const CHAN = { todos:'Todos os canais', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre' };
+const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos' };
+
+function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
+function parseISO(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d) }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x }
+function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }
+function fmtBRL(v, dec=0) { return 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}) }
+function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
+function pctStr(n) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:1,minimumFractionDigits:1})+'%' }
+
+const todayISO = isoLocal(new Date());
+let sinceDate = localStorage.getItem('coco_since') || todayISO;
+let untilDate = localStorage.getItem('coco_until') || todayISO;
+let channel   = localStorage.getItem('coco_channel') || 'todos';
+let metric    = localStorage.getItem('coco_metric_geo') || 'receita';
+if (!CHAN[channel]) channel = 'todos';
+if (!METRIC_LABEL[metric]) metric = 'receita';
+
+function rangeLabel(s, u) {
+  if (s === u && s === todayISO) return 'Hoje';
+  if (s === u) return fmtDM(parseISO(s));
+  return fmtDM(parseISO(s)) + ' – ' + fmtDM(parseISO(u));
+}
+function presetRange(p) {
+  const n = new Date();
+  if (p === 'today') return [todayISO, todayISO];
+  if (p === '7d')    return [isoLocal(addDays(n,-6)), todayISO];
+  if (p === '30d')   return [isoLocal(addDays(n,-29)), todayISO];
+  if (p === 'month') return [isoLocal(new Date(n.getFullYear(),n.getMonth(),1)), todayISO];
+  return [todayISO, todayISO];
+}
+function setLive(s, t) {
+  const d = document.getElementById('liveDot');
+  d.className = 'ldot'+(s==='loading'?' loading':s==='error'?' error':'');
+  if (t) document.getElementById('lastUpdate').textContent = t;
+}
+
+// ── Google Charts ──
+let gchartsReady = false;
+let pendingData = null;
+
+google.charts.load('current', { packages: ['geochart'] });
+google.charts.setOnLoadCallback(() => {
+  gchartsReady = true;
+  if (pendingData) { drawMap(pendingData); pendingData = null; }
+});
+
+let geoChart = null;
+
+function drawMap(byState) {
+  if (!gchartsReady) { pendingData = byState; return; }
+
+  const entries = Object.entries(byState);
+  const isMoney = metric === 'receita';
+  const getValue = ([, s]) => isMoney ? s.revenue : s.orders;
+
+  if (entries.length === 0) {
+    document.getElementById('geochart').innerHTML =
+      `<div class="map-empty"><div class="map-empty-icon">🗺</div><div class="map-empty-text">Sem dados de estado disponíveis.<br>Clique em <strong>Sincronizar</strong> para buscar pedidos com endereço de entrega.</div></div>`;
+    return;
+  }
+
+  // Build DataTable: ['Estado', 'Valor', tooltip]
+  const rows = [['Estado', isMoney ? 'Receita (R$)' : 'Pedidos', { role: 'tooltip', p: { html: true } }]];
+  for (const [code, s] of entries) {
+    const name = STATE_NAMES[code] || code;
+    const val  = isMoney ? s.revenue : s.orders;
+    const tip  = `<div style="padding:8px 12px;font-family:inherit;font-size:12px"><strong>${name} (${code})</strong><br>${isMoney ? fmtBRL(val, 2) : fmtInt(val) + ' pedidos'}</div>`;
+    rows.push(['BR-' + code, val, tip]);
+  }
+
+  const data = google.visualization.arrayToDataTable(rows);
+
+  const options = {
+    region: 'BR',
+    resolution: 'provinces',
+    displayMode: 'regions',
+    colorAxis: {
+      minValue: 0,
+      colors: ['#e8e3d8', '#c4956a', '#8c3a20'],
+    },
+    backgroundColor: '#faf8f4',
+    datalessRegionColor: '#ede8df',
+    defaultColor: '#d4cdc2',
+    legend: 'none',
+    tooltip: { isHtml: true, trigger: 'focus' },
+  };
+
+  const container = document.getElementById('geochart');
+  container.innerHTML = '';
+
+  if (!geoChart) geoChart = new google.visualization.GeoChart(container);
+  geoChart.draw(data, options);
+}
+
+function render(d) {
+  const byState = d.byState || {};
+  const isMoney = metric === 'receita';
+  const label   = rangeLabel(d.period.since, d.period.until);
+
+  document.getElementById('pageSub').textContent =
+    `Coco and Luna · ${CHAN[d.channel]} · ${label}`;
+  document.getElementById('mapTitle').textContent =
+    `Mapa de calor · ${METRIC_LABEL[metric]} por estado`;
+  document.getElementById('rankingTitle').textContent =
+    `Ranking de estados · ${METRIC_LABEL[metric]}`;
+
+  // Sort states by selected metric
+  const sorted = Object.entries(byState)
+    .map(([code, s]) => ({ code, revenue: s.revenue, orders: s.orders, val: isMoney ? s.revenue : s.orders }))
+    .sort((a, b) => b.val - a.val);
+
+  const total = sorted.reduce((a, s) => a + s.val, 0);
+
+  // KPIs
+  document.getElementById('kpiStates').textContent = sorted.length || '—';
+  document.getElementById('kpiStatesSub').textContent = sorted.length
+    ? `de ${Object.keys(STATE_NAMES).length} estados do Brasil`
+    : 'sem dados de estado';
+
+  if (sorted.length) {
+    const leader = sorted[0];
+    const lname  = STATE_NAMES[leader.code] || leader.code;
+    document.getElementById('kpiLeader').textContent = lname;
+    document.getElementById('kpiLeaderSub').textContent = isMoney ? fmtBRL(leader.val) : fmtInt(leader.val) + ' pedidos';
+  } else {
+    document.getElementById('kpiLeader').textContent = '—';
+    document.getElementById('kpiLeaderSub').textContent = '—';
+  }
+
+  if (sorted.length >= 3 && total > 0) {
+    const top3 = sorted.slice(0, 3).reduce((a, s) => a + s.val, 0);
+    document.getElementById('kpiTop3').textContent = pctStr(top3 / total * 100);
+  } else {
+    document.getElementById('kpiTop3').textContent = '—';
+  }
+
+  // Draw map
+  drawMap(byState);
+
+  // State ranking grid
+  const maxVal = sorted[0]?.val || 1;
+  if (sorted.length) {
+    document.getElementById('stateGrid').innerHTML = sorted.map((s, i) => {
+      const name  = STATE_NAMES[s.code] || s.code;
+      const pct   = total > 0 ? pctStr(s.val / total * 100) : '—';
+      const barW  = Math.max((s.val / maxVal) * 100, 1).toFixed(1);
+      const valTx = isMoney ? fmtBRL(s.val) : fmtInt(s.val) + ' ped.';
+      const subTx = isMoney
+        ? `${fmtInt(s.orders)} pedido${s.orders !== 1 ? 's' : ''} · ${pct}`
+        : `${fmtBRL(s.revenue)} · ${pct}`;
+      return `
+        <div class="state-card">
+          <div class="state-rank">${i + 1}</div>
+          <div class="state-bar-wrap">
+            <div class="state-name">
+              <span>${name}</span>
+              <span class="state-code">${s.code}</span>
+            </div>
+            <div class="state-bar-track">
+              <div class="state-bar-fill" style="width:${barW}%;background:#8c3a20"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between">
+              <span class="state-val">${valTx}</span>
+              <span class="state-orders">${subTx}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  } else {
+    document.getElementById('stateGrid').innerHTML =
+      '<div class="muted-state" style="grid-column:1/-1">Nenhum dado de estado. Clique em Sincronizar para atualizar.</div>';
+  }
+
+  const now = new Date();
+  setLive('ok', `Ao vivo · ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
+  const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
+  document.getElementById('footerDate').textContent =
+    `Sales HQ · Coco and Luna · ${CHAN[d.channel]} · ${label} · última sincronização: ${up}`;
+}
+
+// ── Load data ──
+async function loadData() {
+  setLive('loading', 'Atualizando…');
+  try {
+    const p = new URLSearchParams({ channel, metric: 'receita', since: sinceDate, until: untilDate });
+    const r = await fetch('/api/dashboard?' + p);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    render(d);
+  } catch(e) {
+    setLive('error', 'Erro');
+    document.getElementById('footerDate').textContent = 'Erro: ' + e.message;
+  }
+}
+
+// ── UI controls ──
+function syncControls() {
+  document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
+  document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
+  document.getElementById('channelVal').textContent = CHAN[channel] || channel;
+  document.querySelectorAll('#cselChannel .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === channel));
+  document.getElementById('periodValue').textContent = rangeLabel(sinceDate, untilDate);
+}
+
+function closeAllDropdowns() {
+  document.querySelectorAll('.csel.open').forEach(el => el.classList.remove('open'));
+}
+
+document.addEventListener('click', () => {
+  closeAllDropdowns();
+  document.getElementById('periodPop').classList.remove('open');
+});
+
+document.querySelectorAll('.csel').forEach(el => {
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    const wasOpen = el.classList.contains('open');
+    closeAllDropdowns();
+    if (!wasOpen) el.classList.add('open');
+  });
+  el.querySelectorAll('.csel-opt').forEach(opt => {
+    opt.addEventListener('click', e => {
+      e.stopPropagation();
+      const val = opt.dataset.value;
+      if (el.id === 'cselMetric') { metric = val; localStorage.setItem('coco_metric_geo', metric); }
+      if (el.id === 'cselChannel') { channel = val; localStorage.setItem('coco_channel', channel); }
+      el.classList.remove('open');
+      syncControls();
+      loadData();
+    });
+  });
+});
+
+const pop     = document.getElementById('periodPop');
+const fromInp = document.getElementById('dateFrom');
+const toInp   = document.getElementById('dateTo');
+const ppErr   = document.getElementById('ppErr');
+
+document.getElementById('periodPill').addEventListener('click', e => {
+  e.stopPropagation();
+  closeAllDropdowns();
+  const wasOpen = pop.classList.contains('open');
+  pop.classList.toggle('open', !wasOpen);
+  if (!wasOpen) {
+    ppErr.textContent='';
+    fromInp.value=sinceDate; toInp.value=untilDate;
+    fromInp.max=todayISO; toInp.max=todayISO;
+    document.querySelectorAll('.pp-presets button').forEach(b=>{
+      const[s,u]=presetRange(b.dataset.preset); b.classList.toggle('active',s===sinceDate&&u===untilDate);
+    });
+  }
+});
+pop.addEventListener('click', e => e.stopPropagation());
+
+document.querySelectorAll('.pp-presets button').forEach(b => b.addEventListener('click', () => {
+  const [s,u] = presetRange(b.dataset.preset);
+  sinceDate=s; untilDate=u;
+  localStorage.setItem('coco_since',s); localStorage.setItem('coco_until',u);
+  pop.classList.remove('open');
+  syncControls(); loadData();
+}));
+
+document.getElementById('applyRange').addEventListener('click', () => {
+  const s=fromInp.value, u=toInp.value;
+  if(!s||!u){ppErr.textContent='Selecione as duas datas.';return}
+  if(parseISO(s)>parseISO(u)){ppErr.textContent='A data inicial deve ser anterior à final.';return}
+  ppErr.textContent='';
+  sinceDate=s; untilDate=u;
+  localStorage.setItem('coco_since',s); localStorage.setItem('coco_until',u);
+  pop.classList.remove('open');
+  syncControls(); loadData();
+});
+
+document.getElementById('syncBtn').addEventListener('click', async () => {
+  setLive('loading','Sincronizando…');
+  try { await fetch('/api/sync',{method:'POST'}); } catch(e) {}
+  loadData();
+});
+
+// ── Init ──
+syncControls();
+loadData();
+setInterval(loadData, 5*60*1000);
+</script>
+</body>
+</html>
