@@ -17,9 +17,9 @@
 
   /* ── Sidebar ── */
   .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200}
-  .brand{display:flex;align-items:center;gap:10px;padding:0 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
-  .brand-logo{width:36px;height:36px;object-fit:contain;flex-shrink:0}
-  .brand-name{font-size:13px;font-weight:700;color:var(--side-text);letter-spacing:.3px;line-height:1.2}
+  .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
+  .brand-logo{width:72px;height:72px;object-fit:contain}
+  .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
   .nav-group{margin-bottom:24px}
   .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
   .nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
@@ -169,7 +169,7 @@
 <nav class="sidebar">
   <div class="brand">
     <img src="Logo.svg" alt="Coco and Luna" class="brand-logo">
-    <span class="brand-name">Sales HQ</span>
+    <span class="brand-name">Dashboard<br>Vita Pet Life</span>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
     <a class="nav-item active"><span class="nav-icon">↗</span> Revenue</a>
@@ -180,8 +180,7 @@
     <a class="nav-item"><span class="nav-icon">≡</span> Estoque</a>
     <a class="nav-item"><span class="nav-icon">$</span> Financeiro</a></div>
   <div class="nav-group"><div class="nav-label">Marketing</div>
-    <a class="nav-item"><span class="nav-icon">◈</span> Campanhas</a>
-    <a class="nav-item"><span class="nav-icon">◉</span> Keywords</a></div>
+    <a class="nav-item"><span class="nav-icon">◈</span> Campanhas</a></div>
 </nav>
 
 <div class="main">
