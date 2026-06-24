@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sales HQ — Coco and Luna</title>
+<link rel="shortcut icon" href="logo.png" type="image/x-icon">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
 <style>
   :root{ color-scheme:light;
@@ -288,7 +289,8 @@ function render(d){
   document.getElementById('funnelList').innerHTML=steps.map(([l,v,c])=>{const w=Math.max((v/max)*100,v>0?1.5:0);return `<div class="fl-row"><span class="fl-label">${l}</span><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><span class="fl-val">${fmtInt(v)}</span></div>`}).join('');
 
   // top products
-  document.getElementById('topProducts').innerHTML=d.topProducts.length?d.topProducts.map(([nm,v],i)=>{const last=i===d.topProducts.length-1;const name=nm.length>42?nm.slice(0,42)+'…':nm;return `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;${last?'':'border-bottom:1px solid var(--border);'}font-size:12px"><span style="color:var(--sub)">${i+1} · ${name}</span><span style="font-weight:500;white-space:nowrap">${fmtBRL(v)}</span></div>`}).join(''):'<div class="muted-state">Sem vendas no período.</div>';
+  const chBadge={shopify:['Shopify','#7c6f5e'],shopee:['Shopee','#ee4d2d'],mercadolivre:['ML','#3483fa'],amazon:['Amazon','#e47911']};
+  document.getElementById('topProducts').innerHTML=d.topProducts.length?d.topProducts.map(([nm,ch,v],i)=>{const last=i===d.topProducts.length-1;const name=nm.length>36?nm.slice(0,36)+'…':nm;const[bl,bc]=chBadge[ch]||[ch,'#999'];return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;${last?'':'border-bottom:1px solid var(--border);'}font-size:12px"><span style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name}<span style="background:${bc};color:#fff;font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;white-space:nowrap">${bl}</span></span><span style="font-weight:500;white-space:nowrap">${fmtBRL(v)}</span></div>`}).join(''):'<div class="muted-state">Sem vendas no período.</div>';
 
   // recent orders
   const ro=d.recentOrders;
