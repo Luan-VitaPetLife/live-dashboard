@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard } from './src/metrics.js';
 import { runSync } from './src/sync.js';
+import { initStore } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 
@@ -71,9 +72,10 @@ app.get('/mercadolivre/callback', async (req, res) => {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+await initStore();
+
 app.listen(PORT, () => {
   console.log(`Dashboard rodando em http://localhost:${PORT}`);
-  // Sincroniza ao subir e depois a cada N minutos.
   runSync().then(r => console.log('Sync inicial:', r)).catch(e => console.error('Sync inicial falhou:', e.message));
   const minutes = Number(process.env.SYNC_INTERVAL_MINUTES || 15);
   setInterval(() => runSync().then(r => console.log('Sync:', r)).catch(e => console.error('Sync falhou:', e.message)), minutes * 60 * 1000);
