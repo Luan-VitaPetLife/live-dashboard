@@ -15,7 +15,7 @@ import { getMlTokens, setMlTokens } from './store.js';
 const CLIENT_ID     = process.env.ML_CLIENT_ID;
 const CLIENT_SECRET = process.env.ML_CLIENT_SECRET;
 const REDIRECT      = process.env.ML_REDIRECT_URL;
-const API_BASE      = 'https://api.mercadolivre.com';
+const API_BASE      = 'https://api.mercadolibre.com';
 const AUTH_URL      = 'https://auth.mercadolivre.com.br/authorization';
 
 function now() { return Math.floor(Date.now() / 1000); }
