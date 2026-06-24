@@ -14,46 +14,82 @@
     --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--line1:#2d2a26;--line2:#b0a898;--radius:10px;--radius-sm:6px; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* ── Sidebar ── */
   .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200}
-  .brand{display:flex;align-items:center;gap:8px;padding:0 18px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
-  .brand-icon{width:22px;height:22px;background:var(--side-text);clip-path:polygon(50% 0%,0% 100%,100% 100%)}
-  .brand-name{font-size:13px;font-weight:700;color:var(--side-text);letter-spacing:.3px}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
+  .brand-logo{width:36px;height:36px;object-fit:contain;flex-shrink:0}
+  .brand-name{font-size:13px;font-weight:700;color:var(--side-text);letter-spacing:.3px;line-height:1.2}
   .nav-group{margin-bottom:24px}
   .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
   .nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
   .nav-item:hover{background:var(--side-hover);color:var(--side-text)}
   .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
   .nav-icon{font-size:13px;opacity:.7;width:16px;text-align:center}
+
+  /* ── Main layout ── */
   .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh}
-  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:50px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:100}
-  .filter-pill{display:flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap}
-  .filter-pill:hover{border-color:var(--ink);color:var(--text)}
-  .filter-pill .label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
-  .filter-pill .arrow{color:var(--muted);font-size:10px;pointer-events:none}
-  .select-pill{position:relative;padding-right:10px}
-  .select-pill select{appearance:none;-webkit-appearance:none;-moz-appearance:none;border:none;background:transparent;font:inherit;font-size:11px;font-weight:600;color:var(--text);cursor:pointer;outline:none}
-  .sync-btn{height:30px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer}
-  .sync-btn:hover{border-color:var(--ink);color:var(--text)}
-  .period-wrap{position:relative}
-  .period-pop{position:absolute;top:38px;right:0;width:250px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.16);padding:14px;z-index:300;display:none;flex-direction:column;gap:12px}
-  .period-pop.open{display:flex}
-  .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-  .pp-presets button{font-size:11px;font-weight:600;padding:7px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer}
-  .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
-  .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
-  .pp-divider{height:1px;background:var(--border)}
-  .pp-field{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .pp-field label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);width:30px}
-  .pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2)}
-  .pp-apply{font-size:12px;font-weight:600;padding:8px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer}
-  .pp-err{font-size:10px;color:var(--red);min-height:12px}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:100}
   .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-right:4px}
   .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
   .ldot.loading{background:var(--amber)} .ldot.error{background:var(--red);animation:none}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Filter pills ── */
+  .filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none}
+  .filter-pill:hover{border-color:var(--ink);color:var(--text)}
+  .filter-pill .lbl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .filter-pill .val{font-weight:600;color:var(--text)}
+  .filter-pill .arr{color:var(--muted);font-size:9px;margin-left:1px;transition:transform .15s}
+
+  /* ── Custom select dropdown ── */
+  .csel{position:relative}
+  .csel.open .arr{transform:rotate(180deg)}
+  .csel.open{border-color:var(--ink)}
+  .csel-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+  .csel.open .csel-pop{display:flex}
+  .csel-opt{padding:9px 14px;font-size:12px;color:var(--sub);cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:8px}
+  .csel-opt:hover{background:var(--surface2);color:var(--text)}
+  .csel-opt.active{color:var(--text);font-weight:600}
+  .csel-opt.active::before{content:'✓';color:var(--ink);font-size:11px;font-weight:700}
+  .csel-opt:not(.active)::before{content:'';display:inline-block;width:11px}
+
+  /* ── Sync button ── */
+  .sync-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s}
+  .sync-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+
+  /* ── Period picker pill (highlighted) ── */
+  .period-pill-active{background:var(--ink)!important;border-color:var(--ink)!important}
+  .period-pill-active .lbl{color:rgba(240,235,224,.5)!important}
+  .period-pill-active .val{color:var(--side-text)!important}
+  .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
+
+  /* ── Period picker popup ── */
+  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+  .period-pop.open{display:flex}
+  .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
+  .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .pp-divider{height:1px;background:var(--border)}
+  .pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .pp-dates{display:flex;flex-direction:column;gap:8px}
+  .pp-field{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .pp-field label{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+  .pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);appearance:none;-webkit-appearance:none;outline:none;transition:border-color .12s}
+  .pp-field input[type=date]:focus{border-color:var(--ink)}
+  .pp-err{font-size:10px;color:var(--red);min-height:12px}
+  .pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer;transition:opacity .12s}
+  .pp-apply:hover{opacity:.85}
+
+  /* ── Content ── */
   .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  /* ── KPI strip ── */
   .kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
   .kpi-cell{padding:16px 20px;border-right:1px solid var(--border)}
   .kpi-cell:last-child{border-right:none}
@@ -63,6 +99,8 @@
   .kc-delta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
   .delta-val{font-size:10px;font-weight:600;padding:1px 6px;border-radius:20px}
   .delta-val.up{background:rgba(61,122,82,.1);color:var(--green)} .delta-val.down{background:rgba(155,58,58,.09);color:var(--red)} .delta-val.flat{background:rgba(30,28,24,.06);color:var(--muted)}
+
+  /* ── Cards ── */
   .charts-row{display:grid;grid-template-columns:1fr 240px 240px;gap:12px;align-items:start}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative}
   .card-pad{padding:18px 20px}
@@ -91,8 +129,6 @@
   .tbl td{padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle}
   .tbl tr:last-child td{border-bottom:none} .tbl tbody tr:hover td{background:var(--surface2)}
   .tbl .mono{font-family:'SF Mono','Fira Code',monospace;font-size:10px;color:var(--muted)} .tbl .dim{color:var(--sub)} .tbl .bold{font-weight:600}
-  .ch-tag{font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px}
-  .ch-tag.shopify{background:rgba(106,140,110,.1);color:var(--sage)} .ch-tag.shopee{background:rgba(160,90,58,.12);color:var(--rust)}
   .st-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
   .st-tag.ok{background:rgba(61,122,82,.08);color:var(--green)} .st-tag.pend{background:rgba(155,122,42,.08);color:var(--amber)} .st-tag.canc{background:rgba(155,58,58,.08);color:var(--red)}
   .legend-row{display:flex;align-items:center;gap:16px;margin-top:10px}
@@ -104,8 +140,12 @@
 </style>
 </head>
 <body>
+
 <nav class="sidebar">
-  <div class="brand"><div class="brand-icon"></div><span class="brand-name">Sales HQ</span></div>
+  <div class="brand">
+    <img src="Logo.svg" alt="Coco and Luna" class="brand-logo">
+    <span class="brand-name">Sales HQ</span>
+  </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
     <a class="nav-item active"><span class="nav-icon">↗</span> Revenue</a>
     <a class="nav-item"><span class="nav-icon">⊞</span> Segmentos</a>
@@ -122,19 +162,69 @@
 <div class="main">
   <div class="topbar">
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
+
     <button class="sync-btn" id="syncBtn" title="Buscar dados novos agora">↻ Sincronizar</button>
-    <div class="filter-pill select-pill"><span class="label">Métrica</span>
-      <select id="metricSelect"><option value="receita">Receita</option><option value="pedidos">Pedidos</option><option value="sessoes">Sessões</option></select><span class="arrow">▾</span></div>
-    <div class="filter-pill select-pill"><span class="label">Canal</span>
-      <select id="channelSelect"><option value="todos">Todos</option><option value="shopify">Shopify</option><option value="shopee">Shopee</option><option value="amazon">Amazon</option><option value="mercadolivre">Mercado Livre</option></select><span class="arrow">▾</span></div>
-    <div class="period-wrap">
-      <div class="filter-pill" id="periodPill" style="background:var(--ink);border-color:var(--ink)">
-        <span class="label" style="color:rgba(240,235,224,.5)">Período</span><span class="value" id="periodValue" style="color:var(--side-text)">Hoje</span><span class="arrow" style="color:rgba(240,235,224,.4)">▾</span></div>
+
+    <!-- Refresh rate selector -->
+    <div class="filter-pill csel" id="cselRefresh">
+      <span class="lbl">Atualizar</span>
+      <span class="val" id="refreshVal">5 min</span>
+      <span class="arr">▾</span>
+      <div class="csel-pop">
+        <div class="csel-opt" data-value="1">1 min</div>
+        <div class="csel-opt active" data-value="5">5 min</div>
+        <div class="csel-opt" data-value="15">15 min</div>
+        <div class="csel-opt" data-value="30">30 min</div>
+        <div class="csel-opt" data-value="0">Desligar</div>
+      </div>
+    </div>
+
+    <!-- Metric selector -->
+    <div class="filter-pill csel" id="cselMetric">
+      <span class="lbl">Métrica</span>
+      <span class="val" id="metricVal">Receita</span>
+      <span class="arr">▾</span>
+      <div class="csel-pop">
+        <div class="csel-opt active" data-value="receita">Receita</div>
+        <div class="csel-opt" data-value="pedidos">Pedidos</div>
+        <div class="csel-opt" data-value="sessoes">Sessões</div>
+      </div>
+    </div>
+
+    <!-- Channel selector -->
+    <div class="filter-pill csel" id="cselChannel">
+      <span class="lbl">Canal</span>
+      <span class="val" id="channelVal">Todos</span>
+      <span class="arr">▾</span>
+      <div class="csel-pop">
+        <div class="csel-opt active" data-value="todos">Todos</div>
+        <div class="csel-opt" data-value="shopify">Shopify</div>
+        <div class="csel-opt" data-value="shopee">Shopee</div>
+        <div class="csel-opt" data-value="amazon">Amazon</div>
+        <div class="csel-opt" data-value="mercadolivre">Mercado Livre</div>
+      </div>
+    </div>
+
+    <!-- Period picker -->
+    <div style="position:relative" id="periodWrap">
+      <div class="filter-pill period-pill-active" id="periodPill">
+        <span class="lbl">Período</span>
+        <span class="val" id="periodValue">Hoje</span>
+        <span class="arr">▾</span>
+      </div>
       <div class="period-pop" id="periodPop">
-        <div class="pp-presets"><button data-preset="today">Hoje</button><button data-preset="7d">7 dias</button><button data-preset="30d">30 dias</button><button data-preset="month">Este mês</button></div>
+        <div class="pp-presets">
+          <button data-preset="today">Hoje</button>
+          <button data-preset="7d">7 dias</button>
+          <button data-preset="30d">30 dias</button>
+          <button data-preset="month">Este mês</button>
+        </div>
         <div class="pp-divider"></div>
-        <div class="pp-field"><label>De</label><input type="date" id="dateFrom"></div>
-        <div class="pp-field"><label>Até</label><input type="date" id="dateTo"></div>
+        <div class="pp-section-label">Intervalo personalizado</div>
+        <div class="pp-dates">
+          <div class="pp-field"><label>De</label><input type="date" id="dateFrom"></div>
+          <div class="pp-field"><label>Até</label><input type="date" id="dateTo"></div>
+        </div>
         <div class="pp-err" id="ppErr"></div>
         <button class="pp-apply" id="applyRange">Aplicar intervalo</button>
       </div>
@@ -142,7 +232,10 @@
   </div>
 
   <div class="content">
-    <div><div class="page-title">Revenue command center</div><div class="page-sub" id="pageSub">Coco and Luna · multicanal</div></div>
+    <div>
+      <div class="page-title">Revenue command center</div>
+      <div class="page-sub" id="pageSub">Coco and Luna · multicanal</div>
+    </div>
 
     <div class="kpi-strip">
       <div class="kpi-cell"><div class="kc-label">Receita Total</div><div class="kc-value" id="kpiRevenue">—</div><div class="kc-delta" id="kpiRevenueDelta"></div></div>
@@ -202,135 +295,310 @@
 </div>
 
 <script>
-const CHAN={todos:'Todos os canais',shopify:'Shopify',shopee:'Shopee',amazon:'Amazon',mercadolivre:'Mercado Livre'};
-const METRIC_LABEL={receita:'Receita',pedidos:'Pedidos',sessoes:'Sessões'};
-const MKT_COLORS={Instagram:'#a05a3a',Facebook:'#2d2a26',Google:'#6a8c6e',Shopee:'#ee4d2d',Direto:'#c4b49a',Outros:'#b0a898'};
-const charts={};
-function setChart(id,cfg){ if(charts[id])charts[id].destroy(); charts[id]=new Chart(document.getElementById(id),cfg); }
+// ── Single source of truth for channel colors ──
+const CH = {
+  shopify:      { bg:'#95BF47', text:'#fff',  label:'Shopify' },
+  shopee:       { bg:'#EE4D2D', text:'#fff',  label:'Shopee' },
+  mercadolivre: { bg:'#FFE600', text:'#333',  label:'Mercado Livre' },
+  amazon:       { bg:'#FF9900', text:'#333',  label:'Amazon' },
+};
 
-function isoLocal(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function parseISO(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
-function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
-function fmtDM(d){return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')}
-const todayISO=isoLocal(new Date());
-let sinceDate=localStorage.getItem('coco_since')||todayISO, untilDate=localStorage.getItem('coco_until')||todayISO;
-let channel=localStorage.getItem('coco_channel')||'todos', metric=localStorage.getItem('coco_metric')||'receita';
-if(!CHAN[channel])channel='todos'; if(!METRIC_LABEL[metric])metric='receita';
-function rangeLabel(s,u){if(s===u&&s===todayISO)return'Hoje';if(s===u)return fmtDM(parseISO(s));return fmtDM(parseISO(s))+' – '+fmtDM(parseISO(u))}
-function presetRange(p){const n=new Date();if(p==='today')return[todayISO,todayISO];if(p==='7d')return[isoLocal(addDays(n,-6)),todayISO];if(p==='30d')return[isoLocal(addDays(n,-29)),todayISO];if(p==='month')return[isoLocal(new Date(n.getFullYear(),n.getMonth(),1)),todayISO];return[todayISO,todayISO]}
-
-function fmtBRL(v,dec=0){return'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec})}
-function fmtBRLshort(v){const n=Number(v)||0;return n>=1000?'R$ '+(n/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'K':fmtBRL(n)}
-function fmtInt(v){return(Number(v)||0).toLocaleString('pt-BR')}
-function pctStr(n,dec=1){return(Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:dec,minimumFractionDigits:dec})+'%'}
-function renderDelta(el,p,suffix='vs. período anterior'){ if(p===null||p===undefined){el.innerHTML=`<span class="delta-val flat">—</span> ${suffix}`;return} const up=p>=0,cls=Math.abs(p)<0.05?'flat':(up?'up':'down'); el.innerHTML=`<span class="delta-val ${cls}">${up?'↑':'↓'} ${Math.abs(p).toLocaleString('pt-BR',{maximumFractionDigits:1})}%</span> ${suffix}`; }
-function setLive(s,t){const d=document.getElementById('liveDot');d.className='ldot'+(s==='loading'?' loading':s==='error'?' error':'');if(t)document.getElementById('lastUpdate').textContent=t}
-
-Chart.defaults.color='#9c9790';Chart.defaults.borderColor='rgba(30,28,24,0.08)';Chart.defaults.font.size=11;
-const tip={backgroundColor:'#faf8f4',borderColor:'rgba(30,28,24,0.12)',borderWidth:1,titleColor:'#1a1916',bodyColor:'#6b6760',padding:10,cornerRadius:6};
-
-function drawDonut(id,data,colors){
-  const total=data.reduce((a,b)=>a+(Number(b)||0),0);
-  const cfg=total<=0
-    ?{type:'doughnut',data:{labels:['Sem dados'],datasets:[{data:[1],backgroundColor:['#e6e1d6'],borderColor:'#faf8f4',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}
-    :{type:'doughnut',data:{datasets:[{data,backgroundColor:colors,borderColor:'#faf8f4',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false},tooltip:{enabled:false}}}};
-  setChart(id,cfg);
+function chBadgeHTML(chKey) {
+  const c = CH[chKey] || { bg:'#999', text:'#fff', label: chKey || '?' };
+  return `<span style="background:${c.bg};color:${c.text};font-size:10px;padding:2px 7px;border-radius:3px;font-weight:600;white-space:nowrap">${c.label}</span>`;
 }
 
-function render(d){
-  const label=rangeLabel(d.period.since,d.period.until);
-  document.getElementById('pageSub').textContent=`Coco and Luna · ${CHAN[d.channel]} · multicanal`;
+const CHAN = { todos:'Todos os canais', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre' };
+const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos', sessoes:'Sessões' };
+const MKT_COLORS = { Instagram:'#a05a3a', Facebook:'#2d2a26', Google:'#6a8c6e', Shopee:'#EE4D2D', 'Mercado Livre':'#FFE600', Direto:'#c4b49a', Outros:'#b0a898' };
+const charts = {};
+function setChart(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
 
-  const k=d.kpis;
-  document.getElementById('kpiRevenue').textContent=fmtBRL(k.revenue); renderDelta(document.getElementById('kpiRevenueDelta'),k.revenueDelta);
-  document.getElementById('kpiOrders').textContent=fmtInt(k.orders); renderDelta(document.getElementById('kpiOrdersDelta'),k.ordersDelta);
-  document.getElementById('kpiAov').textContent=fmtBRL(k.aov,2); renderDelta(document.getElementById('kpiAovDelta'),k.aovDelta);
-  document.getElementById('kpiConv').textContent=(k.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
-  const dpp=k.conversionDeltaPP; if(dpp===null||dpp===undefined||isNaN(dpp)) document.getElementById('kpiConvDelta').innerHTML='<span class="delta-val flat">—</span> vs. período anterior';
-  else{const up=dpp>=0,cls=Math.abs(dpp)<0.005?'flat':(up?'up':'down');document.getElementById('kpiConvDelta').innerHTML=`<span class="delta-val ${cls}">${up?'↑':'↓'} ${Math.abs(dpp).toLocaleString('pt-BR',{maximumFractionDigits:2})}pp</span> vs. período anterior`;}
+function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
+function parseISO(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d) }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x }
+function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }
+const todayISO = isoLocal(new Date());
+let sinceDate = localStorage.getItem('coco_since') || todayISO;
+let untilDate = localStorage.getItem('coco_until') || todayISO;
+let channel   = localStorage.getItem('coco_channel') || 'todos';
+let metric    = localStorage.getItem('coco_metric') || 'receita';
+let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
+if (!CHAN[channel]) channel = 'todos';
+if (!METRIC_LABEL[metric]) metric = 'receita';
 
-  // trend
-  const t=d.trend, money=t.fmt==='money';
-  const ds=[{label:METRIC_LABEL[d.metric],data:t.data,borderColor:'#2d2a26',borderWidth:1.5,tension:.4,pointRadius:3,pointHoverRadius:5,pointBackgroundColor:'#faf8f4',pointBorderColor:'#2d2a26',pointBorderWidth:1.5,fill:false}];
-  if(d.metric==='receita')ds.push({label:'Custo ads',data:t.data.map(()=>0),borderColor:'#b0a898',borderWidth:1.5,borderDash:[5,4],tension:.4,pointRadius:0,fill:false});
-  setChart('trendChart',{type:'line',data:{labels:t.labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{...tip,callbacks:{label:c=>' '+c.dataset.label+': '+(money?fmtBRL(c.parsed.y,2):fmtInt(c.parsed.y))}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{grid:{color:'rgba(30,28,24,0.06)'},ticks:{callback:v=>money?fmtBRLshort(v):fmtInt(v)}}}}});
-  document.getElementById('trendTitle').textContent='Tendência · '+METRIC_LABEL[d.metric];
-  document.getElementById('trendSub').textContent=(d.period.grain==='hour'?'Por hora · ':'Por dia · ')+label.toLowerCase();
-  document.getElementById('trendVal').textContent=(money?fmtBRL(t.total):fmtInt(t.total))+' '+METRIC_LABEL[d.metric].toUpperCase();
-  document.getElementById('trendLegend').innerHTML=d.metric==='receita'?`<div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Receita</div><div class="legend-item"><div class="legend-line" style="background:var(--line2)"></div>Custo ads</div>`:`<div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>${METRIC_LABEL[d.metric]}</div>`;
-
-  // channel split
-  const cs=d.channelSplit, order=[['Shopify','shopify','#a05a3a'],['Shopee','shopee','#ee4d2d'],['Amazon','amazon','#2d2a26'],['Mercado Livre','mercadolivre','#6a8c6e']];
-  const cTotal=order.reduce((a,[,k])=>a+(cs[k]||0),0);
-  drawDonut('channelChart',order.map(([,k])=>cs[k]||0),order.map(([,, c])=>c));
-  document.getElementById('chCenter').textContent=fmtBRLshort(cTotal);
-  document.getElementById('channelRows').innerHTML=order.map(([nm,k,c])=>{const v=cs[k]||0;const pc=cTotal>0?(v/cTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%';return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${c}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtBRL(v)}</span></div></div>`}).join('');
-
-  // marketing
-  const mTotal=d.marketing.reduce((a,e)=>a+e.value,0);
-  drawDonut('mktChart',d.marketing.map(e=>e.value),d.marketing.map(e=>MKT_COLORS[e.name]||'#b0a898'));
-  document.getElementById('mktCenter').textContent=fmtBRLshort(mTotal);
-  document.getElementById('mktRows').innerHTML=d.marketing.length?d.marketing.map(e=>{const pc=mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%';return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${MKT_COLORS[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtBRL(e.value)}</span></div></div>`}).join(''):'<div class="muted-state">Sem receita atribuída.</div>';
-
-  // traffic
-  const tf=d.traffic;
-  document.getElementById('mSessions').textContent=fmtInt(tf.sessions);
-  document.getElementById('mSessionsMeta').textContent=tf.visitors?(tf.sessions/tf.visitors).toLocaleString('pt-BR',{maximumFractionDigits:1})+' por visitante':' ';
-  document.getElementById('mVisitors').textContent=fmtInt(tf.visitors);
-  document.getElementById('mCart').textContent=fmtInt(tf.cart);
-  document.getElementById('mCartMeta').textContent=tf.sessions?pctStr(tf.cart/tf.sessions*100)+' das sessões':' ';
-  document.getElementById('mConv').textContent=(tf.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
-  document.getElementById('trafficVal').textContent=fmtInt(tf.sessions)+' SESSÕES';
-  setChart('trafficChart',{data:{labels:tf.series.map(p=>p.label),datasets:[{type:'bar',label:'Sessões',data:tf.series.map(p=>p.sessions),backgroundColor:'rgba(176,168,152,.55)',borderRadius:2,yAxisID:'y',order:2},{type:'line',label:'Conversão',data:tf.series.map(p=>p.conv*100),borderColor:'#2d2a26',borderWidth:1.5,tension:.4,pointRadius:2,yAxisID:'y1',order:1,fill:false}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{...tip,callbacks:{label:c=>c.dataset.label==='Conversão'?' Conversão: '+c.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':' Sessões: '+fmtInt(c.parsed.y)}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{position:'left',beginAtZero:true,grid:{color:'rgba(30,28,24,0.06)'}},y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>v+'%'}}}}});
-
-  // funnel
-  const fn=d.funnel,max=fn.sessions||1;
-  const steps=[['Sessões',fn.sessions,'var(--ink)'],['Adicionou carrinho',fn.cart,'var(--ink)'],['Iniciou checkout',fn.checkout,'var(--tan)'],['Concluiu compra',fn.completed,'var(--sage)']];
-  document.getElementById('funnelList').innerHTML=steps.map(([l,v,c])=>{const w=Math.max((v/max)*100,v>0?1.5:0);return `<div class="fl-row"><span class="fl-label">${l}</span><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><span class="fl-val">${fmtInt(v)}</span></div>`}).join('');
-
-  // top products
-  const chBadge={shopify:['Shopify','#95BF47','#fff'],shopee:['Shopee','#EE4D2D','#fff'],mercadolivre:['Mercado Livre','#FFE600','#333'],amazon:['Amazon','#FF9900','#333']};
-  document.getElementById('topProducts').innerHTML=d.topProducts.length?d.topProducts.map(([nm,ch,v],i)=>{const last=i===d.topProducts.length-1;const name=nm.length>36?nm.slice(0,36)+'…':nm;const[bl,bc,btc]=chBadge[ch]||[ch,'#999','#fff'];return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;${last?'':'border-bottom:1px solid var(--border);'}font-size:12px"><span style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name}<span style="background:${bc};color:${btc};font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;white-space:nowrap">${bl}</span></span><span style="font-weight:500;white-space:nowrap">${fmtBRL(v)}</span></div>`}).join(''):'<div class="muted-state">Sem vendas no período.</div>';
-
-  // recent orders
-  const ro=d.recentOrders;
-  document.getElementById('ordersMeta').textContent=ro.length?`${ro.length} pedidos`:'0 pedidos';
-  document.getElementById('ordersBody').innerHTML=ro.length?ro.map(o=>{const st=statusTag(o);const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});const[bl,bc,btc]=chBadge[o.channel]||[o.channel,'#999','#fff'];return `<tr><td class="mono">${o.name||''}</td><td><span style="background:${bc};color:${btc};font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;white-space:nowrap">${bl}</span></td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtBRL(o.total,2)}</td><td style="color:var(--muted)">${fmtBRL(0,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`}).join(''):'<tr><td colspan="8" class="muted-state">Nenhum pedido.</td></tr>';
-
-  const now=new Date(),hh=String(now.getHours()).padStart(2,'0'),mm=String(now.getMinutes()).padStart(2,'0');
-  setLive('ok',`Ao vivo · ${hh}:${mm}`);
-  const up=d.updatedAt?new Date(d.updatedAt).toLocaleString('pt-BR'):'—';
-  document.getElementById('footerDate').textContent=`Sales HQ · Coco and Luna · ${CHAN[d.channel]} · período ${label} · receita exclui cancelados · última sincronização: ${up}`;
+function rangeLabel(s, u) {
+  if (s === u && s === todayISO) return 'Hoje';
+  if (s === u) return fmtDM(parseISO(s));
+  return fmtDM(parseISO(s)) + ' – ' + fmtDM(parseISO(u));
+}
+function presetRange(p) {
+  const n = new Date();
+  if (p === 'today')  return [todayISO, todayISO];
+  if (p === '7d')     return [isoLocal(addDays(n,-6)), todayISO];
+  if (p === '30d')    return [isoLocal(addDays(n,-29)), todayISO];
+  if (p === 'month')  return [isoLocal(new Date(n.getFullYear(),n.getMonth(),1)), todayISO];
+  return [todayISO, todayISO];
 }
 
-function statusTag(o){ if(o.cancelled)return{cls:'canc',label:'Cancelado'}; const s=(o.status||'').toUpperCase(); if(['PAID','COMPLETED','SHIPPED','TO_CONFIRM_RECEIVE','READY_TO_SHIP'].includes(s))return{cls:'ok',label:'OK'}; return{cls:'pend',label:'Pendente'}; }
+function fmtBRL(v, dec=0) { return 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}) }
+function fmtBRLshort(v) { const n=Number(v)||0; return n>=1000?'R$ '+(n/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'K':fmtBRL(n) }
+function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
+function pctStr(n, dec=1) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:dec,minimumFractionDigits:dec})+'%' }
+function renderDelta(el, p, suffix='vs. período anterior') {
+  if (p === null || p === undefined) { el.innerHTML=`<span class="delta-val flat">—</span> ${suffix}`; return }
+  const up = p >= 0, cls = Math.abs(p) < 0.05 ? 'flat' : (up ? 'up' : 'down');
+  el.innerHTML = `<span class="delta-val ${cls}">${up?'↑':'↓'} ${Math.abs(p).toLocaleString('pt-BR',{maximumFractionDigits:1})}%</span> ${suffix}`;
+}
+function setLive(s, t) {
+  const d = document.getElementById('liveDot');
+  d.className = 'ldot' + (s === 'loading' ? ' loading' : s === 'error' ? ' error' : '');
+  if (t) document.getElementById('lastUpdate').textContent = t;
+}
 
-async function load(){
-  setLive('loading','Atualizando…');
-  document.getElementById('metricSelect').value=metric;
-  document.getElementById('channelSelect').value=channel;
-  document.getElementById('periodValue').textContent=rangeLabel(sinceDate,untilDate);
-  try{
-    const p=new URLSearchParams({channel,metric,since:sinceDate,until:untilDate});
-    const r=await fetch('/api/dashboard?'+p); const d=await r.json();
-    if(d.error)throw new Error(d.error);
+Chart.defaults.color = '#9c9790';
+Chart.defaults.borderColor = 'rgba(30,28,24,0.08)';
+Chart.defaults.font.size = 11;
+const tip = { backgroundColor:'#faf8f4', borderColor:'rgba(30,28,24,0.12)', borderWidth:1, titleColor:'#1a1916', bodyColor:'#6b6760', padding:10, cornerRadius:6 };
+
+function drawDonut(id, data, colors) {
+  const total = data.reduce((a,b) => a+(Number(b)||0), 0);
+  const cfg = total <= 0
+    ? { type:'doughnut', data:{ labels:['Sem dados'], datasets:[{ data:[1], backgroundColor:['#e6e1d6'], borderColor:'#faf8f4', borderWidth:3 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false} } } }
+    : { type:'doughnut', data:{ datasets:[{ data, backgroundColor:colors, borderColor:'#faf8f4', borderWidth:3 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false} } } };
+  setChart(id, cfg);
+}
+
+function render(d) {
+  const label = rangeLabel(d.period.since, d.period.until);
+  document.getElementById('pageSub').textContent = `Coco and Luna · ${CHAN[d.channel]} · multicanal`;
+
+  // KPIs
+  const k = d.kpis;
+  document.getElementById('kpiRevenue').textContent = fmtBRL(k.revenue); renderDelta(document.getElementById('kpiRevenueDelta'), k.revenueDelta);
+  document.getElementById('kpiOrders').textContent = fmtInt(k.orders); renderDelta(document.getElementById('kpiOrdersDelta'), k.ordersDelta);
+  document.getElementById('kpiAov').textContent = fmtBRL(k.aov, 2); renderDelta(document.getElementById('kpiAovDelta'), k.aovDelta);
+  document.getElementById('kpiConv').textContent = (k.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
+  const dpp = k.conversionDeltaPP;
+  if (dpp === null || dpp === undefined || isNaN(dpp)) {
+    document.getElementById('kpiConvDelta').innerHTML = '<span class="delta-val flat">—</span> vs. período anterior';
+  } else {
+    const up = dpp >= 0, cls = Math.abs(dpp) < 0.005 ? 'flat' : (up ? 'up' : 'down');
+    document.getElementById('kpiConvDelta').innerHTML = `<span class="delta-val ${cls}">${up?'↑':'↓'} ${Math.abs(dpp).toLocaleString('pt-BR',{maximumFractionDigits:2})}pp</span> vs. período anterior`;
+  }
+
+  // Trend chart
+  const t = d.trend, money = t.fmt === 'money';
+  const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:'#2d2a26', borderWidth:1.5, tension:.4, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:'#faf8f4', pointBorderColor:'#2d2a26', pointBorderWidth:1.5, fill:false }];
+  if (d.metric === 'receita') ds.push({ label:'Custo ads', data:t.data.map(()=>0), borderColor:'#b0a898', borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
+  setChart('trendChart', { type:'line', data:{ labels:t.labels, datasets:ds }, options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{ label:c=>' '+c.dataset.label+': '+(money?fmtBRL(c.parsed.y,2):fmtInt(c.parsed.y)) }} }, scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ grid:{color:'rgba(30,28,24,0.06)'}, ticks:{callback:v=>money?fmtBRLshort(v):fmtInt(v)} } } } });
+  document.getElementById('trendTitle').textContent = 'Tendência · ' + METRIC_LABEL[d.metric];
+  document.getElementById('trendSub').textContent = (d.period.grain === 'hour' ? 'Por hora · ' : 'Por dia · ') + label.toLowerCase();
+  document.getElementById('trendVal').textContent = (money ? fmtBRL(t.total) : fmtInt(t.total)) + ' ' + METRIC_LABEL[d.metric].toUpperCase();
+  document.getElementById('trendLegend').innerHTML = d.metric === 'receita'
+    ? `<div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Receita</div><div class="legend-item"><div class="legend-line" style="background:var(--line2)"></div>Custo ads</div>`
+    : `<div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>${METRIC_LABEL[d.metric]}</div>`;
+
+  // Channel split — using CH colors
+  const cs = d.channelSplit;
+  const chOrder = [['shopify','Shopify'],['shopee','Shopee'],['mercadolivre','Mercado Livre'],['amazon','Amazon']];
+  const cTotal = chOrder.reduce((a,[k]) => a + (cs[k]||0), 0);
+  drawDonut('channelChart', chOrder.map(([k]) => cs[k]||0), chOrder.map(([k]) => CH[k]?.bg || '#999'));
+  document.getElementById('chCenter').textContent = fmtBRLshort(cTotal);
+  document.getElementById('channelRows').innerHTML = chOrder.map(([k, nm]) => {
+    const v = cs[k] || 0;
+    const pc = cTotal > 0 ? (v/cTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%' : '0%';
+    const c = CH[k]?.bg || '#999';
+    return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${c}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtBRL(v)}</span></div></div>`;
+  }).join('');
+
+  // Marketing donut
+  const mTotal = d.marketing.reduce((a,e) => a+e.value, 0);
+  drawDonut('mktChart', d.marketing.map(e=>e.value), d.marketing.map(e=>MKT_COLORS[e.name]||'#b0a898'));
+  document.getElementById('mktCenter').textContent = fmtBRLshort(mTotal);
+  document.getElementById('mktRows').innerHTML = d.marketing.length
+    ? d.marketing.map(e => { const pc = mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%'; return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${MKT_COLORS[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtBRL(e.value)}</span></div></div>`; }).join('')
+    : '<div class="muted-state">Sem receita atribuída.</div>';
+
+  // Traffic
+  const tf = d.traffic;
+  document.getElementById('mSessions').textContent = fmtInt(tf.sessions);
+  document.getElementById('mSessionsMeta').textContent = tf.visitors ? (tf.sessions/tf.visitors).toLocaleString('pt-BR',{maximumFractionDigits:1})+' por visitante' : ' ';
+  document.getElementById('mVisitors').textContent = fmtInt(tf.visitors);
+  document.getElementById('mCart').textContent = fmtInt(tf.cart);
+  document.getElementById('mCartMeta').textContent = tf.sessions ? pctStr(tf.cart/tf.sessions*100)+' das sessões' : ' ';
+  document.getElementById('mConv').textContent = (tf.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
+  document.getElementById('trafficVal').textContent = fmtInt(tf.sessions)+' SESSÕES';
+  setChart('trafficChart', { data:{ labels:tf.series.map(p=>p.label), datasets:[ { type:'bar', label:'Sessões', data:tf.series.map(p=>p.sessions), backgroundColor:'rgba(176,168,152,.55)', borderRadius:2, yAxisID:'y', order:2 }, { type:'line', label:'Conversão', data:tf.series.map(p=>p.conv*100), borderColor:'#2d2a26', borderWidth:1.5, tension:.4, pointRadius:2, yAxisID:'y1', order:1, fill:false } ] }, options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{label:c=>c.dataset.label==='Conversão'?' Conversão: '+c.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':' Sessões: '+fmtInt(c.parsed.y)}} }, scales:{ x:{grid:{display:false},ticks:{maxTicksLimit:12}}, y:{position:'left',beginAtZero:true,grid:{color:'rgba(30,28,24,0.06)'}}, y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>v+'%'}} } } });
+
+  // Funnel
+  const fn = d.funnel, max = fn.sessions || 1;
+  const steps = [['Sessões',fn.sessions,'var(--ink)'],['Adicionou carrinho',fn.cart,'var(--ink)'],['Iniciou checkout',fn.checkout,'var(--tan)'],['Concluiu compra',fn.completed,'var(--sage)']];
+  document.getElementById('funnelList').innerHTML = steps.map(([l,v,c]) => { const w = Math.max((v/max)*100, v>0?1.5:0); return `<div class="fl-row"><span class="fl-label">${l}</span><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><span class="fl-val">${fmtInt(v)}</span></div>`; }).join('');
+
+  // Top products — use chBadgeHTML
+  document.getElementById('topProducts').innerHTML = d.topProducts.length
+    ? d.topProducts.map(([nm, ch, v], i) => {
+        const last = i === d.topProducts.length - 1;
+        const name = nm.length > 36 ? nm.slice(0,36)+'…' : nm;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;${last?'':'border-bottom:1px solid var(--border);'}font-size:12px"><span style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name} ${chBadgeHTML(ch)}</span><span style="font-weight:500;white-space:nowrap">${fmtBRL(v)}</span></div>`;
+      }).join('')
+    : '<div class="muted-state">Sem vendas no período.</div>';
+
+  // Recent orders — use chBadgeHTML
+  const ro = d.recentOrders;
+  document.getElementById('ordersMeta').textContent = ro.length ? `${ro.length} pedidos` : '0 pedidos';
+  document.getElementById('ordersBody').innerHTML = ro.length
+    ? ro.map(o => {
+        const st = statusTag(o);
+        const time = new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+        return `<tr><td class="mono">${o.name||''}</td><td>${chBadgeHTML(o.channel)}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtBRL(o.total,2)}</td><td style="color:var(--muted)">${fmtBRL(0,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`;
+      }).join('')
+    : '<tr><td colspan="8" class="muted-state">Nenhum pedido.</td></tr>';
+
+  const now = new Date(), hh = String(now.getHours()).padStart(2,'0'), mm = String(now.getMinutes()).padStart(2,'0');
+  setLive('ok', `Ao vivo · ${hh}:${mm}`);
+  const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
+  document.getElementById('footerDate').textContent = `Sales HQ · Coco and Luna · ${CHAN[d.channel]} · período ${label} · receita exclui cancelados · última sincronização: ${up}`;
+}
+
+function statusTag(o) {
+  if (o.cancelled) return { cls:'canc', label:'Cancelado' };
+  const s = (o.status||'').toUpperCase();
+  if (['PAID','COMPLETED','SHIPPED','TO_CONFIRM_RECEIVE','READY_TO_SHIP'].includes(s)) return { cls:'ok', label:'OK' };
+  return { cls:'pend', label:'Pendente' };
+}
+
+// ── Refresh interval control ──
+let refreshTimer = null;
+function applyRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (refreshMin > 0) refreshTimer = setInterval(loadData, refreshMin * 60 * 1000);
+}
+
+// ── syncControls — keep UI in sync with state ──
+function syncControls() {
+  // Metric
+  document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
+  document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
+  // Channel
+  document.getElementById('channelVal').textContent = CHAN[channel] || channel;
+  document.querySelectorAll('#cselChannel .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === channel));
+  // Refresh
+  const rLabel = refreshMin === 0 ? 'Desligar' : `${refreshMin} min`;
+  document.getElementById('refreshVal').textContent = rLabel;
+  document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => o.classList.toggle('active', Number(o.dataset.value) === refreshMin));
+  // Period
+  document.getElementById('periodValue').textContent = rangeLabel(sinceDate, untilDate);
+}
+
+async function loadData() {
+  setLive('loading', 'Atualizando…');
+  try {
+    const p = new URLSearchParams({ channel, metric, since:sinceDate, until:untilDate });
+    const r = await fetch('/api/dashboard?' + p);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
     render(d);
-  }catch(e){ setLive('error','Erro'); document.getElementById('footerDate').textContent='Erro: '+e.message; }
+  } catch(e) {
+    setLive('error', 'Erro');
+    document.getElementById('footerDate').textContent = 'Erro: ' + e.message;
+  }
 }
 
-// controls
-const pop=document.getElementById('periodPop'),fromInp=document.getElementById('dateFrom'),toInp=document.getElementById('dateTo'),ppErr=document.getElementById('ppErr');
-document.getElementById('metricSelect').addEventListener('change',e=>{metric=e.target.value;localStorage.setItem('coco_metric',metric);load()});
-document.getElementById('channelSelect').addEventListener('change',e=>{channel=e.target.value;localStorage.setItem('coco_channel',channel);load()});
-document.getElementById('periodPill').addEventListener('click',e=>{e.stopPropagation();pop.classList.toggle('open');if(pop.classList.contains('open')){ppErr.textContent='';fromInp.value=sinceDate;toInp.value=untilDate;fromInp.max=todayISO;toInp.max=todayISO;document.querySelectorAll('.pp-presets button').forEach(b=>{const[s,u]=presetRange(b.dataset.preset);b.classList.toggle('active',s===sinceDate&&u===untilDate)})}});
-pop.addEventListener('click',e=>e.stopPropagation());
-document.addEventListener('click',()=>pop.classList.remove('open'));
-document.querySelectorAll('.pp-presets button').forEach(b=>b.addEventListener('click',()=>{const[s,u]=presetRange(b.dataset.preset);sinceDate=s;untilDate=u;localStorage.setItem('coco_since',s);localStorage.setItem('coco_until',u);pop.classList.remove('open');load()}));
-document.getElementById('applyRange').addEventListener('click',()=>{const s=fromInp.value,u=toInp.value;if(!s||!u){ppErr.textContent='Selecione as duas datas.';return}if(parseISO(s)>parseISO(u)){ppErr.textContent='A data inicial deve ser anterior à final.';return}ppErr.textContent='';sinceDate=s;untilDate=u;localStorage.setItem('coco_since',s);localStorage.setItem('coco_until',u);pop.classList.remove('open');load()});
-document.getElementById('syncBtn').addEventListener('click',async()=>{setLive('loading','Sincronizando…');try{await fetch('/api/sync',{method:'POST'});}catch(e){} load();});
+// ── Custom dropdown logic ──
+function setupCsel(el) {
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    const wasOpen = el.classList.contains('open');
+    closeAllDropdowns();
+    if (!wasOpen) el.classList.add('open');
+  });
+  el.querySelectorAll('.csel-opt').forEach(opt => {
+    opt.addEventListener('click', e => {
+      e.stopPropagation();
+      const field = el.id;
+      const val = opt.dataset.value;
+      if (field === 'cselMetric') { metric = val; localStorage.setItem('coco_metric', metric); }
+      if (field === 'cselChannel') { channel = val; localStorage.setItem('coco_channel', channel); }
+      if (field === 'cselRefresh') { refreshMin = Number(val); localStorage.setItem('coco_refresh', refreshMin); applyRefresh(); }
+      el.classList.remove('open');
+      syncControls();
+      if (field !== 'cselRefresh') loadData();
+    });
+  });
+}
 
-load();
-setInterval(load, 5*60*1000);
+function closeAllDropdowns() {
+  document.querySelectorAll('.csel.open').forEach(el => el.classList.remove('open'));
+}
+
+document.addEventListener('click', () => {
+  closeAllDropdowns();
+  document.getElementById('periodPop').classList.remove('open');
+});
+
+// Period picker
+const pop = document.getElementById('periodPop');
+const fromInp = document.getElementById('dateFrom');
+const toInp = document.getElementById('dateTo');
+const ppErr = document.getElementById('ppErr');
+
+document.getElementById('periodPill').addEventListener('click', e => {
+  e.stopPropagation();
+  closeAllDropdowns();
+  const wasOpen = pop.classList.contains('open');
+  pop.classList.toggle('open', !wasOpen);
+  if (!wasOpen) {
+    ppErr.textContent = '';
+    fromInp.value = sinceDate;
+    toInp.value = untilDate;
+    fromInp.max = todayISO;
+    toInp.max = todayISO;
+    document.querySelectorAll('.pp-presets button').forEach(b => {
+      const [s, u] = presetRange(b.dataset.preset);
+      b.classList.toggle('active', s === sinceDate && u === untilDate);
+    });
+  }
+});
+pop.addEventListener('click', e => e.stopPropagation());
+
+document.querySelectorAll('.pp-presets button').forEach(b => b.addEventListener('click', () => {
+  const [s, u] = presetRange(b.dataset.preset);
+  sinceDate = s; untilDate = u;
+  localStorage.setItem('coco_since', s);
+  localStorage.setItem('coco_until', u);
+  pop.classList.remove('open');
+  syncControls();
+  loadData();
+}));
+
+document.getElementById('applyRange').addEventListener('click', () => {
+  const s = fromInp.value, u = toInp.value;
+  if (!s || !u) { ppErr.textContent = 'Selecione as duas datas.'; return }
+  if (parseISO(s) > parseISO(u)) { ppErr.textContent = 'A data inicial deve ser anterior à final.'; return }
+  ppErr.textContent = '';
+  sinceDate = s; untilDate = u;
+  localStorage.setItem('coco_since', s);
+  localStorage.setItem('coco_until', u);
+  pop.classList.remove('open');
+  syncControls();
+  loadData();
+});
+
+document.getElementById('syncBtn').addEventListener('click', async () => {
+  setLive('loading', 'Sincronizando…');
+  try { await fetch('/api/sync', { method:'POST' }); } catch(e) {}
+  loadData();
+});
+
+// Setup all custom selects
+document.querySelectorAll('.csel').forEach(setupCsel);
+
+// Initial load
+syncControls();
+applyRefresh();
+loadData();
 </script>
 </body>
 </html>
