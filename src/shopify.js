@@ -40,6 +40,7 @@ export async function fetchOrders(sinceISO, untilISO) {
             currentTotalPriceSet { shopMoney { amount } }
             customerJourneySummary { lastVisit { source } }
             customer { displayName }
+            shippingAddress { provinceCode }
             lineItems(first: 20) { edges { node { title quantity discountedTotalSet { shopMoney { amount } } } } }
           } }
           pageInfo { hasNextPage endCursor }
@@ -59,6 +60,7 @@ export async function fetchOrders(sinceISO, untilISO) {
         total: parseFloat(n.currentTotalPriceSet?.shopMoney?.amount || '0'),
         source: n.customerJourneySummary?.lastVisit?.source || '',
         customer: n.customer?.displayName || '',
+        state: n.shippingAddress?.provinceCode || null,
         items: (n.lineItems?.edges || []).map(x => ({
           title: x.node.title,
           qty: x.node.quantity,

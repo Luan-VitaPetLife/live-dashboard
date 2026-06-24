@@ -111,6 +111,17 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     .slice(0, 5)
     .map(([key, value]) => { const [title, ch] = key.split('|||'); return [title, ch, value]; });
 
+  // por estado (endereço de entrega dos pedidos válidos)
+  const byState = {};
+  valid.forEach(o => {
+    const s = o.state;
+    if (s) {
+      if (!byState[s]) byState[s] = { revenue: 0, orders: 0 };
+      byState[s].revenue += o.total;
+      byState[s].orders += 1;
+    }
+  });
+
   // pedidos recentes (todos os canais, mais novos primeiro)
   const recent = getOrders({ channel, since: null, until: null })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 10)
@@ -135,6 +146,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series },
     funnel: { sessions: sess.sessions, cart: sess.cart, checkout: sess.checkout, completed: sess.completed },
     topProducts,
+    byState,
     recentOrders: recent,
     updatedAt: load().lastSync,
   };
