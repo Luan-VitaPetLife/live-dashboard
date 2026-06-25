@@ -125,10 +125,15 @@ export async function fetchOrders(sinceISO, untilISO) {
   const out = [];
   let nextToken = null;
   do {
+    // CreatedBefore deve ser pelo menos 2 min antes do momento atual (requisito SP-API)
+    const safeUntil = new Date(Math.min(
+      new Date(`${untilISO}T23:59:59Z`).getTime(),
+      Date.now() - 3 * 60 * 1000
+    )).toISOString();
     const params = {
       MarketplaceIds:  MARKETPLACE_ID,
       CreatedAfter:    `${sinceISO}T00:00:00Z`,
-      CreatedBefore:   `${untilISO}T23:59:59Z`,
+      CreatedBefore:   safeUntil,
       MaxResultsPerPage: 100,
     };
     if (nextToken) params.NextToken = nextToken;
