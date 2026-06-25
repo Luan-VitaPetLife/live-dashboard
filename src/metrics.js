@@ -74,7 +74,9 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // tendência
   const buckets = buildBuckets(since, until, grain);
   const idx = new Map(buckets.map((b, i) => [b.key, i]));
-  const sess = aggregateSessions(since, until);
+  const hasSessionData = channel === 'todos' || channel === 'shopify';
+  const emptySess = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0, conv: 0, series: buckets.map(b => ({ label: b.label, sessions: 0, conv: 0 })) };
+  const sess = hasSessionData ? aggregateSessions(since, until) : emptySess;
   let trendLabels, trendData, trendTotal, trendFmt = metric === 'receita' ? 'money' : 'int';
   if (metric === 'sessoes') {
     trendLabels = sess.series.map(p => p.label);
@@ -128,7 +130,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
 
   // conversão anterior
-  const prevSess = aggregateSessions(prevSince, prevUntil);
+  const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil) : emptySess;
 
   return {
     period: { since, until, span, grain },
