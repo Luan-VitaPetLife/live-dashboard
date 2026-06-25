@@ -100,9 +100,11 @@ export function upsertOrders(orders) {
   }
 }
 
-export function getOrders({ channel = 'todos', since = null, until = null } = {}) {
+export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {
   const db = load();
   let arr = Object.values(db.orders);
+  // Market filter: pedidos sem campo market são legados e pertencem ao BR.
+  if (market) arr = arr.filter(o => (o.market || (o.channel === 'shopify_us' ? 'us' : 'br')) === market);
   if (channel && channel !== 'todos') arr = arr.filter(o => o.channel === channel);
   if (since) { const t = Date.parse(since + 'T00:00:00-03:00'); arr = arr.filter(o => Date.parse(o.createdAt) >= t); }
   if (until) { const t = Date.parse(until + 'T23:59:59-03:00'); arr = arr.filter(o => Date.parse(o.createdAt) <= t); }

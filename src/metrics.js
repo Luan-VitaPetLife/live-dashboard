@@ -54,7 +54,7 @@ function aggregateSessions(since, until) {
 
 function normSource(s) { if (!s || !s.trim()) return 'Direto'; const t = s.trim(); return t[0].toUpperCase() + t.slice(1); }
 
-export function computeDashboard({ channel = 'todos', since, until, metric = 'receita' }) {
+export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br' }) {
   const span = daySpan(since, until);
   const grain = span <= 2 ? 'hour' : 'day';
 
@@ -62,8 +62,8 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const prevUntil = isoUTC(addDays(parseISO(since), -1));
   const prevSince = isoUTC(addDays(parseISO(since), -span));
 
-  const curAll = getOrders({ channel, since, until });
-  const prevAll = getOrders({ channel, since: prevSince, until: prevUntil });
+  const curAll = getOrders({ channel, since, until, market });
+  const prevAll = getOrders({ channel, since: prevSince, until: prevUntil, market });
   const valid = curAll.filter(o => !isCancelled(o));
   const prevValid = prevAll.filter(o => !isCancelled(o));
 
@@ -74,7 +74,8 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // tendência
   const buckets = buildBuckets(since, until, grain);
   const idx = new Map(buckets.map((b, i) => [b.key, i]));
-  const hasSessionData = channel === 'todos' || channel === 'shopify';
+  // Sessões só existem via ShopifyQL da loja BR. Mercados US ou canais não-Shopify ficam sem dados.
+  const hasSessionData = market === 'br' && (channel === 'todos' || channel === 'shopify');
   const emptySess = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0, conv: 0, series: buckets.map(b => ({ label: b.label, sessions: 0, conv: 0 })) };
   const sess = hasSessionData ? aggregateSessions(since, until) : emptySess;
   let trendLabels, trendData, trendTotal, trendFmt = metric === 'receita' ? 'money' : 'int';
@@ -91,8 +92,10 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   }
 
   // split por canal (receita real por canal; canais sem dados ficam 0)
-  const byChannel = { shopify: 0, shopee: 0, amazon: 0, mercadolivre: 0 };
-  getOrders({ channel: 'todos', since, until }).filter(o => !isCancelled(o)).forEach(o => { byChannel[o.channel] = (byChannel[o.channel] || 0) + o.total; });
+  const byChannel = market === 'us'
+    ? { shopify_us: 0, amazon: 0 }
+    : { shopify: 0, shopee: 0, amazon: 0, mercadolivre: 0 };
+  getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o)).forEach(o => { byChannel[o.channel] = (byChannel[o.channel] || 0) + o.total; });
 
   // marketing por origem (apenas pedidos válidos do recorte atual)
   const mkt = {};
@@ -124,8 +127,8 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     }
   });
 
-  // pedidos recentes (todos os canais, mais novos primeiro)
-  const recent = getOrders({ channel, since: null, until: null })
+  // pedidos recentes (todos os canais do mercado, mais novos primeiro)
+  const recent = getOrders({ channel, since: null, until: null, market })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 10)
     .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
 
@@ -144,7 +147,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 
   return {
     period: { since, until, span, grain },
-    channel, metric,
+    channel, metric, market,
     kpis: {
       revenue, revenueDelta: delta(revenue, pRev),
       orders: count, ordersDelta: delta(count, pCount),
