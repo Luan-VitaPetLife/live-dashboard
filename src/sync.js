@@ -7,7 +7,8 @@ import 'dotenv/config';
 import * as shopify from './shopify.js';
 import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync } from './store.js';
+import * as meta from './meta.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -19,7 +20,7 @@ function defaultWindow(days = 60) {
 
 export async function runSync() {
   const { since, until } = defaultWindow();
-  const report = { shopify: 0, shopee: 0, mercadolivre: 0, sessions: 0, errors: [] };
+  const report = { shopify: 0, shopee: 0, mercadolivre: 0, meta: 0, sessions: 0, errors: [] };
 
   // Shopify — pedidos
   try {
@@ -48,6 +49,14 @@ export async function runSync() {
     upsertOrders(orders);
     report.mercadolivre = orders.length;
   } catch (e) { report.errors.push('mercadolivre.orders: ' + e.message); }
+
+  // Meta — gasto diário de anúncios (Instagram + Facebook)
+  try {
+    const insights = await meta.fetchInsights(since, until);
+    const existing = getMetaInsightsDaily();
+    setMetaInsightsDaily({ ...existing, ...insights });
+    report.meta = Object.keys(insights).length;
+  } catch (e) { report.errors.push('meta.insights: ' + e.message); }
 
   setLastSync(new Date().toISOString());
   return report;
