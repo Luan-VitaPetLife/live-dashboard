@@ -127,6 +127,8 @@ export async function fetchOrders(sinceISO, untilISO) {
         total:     Number(o.total_amount) || 0,
         source:    'Mercado Livre',
         customer:  o.buyer?.nickname || '',
+        state:     null,              // preenchido abaixo via /shipments
+        _sid:      o.shipping?.id || null,
         items: (o.order_items || []).map(it => ({
           title:  it.item?.title || '',
           qty:    it.quantity || 1,
@@ -137,6 +139,26 @@ export async function fetchOrders(sinceISO, untilISO) {
 
     if (results.length < limit) break;
     offset += limit;
+  }
+
+  // Resolve endereço de entrega em lotes para popular o campo state
+  const shipIds = [...new Set(out.filter(o => o._sid).map(o => o._sid))];
+  if (shipIds.length > 0) {
+    const stateMap = {};
+    const BATCH = 15;
+    for (let i = 0; i < shipIds.length; i += BATCH) {
+      const batch = shipIds.slice(i, i + BATCH);
+      await Promise.all(batch.map(async sid => {
+        try {
+          const sh = await apiGet(`/shipments/${sid}`);
+          const stId = sh.receiver_address?.state?.id; // ex: "BR-SP"
+          if (stId) stateMap[sid] = stId.includes('-') ? stId.split('-').pop() : stId;
+        } catch { /* sem endereço — state fica null */ }
+      }));
+    }
+    out.forEach(o => { o.state = stateMap[o._sid] || null; delete o._sid; });
+  } else {
+    out.forEach(o => { delete o._sid; });
   }
 
   return out;
