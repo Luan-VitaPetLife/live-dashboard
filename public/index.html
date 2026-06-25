@@ -293,7 +293,7 @@
 
     <div class="charts-row-2">
       <div class="card"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub">Shopify · período selecionado</div></div><div class="ct-val" id="trafficVal">—</div></div>
+        <div class="card-top"><div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div><div class="ct-val" id="trafficVal">—</div></div>
         <div class="metric-row">
           <div class="metric-cell"><div class="mc-type">Sessões</div><div class="mc-val" id="mSessions">—</div><div class="mc-meta" id="mSessionsMeta">&nbsp;</div></div>
           <div class="metric-cell"><div class="mc-type">Visitantes</div><div class="mc-val" id="mVisitors">—</div><div class="mc-meta">únicos</div></div>
@@ -576,6 +576,10 @@ function render(d) {
 
   // Traffic
   const tf = d.traffic;
+  const hasTraffic = d.channel === 'todos' || d.channel === 'shopify';
+  document.getElementById('trafficSub').textContent = hasTraffic
+    ? 'Shopify · período selecionado'
+    : 'Dados de sessão disponíveis apenas para Shopify';
   document.getElementById('mSessions').textContent = fmtInt(tf.sessions);
   document.getElementById('mSessionsMeta').textContent = tf.visitors?(tf.sessions/tf.visitors).toLocaleString('pt-BR',{maximumFractionDigits:1})+' por visitante':' ';
   document.getElementById('mVisitors').textContent = fmtInt(tf.visitors);
