@@ -266,7 +266,7 @@
       <div class="kpi-cell"><div class="kc-label">Receita Total</div><div class="kc-value" id="kpiRevenue">—</div><div class="kc-delta" id="kpiRevenueDelta"></div></div>
       <div class="kpi-cell"><div class="kc-label">Pedidos</div><div class="kc-value" id="kpiOrders">—</div><div class="kc-delta" id="kpiOrdersDelta"></div></div>
       <div class="kpi-cell"><div class="kc-label">Ticket Médio</div><div class="kc-value" id="kpiAov">—</div><div class="kc-delta" id="kpiAovDelta"></div></div>
-      <div class="kpi-cell"><div class="kc-label">Custo Campanhas</div><div class="kc-value zero" id="kpiAdCost">R$ 0,00</div><div class="kc-delta">via Ads (a integrar)</div></div>
+      <div class="kpi-cell"><div class="kc-label">Custo Meta Ads</div><div class="kc-value" id="kpiAdCost">—</div><div class="kc-delta" id="kpiAdCostDelta"></div></div>
       <div class="kpi-cell"><div class="kc-label">Conversão</div><div class="kc-value" id="kpiConv">—</div><div class="kc-delta" id="kpiConvDelta"></div></div>
     </div>
 
@@ -287,7 +287,7 @@
         <div class="card-top"><div><div class="ct-title">Marketing por origem</div><div class="ct-sub">Receita atribuída</div></div></div>
         <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub">Atribuída</div></div></div>
         <div class="donut-rows" id="mktRows"></div>
-        <div class="card-note">Custo de Ads / ROAS: requer conectar Google &amp; Meta Ads.</div>
+        <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
       </div></div>
     </div>
 
@@ -307,6 +307,15 @@
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
         <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Top produtos</div><div class="ct-sub">Por receita</div></div></div><div id="topProducts"></div></div></div>
+        <div class="card"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title">Anúncios Meta</div><div class="ct-sub">Instagram &amp; Facebook · período selecionado</div></div></div>
+          <div class="metric-row" style="margin-top:12px">
+            <div class="metric-cell"><div class="mc-type">Gasto</div><div class="mc-val" id="metaSpend">—</div><div class="mc-meta">investido</div></div>
+            <div class="metric-cell"><div class="mc-type">ROAS</div><div class="mc-val" id="metaRoas" style="color:var(--green)">—</div><div class="mc-meta">receita / gasto</div></div>
+            <div class="metric-cell"><div class="mc-type">Impressões</div><div class="mc-val" id="metaImpressions">—</div><div class="mc-meta">total</div></div>
+            <div class="metric-cell"><div class="mc-type">Cliques</div><div class="mc-val" id="metaClicks">—</div><div class="mc-meta">total</div></div>
+          </div>
+        </div></div>
       </div>
     </div>
 
@@ -533,6 +542,14 @@ function render(d) {
   document.getElementById('kpiRevenue').textContent = fmtBRL(k.revenue); renderDelta(document.getElementById('kpiRevenueDelta'), k.revenueDelta);
   document.getElementById('kpiOrders').textContent = fmtInt(k.orders); renderDelta(document.getElementById('kpiOrdersDelta'), k.ordersDelta);
   document.getElementById('kpiAov').textContent = fmtBRL(k.aov,2); renderDelta(document.getElementById('kpiAovDelta'), k.aovDelta);
+  document.getElementById('kpiAdCost').textContent = k.adCost > 0 ? fmtBRL(k.adCost) : '—';
+  document.getElementById('kpiAdCost').className = 'kc-value' + (k.adCost > 0 ? '' : ' zero');
+  document.getElementById('kpiAdCostDelta').textContent = k.adCost > 0 ? `ROAS ${k.roas.toFixed(2)}x` : 'aguardando sync';
+  document.getElementById('metaSpend').textContent = k.adCost > 0 ? fmtBRL(k.adCost) : '—';
+  document.getElementById('metaRoas').textContent = k.adCost > 0 ? k.roas.toFixed(2) + 'x' : '—';
+  document.getElementById('metaImpressions').textContent = k.adImpressions > 0 ? fmtInt(k.adImpressions) : '—';
+  document.getElementById('metaClicks').textContent = k.adClicks > 0 ? fmtInt(k.adClicks) : '—';
+  document.getElementById('mktNote').textContent = k.adCost > 0 ? 'Meta Ads conectado · Google Ads em breve' : 'Meta Ads conectado · sincronize para ver os dados';
   document.getElementById('kpiConv').textContent = (k.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
   const dpp = k.conversionDeltaPP;
   if (dpp === null || dpp === undefined || isNaN(dpp)) {
