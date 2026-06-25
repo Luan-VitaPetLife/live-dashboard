@@ -7,6 +7,7 @@
 <link rel="icon" href="logo.png" type="image/png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 <style>
   :root{
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -397,11 +398,19 @@ function setLive(s,t) {
 const BRAZIL_BOUNDS = L.latLngBounds([[-36,-75],[6,-27]]);
 const map = L.map('map', { center:[-15,-52], zoom:4, minZoom:4, maxZoom:8, zoomControl:true, maxBounds:BRAZIL_BOUNDS, maxBoundsViscosity:0.85 });
 
-// Neutral tile layer (no labels — we add our own)
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
-  subdomains:'abcd', maxZoom:19
-}).addTo(map);
+// Tile layers — swapped by mode: choropleth uses no-labels, heatmap uses full labels for city context
+let currentTile = null;
+function setTileLayer(withLabels) {
+  if (currentTile) map.removeLayer(currentTile);
+  const url = withLabels
+    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
+  currentTile = L.tileLayer(url, {
+    attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+    subdomains:'abcd', maxZoom:19
+  }).addTo(map);
+}
+setTileLayer(false);
 
 let geojsonData = null;   // Brazil states GeoJSON (loaded once)
 let stateData   = {};     // { UF: { revenue, orders } }
@@ -477,6 +486,7 @@ function drawMap() {
 }
 
 function drawChoropleth(isMoney, getValue, maxVal) {
+  setTileLayer(false);
   const layer = L.geoJSON(geojsonData, {
     style: feature => {
       const uf = feature.properties._uf;
@@ -535,75 +545,53 @@ function drawChoropleth(isMoney, getValue, maxVal) {
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
-  // Background polygons (neutral gray)
-  const baseLayer = L.geoJSON(geojsonData, {
-    style: { fillColor:'#ddd8cf', fillOpacity:0.4, color:'#c4bdb2', weight:0.8 }
-  }).addTo(map);
-  mapLayers.push(baseLayer);
+  // Switch to tile layer with city labels for geographic context
+  setTileLayer(true);
 
   const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
 
+  // Build heatmap points from sub-regions (spread blobs across each state)
+  const heatPoints = [];
   for (const [uf, s] of Object.entries(stateData)) {
     const pts = SUB_REGIONS[uf] || [CENTROIDS[uf]];
-    if (!pts || !pts[0]) continue;
-
-    const centroid = pts[0];
     const val = getValue(s);
-    const t   = val / maxVal;
-    const c   = heatColor(t);
-    const col  = `rgb(${c.r},${c.g},${c.b})`;
-    const mainRad = 45000 + t * 260000;
+    const intensity = val / maxVal;
+    pts.forEach(pt => heatPoints.push([pt[0], pt[1], intensity]));
+  }
 
-    // Satellite circles at sub-region points (smaller, more transparent)
-    for (let i = 1; i < pts.length; i++) {
-      const subRad = mainRad * (0.50 + i * 0.06);
-      const sub = L.circle(pts[i], {
-        radius: subRad,
-        fillColor: col,
-        fillOpacity: c.a * 0.55,
-        color: col,
-        weight: 0,
-        opacity: 0,
-      }).addTo(map);
-      mapLayers.push(sub);
-    }
+  // Leaflet.heat gaussian blob layer
+  const heat = L.heatLayer(heatPoints, {
+    radius: 38,
+    blur: 28,
+    maxZoom: 8,
+    max: 1.0,
+    gradient: { 0.0:'#22c55e', 0.3:'#86efac', 0.55:'#eab308', 0.75:'#f97316', 1.0:'#ef4444' },
+  }).addTo(map);
+  mapLayers.push(heat);
 
-    // Main circle at centroid
-    const circle = L.circle(centroid, {
-      radius: mainRad,
-      fillColor: col,
-      fillOpacity: c.a,
-      color: col,
-      weight: 1,
-      opacity: c.a * 0.4,
-    }).addTo(map);
-    mapLayers.push(circle);
-
-    // Label centered at centroid — black text, no background badge
+  // Orange pill labels at state centroids
+  for (const [uf, s] of Object.entries(stateData)) {
+    const centroid = CENTROIDS[uf];
+    if (!centroid) continue;
+    const val   = getValue(s);
     const label = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
     const icon  = L.divIcon({
-      html: `<div style="transform:translate(-50%,-50%);color:#1a1916;text-align:center;white-space:nowrap;font-family:inherit;pointer-events:none;text-shadow:0 1px 3px rgba(255,255,255,.9),0 0 6px rgba(255,255,255,.7)">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.4px;line-height:1.2">${uf}</div>
-        <div style="font-size:10px;font-weight:600;line-height:1.2">${label}</div>
-      </div>`,
+      html: `<div style="transform:translate(-50%,-50%);background:#f97316;color:#fff;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.30);cursor:pointer">${uf}: ${label}</div>`,
       className: '',
       iconSize: [0, 0],
       iconAnchor: [0, 0],
     });
-    const marker = L.marker(centroid, { icon, interactive: false }).addTo(map);
+    const marker = L.marker(centroid, { icon }).addTo(map);
+    marker.on('click', () => {
+      L.popup().setLatLng(centroid).setContent(`
+        <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
+        <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue,2)}</strong></div>
+        <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
+        <div class="pop-row"><span>Ticket médio</span><strong>${s.orders?fmtBRL(s.revenue/s.orders,2):'—'}</strong></div>
+        <div class="pop-row"><span>% do total</span><strong>${pctStr(val/Math.max(1,totalAll)*100)}</strong></div>
+      `).openOn(map);
+    });
     mapLayers.push(marker);
-
-    // Popup on click
-    circle.bindPopup(`
-      <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
-      <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue,2)}</strong></div>
-      <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
-      <div class="pop-row"><span>Ticket médio</span><strong>${s.orders?fmtBRL(s.revenue/s.orders,2):'—'}</strong></div>
-      <div class="pop-row"><span>% do total</span><strong>${pctStr(val/Math.max(1,totalAll)*100)}</strong></div>
-    `);
-
-    circle.on('mouseover', () => circle.setStyle({ fillOpacity: Math.min(c.a + 0.18, 0.80) }));
-    circle.on('mouseout',  () => circle.setStyle({ fillOpacity: c.a }));
   }
 
   document.getElementById('legendGrad').className = 'legend-grad-heat';
