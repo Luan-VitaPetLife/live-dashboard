@@ -160,7 +160,8 @@
   .ct-title{font-size:12px;font-weight:500}
   .ct-sub{font-size:11px;color:var(--muted);margin-top:1px}
   .state-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:14px}
-  .state-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px}
+  .state-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+  .state-card:hover{border-color:var(--ink);box-shadow:0 2px 8px rgba(30,28,24,.10)}
   .sc-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
   .sc-rank{font-size:10px;font-weight:700;color:var(--muted);width:18px}
   .sc-code{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.4px}
@@ -172,6 +173,30 @@
   .sc-sub{font-size:10px;color:var(--muted)}
   .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
   footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
+
+  /* ── State detail modal ── */
+  .smd-overlay{position:fixed;inset:0;background:rgba(30,28,24,.4);z-index:4000;display:none;backdrop-filter:blur(2px)}
+  .smd-overlay.open{display:block}
+  .smd-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:500px;max-width:92vw;max-height:82vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.22);z-index:4001;display:none;flex-direction:column;overflow:hidden}
+  .smd-modal.open{display:flex}
+  .smd-head{display:flex;align-items:flex-start;justify-content:space-between;padding:20px 22px 16px;border-bottom:1px solid var(--border)}
+  .smd-title{font-size:17px;font-weight:600;letter-spacing:-.3px}
+  .smd-sub{font-size:11px;color:var(--muted);margin-top:3px}
+  .smd-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s}
+  .smd-close:hover{background:var(--surface2);color:var(--text)}
+  .smd-body{overflow-y:auto;padding:20px 22px}
+  .smd-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px}
+  .smd-kpi{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px}
+  .smd-kpi-label{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .smd-kpi-value{font-size:17px;font-weight:300;letter-spacing:-.4px}
+  .smd-chart-label{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  .smd-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .smd-bar-uf{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+  .smd-bar-track{flex:1;height:9px;background:var(--border);border-radius:5px;overflow:hidden}
+  .smd-bar-fill{height:100%;border-radius:5px;transition:width .45s cubic-bezier(.4,0,.2,1)}
+  .smd-bar-val{font-size:11px;color:var(--sub);width:90px;text-align:right;flex-shrink:0}
+  .smd-bar-row.smd-highlight .smd-bar-uf{color:var(--text);font-weight:700}
+  .smd-bar-row.smd-highlight .smd-bar-val{color:var(--text);font-weight:600}
 </style>
 </head>
 <body>
@@ -197,7 +222,20 @@
   <div class="topbar">
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
     <button class="sync-btn" id="syncBtn">↻ Sincronizar</button>
-    <button class="settings-btn" id="settingsBtn" title="Configurações do mapa de calor">⚙</button>
+    <button class="settings-btn" id="settingsBtn" title="Configurações do mapa">⚙</button>
+
+    <div class="filter-pill csel" id="cselRefresh">
+      <span class="lbl">Atualizar</span>
+      <span class="val" id="refreshVal">5 min</span>
+      <span class="arr">▾</span>
+      <div class="csel-pop">
+        <div class="csel-opt" data-value="1">1 min</div>
+        <div class="csel-opt active" data-value="5">5 min</div>
+        <div class="csel-opt" data-value="15">15 min</div>
+        <div class="csel-opt" data-value="30">30 min</div>
+        <div class="csel-opt" data-value="0">Desligar</div>
+      </div>
+    </div>
 
     <div class="filter-pill csel" id="cselMetric">
       <span class="lbl">Métrica</span>
@@ -304,16 +342,62 @@
   <footer id="footerDate"></footer>
 </div>
 
+<!-- State detail modal -->
+<div class="smd-overlay" id="smdOverlay"></div>
+<div class="smd-modal" id="smdModal">
+  <div class="smd-head">
+    <div>
+      <div class="smd-title" id="smdTitle"></div>
+      <div class="smd-sub" id="smdSub"></div>
+    </div>
+    <button class="smd-close" id="smdClose">✕</button>
+  </div>
+  <div class="smd-body">
+    <div class="smd-kpis" id="smdKpis"></div>
+    <div class="smd-chart-label">Comparativo com os principais estados</div>
+    <div id="smdChart"></div>
+  </div>
+</div>
+
 <!-- Settings panel -->
 <div class="sp-overlay" id="spOverlay"></div>
 <div class="sp-panel" id="spPanel">
   <div class="sp-head">
-    <span class="sp-head-title">Configurações — Mapa de Calor</span>
+    <span class="sp-head-title">Configurações do mapa</span>
     <button class="sp-close" id="spClose">✕</button>
   </div>
   <div class="sp-body">
     <div class="sp-section">
-      <div class="sp-section-title">Cores das manchas</div>
+      <div class="sp-section-title">Mapa coropleto — cores</div>
+      <div class="sp-row">
+        <span class="sp-row-label">Baixa intensidade</span>
+        <input type="color" class="sp-color-inp" id="chCold" value="#e8e3d8">
+      </div>
+      <div class="sp-row">
+        <span class="sp-row-label">Média intensidade</span>
+        <input type="color" class="sp-color-inp" id="chMid" value="#c49568">
+      </div>
+      <div class="sp-row">
+        <span class="sp-row-label">Alta intensidade</span>
+        <input type="color" class="sp-color-inp" id="chHigh" value="#8c3a20">
+      </div>
+      <div class="sp-row">
+        <span class="sp-row-label">Cor das bordas</span>
+        <input type="color" class="sp-color-inp" id="chBorder" value="#bbb5aa">
+      </div>
+      <div class="sp-range-row">
+        <span class="sp-row-label">Espessura bordas</span>
+        <input type="range" class="sp-range" id="chBorderW" min="0" max="4" step="0.5" value="0.8">
+        <span class="sp-range-val" id="chBorderWVal">0.8</span>
+      </div>
+      <div class="sp-range-row">
+        <span class="sp-row-label">Opacidade preench.</span>
+        <input type="range" class="sp-range" id="chOpacity" min="20" max="100" value="82">
+        <span class="sp-range-val" id="chOpacityVal">82%</span>
+      </div>
+    </div>
+    <div class="sp-section">
+      <div class="sp-section-title">Mapa de calor — manchas</div>
       <div class="sp-row">
         <span class="sp-row-label">Baixa intensidade</span>
         <input type="color" class="sp-color-inp" id="hcCold" value="#22c55e">
@@ -447,15 +531,24 @@ function parseISO(s) { const [y,m,d]=s.split('-').map(Number); return new Date(y
 function addDays(d,n) { const x=new Date(d); x.setDate(x.getDate()+n); return x }
 function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }
 
-// ── Color interpolation ──
+// ── Color helpers ──
+function hexToRGB(hex) {
+  const h = hex.replace('#','');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+function lerpRGB(c1,c2,t){ return c1.map((v,i)=>Math.round(v+(c2[i]-v)*t)); }
+
+// ── Choropleth config ──
+const CHORO_DEFAULTS = { lowColor:'#e8e3d8', midColor:'#c49568', highColor:'#8c3a20', borderColor:'#bbb5aa', borderWeight:0.8, fillOpacity:82 };
+let choroConfig = { ...CHORO_DEFAULTS };
+try { const _s = localStorage.getItem('coco_choro_cfg'); if (_s) choroConfig = { ...CHORO_DEFAULTS, ...JSON.parse(_s) }; } catch {}
+function saveChoroConfig() { localStorage.setItem('coco_choro_cfg', JSON.stringify(choroConfig)); }
+
 function choroColor(t) {
-  // cream → burnt orange → dark rust
-  const stops = [[232,227,216],[196,149,104],[140,58,32]];
   const s = Math.max(0, Math.min(1, t));
-  const i = s < 0.5 ? 0 : 1;
-  const u = s < 0.5 ? s*2 : (s-0.5)*2;
-  const [r1,g1,b1]=stops[i], [r2,g2,b2]=stops[i+1];
-  return `rgb(${Math.round(r1+(r2-r1)*u)},${Math.round(g1+(g2-g1)*u)},${Math.round(b1+(b2-b1)*u)})`;
+  const c0 = hexToRGB(choroConfig.lowColor), c1 = hexToRGB(choroConfig.midColor), c2 = hexToRGB(choroConfig.highColor);
+  const [r,g,b] = s < 0.5 ? lerpRGB(c0,c1,s*2) : lerpRGB(c1,c2,(s-0.5)*2);
+  return `rgb(${r},${g},${b})`;
 }
 function heatColor(t) {
   // green → yellow → red, opacity scales with intensity (partial fill for all)
@@ -603,9 +696,9 @@ function drawChoropleth(isMoney, getValue, maxVal) {
       const t  = s ? getValue(s) / maxVal : 0;
       return {
         fillColor:   s ? choroColor(t) : '#e0dbd2',
-        fillOpacity: s ? 0.82 : 0.35,
-        color:       '#bbb5aa',
-        weight:      0.8,
+        fillOpacity: s ? choroConfig.fillOpacity / 100 : 0.35,
+        color:       choroConfig.borderColor,
+        weight:      choroConfig.borderWeight,
         opacity:     1,
       };
     },
@@ -642,15 +735,17 @@ function drawChoropleth(isMoney, getValue, maxVal) {
       });
 
       // Hover effect
-      layer.on('mouseover', () => { if(!stateData[uf]) return; layer.setStyle({ weight:2, color:'#2d2a26' }); });
-      layer.on('mouseout',  () => { if(!stateData[uf]) return; layer.setStyle({ weight:0.8, color:'#bbb5aa' }); });
+      layer.on('mouseover', () => { if(!stateData[uf]) return; layer.setStyle({ weight: Math.max(choroConfig.borderWeight+1,2), color:'#2d2a26' }); });
+      layer.on('mouseout',  () => { if(!stateData[uf]) return; layer.setStyle({ weight:choroConfig.borderWeight, color:choroConfig.borderColor }); });
     }
   }).addTo(map);
 
   mapLayers.push(layer);
 
-  // Legend
-  document.getElementById('legendGrad').className = 'legend-grad-choro';
+  // Legend — dynamic colors from choroConfig
+  const grad = document.getElementById('legendGrad');
+  grad.className = '';
+  grad.style.cssText = `width:100px;height:7px;border-radius:4px;background:linear-gradient(to right,${choroConfig.lowColor},${choroConfig.midColor},${choroConfig.highColor})`;
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
@@ -782,7 +877,7 @@ function render(d) {
         ? `${fmtInt(s.orders)} pedido${s.orders!==1?'s':''} · ${pctStr(s.val/total*100)}`
         : `${fmtBRL(s.revenue)} · ${pctStr(s.val/total*100)}`;
       const barCol = choroColor(s.val / maxVal);
-      return `<div class="state-card">
+      return `<div class="state-card" onclick="openStateModal('${s.code}')">
         <div class="sc-head">
           <span class="sc-rank">${i+1}</span>
           <span class="sc-name">${name}</span>
@@ -801,7 +896,7 @@ function render(d) {
   setLive('ok', `Ao vivo · ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   document.getElementById('footerDate').textContent =
-    `Sales HQ · Coco and Luna · ${CHAN[d.channel]} · ${label} · última sincronização: ${up}`;
+    `Dashboard - Vita Pet Life · Coco and Luna · ${CHAN[d.channel]} · ${label} · última sincronização: ${up}`;
 
   drawMap();
 }
@@ -849,7 +944,22 @@ function syncHeatCfgUI() {
 }
 syncHeatCfgUI();
 
-function openSettings() { syncHeatCfgUI(); document.getElementById('spOverlay').classList.add('open'); document.getElementById('spPanel').classList.add('open'); }
+function syncChoroUI() {
+  document.getElementById('chCold').value       = choroConfig.lowColor;
+  document.getElementById('chMid').value        = choroConfig.midColor;
+  document.getElementById('chHigh').value       = choroConfig.highColor;
+  document.getElementById('chBorder').value     = choroConfig.borderColor;
+  document.getElementById('chBorderW').value    = choroConfig.borderWeight;
+  document.getElementById('chOpacity').value    = choroConfig.fillOpacity;
+  document.getElementById('chBorderWVal').textContent = choroConfig.borderWeight;
+  document.getElementById('chOpacityVal').textContent = choroConfig.fillOpacity + '%';
+}
+syncChoroUI();
+
+document.getElementById('chBorderW').addEventListener('input', e => { document.getElementById('chBorderWVal').textContent = e.target.value; });
+document.getElementById('chOpacity').addEventListener('input', e => { document.getElementById('chOpacityVal').textContent = e.target.value + '%'; });
+
+function openSettings() { syncHeatCfgUI(); syncChoroUI(); document.getElementById('spOverlay').classList.add('open'); document.getElementById('spPanel').classList.add('open'); }
 function closeSettings() { document.getElementById('spOverlay').classList.remove('open'); document.getElementById('spPanel').classList.remove('open'); }
 
 document.getElementById('settingsBtn').addEventListener('click', e => { e.stopPropagation(); openSettings(); });
@@ -874,16 +984,76 @@ document.getElementById('hcApply').addEventListener('click', () => {
     blur:         Number(document.getElementById('hcBlur').value),
     minOpacity:   Number(document.getElementById('hcMinOp').value),
   };
+  choroConfig = {
+    lowColor:     document.getElementById('chCold').value,
+    midColor:     document.getElementById('chMid').value,
+    highColor:    document.getElementById('chHigh').value,
+    borderColor:  document.getElementById('chBorder').value,
+    borderWeight: Number(document.getElementById('chBorderW').value),
+    fillOpacity:  Number(document.getElementById('chOpacity').value),
+  };
   saveHeatConfig();
+  saveChoroConfig();
   closeSettings();
   drawMap();
 });
 document.getElementById('hcReset').addEventListener('click', () => {
   heatConfig = { ...HEAT_DEFAULTS };
+  choroConfig = { ...CHORO_DEFAULTS };
   saveHeatConfig();
+  saveChoroConfig();
   syncHeatCfgUI();
+  syncChoroUI();
   drawMap();
 });
+
+// ── State detail modal ──
+function openStateModal(uf) {
+  const s = stateData[uf];
+  if (!s) return;
+  const isMoney = metric === 'receita';
+  const sorted = Object.entries(stateData)
+    .map(([c, d]) => ({ code: c, val: isMoney ? d.revenue : d.orders, revenue: d.revenue, orders: d.orders }))
+    .sort((a, b) => b.val - a.val);
+  const totalAll = sorted.reduce((a, x) => a + x.val, 0);
+  const val = isMoney ? s.revenue : s.orders;
+  const pct = totalAll > 0 ? val / totalAll * 100 : 0;
+  const rank = sorted.findIndex(x => x.code === uf) + 1;
+  const maxVal = sorted[0]?.val || 1;
+  const ticket = s.orders > 0 ? s.revenue / s.orders : 0;
+
+  document.getElementById('smdTitle').textContent = `${STATE_NAMES[uf] || uf} · ${uf}`;
+  document.getElementById('smdSub').textContent = `#${rank} de ${sorted.length} estados · ${pctStr(pct)} do total`;
+
+  document.getElementById('smdKpis').innerHTML = `
+    <div class="smd-kpi"><div class="smd-kpi-label">Receita</div><div class="smd-kpi-value">${fmtBRL(s.revenue)}</div></div>
+    <div class="smd-kpi"><div class="smd-kpi-label">Pedidos</div><div class="smd-kpi-value">${fmtInt(s.orders)}</div></div>
+    <div class="smd-kpi"><div class="smd-kpi-label">Ticket médio</div><div class="smd-kpi-value">${ticket > 0 ? fmtBRL(ticket) : '—'}</div></div>
+    <div class="smd-kpi"><div class="smd-kpi-label">Participação</div><div class="smd-kpi-value">${pctStr(pct)}</div></div>
+  `;
+
+  const top8 = sorted.slice(0, 8);
+  document.getElementById('smdChart').innerHTML = top8.map(x => {
+    const barW = ((x.val / maxVal) * 100).toFixed(1);
+    const valTxt = isMoney ? fmtBRL(x.val) : fmtInt(x.val) + ' ped.';
+    const isThis = x.code === uf;
+    const barColor = isThis ? choroColor(x.val / maxVal) : 'var(--border2)';
+    return `<div class="smd-bar-row${isThis ? ' smd-highlight' : ''}">
+      <span class="smd-bar-uf">${x.code}</span>
+      <div class="smd-bar-track"><div class="smd-bar-fill" style="width:${barW}%;background:${barColor}"></div></div>
+      <span class="smd-bar-val">${valTxt}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('smdOverlay').classList.add('open');
+  document.getElementById('smdModal').classList.add('open');
+}
+function closeStateModal() {
+  document.getElementById('smdOverlay').classList.remove('open');
+  document.getElementById('smdModal').classList.remove('open');
+}
+document.getElementById('smdClose').addEventListener('click', closeStateModal);
+document.getElementById('smdOverlay').addEventListener('click', closeStateModal);
 
 // ── Filter controls ──
 function syncControls() {
@@ -950,12 +1120,36 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
   loadData();
 });
 
+// ── Refresh pill ──
+let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
+let refreshTimer = null;
+function scheduleRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (refreshMin > 0) refreshTimer = setInterval(loadData, refreshMin * 60000);
+}
+function syncRefreshUI() {
+  const labels = { '0':'Desligar','1':'1 min','5':'5 min','15':'15 min','30':'30 min' };
+  document.getElementById('refreshVal').textContent = labels[String(refreshMin)] || refreshMin + ' min';
+  document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === String(refreshMin)));
+}
+document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => {
+  o.addEventListener('click', e => {
+    e.stopPropagation();
+    refreshMin = Number(o.dataset.value);
+    localStorage.setItem('coco_refresh', String(refreshMin));
+    syncRefreshUI();
+    scheduleRefresh();
+    document.getElementById('cselRefresh').classList.remove('open');
+  });
+});
+syncRefreshUI();
+
 // ── Init ──
 syncControls();
 (async () => {
   await loadGeoJSON();
   await loadData();
-  setInterval(loadData, 5*60*1000);
+  scheduleRefresh();
 })();
 </script>
 </body>

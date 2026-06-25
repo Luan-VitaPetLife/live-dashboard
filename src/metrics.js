@@ -115,7 +115,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const byState = {};
   valid.forEach(o => {
     const s = o.state;
-    if (s) {
+    if (s && o.total > 0) {
       if (!byState[s]) byState[s] = { revenue: 0, orders: 0 };
       byState[s].revenue += o.total;
       byState[s].orders += 1;
