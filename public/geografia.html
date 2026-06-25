@@ -302,6 +302,37 @@ const CENTROIDS = {
   SP:[-22.5,-48.5],TO:[-10.0,-48.3],
 };
 
+// Sub-region points for heatmap dispersion [centroid, sub1, sub2, ...] (1st = centroid = label position)
+const SUB_REGIONS = {
+  AC: [[-9.0,-70.5],[-8.2,-72.8],[-10.3,-68.2]],
+  AL: [[-9.6,-36.8],[-9.1,-35.8],[-10.1,-37.3]],
+  AM: [[-4.0,-62.0],[-1.5,-67.5],[-6.5,-64.5],[-3.0,-57.5],[-7.5,-72.0]],
+  AP: [[1.4,-51.8],[3.1,-51.2],[0.3,-51.5]],
+  BA: [[-12.5,-41.7],[-9.5,-38.5],[-15.5,-39.0],[-16.5,-43.5],[-11.0,-44.5]],
+  CE: [[-5.2,-39.5],[-3.7,-38.5],[-7.2,-39.3],[-4.8,-41.0]],
+  DF: [[-15.8,-47.9],[-15.6,-47.7],[-16.0,-48.1]],
+  ES: [[-19.2,-40.3],[-18.3,-40.0],[-20.7,-41.2]],
+  GO: [[-16.0,-49.6],[-13.5,-47.5],[-18.0,-50.5],[-15.5,-52.5]],
+  MA: [[-5.4,-44.4],[-2.8,-43.0],[-7.5,-46.0],[-5.5,-47.5]],
+  MG: [[-18.5,-44.4],[-15.5,-44.0],[-21.0,-46.5],[-18.0,-42.5],[-20.5,-49.0]],
+  MS: [[-20.5,-54.5],[-18.5,-55.5],[-22.5,-54.0],[-20.0,-52.0]],
+  MT: [[-13.0,-55.9],[-10.5,-54.0],[-16.0,-57.5],[-13.5,-51.5]],
+  PA: [[-4.5,-52.5],[-1.5,-51.5],[-7.0,-50.0],[-3.5,-56.0],[-1.0,-55.0]],
+  PB: [[-7.1,-36.7],[-6.4,-35.3],[-7.9,-37.5]],
+  PE: [[-8.4,-37.9],[-7.9,-35.2],[-9.3,-37.5],[-8.5,-40.5]],
+  PI: [[-7.7,-43.5],[-5.0,-42.5],[-9.5,-44.8],[-7.5,-40.5]],
+  PR: [[-24.9,-51.6],[-23.5,-51.5],[-26.2,-52.8],[-25.5,-49.5]],
+  RJ: [[-22.2,-42.7],[-22.9,-43.2],[-21.3,-41.3],[-22.8,-44.5]],
+  RN: [[-5.8,-36.6],[-5.2,-35.4],[-6.5,-37.1],[-6.0,-38.0]],
+  RO: [[-10.9,-62.8],[-9.0,-64.5],[-12.5,-61.0],[-11.5,-63.5]],
+  RR: [[2.0,-61.4],[3.8,-61.0],[1.0,-61.5],[4.5,-63.0]],
+  RS: [[-30.2,-53.5],[-28.0,-51.5],[-32.5,-52.0],[-29.5,-56.0],[-31.0,-51.0]],
+  SC: [[-27.5,-50.9],[-26.3,-49.0],[-28.5,-52.0],[-27.5,-48.5]],
+  SE: [[-10.6,-37.5],[-10.0,-37.0],[-11.2,-37.8]],
+  SP: [[-22.5,-48.5],[-21.0,-50.5],[-23.5,-46.5],[-23.0,-51.5],[-24.5,-47.5]],
+  TO: [[-10.0,-48.3],[-7.0,-48.0],[-12.5,-49.5],[-10.0,-46.0]],
+};
+
 // ── Formatting ──
 const CHAN = { todos:'Todos os canais', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre' };
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos' };
@@ -324,14 +355,15 @@ function choroColor(t) {
   return `rgb(${Math.round(r1+(r2-r1)*u)},${Math.round(g1+(g2-g1)*u)},${Math.round(b1+(b2-b1)*u)})`;
 }
 function heatColor(t) {
-  // green → yellow → red
+  // green → yellow → red, opacity scales with intensity (partial fill for all)
   const s = Math.max(0, Math.min(1, t));
+  const a = 0.18 + s * 0.44; // 0.18 (low) → 0.62 (top)
   if (s < 0.5) {
     const u = s * 2;
-    return { r:Math.round(u*235), g:Math.round(200-u*15), b:30, a:0.65+u*0.2 };
+    return { r:Math.round(u*230), g:Math.round(195-u*10), b:35, a };
   } else {
     const u = (s-0.5)*2;
-    return { r:235, g:Math.round(185-u*155), b:30, a:0.75+u*0.15 };
+    return { r:230, g:Math.round(185-u*155), b:35, a };
   }
 }
 
@@ -362,7 +394,8 @@ function setLive(s,t) {
 }
 
 // ── Leaflet map ──
-const map = L.map('map', { center:[-15,-55], zoom:4, minZoom:3, maxZoom:8, zoomControl:true });
+const BRAZIL_BOUNDS = L.latLngBounds([[-36,-75],[6,-27]]);
+const map = L.map('map', { center:[-15,-52], zoom:4, minZoom:4, maxZoom:8, zoomControl:true, maxBounds:BRAZIL_BOUNDS, maxBoundsViscosity:0.85 });
 
 // Neutral tile layer (no labels — we add our own)
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
@@ -502,54 +535,65 @@ function drawChoropleth(isMoney, getValue, maxVal) {
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
-  // Background polygons (neutral)
+  // Background polygons (neutral gray)
   const baseLayer = L.geoJSON(geojsonData, {
     style: { fillColor:'#ddd8cf', fillOpacity:0.4, color:'#c4bdb2', weight:0.8 }
   }).addTo(map);
   mapLayers.push(baseLayer);
 
-  // Bubble circles at centroids
+  const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
+
   for (const [uf, s] of Object.entries(stateData)) {
-    const pos = CENTROIDS[uf];
-    if (!pos) continue;
+    const pts = SUB_REGIONS[uf] || [CENTROIDS[uf]];
+    if (!pts || !pts[0]) continue;
 
-    const val  = getValue(s);
-    const t    = val / maxVal;
-    const c    = heatColor(t);
-    const rad  = 40000 + t * 320000; // radius in meters
+    const centroid = pts[0];
+    const val = getValue(s);
+    const t   = val / maxVal;
+    const c   = heatColor(t);
+    const col  = `rgb(${c.r},${c.g},${c.b})`;
+    const mainRad = 45000 + t * 260000;
 
-    // Outer glow
-    const glow = L.circle(pos, {
-      radius: rad * 1.5,
-      fillColor: `rgba(${c.r},${c.g},${c.b},0.12)`,
-      fillOpacity: 1,
-      color: 'transparent',
-      weight: 0,
-    }).addTo(map);
-    mapLayers.push(glow);
+    // Satellite circles at sub-region points (smaller, more transparent)
+    for (let i = 1; i < pts.length; i++) {
+      const subRad = mainRad * (0.50 + i * 0.06);
+      const sub = L.circle(pts[i], {
+        radius: subRad,
+        fillColor: col,
+        fillOpacity: c.a * 0.55,
+        color: col,
+        weight: 0,
+        opacity: 0,
+      }).addTo(map);
+      mapLayers.push(sub);
+    }
 
-    // Main bubble
-    const circle = L.circle(pos, {
-      radius: rad,
-      fillColor: `rgb(${c.r},${c.g},${c.b})`,
+    // Main circle at centroid
+    const circle = L.circle(centroid, {
+      radius: mainRad,
+      fillColor: col,
       fillOpacity: c.a,
-      color: `rgba(${c.r},${c.g},${c.b},0.4)`,
+      color: col,
       weight: 1,
+      opacity: c.a * 0.4,
     }).addTo(map);
     mapLayers.push(circle);
 
-    // Label marker
+    // Label centered at centroid — black text, no background badge
     const label = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
     const icon  = L.divIcon({
-      html: `<div style="background:rgba(28,26,22,.82);color:#f0ebe0;border-radius:4px;padding:3px 7px;font-size:10px;font-weight:700;white-space:nowrap;text-align:center;font-family:inherit">${uf}<br><span style="font-size:9px;font-weight:500;opacity:.85">${label}</span></div>`,
+      html: `<div style="transform:translate(-50%,-50%);color:#1a1916;text-align:center;white-space:nowrap;font-family:inherit;pointer-events:none;text-shadow:0 1px 3px rgba(255,255,255,.9),0 0 6px rgba(255,255,255,.7)">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.4px;line-height:1.2">${uf}</div>
+        <div style="font-size:10px;font-weight:600;line-height:1.2">${label}</div>
+      </div>`,
       className: '',
-      iconAnchor: [35, 20],
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
     });
-    const marker = L.marker(pos, { icon, interactive: false }).addTo(map);
+    const marker = L.marker(centroid, { icon, interactive: false }).addTo(map);
     mapLayers.push(marker);
 
-    // Click popup on circle
-    const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
+    // Popup on click
     circle.bindPopup(`
       <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
       <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue,2)}</strong></div>
@@ -558,12 +602,10 @@ function drawHeatmap(isMoney, getValue, maxVal) {
       <div class="pop-row"><span>% do total</span><strong>${pctStr(val/Math.max(1,totalAll)*100)}</strong></div>
     `);
 
-    // Hover
-    circle.on('mouseover', () => circle.setStyle({ fillOpacity: Math.min(c.a + 0.15, 1) }));
+    circle.on('mouseover', () => circle.setStyle({ fillOpacity: Math.min(c.a + 0.18, 0.80) }));
     circle.on('mouseout',  () => circle.setStyle({ fillOpacity: c.a }));
   }
 
-  // Legend
   document.getElementById('legendGrad').className = 'legend-grad-heat';
 }
 
