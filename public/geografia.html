@@ -125,6 +125,23 @@
   .legend-grad-heat{width:100px;height:7px;border-radius:4px;background:linear-gradient(to right,#22c55e,#eab308,#ef4444)}
   .legend-note{font-size:10px;color:var(--muted)}
 
+  /* ── Heat settings ── */
+  .heat-cfg-btn{height:28px;padding:0 10px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:13px;color:var(--sub);cursor:pointer;transition:all .12s;display:none}
+  .heat-cfg-btn:hover{border-color:var(--ink)}
+  .heat-cfg-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .heat-cfg-panel{display:none;padding:16px 20px;border-top:1px solid var(--border);background:var(--surface2);gap:16px 24px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+  .heat-cfg-panel.open{display:grid}
+  .hcp-group{display:flex;flex-direction:column;gap:7px}
+  .hcp-label{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  .hcp-row{display:flex;align-items:center;gap:8px}
+  .hcp-swatch{width:30px;height:26px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;padding:0;outline:none}
+  .hcp-range{flex:1;accent-color:var(--ink);cursor:pointer}
+  .hcp-val{font-size:11px;color:var(--sub);width:24px;text-align:right;font-variant-numeric:tabular-nums}
+  .hcp-actions{grid-column:1/-1;display:flex;gap:8px;padding-top:12px;border-top:1px solid var(--border);margin-top:4px}
+  .hcp-apply{flex:1;height:30px;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);font-size:11px;font-weight:600;cursor:pointer}
+  .hcp-reset{height:30px;padding:0 14px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);border-radius:var(--radius-sm);font-size:11px;font-weight:600;cursor:pointer}
+  .hcp-reset:hover{border-color:var(--ink);color:var(--text)}
+
   /* ── Ranking card ── */
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
   .card-pad{padding:18px 20px}
@@ -246,8 +263,50 @@
         <div class="map-modes">
           <button class="mode-btn active" id="btnChoropleth">🗺 Coropleto</button>
           <button class="mode-btn" id="btnHeat">🌡 Calor</button>
+          <button class="heat-cfg-btn" id="btnHeatCfg" title="Configurações do mapa de calor">⚙</button>
         </div>
       </div>
+
+      <!-- Painel de configurações do mapa de calor -->
+      <div class="heat-cfg-panel" id="heatCfgPanel">
+        <div class="hcp-group">
+          <div class="hcp-label">Cor baixa intensidade</div>
+          <div class="hcp-row"><input type="color" class="hcp-swatch" id="hcCold" value="#22c55e"></div>
+        </div>
+        <div class="hcp-group">
+          <div class="hcp-label">Cor média</div>
+          <div class="hcp-row"><input type="color" class="hcp-swatch" id="hcMid" value="#eab308"></div>
+        </div>
+        <div class="hcp-group">
+          <div class="hcp-label">Cor alta intensidade</div>
+          <div class="hcp-row"><input type="color" class="hcp-swatch" id="hcHot" value="#ef4444"></div>
+        </div>
+        <div class="hcp-group">
+          <div class="hcp-label">Cor da pill</div>
+          <div class="hcp-row"><input type="color" class="hcp-swatch" id="hcPill" value="#f97316"></div>
+        </div>
+        <div class="hcp-group">
+          <div class="hcp-label">Cor do texto</div>
+          <div class="hcp-row"><input type="color" class="hcp-swatch" id="hcText" value="#ffffff"></div>
+        </div>
+        <div class="hcp-group">
+          <div class="hcp-label">Raio do blob</div>
+          <div class="hcp-row"><input type="range" class="hcp-range" id="hcRadius" min="15" max="70" value="38"><span class="hcp-val" id="hcRadiusVal">38</span></div>
+        </div>
+        <div class="hcp-group">
+          <div class="hcp-label">Suavidade</div>
+          <div class="hcp-row"><input type="range" class="hcp-range" id="hcBlur" min="5" max="55" value="28"><span class="hcp-val" id="hcBlurVal">28</span></div>
+        </div>
+        <div class="hcp-group">
+          <div class="hcp-label">Opacidade mínima</div>
+          <div class="hcp-row"><input type="range" class="hcp-range" id="hcMinOp" min="0" max="60" value="30"><span class="hcp-val" id="hcMinOpVal">30%</span></div>
+        </div>
+        <div class="hcp-actions">
+          <button class="hcp-apply" id="hcApply">Aplicar</button>
+          <button class="hcp-reset" id="hcReset">Restaurar padrões</button>
+        </div>
+      </div>
+
       <div id="map"></div>
       <div class="map-footer">
         <div class="legend-wrap" id="legendWrap">
@@ -367,6 +426,13 @@ function heatColor(t) {
     return { r:230, g:Math.round(185-u*155), b:35, a };
   }
 }
+
+// ── Heat config ──
+const HEAT_DEFAULTS = { coldColor:'#22c55e', midColor:'#eab308', hotColor:'#ef4444', pillColor:'#f97316', textColor:'#ffffff', radius:38, blur:28, minOpacity:30 };
+let heatConfig = { ...HEAT_DEFAULTS };
+try { const s = localStorage.getItem('coco_heat_cfg'); if (s) heatConfig = { ...HEAT_DEFAULTS, ...JSON.parse(s) }; } catch {}
+
+function saveHeatConfig() { localStorage.setItem('coco_heat_cfg', JSON.stringify(heatConfig)); }
 
 // ── App state ──
 const todayISO = isoLocal(new Date());
@@ -545,12 +611,12 @@ function drawChoropleth(isMoney, getValue, maxVal) {
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
-  // Switch to tile layer with city labels for geographic context
+  // Tile with city labels for geographic context in heat mode
   setTileLayer(true);
 
   const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
 
-  // Build heatmap points from sub-regions (spread blobs across each state)
+  // Build heat points — each sub-region point gets the state's relative intensity
   const heatPoints = [];
   for (const [uf, s] of Object.entries(stateData)) {
     const pts = SUB_REGIONS[uf] || [CENTROIDS[uf]];
@@ -559,27 +625,34 @@ function drawHeatmap(isMoney, getValue, maxVal) {
     pts.forEach(pt => heatPoints.push([pt[0], pt[1], intensity]));
   }
 
-  // Leaflet.heat gaussian blob layer
+  // Leaflet.heat: smooth gaussian blobs with configurable gradient
   const heat = L.heatLayer(heatPoints, {
-    radius: 38,
-    blur: 28,
+    radius: heatConfig.radius,
+    blur: heatConfig.blur,
     maxZoom: 8,
     max: 1.0,
-    gradient: { 0.0:'#22c55e', 0.3:'#86efac', 0.55:'#eab308', 0.75:'#f97316', 1.0:'#ef4444' },
+    minOpacity: heatConfig.minOpacity / 100,
+    gradient: {
+      0.0: heatConfig.coldColor,
+      0.5: heatConfig.midColor,
+      1.0: heatConfig.hotColor,
+    },
   }).addTo(map);
   mapLayers.push(heat);
 
-  // Orange pill labels at state centroids
+  // Pill labels — using explicit iconSize so Leaflet doesn't clip the content
   for (const [uf, s] of Object.entries(stateData)) {
     const centroid = CENTROIDS[uf];
     if (!centroid) continue;
-    const val   = getValue(s);
-    const label = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
-    const icon  = L.divIcon({
-      html: `<div style="transform:translate(-50%,-50%);background:#f97316;color:#fff;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.30);cursor:pointer">${uf}: ${label}</div>`,
+    const val    = getValue(s);
+    const label  = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
+    const text   = `${uf}: ${label}`;
+    const pillW  = Math.max(80, text.length * 7 + 28); // estimated pixel width
+    const icon   = L.divIcon({
+      html: `<div style="width:${pillW}px;text-align:center;background:${heatConfig.pillColor};color:${heatConfig.textColor};padding:5px 0;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.28);cursor:pointer">${text}</div>`,
       className: '',
-      iconSize: [0, 0],
-      iconAnchor: [0, 0],
+      iconSize: [pillW, 26],
+      iconAnchor: [pillW / 2, 13],
     });
     const marker = L.marker(centroid, { icon }).addTo(map);
     marker.on('click', () => {
@@ -594,7 +667,10 @@ function drawHeatmap(isMoney, getValue, maxVal) {
     mapLayers.push(marker);
   }
 
-  document.getElementById('legendGrad').className = 'legend-grad-heat';
+  // Update legend gradient dynamically
+  document.getElementById('legendGrad').className = '';
+  document.getElementById('legendGrad').style.background =
+    `linear-gradient(to right,${heatConfig.coldColor},${heatConfig.midColor},${heatConfig.hotColor})`;
 }
 
 // ── Render ──
@@ -694,16 +770,66 @@ async function loadData() {
 }
 
 // ── Viz mode buttons ──
+function syncVizMode() {
+  const isHeat = vizMode === 'heat';
+  document.getElementById('btnChoropleth').classList.toggle('active', !isHeat);
+  document.getElementById('btnHeat').classList.toggle('active', isHeat);
+  const cfgBtn = document.getElementById('btnHeatCfg');
+  cfgBtn.style.display = isHeat ? '' : 'none';
+  if (!isHeat) document.getElementById('heatCfgPanel').classList.remove('open');
+}
 document.getElementById('btnChoropleth').addEventListener('click', () => {
   vizMode = 'choropleth';
-  document.getElementById('btnChoropleth').classList.add('active');
-  document.getElementById('btnHeat').classList.remove('active');
+  syncVizMode();
   drawMap();
 });
 document.getElementById('btnHeat').addEventListener('click', () => {
   vizMode = 'heat';
-  document.getElementById('btnHeat').classList.add('active');
-  document.getElementById('btnChoropleth').classList.remove('active');
+  syncVizMode();
+  drawMap();
+});
+
+// ── Heat settings panel ──
+function syncHeatCfgUI() {
+  document.getElementById('hcCold').value    = heatConfig.coldColor;
+  document.getElementById('hcMid').value     = heatConfig.midColor;
+  document.getElementById('hcHot').value     = heatConfig.hotColor;
+  document.getElementById('hcPill').value    = heatConfig.pillColor;
+  document.getElementById('hcText').value    = heatConfig.textColor;
+  document.getElementById('hcRadius').value  = heatConfig.radius;
+  document.getElementById('hcBlur').value    = heatConfig.blur;
+  document.getElementById('hcMinOp').value   = heatConfig.minOpacity;
+  document.getElementById('hcRadiusVal').textContent = heatConfig.radius;
+  document.getElementById('hcBlurVal').textContent   = heatConfig.blur;
+  document.getElementById('hcMinOpVal').textContent  = heatConfig.minOpacity + '%';
+}
+syncHeatCfgUI();
+
+document.getElementById('btnHeatCfg').addEventListener('click', () => {
+  document.getElementById('heatCfgPanel').classList.toggle('open');
+  document.getElementById('btnHeatCfg').classList.toggle('active', document.getElementById('heatCfgPanel').classList.contains('open'));
+});
+document.getElementById('hcRadius').addEventListener('input', e => { document.getElementById('hcRadiusVal').textContent = e.target.value; });
+document.getElementById('hcBlur').addEventListener('input', e => { document.getElementById('hcBlurVal').textContent = e.target.value; });
+document.getElementById('hcMinOp').addEventListener('input', e => { document.getElementById('hcMinOpVal').textContent = e.target.value + '%'; });
+document.getElementById('hcApply').addEventListener('click', () => {
+  heatConfig = {
+    coldColor:  document.getElementById('hcCold').value,
+    midColor:   document.getElementById('hcMid').value,
+    hotColor:   document.getElementById('hcHot').value,
+    pillColor:  document.getElementById('hcPill').value,
+    textColor:  document.getElementById('hcText').value,
+    radius:     Number(document.getElementById('hcRadius').value),
+    blur:       Number(document.getElementById('hcBlur').value),
+    minOpacity: Number(document.getElementById('hcMinOp').value),
+  };
+  saveHeatConfig();
+  drawMap();
+});
+document.getElementById('hcReset').addEventListener('click', () => {
+  heatConfig = { ...HEAT_DEFAULTS };
+  saveHeatConfig();
+  syncHeatCfgUI();
   drawMap();
 });
 
