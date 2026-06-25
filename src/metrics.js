@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, load } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, load } from './store.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -132,6 +132,16 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // conversão anterior
   const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil) : emptySess;
 
+  // Meta Ads — gasto e ROAS no período
+  const metaDaily = getMetaInsightsDaily();
+  let adCost = 0, adImpressions = 0, adClicks = 0;
+  { let d = parseISO(since); const end = parseISO(until);
+    while (d <= end) { const k = isoUTC(d); const m = metaDaily[k]; if (m) { adCost += m.spend; adImpressions += m.impressions; adClicks += m.clicks; } d = addDays(d, 1); }
+  }
+  const metaSources = new Set(['Instagram', 'Facebook', 'instagram', 'facebook', 'ig', 'fb']);
+  const metaRevenue = valid.filter(o => metaSources.has(normSource(o.source))).reduce((a, o) => a + o.total, 0);
+  const roas = adCost > 0 ? metaRevenue / adCost : 0;
+
   return {
     period: { since, until, span, grain },
     channel, metric,
@@ -139,7 +149,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       revenue, revenueDelta: delta(revenue, pRev),
       orders: count, ordersDelta: delta(count, pCount),
       aov, aovDelta: delta(aov, pAov),
-      adCost: 0,
+      adCost, adImpressions, adClicks, roas, metaRevenue,
       conversion: sess.conv, conversionDeltaPP: (sess.conv - prevSess.conv) * 100,
     },
     trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt },
