@@ -8,6 +8,7 @@ import * as shopify from './shopify.js';
 import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
+import * as amazon from './amazon.js';
 import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
@@ -20,7 +21,7 @@ function defaultWindow(days = 60) {
 
 export async function runSync() {
   const { since, until } = defaultWindow();
-  const report = { shopify: 0, shopee: 0, mercadolivre: 0, meta: 0, sessions: 0, errors: [] };
+  const report = { shopify: 0, shopify_us: 0, shopee: 0, mercadolivre: 0, amazon: 0, meta: 0, sessions: 0, errors: [] };
 
   // Shopify — pedidos
   try {
@@ -57,6 +58,26 @@ export async function runSync() {
     setMetaInsightsDaily({ ...existing, ...insights });
     report.meta = Object.keys(insights).length;
   } catch (e) { report.errors.push('meta.insights: ' + e.message); }
+
+  // ── Mercado EUA ───────────────────────────────
+
+  // Shopify EUA (opcional — requer SHOPIFY_US_STORE + SHOPIFY_US_ADMIN_TOKEN)
+  try {
+    const usStore = process.env.SHOPIFY_US_STORE;
+    const usToken = process.env.SHOPIFY_US_ADMIN_TOKEN;
+    if (usStore && usToken) {
+      const orders = await shopify.fetchOrders(since, until, { store: usStore, token: usToken, market: 'us', channel: 'shopify_us' });
+      upsertOrders(orders);
+      report.shopify_us = orders.length;
+    }
+  } catch (e) { report.errors.push('shopify_us.orders: ' + e.message); }
+
+  // Amazon SP-API (requer AMAZON_AWS_ACCESS_KEY + AMAZON_AWS_SECRET_KEY além das credenciais LWA)
+  try {
+    const orders = await amazon.fetchOrders(since, until);
+    upsertOrders(orders);
+    report.amazon = orders.length;
+  } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
 
   setLastSync(new Date().toISOString());
   return report;

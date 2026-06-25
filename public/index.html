@@ -216,18 +216,23 @@
       </div>
     </div>
 
-    <!-- Channel -->
+    <!-- Market -->
+    <div class="filter-pill csel" id="cselMarket">
+      <span class="lbl">Mercado</span>
+      <span class="val" id="marketVal">🇧🇷 Brasil</span>
+      <span class="arr">▾</span>
+      <div class="csel-pop">
+        <div class="csel-opt active" data-value="br">🇧🇷 Brasil</div>
+        <div class="csel-opt" data-value="us">🇺🇸 EUA</div>
+      </div>
+    </div>
+
+    <!-- Channel (opções geradas dinamicamente via JS) -->
     <div class="filter-pill csel" id="cselChannel">
       <span class="lbl">Canal</span>
       <span class="val" id="channelVal">Todos</span>
       <span class="arr">▾</span>
-      <div class="csel-pop">
-        <div class="csel-opt active" data-value="todos">Todos</div>
-        <div class="csel-opt" data-value="shopify">Shopify</div>
-        <div class="csel-opt" data-value="shopee">Shopee</div>
-        <div class="csel-opt" data-value="amazon">Amazon</div>
-        <div class="csel-opt" data-value="mercadolivre">Mercado Livre</div>
-      </div>
+      <div class="csel-pop" id="channelPop"></div>
     </div>
 
     <!-- Period -->
@@ -354,6 +359,7 @@
 // ── Default colors (source of truth) ──
 const DEFAULT_CH = {
   shopify:      { bg:'#95BF47', label:'Shopify' },
+  shopify_us:   { bg:'#7EAD3C', label:'Shopify US' },
   shopee:       { bg:'#EE4D2D', label:'Shopee' },
   mercadolivre: { bg:'#FFE600', label:'Mercado Livre' },
   amazon:       { bg:'#111111', label:'Amazon' },
@@ -468,7 +474,20 @@ document.getElementById('spReset').addEventListener('click', () => {
 });
 
 // ── App state ──
-const CHAN = { todos:'Todos os canais', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre' };
+const CHAN = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre', shopify_us:'Shopify US' };
+const MARKET_CHANNELS = {
+  br: [
+    { value:'todos',         label:'Todos' },
+    { value:'shopify',       label:'Shopify' },
+    { value:'shopee',        label:'Shopee' },
+    { value:'mercadolivre',  label:'Mercado Livre' },
+  ],
+  us: [
+    { value:'todos',      label:'Todos' },
+    { value:'shopify_us', label:'Shopify US' },
+    { value:'amazon',     label:'Amazon' },
+  ],
+};
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos', sessoes:'Sessões' };
 const charts = {};
 let lastData = null;
@@ -483,8 +502,9 @@ function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getM
 const todayISO = isoLocal(new Date());
 let sinceDate = localStorage.getItem('coco_since') || todayISO;
 let untilDate = localStorage.getItem('coco_until') || todayISO;
+let market    = localStorage.getItem('coco_market')  || 'br';
 let channel   = localStorage.getItem('coco_channel') || 'todos';
-let metric    = localStorage.getItem('coco_metric') || 'receita';
+let metric    = localStorage.getItem('coco_metric')  || 'receita';
 let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
 if (!CHAN[channel]) channel = 'todos';
 if (!METRIC_LABEL[metric]) metric = 'receita';
@@ -573,7 +593,9 @@ function render(d) {
 
   // Channel split
   const cs = d.channelSplit;
-  const chOrder = [['shopify','Shopify'],['shopee','Shopee'],['mercadolivre','Mercado Livre'],['amazon','Amazon']];
+  const chOrder = d.market === 'us'
+    ? [['shopify_us','Shopify US'],['amazon','Amazon']]
+    : [['shopify','Shopify'],['shopee','Shopee'],['mercadolivre','Mercado Livre'],['amazon','Amazon']];
   const cTotal = chOrder.reduce((a,[k]) => a+(cs[k]||0), 0);
   drawDonut('channelChart', chOrder.map(([k])=>cs[k]||0), chOrder.map(([k])=>CH[k]?.bg||'#999'));
   document.getElementById('chCenter').textContent = fmtBRLshort(cTotal);
@@ -593,10 +615,10 @@ function render(d) {
 
   // Traffic
   const tf = d.traffic;
-  const hasTraffic = d.channel === 'todos' || d.channel === 'shopify';
-  document.getElementById('trafficSub').textContent = hasTraffic
-    ? 'Shopify · período selecionado'
-    : 'Dados de sessão disponíveis apenas para Shopify';
+  const hasTraffic = d.market === 'br' && (d.channel === 'todos' || d.channel === 'shopify');
+  document.getElementById('trafficSub').textContent = d.market !== 'br'
+    ? 'Dados de sessão disponíveis apenas para o mercado Brasil'
+    : (hasTraffic ? 'Shopify · período selecionado' : 'Dados de sessão disponíveis apenas para Shopify');
   document.getElementById('mSessions').textContent = fmtInt(tf.sessions);
   document.getElementById('mSessionsMeta').textContent = tf.visitors?(tf.sessions/tf.visitors).toLocaleString('pt-BR',{maximumFractionDigits:1})+' por visitante':' ';
   document.getElementById('mVisitors').textContent = fmtInt(tf.visitors);
@@ -659,12 +681,26 @@ function applyRefresh() {
   if (refreshMin > 0) refreshTimer = setInterval(loadData, refreshMin * 60 * 1000);
 }
 
+// ── Channel dropdown dinâmico ──
+function buildChannelDropdown() {
+  const channels = MARKET_CHANNELS[market] || MARKET_CHANNELS.br;
+  if (!channels.find(c => c.value === channel)) {
+    channel = 'todos';
+    localStorage.setItem('coco_channel', channel);
+  }
+  document.getElementById('channelPop').innerHTML = channels
+    .map(c => `<div class="csel-opt${c.value===channel?' active':''}" data-value="${c.value}">${c.label}</div>`)
+    .join('');
+}
+
 // ── UI state sync ──
 function syncControls() {
+  document.getElementById('marketVal').textContent = market==='us' ? '🇺🇸 EUA' : '🇧🇷 Brasil';
+  document.querySelectorAll('#cselMarket .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === market));
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
   document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
+  buildChannelDropdown();
   document.getElementById('channelVal').textContent = CHAN[channel]||channel;
-  document.querySelectorAll('#cselChannel .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === channel));
   document.getElementById('refreshVal').textContent = refreshMin===0?'Desligar':`${refreshMin} min`;
   document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => o.classList.toggle('active', Number(o.dataset.value) === refreshMin));
   document.getElementById('periodValue').textContent = rangeLabel(sinceDate, untilDate);
@@ -673,7 +709,7 @@ function syncControls() {
 async function loadData() {
   setLive('loading','Atualizando…');
   try {
-    const p = new URLSearchParams({ channel, metric, since:sinceDate, until:untilDate });
+    const p = new URLSearchParams({ channel, metric, since:sinceDate, until:untilDate, market });
     const r = await fetch('/api/dashboard?'+p);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
@@ -692,20 +728,35 @@ function setupCsel(el) {
     closeAllDropdowns();
     if (!wasOpen) el.classList.add('open');
   });
-  el.querySelectorAll('.csel-opt').forEach(opt => {
-    opt.addEventListener('click', e => {
-      e.stopPropagation();
-      const field = el.id;
-      const val = opt.dataset.value;
-      if (field==='cselMetric')  { metric=val; localStorage.setItem('coco_metric',metric); }
-      if (field==='cselChannel') { channel=val; localStorage.setItem('coco_channel',channel); }
-      if (field==='cselRefresh') { refreshMin=Number(val); localStorage.setItem('coco_refresh',refreshMin); applyRefresh(); }
-      el.classList.remove('open');
-      syncControls();
-      if (field!=='cselRefresh') loadData();
+  // cselChannel é gerenciado por delegação em channelPop (buildChannelDropdown)
+  if (el.id !== 'cselChannel') {
+    el.querySelectorAll('.csel-opt').forEach(opt => {
+      opt.addEventListener('click', e => {
+        e.stopPropagation();
+        const field = el.id;
+        const val = opt.dataset.value;
+        if (field==='cselMetric')  { metric=val; localStorage.setItem('coco_metric',metric); }
+        if (field==='cselMarket')  { market=val; localStorage.setItem('coco_market',market); channel='todos'; localStorage.setItem('coco_channel',channel); }
+        if (field==='cselRefresh') { refreshMin=Number(val); localStorage.setItem('coco_refresh',refreshMin); applyRefresh(); }
+        el.classList.remove('open');
+        syncControls();
+        if (field!=='cselRefresh') loadData();
+      });
     });
-  });
+  }
 }
+
+// Delegação de clique para o dropdown de canal (construído dinamicamente)
+document.getElementById('channelPop').addEventListener('click', e => {
+  const opt = e.target.closest('.csel-opt');
+  if (!opt) return;
+  e.stopPropagation();
+  channel = opt.dataset.value;
+  localStorage.setItem('coco_channel', channel);
+  document.getElementById('cselChannel').classList.remove('open');
+  syncControls();
+  loadData();
+});
 function closeAllDropdowns() {
   document.querySelectorAll('.csel.open').forEach(el => el.classList.remove('open'));
 }
