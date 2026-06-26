@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, load } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, load } from './store.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -147,6 +147,26 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const metaRevenue = valid.filter(o => metaSources.has(normSource(o.source))).reduce((a, o) => a + o.total, 0);
   const roas = adCost > 0 ? metaRevenue / adCost : 0;
 
+  // ML breakdown: orgânico vs premium + custo de anúncios (apenas mercado BR)
+  const mlOrders = valid.filter(o => o.channel === 'mercadolivre');
+  const mlBreakdown = {
+    organic: mlOrders.filter(o => o.listingType === 'organic' || !o.listingType).reduce((a, o) => a + o.total, 0),
+    premium: mlOrders.filter(o => o.listingType === 'premium').reduce((a, o) => a + o.total, 0),
+    adCost: 0,
+    adClicks: 0,
+    roas: 0,
+  };
+  if (market === 'br') {
+    const mlAds = getMlAdCosts();
+    if (mlAds && mlAds.spend) {
+      mlBreakdown.adCost = mlAds.spend;
+      mlBreakdown.adClicks = mlAds.clicks || 0;
+    }
+    mlBreakdown.roas = mlBreakdown.adCost > 0
+      ? (mlBreakdown.organic + mlBreakdown.premium) / mlBreakdown.adCost
+      : 0;
+  }
+
   return {
     period: { since, until, span, grain },
     channel, metric, market,
@@ -165,6 +185,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     topProducts,
     byState,
     recentOrders: recent,
+    mlBreakdown,
     updatedAt: load().lastSync,
   };
 }
