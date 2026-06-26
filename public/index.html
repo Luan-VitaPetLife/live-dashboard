@@ -296,8 +296,8 @@
       </div></div>
 
       <div class="card" id="cardMarketing"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title">Marketing por origem</div><div class="ct-sub">Receita atribuída</div></div></div>
-        <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub">Atribuída</div></div></div>
+        <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
+        <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
         <div class="donut-rows" id="mktRows"></div>
         <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
       </div></div>
@@ -386,6 +386,9 @@ const DEFAULT_MKT = {
   Google:         '#6a8c6e',
   Shopee:         '#EE4D2D',
   'Mercado Livre':'#FFE600',
+  Amazon:         '#4a90c4',
+  Clássico:       '#4a9e6e',
+  Destaque:       '#e8a225',
   Direto:         '#c4b49a',
   Outros:         '#b0a898',
 };
@@ -601,7 +604,18 @@ function render(d) {
     document.getElementById('mlAdCost').textContent = ml && ml.adCost > 0 ? fmtMoney(ml.adCost) : '—';
     document.getElementById('mlRoas').textContent = ml && ml.roas > 0 ? ml.roas.toFixed(2) + 'x' : '—';
   }
-  document.getElementById('mktNote').textContent = k.adCost > 0 ? 'Meta Ads conectado · Google Ads em breve' : 'Meta Ads conectado · sincronize para ver os dados';
+  // Card de marketing — títulos e nota adaptados por canal
+  { const ch = d.channel;
+    const isMkt = ['shopee','mercadolivre','amazon'].includes(ch);
+    document.getElementById('mktTitle').textContent = ch === 'mercadolivre' ? 'Distribuição por tipo' : 'Marketing por origem';
+    document.getElementById('mktSub').textContent   = ch === 'mercadolivre' ? 'Clássico vs Destaque' : isMkt ? 'Receita do canal' : 'Receita atribuída';
+    document.getElementById('mktCenterSub').textContent = ch === 'mercadolivre' ? 'Total ML' : isMkt ? 'Total' : 'Atribuída';
+    document.getElementById('mktNote').textContent =
+      ch === 'mercadolivre' ? 'Clássico = listagem grátis · Destaque = listagem paga' :
+      ch === 'shopee'       ? 'Receita orgânica da Shopee · Ads em breve' :
+      ch === 'amazon'       ? 'Receita orgânica da Amazon · Ads em breve' :
+      k.adCost > 0          ? 'Meta Ads conectado · Google Ads em breve' : 'Meta Ads conectado · sincronize para ver os dados';
+  }
   document.getElementById('kpiConv').textContent = (k.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
   const dpp = k.conversionDeltaPP;
   if (dpp === null || dpp === undefined || isNaN(dpp)) {
@@ -717,12 +731,13 @@ function statusTag(o) {
 function updateCardVisibility() {
   const isTodos = channel === 'todos';
   const isShopify = channel === 'shopify' || channel === 'shopify_us';
+  const isMarketplace = ['shopee', 'mercadolivre', 'amazon'].includes(channel);
   const show = (id, visible) => {
     const el = document.getElementById(id);
     if (el) el.style.display = visible ? '' : 'none';
   };
   show('cardChannelSplit', isTodos);
-  show('cardMarketing', isTodos);
+  show('cardMarketing', isTodos || isMarketplace);
   show('cardTraffic', isTodos || isShopify);
   show('cardFunnel', isTodos || isShopify);
   show('cardMlBreakdown', channel === 'mercadolivre');
