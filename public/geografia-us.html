@@ -529,14 +529,17 @@ function setLive(s,t) {
 }
 
 // ── Leaflet map ──
-const map = L.map('map', { center:[38,-97], zoom:4, minZoom:3, maxZoom:8, zoomControl:true });
+const map = L.map('map', { center:[38,-97], zoom:4, minZoom:4, maxZoom:8, zoomControl:true, zoomSnap:0.5 });
+map.fitBounds([[24.0, -125.0], [49.5, -66.5]]);
+map.setMaxBounds([[18.0, -130.0], [52.0, -62.0]]);
+map.options.minZoom = 4;
 
+// Tile layer — CartoDB Voyager (city and state labels)
 let currentTile = null;
 function setTileLayer(withLabels) {
-  if (currentTile) { map.removeLayer(currentTile); currentTile = null; }
-  if (!withLabels) return; // coropleto: fundo neutro, sem países ao redor
-  currentTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+  if (currentTile) map.removeLayer(currentTile);
+  currentTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     subdomains:'abcd', maxZoom:19
   }).addTo(map);
 }
@@ -637,9 +640,6 @@ function drawChoropleth(isMoney, getValue, maxVal) {
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
-  // Fundo neutro — remove tile layer para nenhum outro país aparecer
-  if (currentTile) { map.removeLayer(currentTile); currentTile = null; }
-
   const totalAll=Object.values(stateData).reduce((a,x)=>a+getValue(x),0);
 
   // Bordas dos estados sobre fundo neutro

@@ -603,18 +603,17 @@ function setLive(s,t) {
 }
 
 // ── Leaflet map ──
-const BRAZIL_BOUNDS = L.latLngBounds([[-36,-75],[6,-27]]);
-const map = L.map('map', { center:[-15,-52], zoom:4, minZoom:4, maxZoom:8, zoomControl:true, maxBounds:BRAZIL_BOUNDS, maxBoundsViscosity:0.85 });
+const map = L.map('map', { center:[-15,-52], zoom:4, minZoom:4, maxZoom:8, zoomControl:true, zoomSnap:0.5 });
+map.fitBounds([[-33.75, -73.99], [5.26, -28.84]]);
+map.setMaxBounds([[-36.0, -76.0], [8.0, -25.0]]);
+map.options.minZoom = 4;
 
-// Tile layers — swapped by mode: choropleth uses no-labels, heatmap uses full labels for city context
+// Tile layer — CartoDB Voyager (city and state labels)
 let currentTile = null;
 function setTileLayer(withLabels) {
   if (currentTile) map.removeLayer(currentTile);
-  const url = withLabels
-    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
-  currentTile = L.tileLayer(url, {
-    attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+  currentTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     subdomains:'abcd', maxZoom:19
   }).addTo(map);
 }
@@ -755,9 +754,6 @@ function drawChoropleth(isMoney, getValue, maxVal) {
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
-  // Fundo neutro — remove tile layer para nenhum outro país aparecer
-  if (currentTile) { map.removeLayer(currentTile); currentTile = null; }
-
   const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
 
   // Bordas dos estados sobre fundo neutro
