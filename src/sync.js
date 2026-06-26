@@ -9,7 +9,7 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setAmazonBackoff, getAmazonBackoff } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -94,11 +94,19 @@ export async function runSync() {
     }
   } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
 
-  // Amazon SP-API (requer AMAZON_AWS_ACCESS_KEY + AMAZON_AWS_SECRET_KEY além das credenciais LWA)
+  // Amazon SP-API — intervalo mínimo de 1h entre syncs (rate limit da SP-API)
   try {
-    const orders = await amazon.fetchOrders(since, until);
-    upsertOrders(orders);
-    report.amazon = orders.length;
+    const backoffUntil = getAmazonBackoff();
+    if (backoffUntil > Date.now()) {
+      const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
+      console.log(`Amazon: aguardando intervalo de 1h — próximo sync em ~${mins} min`);
+    } else {
+      const orders = await amazon.fetchOrders(since, until);
+      upsertOrders(orders);
+      report.amazon = orders.length;
+      // Aplica intervalo de 1h mesmo após sucesso para respeitar rate limit da SP-API
+      setAmazonBackoff(Date.now() + 60 * 60 * 1000);
+    }
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
 
   setLastSync(new Date().toISOString());
