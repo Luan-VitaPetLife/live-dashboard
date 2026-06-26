@@ -27,6 +27,7 @@ const EMPTY = {
   metaUSInsightsDaily: {},
   shopeeTokens: null,
   mlTokens: null,
+  mlAdCosts: null,
   lastSync: null,
 };
 
@@ -51,6 +52,7 @@ export async function initStore() {
     for (const r of kv.rows) {
       if (r.key === 'shopeeTokens')         cache.shopeeTokens         = r.value;
       if (r.key === 'mlTokens')             cache.mlTokens             = r.value;
+      if (r.key === 'mlAdCosts')            cache.mlAdCosts            = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -160,6 +162,13 @@ export function setMlTokens(tokens) {
   if (USE_PG) pgKv('mlTokens', tokens);
 }
 export function getMlTokens() { return load().mlTokens; }
+
+// ── ML Ads Costs ─────────────────────────────
+export function setMlAdCosts(data) {
+  const db = load(); db.mlAdCosts = data; saveJson();
+  if (USE_PG) pgKv('mlAdCosts', data);
+}
+export function getMlAdCosts() { return load().mlAdCosts || null; }
 
 // ── Meta Insights ─────────────────────────────
 export function setMetaInsightsDaily(data) {
