@@ -9,7 +9,7 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -51,13 +51,24 @@ export async function runSync() {
     report.mercadolivre = orders.length;
   } catch (e) { report.errors.push('mercadolivre.orders: ' + e.message); }
 
-  // Meta — gasto diário de anúncios (Instagram + Facebook)
+  // Meta BR — gasto diário de anúncios (Coco and Luna)
   try {
     const insights = await meta.fetchInsights(since, until);
     const existing = getMetaInsightsDaily();
     setMetaInsightsDaily({ ...existing, ...insights });
     report.meta = Object.keys(insights).length;
   } catch (e) { report.errors.push('meta.insights: ' + e.message); }
+
+  // Meta EUA — gasto diário de anúncios (Vita Pet Life)
+  try {
+    const usAccountId = meta.AD_ACCOUNT_ID_US;
+    if (usAccountId) {
+      const insights = await meta.fetchInsights(since, until, usAccountId);
+      const existing = getMetaUSInsightsDaily();
+      setMetaUSInsightsDaily({ ...existing, ...insights });
+      report.meta_us = Object.keys(insights).length;
+    }
+  } catch (e) { report.errors.push('meta_us.insights: ' + e.message); }
 
   // ── Mercado EUA ───────────────────────────────
 

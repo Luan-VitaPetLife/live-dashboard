@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, load } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, load } from './store.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -137,8 +137,8 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // conversão anterior
   const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil, market) : emptySess;
 
-  // Meta Ads — gasto e ROAS no período
-  const metaDaily = getMetaInsightsDaily();
+  // Meta Ads — gasto e ROAS no período (separado por mercado)
+  const metaDaily = market === 'us' ? getMetaUSInsightsDaily() : getMetaInsightsDaily();
   let adCost = 0, adImpressions = 0, adClicks = 0;
   { let d = parseISO(since); const end = parseISO(until);
     while (d <= end) { const k = isoUTC(d); const m = metaDaily[k]; if (m) { adCost += m.spend; adImpressions += m.impressions; adClicks += m.clicks; } d = addDays(d, 1); }

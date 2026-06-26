@@ -5,13 +5,14 @@
 // ─────────────────────────────────────────────
 import 'dotenv/config';
 
-const ACCESS_TOKEN  = process.env.META_ACCESS_TOKEN;
-const AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID;
-const API_VERSION   = 'v20.0';
-const BASE          = `https://graph.facebook.com/${API_VERSION}`;
+const ACCESS_TOKEN     = process.env.META_ACCESS_TOKEN;
+const AD_ACCOUNT_ID    = process.env.META_AD_ACCOUNT_ID;
+const AD_ACCOUNT_ID_US = process.env.META_US_AD_ACCOUNT_ID;
+const API_VERSION      = 'v20.0';
+const BASE             = `https://graph.facebook.com/${API_VERSION}`;
 
-export function isConfigured() {
-  return Boolean(ACCESS_TOKEN && AD_ACCOUNT_ID);
+export function isConfigured(accountId = AD_ACCOUNT_ID) {
+  return Boolean(ACCESS_TOKEN && accountId);
 }
 
 async function graphGet(path, params = {}) {
@@ -24,12 +25,12 @@ async function graphGet(path, params = {}) {
   return json;
 }
 
-// Busca insights diários da conta de anúncios no intervalo.
+// Busca insights diários de uma conta de anúncios no intervalo.
 // Retorna { [YYYY-MM-DD]: { spend, impressions, clicks, reach, cpm, cpc, ctr } }
-export async function fetchInsights(sinceISO, untilISO) {
-  if (!isConfigured()) return {};
+export async function fetchInsights(sinceISO, untilISO, accountId = AD_ACCOUNT_ID) {
+  if (!isConfigured(accountId)) return {};
 
-  const accountId = AD_ACCOUNT_ID.startsWith('act_') ? AD_ACCOUNT_ID : `act_${AD_ACCOUNT_ID}`;
+  const actId = String(accountId).startsWith('act_') ? accountId : `act_${accountId}`;
   const fields = 'spend,impressions,clicks,reach,cpm,cpc,ctr';
   const daily = {};
 
@@ -44,7 +45,7 @@ export async function fetchInsights(sinceISO, untilISO) {
     };
     if (after) params.after = after;
 
-    const json = await graphGet(`/${accountId}/insights`, params);
+    const json = await graphGet(`/${actId}/insights`, params);
 
     for (const row of (json.data || [])) {
       daily[row.date_start] = {
@@ -63,3 +64,5 @@ export async function fetchInsights(sinceISO, untilISO) {
 
   return daily;
 }
+
+export { AD_ACCOUNT_ID_US };
