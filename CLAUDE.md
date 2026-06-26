@@ -133,6 +133,10 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - `getOrders({ market })` em store.js filtra corretamente legacy + novos pedidos.
 
 ### 4.9 Canais e UI — `public/index.html`
+- **Sidebar ocultável:** botão `☰` (`#sidebarToggle`) no início da topbar. Desktop: toggle com animação + `localStorage('coco_sidebar')`. Mobile (≤768px): sidebar começa oculta, abre como overlay com `#sidebarOverlay`. Classe `body.sidebar-hidden` oculta a sidebar no desktop; `body.sidebar-mobile-open` abre como drawer no mobile.
+- **Responsivo:** breakpoint 768px — KPIs em 2 colunas (5º ocupa linha inteira), charts em coluna única, padding reduzido. Breakpoint 520px — labels dos filtros e texto dos botões de mercado ocultos.
+
+### 4.9b (original)
 - **Seletor de mercado:** dois botões toggle no canto esquerdo do topbar com imagens das bandeiras reais
   (`bandeira_brasil.webp`, `bandeira_eua.svg`). Botão ativo tem fundo escuro (estilo do botão Período).
   Persiste em `localStorage('coco_market')`. Troca de mercado reseta canal para `'todos'`.
@@ -245,15 +249,34 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /health`
 
-## 8. Próximos passos (backlog priorizado)
+## 8. Status das integrações (26/06/2026)
 
-1. **Autorizar a Shopee** (`SHOPEE_PRODUCTION=1` + `/shopee/connect` após aprovação da Shopee).
+### Amazon SP-API — situação atual
+- **IAM Role `SellingPartnerAPIRole`**: política `SPAPIInvokePolicy` adicionada com `execute-api:Invoke` em `*`. Trust policy inclui `usdashboard` user. ✅
+- **Autenticação confirmada:** diagCall retornou 5 pedidos reais de março/2026 (IL, CO, MN, WV...) com HTTP 200. ✅
+- **Janela de sync:** expandida para **90 dias** (antes era 60 dias) — pedidos de março estão no range. ✅
+- **Rate limit SP-API:** 0.0167 req/s (burst 20). Backoff de 1h aplicado após cada sync bem-sucedido ou 429. Múltiplos force-syncs durante debug esgotaram o burst em 26/06 — comportamento normal em produção, não voltará a acontecer.
+- **Endpoint `POST /api/amazon/reset-backoff?delay=N`:** aceita `delay` em minutos para definir backoff customizado.
+- **Próximo sync automático:** ~18:28 horário de Brasília em 26/06. Se não funcionar, o próximo é 15 min depois (o sync automático roda a cada 15 min e pula Amazon enquanto o backoff está ativo — quando expira, o próximo ciclo inclui Amazon).
+
+### Shopee — ativa ✅
+- Credenciais de produção configuradas: Partner ID 2037711, Shop ID 1502160212.
+- 83 pedidos confirmados no banco. Chunking de 15 dias implementado em `src/shopee.js`.
+- Analytics da Shopee (tráfego, insights) **não disponível via API** — só no Seller Center. Endpoints retornam `error_not_found`.
+
+### Mercado Livre — ativo ✅
+- OAuth autorizado. Tokens persistidos no Postgres. Re-autorizar após deploy via `/mercadolivre/connect`.
+- 140 pedidos no banco. ML Ads (`write:product_ads`) ainda não autorizado.
+
+## 9. Próximos passos (backlog priorizado)
+
+1. **Confirmar Amazon**: sync automático pós-18:28 de 26/06 deve trazer pedidos de março/abril/maio/junho. Se falhar por 429, o próximo ciclo de 15 min tentará novamente automaticamente.
 2. Decidir tratamento de **PENDING** (contar só pagos?) — ver 4.1.
 3. **Google Ads** para custo/ROAS de Google.
 4. **ML Ads:** re-autorizar OAuth com escopo `write:product_ads` para ativar custo de campanha no card ML Breakdown.
 5. Login/usuários se mais pessoas precisarem acessar.
 
-## 9. Convenções
+## 10. Convenções
 
 - Código em ES Modules (`"type": "module"`). Node 18+ (usa `fetch` nativo).
 - Dependências mínimas: `express`, `dotenv`, `pg`. Manter simples — sem aws-sdk, sem axios.
