@@ -195,3 +195,9 @@ export function setAmazonBackoff(until) {
   if (USE_PG) pgKv('amazonBackoff', until);
 }
 export function getAmazonBackoff() { return load().amazonBackoff || 0; }
+
+export function setAmazonBRBackoff(until) {
+  const db = load(); db.amazonBRBackoff = until; saveJson();
+  if (USE_PG) pgKv('amazonBRBackoff', until);
+}
+export function getAmazonBRBackoff() { return load().amazonBRBackoff || 0; }
