@@ -36,8 +36,8 @@ function buildBuckets(since, until, grain) {
 const isCancelled = o => o.cancelled;
 const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
 
-function aggregateSessions(since, until) {
-  const daily = getSessionsDaily();
+function aggregateSessions(since, until, market = 'br') {
+  const daily = getSessionsDaily(market);
   let s = 0, v = 0, c = 0, ck = 0, cp = 0;
   let d = parseISO(since); const end = parseISO(until);
   const series = [];
@@ -74,10 +74,12 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // tendência
   const buckets = buildBuckets(since, until, grain);
   const idx = new Map(buckets.map((b, i) => [b.key, i]));
-  // Sessões só existem via ShopifyQL da loja BR. Mercados US ou canais não-Shopify ficam sem dados.
-  const hasSessionData = market === 'br' && (channel === 'todos' || channel === 'shopify');
+  // Sessões via ShopifyQL: BR (channel shopify/todos) e US (channel shopify_us/todos).
+  const hasSessionData =
+    (market === 'br' && (channel === 'todos' || channel === 'shopify')) ||
+    (market === 'us' && (channel === 'todos' || channel === 'shopify_us'));
   const emptySess = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0, conv: 0, series: buckets.map(b => ({ label: b.label, sessions: 0, conv: 0 })) };
-  const sess = hasSessionData ? aggregateSessions(since, until) : emptySess;
+  const sess = hasSessionData ? aggregateSessions(since, until, market) : emptySess;
   let trendLabels, trendData, trendTotal, trendFmt = metric === 'receita' ? 'money' : 'int';
   if (metric === 'sessoes') {
     trendLabels = sess.series.map(p => p.label);
@@ -133,7 +135,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
 
   // conversão anterior
-  const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil) : emptySess;
+  const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil, market) : emptySess;
 
   // Meta Ads — gasto e ROAS no período
   const metaDaily = getMetaInsightsDaily();

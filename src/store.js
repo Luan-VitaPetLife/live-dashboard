@@ -106,28 +106,43 @@ export function getOrders({ channel = 'todos', since = null, until = null, marke
   // Market filter: pedidos sem campo market são legados e pertencem ao BR.
   if (market) arr = arr.filter(o => (o.market || (o.channel === 'shopify_us' ? 'us' : 'br')) === market);
   if (channel && channel !== 'todos') arr = arr.filter(o => o.channel === channel);
-  if (since) { const t = Date.parse(since + 'T00:00:00-03:00'); arr = arr.filter(o => Date.parse(o.createdAt) >= t); }
-  if (until) { const t = Date.parse(until + 'T23:59:59-03:00'); arr = arr.filter(o => Date.parse(o.createdAt) <= t); }
+  const tz = market === 'us' ? 'Z' : '-03:00';
+  if (since) { const t = Date.parse(since + 'T00:00:00' + tz); arr = arr.filter(o => Date.parse(o.createdAt) >= t); }
+  if (until) { const t = Date.parse(until + 'T23:59:59' + tz); arr = arr.filter(o => Date.parse(o.createdAt) <= t); }
   return arr;
 }
 
 // ── Sessões diárias ───────────────────────────
-export function upsertSessionsDaily(rows) {
+export function upsertSessionsDaily(rows, market = 'br') {
   const db = load();
-  for (const r of rows) db.sessionsDaily[r.date] = r;
+  for (const r of rows) {
+    const key = market === 'br' ? r.date : `${market}:${r.date}`;
+    db.sessionsDaily[key] = r;
+  }
   saveJson();
   if (USE_PG) {
     for (const r of rows) {
+      const key = market === 'br' ? r.date : `${market}:${r.date}`;
       pool.query(
         'INSERT INTO sessions_daily(date,data) VALUES($1,$2) ON CONFLICT(date) DO UPDATE SET data=$2',
-        [r.date, r]
+        [key, r]
       ).catch(e => console.error('PG sessions error:', e.message));
     }
   }
 }
 
-export function getSessionsDaily() {
-  return load().sessionsDaily;
+export function getSessionsDaily(market = 'br') {
+  const all = load().sessionsDaily;
+  if (market === 'br') {
+    // Chaves sem prefixo são BR (legado e novos)
+    return Object.fromEntries(Object.entries(all).filter(([k]) => !k.includes(':')));
+  }
+  const prefix = `${market}:`;
+  return Object.fromEntries(
+    Object.entries(all)
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([k, v]) => [k.slice(prefix.length), v])
+  );
 }
 
 // ── Tokens Shopee ─────────────────────────────
