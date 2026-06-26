@@ -4,8 +4,6 @@
 //  agendador do server.js (a cada N minutos).
 // ─────────────────────────────────────────────
 
-import { setAmazonBackoff } from './src/store.js';
-app.post('/api/amazon/reset-backoff', (req, res) => {   setAmazonBackoff(0);   res.json({ ok: true }); });
 import 'dotenv/config';
 import * as shopify from './shopify.js';
 import * as shopee from './shopee.js';
@@ -99,16 +97,22 @@ export async function runSync() {
 
   // Amazon SP-API — intervalo mínimo de 1h entre syncs (rate limit da SP-API)
   try {
-    const backoffUntil = getAmazonBackoff();
-    if (backoffUntil > Date.now()) {
-      const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
-      console.log(`Amazon: aguardando intervalo de 1h — próximo sync em ~${mins} min`);
+    if (!amazon.isConfigured()) {
+      report.errors.push('amazon: credenciais LWA ausentes (AMAZON_CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN)');
+    } else if (!amazon.hasAwsCreds()) {
+      report.errors.push('amazon: credenciais AWS ausentes (AMAZON_AWS_ACCESS_KEY / AMAZON_AWS_SECRET_KEY)');
     } else {
-      const orders = await amazon.fetchOrders(since, until);
-      upsertOrders(orders);
-      report.amazon = orders.length;
-      // Aplica intervalo de 1h mesmo após sucesso para respeitar rate limit da SP-API
-      setAmazonBackoff(Date.now() + 60 * 60 * 1000);
+      const backoffUntil = getAmazonBackoff();
+      if (backoffUntil > Date.now()) {
+        const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
+        console.log(`Amazon: aguardando intervalo de 1h — próximo sync em ~${mins} min`);
+        report.amazon_skipped = `próximo sync em ~${mins} min`;
+      } else {
+        const orders = await amazon.fetchOrders(since, until);
+        upsertOrders(orders);
+        report.amazon = orders.length;
+        setAmazonBackoff(Date.now() + 60 * 60 * 1000);
+      }
     }
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
 

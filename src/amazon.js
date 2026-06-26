@@ -40,7 +40,7 @@ const SP_HOST        = 'sellingpartnerapi-na.amazon.com';
 export function isConfigured() {
   return Boolean(CLIENT_ID && CLIENT_SECRET && REFRESH_TOKEN);
 }
-function hasAwsCreds() {
+export function hasAwsCreds() {
   return Boolean(AWS_ACCESS_KEY && AWS_SECRET_KEY);
 }
 

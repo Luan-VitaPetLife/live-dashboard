@@ -7,9 +7,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard } from './src/metrics.js';
 import { runSync } from './src/sync.js';
-import { initStore } from './src/store.js';
+import { initStore, getAmazonBackoff, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
+import * as amazon from './src/amazon.js';
+import * as meta from './src/meta.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -73,6 +75,36 @@ app.get('/mercadolivre/callback', async (req, res) => {
 });
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Diagnóstico de integrações — mostra o que está configurado e o estado do Amazon
+app.get('/api/status', (_req, res) => {
+  const backoffUntil = getAmazonBackoff();
+  const backoffActive = backoffUntil > Date.now();
+  const db = load();
+
+  const has = key => Boolean(process.env[key]);
+
+  res.json({
+    amazon: {
+      configured: amazon.isConfigured(),
+      hasLwa:     has('AMAZON_CLIENT_ID') && has('AMAZON_CLIENT_SECRET') && has('AMAZON_REFRESH_TOKEN'),
+      hasAwsCreds: has('AMAZON_AWS_ACCESS_KEY') && has('AMAZON_AWS_SECRET_KEY'),
+      hasRoleArn:  has('AMAZON_ROLE_ARN'),
+      backoffActive,
+      backoffUntil: backoffActive ? new Date(backoffUntil).toISOString() : null,
+      nextSyncIn:   backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
+    },
+    meta: {
+      br: { configured: meta.isConfigured(), hasToken: has('META_ACCESS_TOKEN'), hasAccount: has('META_AD_ACCOUNT_ID') },
+      us: { configured: meta.isConfigured(process.env.META_US_AD_ACCOUNT_ID), hasToken: has('META_ACCESS_TOKEN'), hasAccount: has('META_US_AD_ACCOUNT_ID') },
+    },
+    shopify: {
+      br: { configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') },
+      us: { configured: has('SHOPIFY_US_STORE') && has('SHOPIFY_US_ADMIN_TOKEN') },
+    },
+    lastSync: db.lastSync || null,
+  });
+});
 
 await initStore();
 
