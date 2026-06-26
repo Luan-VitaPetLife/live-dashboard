@@ -10,7 +10,7 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setAmazonBackoff, getAmazonBackoff } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setAmazonBackoff, getAmazonBackoff, setMlAdCosts } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -51,6 +51,13 @@ export async function runSync() {
     upsertOrders(orders);
     report.mercadolivre = orders.length;
   } catch (e) { report.errors.push('mercadolivre.orders: ' + e.message); }
+
+  // Mercado Livre — custo de anúncios (Product Ads API; retorna zeros se sem acesso)
+  try {
+    const adCosts = await ml.fetchAdCosts(since, until);
+    setMlAdCosts({ since, until, ...adCosts });
+    report.ml_ads_spend = adCosts.spend;
+  } catch (e) { report.errors.push('mercadolivre.ads: ' + e.message); }
 
   // Meta BR — gasto diário de anúncios (Coco and Luna)
   try {

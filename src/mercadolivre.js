@@ -117,18 +117,23 @@ export async function fetchOrders(sinceISO, untilISO) {
     const results = data.results || [];
     for (const o of results) {
       const cancelled = ['cancelled', 'invalid'].includes(o.status);
+      // listing_type_id: 'free' → orgânico; qualquer outro (bronze/silver/gold_*) → premium
+      const ltid = (o.order_items || [])[0]?.item?.listing_type_id || null;
+      const listingType = ltid ? (ltid === 'free' ? 'organic' : 'premium') : null;
       out.push({
-        id:        'mercadolivre:' + o.id,
-        channel:   'mercadolivre',
-        name:      '#' + o.id,
-        createdAt: o.date_created,
-        status:    o.status,
+        id:          'mercadolivre:' + o.id,
+        channel:     'mercadolivre',
+        market:      'br',
+        name:        '#' + o.id,
+        createdAt:   o.date_created,
+        status:      o.status,
         cancelled,
-        total:     Number(o.total_amount) || 0,
-        source:    'Mercado Livre',
-        customer:  o.buyer?.nickname || '',
-        state:     null,              // preenchido abaixo via /shipments
-        _sid:      o.shipping?.id || null,
+        total:       Number(o.total_amount) || 0,
+        source:      'Mercado Livre',
+        customer:    o.buyer?.nickname || '',
+        state:       null,              // preenchido abaixo via /shipments
+        listingType,
+        _sid:        o.shipping?.id || null,
         items: (o.order_items || []).map(it => ({
           title:  it.item?.title || '',
           qty:    it.quantity || 1,
@@ -162,4 +167,31 @@ export async function fetchOrders(sinceISO, untilISO) {
   }
 
   return out;
+}
+
+// Busca custo de anúncios do ML Product Ads no intervalo.
+// Retorna zeros graciosamente se o token não tiver acesso ao escopo de advertising.
+export async function fetchAdCosts(sinceISO, untilISO) {
+  const EMPTY_COSTS = { spend: 0, clicks: 0, impressions: 0 };
+  if (!isConfigured() || !getMlTokens()) return EMPTY_COSTS;
+  try {
+    const tk = getMlTokens();
+    const sellerId = tk.user_id;
+    if (!sellerId) return EMPTY_COSTS;
+
+    // Endpoint de clicks/spend por período (Product Ads API)
+    const data = await apiGet(
+      `/advertising/product_ads/advertisers/${sellerId}/clicks`,
+      { date_from: sinceISO, date_to: untilISO }
+    );
+
+    return {
+      spend:       Number(data.total_cost       ?? data.spend       ?? 0),
+      clicks:      Number(data.total_clicks     ?? data.clicks      ?? 0),
+      impressions: Number(data.total_impressions ?? data.impressions ?? 0),
+    };
+  } catch (e) {
+    console.warn('ML Ads API indisponível (pode requerer escopo adicional):', e.message);
+    return EMPTY_COSTS;
+  }
 }
