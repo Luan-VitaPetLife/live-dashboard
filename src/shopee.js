@@ -112,26 +112,39 @@ async function shopCall(path, extraParams = {}, method = 'GET', body = null) {
 }
 
 // Lista pedidos no intervalo e devolve normalizados (mesmo formato da Shopify).
+// A Shopee limita cada chamada a 15 dias — a janela é fatiada em chunks.
 export async function fetchOrders(sinceISO, untilISO) {
-  if (!isConfigured() || !getShopeeTokens()) return []; // ainda não conectada → canal fica 0
-  const timeFrom = Math.floor(Date.parse(sinceISO + 'T00:00:00-03:00') / 1000);
-  const timeTo = Math.floor(Date.parse(untilISO + 'T23:59:59-03:00') / 1000);
+  if (!isConfigured() || !getShopeeTokens()) return [];
 
-  // 1) Coleta os order_sn da janela (máx 15 dias por chamada na Shopee; paginar se preciso).
+  const CHUNK_MS = 15 * 24 * 60 * 60 * 1000; // 15 dias em ms
+  const sinceMs  = Date.parse(sinceISO + 'T00:00:00-03:00');
+  const untilMs  = Date.parse(untilISO + 'T23:59:59-03:00');
+
+  // 1) Coleta order_sn em janelas de ≤15 dias (dedup por Set).
+  const snSet  = new Set();
   const snList = [];
-  let cursor = '';
-  do {
-    const r = await shopCall('/api/v2/order/get_order_list', {
-      time_range_field: 'create_time',
-      time_from: String(timeFrom),
-      time_to: String(timeTo),
-      page_size: '50',
-      cursor,
-    });
-    (r.response?.order_list || []).forEach(o => snList.push(o.order_sn));
-    cursor = r.response?.next_cursor || '';
-    if (!r.response?.more) break;
-  } while (cursor);
+  let chunkStart = sinceMs;
+  while (chunkStart < untilMs) {
+    const chunkEnd = Math.min(chunkStart + CHUNK_MS, untilMs);
+    const timeFrom = Math.floor(chunkStart / 1000);
+    const timeTo   = Math.floor(chunkEnd   / 1000);
+    let cursor = '';
+    do {
+      const r = await shopCall('/api/v2/order/get_order_list', {
+        time_range_field: 'create_time',
+        time_from: String(timeFrom),
+        time_to:   String(timeTo),
+        page_size: '50',
+        cursor,
+      });
+      (r.response?.order_list || []).forEach(o => {
+        if (!snSet.has(o.order_sn)) { snSet.add(o.order_sn); snList.push(o.order_sn); }
+      });
+      cursor = r.response?.next_cursor || '';
+      if (!r.response?.more) break;
+    } while (cursor);
+    chunkStart = chunkEnd + 1;
+  }
 
   // 2) Detalhe dos pedidos (em lotes de até 50 order_sn).
   const out = [];
@@ -145,18 +158,20 @@ export async function fetchOrders(sinceISO, untilISO) {
     for (const o of (d.response?.order_list || [])) {
       const cancelled = ['CANCELLED', 'UNPAID', 'INVOICE_PENDING'].includes(o.order_status);
       out.push({
-        id: 'shopee:' + o.order_sn,
-        channel: 'shopee',
-        name: '#' + o.order_sn,
+        id:        'shopee:' + o.order_sn,
+        channel:   'shopee',
+        market:    'br',
+        name:      '#' + o.order_sn,
         createdAt: new Date((o.create_time || 0) * 1000).toISOString(),
-        status: o.order_status,
+        status:    o.order_status,
         cancelled,
-        total: Number(o.total_amount) || 0,
-        source: 'Shopee',
-        customer: o.buyer_username || '',
+        total:     Number(o.total_amount) || 0,
+        source:    'Shopee',
+        customer:  o.buyer_username || '',
+        state:     null,
         items: (o.item_list || []).map(it => ({
-          title: it.item_name,
-          qty: it.model_quantity_purchased || it.quantity || 1,
+          title:  it.item_name,
+          qty:    it.model_quantity_purchased || it.quantity || 1,
           amount: (Number(it.model_discounted_price ?? it.model_original_price) || 0) * (it.model_quantity_purchased || 1),
         })),
       });
