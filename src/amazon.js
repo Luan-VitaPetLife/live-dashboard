@@ -80,7 +80,7 @@ function sigV4Headers({ method, url, body = '', accessKey, secretKey, sessionTok
 
 // ── Backoff após rate limit ─────────────────────
 // Quando SP-API retorna 429, recuamos por BACKOFF_MS para não renovar o throttle.
-const BACKOFF_MS = 4 * 60 * 60 * 1000; // 4 horas
+const BACKOFF_MS = 60 * 60 * 1000; // 1 hora
 let backoffUntil = 0;
 
 // ── LWA token ──────────────────────────────────
