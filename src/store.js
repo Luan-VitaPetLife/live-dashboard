@@ -171,3 +171,10 @@ export function setLastSync(ts) {
   const db = load(); db.lastSync = ts; saveJson();
   if (USE_PG) pgKv('lastSync', ts);
 }
+
+// ── Amazon backoff (persiste entre deploys) ───
+export function setAmazonBackoff(until) {
+  const db = load(); db.amazonBackoff = until; saveJson();
+  if (USE_PG) pgKv('amazonBackoff', until);
+}
+export function getAmazonBackoff() { return load().amazonBackoff || 0; }
