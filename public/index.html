@@ -195,11 +195,11 @@
     <!-- Market toggle -->
     <div class="mkt-toggle-wrap" id="mktToggleWrap">
       <button class="mkt-btn active" id="mktBtnBr" data-market="br">
-        <img src="bandeira_brasil.webp" alt="BR" class="mkt-flag-img">
+        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img">
         <span>Brasil</span>
       </button>
       <button class="mkt-btn" id="mktBtnUs" data-market="us">
-        <img src="bandeira_eua.svg" alt="EUA" class="mkt-flag-img">
+        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img">
         <span>EUA</span>
       </button>
     </div>
@@ -289,13 +289,13 @@
         <div class="legend-row" id="trendLegend"></div>
       </div></div>
 
-      <div class="card"><div class="card-pad">
+      <div class="card" id="cardChannelSplit"><div class="card-pad">
         <div class="card-top"><div><div class="ct-title">Channel split</div><div class="ct-sub">Receita por canal</div></div></div>
         <div class="donut-center-wrap"><canvas id="channelChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="chCenter">—</div><div class="dcl-sub">Total</div></div></div>
         <div class="donut-rows" id="channelRows"></div>
       </div></div>
 
-      <div class="card"><div class="card-pad">
+      <div class="card" id="cardMarketing"><div class="card-pad">
         <div class="card-top"><div><div class="ct-title">Marketing por origem</div><div class="ct-sub">Receita atribuída</div></div></div>
         <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub">Atribuída</div></div></div>
         <div class="donut-rows" id="mktRows"></div>
@@ -304,7 +304,7 @@
     </div>
 
     <div class="charts-row-2">
-      <div class="card"><div class="card-pad">
+      <div class="card" id="cardTraffic"><div class="card-pad">
         <div class="card-top"><div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div><div class="ct-val" id="trafficVal">—</div></div>
         <div class="metric-row">
           <div class="metric-cell"><div class="mc-type">Sessões</div><div class="mc-val" id="mSessions">—</div><div class="mc-meta" id="mSessionsMeta">&nbsp;</div></div>
@@ -317,7 +317,7 @@
       </div></div>
 
       <div style="display:flex;flex-direction:column;gap:12px">
-        <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
+        <div class="card" id="cardFunnel"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
         <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Top produtos</div><div class="ct-sub">Por receita</div></div></div><div id="topProducts"></div></div></div>
         <div class="card"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Anúncios Meta</div><div class="ct-sub">Instagram &amp; Facebook · período selecionado</div></div></div>
@@ -688,6 +688,7 @@ function render(d) {
   setLive('ok',`Ao vivo · ${hh}:${mm}`);
   const up = d.updatedAt?new Date(d.updatedAt).toLocaleString('pt-BR'):'—';
   document.getElementById('footerDate').textContent = `Dashboard - Vita Pet Life · Coco and Luna · ${CHAN[d.channel]} · período ${label} · receita exclui cancelados · última sincronização: ${up}`;
+  updateCardVisibility();
 }
 
 function statusTag(o) {
@@ -695,6 +696,19 @@ function statusTag(o) {
   const s = (o.status||'').toUpperCase();
   if (['PAID','COMPLETED','SHIPPED','TO_CONFIRM_RECEIVE','READY_TO_SHIP'].includes(s)) return { cls:'ok', label:'OK' };
   return { cls:'pend', label:'Pendente' };
+}
+
+function updateCardVisibility() {
+  const isTodos = channel === 'todos';
+  const isShopify = channel === 'shopify' || channel === 'shopify_us';
+  const show = (id, visible) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? '' : 'none';
+  };
+  show('cardChannelSplit', isTodos);
+  show('cardMarketing', isTodos);
+  show('cardTraffic', isTodos || isShopify);
+  show('cardFunnel', isTodos || isShopify);
 }
 
 // ── Refresh interval ──
@@ -777,6 +791,7 @@ document.getElementById('channelPop').addEventListener('click', e => {
   localStorage.setItem('coco_channel', channel);
   document.getElementById('cselChannel').classList.remove('open');
   syncControls();
+  updateCardVisibility();
   loadData();
 });
 function closeAllDropdowns() {
@@ -848,6 +863,7 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
 document.querySelectorAll('.csel').forEach(setupCsel);
 loadColors();
 syncControls();
+updateCardVisibility();
 applyRefresh();
 loadData();
 </script>
