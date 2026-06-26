@@ -111,21 +111,27 @@ async function shopCall(path, extraParams = {}, method = 'GET', body = null) {
   return json;
 }
 
-// Busca métricas de performance da loja (impressões, cliques, CTR, pedidos).
-// Retorna null se endpoint não disponível para este app.
-export async function fetchShopInsight(sinceISO, untilISO) {
-  if (!isConfigured() || !getShopeeTokens()) return null;
+// Testa vários endpoints de analytics para descobrir quais estão disponíveis.
+export async function probeAnalyticsEndpoints(sinceISO, untilISO) {
+  if (!isConfigured() || !getShopeeTokens()) return { error: 'não conectado' };
   const timeFrom = Math.floor(Date.parse(sinceISO + 'T00:00:00-03:00') / 1000);
   const timeTo   = Math.floor(Date.parse(untilISO + 'T23:59:59-03:00') / 1000);
-  try {
-    return await shopCall('/api/v2/insight/get_shop_insight', {
-      date_from: String(timeFrom),
-      date_to:   String(timeTo),
-    });
-  } catch (e) {
-    console.warn('Shopee insight indisponível:', e.message);
-    return { _error: e.message };
+  const results  = {};
+  const endpoints = [
+    ['/api/v2/insight/get_shop_insight',    { date_from: String(timeFrom), date_to: String(timeTo) }],
+    ['/api/v2/shop/get_shop_performance',   { date_from: String(timeFrom), date_to: String(timeTo) }],
+    ['/api/v2/insight/get_shop_sales_insight', { date_from: String(timeFrom), date_to: String(timeTo) }],
+    ['/api/v2/shop/get_shop_info',          {}],
+    ['/api/v2/product/get_item_list',       { offset: '0', page_size: '3', item_status: 'NORMAL' }],
+  ];
+  for (const [path, params] of endpoints) {
+    try {
+      results[path] = await shopCall(path, params);
+    } catch (e) {
+      results[path] = { _error: e.message };
+    }
   }
+  return results;
 }
 
 // Lista pedidos no intervalo e devolve normalizados (mesmo formato da Shopify).
