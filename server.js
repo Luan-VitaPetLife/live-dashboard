@@ -36,6 +36,13 @@ app.post('/api/amazon/reset-backoff', (_req, res) => {
   res.json({ ok: true, message: 'Backoff Amazon zerado. Chame POST /api/sync para sincronizar agora.' });
 });
 
+// Force-sync da Amazon: zera backoff e sincroniza imediatamente (sem race com o timer)
+app.post('/api/amazon/force-sync', async (_req, res) => {
+  setAmazonBackoff(0);
+  const report = await runSync();
+  res.json(report);
+});
+
 // Forçar uma sincronização manual (protegido por token)
 app.post('/api/sync', async (req, res) => {
   const secret = process.env.SYNC_SECRET;
