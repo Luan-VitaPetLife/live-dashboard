@@ -22,6 +22,7 @@ function defaultWindow(days = 60) {
 
 export async function runSync() {
   const { since, until } = defaultWindow();
+  const { since: since90 } = defaultWindow(90); // Amazon usa 90 dias (pedidos mais antigos)
   const report = { shopify: 0, shopify_us: 0, shopee: 0, mercadolivre: 0, amazon: 0, meta: 0, sessions: 0, errors: [] };
 
   // Shopify — pedidos
@@ -115,7 +116,7 @@ export async function runSync() {
         console.log(`Amazon: aguardando intervalo de 1h — próximo sync em ~${mins} min`);
         report.amazon_skipped = `próximo sync em ~${mins} min`;
       } else {
-        const orders = await amazon.fetchOrders(since, until);
+        const orders = await amazon.fetchOrders(since90, until);
         upsertOrders(orders);
         report.amazon = orders.length;
         setAmazonBackoff(Date.now() + 60 * 60 * 1000);
