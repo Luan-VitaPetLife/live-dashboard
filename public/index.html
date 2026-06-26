@@ -624,10 +624,17 @@ function render(d) {
 
   // Traffic
   const tf = d.traffic;
-  const hasTraffic = d.market === 'br' && (d.channel === 'todos' || d.channel === 'shopify');
-  document.getElementById('trafficSub').textContent = d.market !== 'br'
-    ? 'Dados de sessão disponíveis apenas para o mercado Brasil'
-    : (hasTraffic ? 'Shopify · período selecionado' : 'Dados de sessão disponíveis apenas para Shopify');
+  const hasTraffic =
+    (d.market === 'br' && (d.channel === 'todos' || d.channel === 'shopify')) ||
+    (d.market === 'us' && (d.channel === 'todos' || d.channel === 'shopify_us'));
+  const trafficSubEl = document.getElementById('trafficSub');
+  if (d.market === 'us' && (d.channel === 'todos' || d.channel === 'shopify_us')) {
+    trafficSubEl.textContent = 'Shopify US · período selecionado';
+  } else if (d.market === 'us') {
+    trafficSubEl.textContent = 'Dados de sessão disponíveis apenas para Shopify US';
+  } else {
+    trafficSubEl.textContent = hasTraffic ? 'Shopify · período selecionado' : 'Dados de sessão disponíveis apenas para Shopify';
+  }
   document.getElementById('mSessions').textContent = fmtInt(tf.sessions);
   document.getElementById('mSessionsMeta').textContent = tf.visitors?(tf.sessions/tf.visitors).toLocaleString('pt-BR',{maximumFractionDigits:1})+' por visitante':' ';
   document.getElementById('mVisitors').textContent = fmtInt(tf.visitors);

@@ -72,6 +72,17 @@ export async function runSync() {
     }
   } catch (e) { report.errors.push('shopify_us.orders: ' + e.message); }
 
+  // Shopify EUA — sessões diárias (requer escopo read_analytics no token US)
+  try {
+    const usStore = process.env.SHOPIFY_US_STORE;
+    const usToken = process.env.SHOPIFY_US_ADMIN_TOKEN;
+    if (usStore && usToken) {
+      const sessions = await shopify.fetchSessionsDaily(90, { store: usStore, token: usToken });
+      upsertSessionsDaily(sessions, 'us');
+      report.sessions_us = sessions.length;
+    }
+  } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
+
   // Amazon SP-API (requer AMAZON_AWS_ACCESS_KEY + AMAZON_AWS_SECRET_KEY além das credenciais LWA)
   try {
     const orders = await amazon.fetchOrders(since, until);
