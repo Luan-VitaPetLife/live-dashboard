@@ -58,6 +58,11 @@ function sigV4Headers({ method, url, body = '', accessKey, secretKey, sessionTok
   };
 }
 
+// ── Backoff após rate limit ─────────────────────
+// Quando SP-API retorna 429, recuamos por BACKOFF_MS para não renovar o throttle.
+const BACKOFF_MS = 4 * 60 * 60 * 1000; // 4 horas
+let backoffUntil = 0;
+
 // ── LWA token ──────────────────────────────────
 let lwaCache = null;
 async function getLwaToken() {
@@ -110,7 +115,15 @@ async function spGet(path, params = {}) {
   });
   const res  = await fetch(url.toString(), { headers: hdrs });
   const json = await res.json();
-  if (json.errors) throw new Error(`SP-API ${path}: ${json.errors.map(e => e.message).join('; ')}`);
+  if (json.errors) {
+    const codes = json.errors.map(e => e.code || '').filter(Boolean).join(',');
+    const err   = new Error(`SP-API ${path} [HTTP ${res.status}${codes ? ' ' + codes : ''}]: ${json.errors.map(e => e.message).join('; ')}`);
+    if (res.status === 429) {
+      backoffUntil = Date.now() + BACKOFF_MS;
+      console.warn(`Amazon: rate limit atingido — pausando Amazon por 4h (até ${new Date(backoffUntil).toISOString()})`);
+    }
+    throw err;
+  }
   return json;
 }
 
@@ -121,22 +134,28 @@ export async function fetchOrders(sinceISO, untilISO) {
     console.warn('Amazon: AMAZON_AWS_ACCESS_KEY / AMAZON_AWS_SECRET_KEY não configurados — configure no Railway para ativar.');
     return [];
   }
+  if (backoffUntil > Date.now()) {
+    const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
+    console.log(`Amazon: em backoff por mais ${mins} min — pulando este sync.`);
+    return [];
+  }
 
   const out = [];
   let nextToken = null;
+  // CreatedBefore deve ser pelo menos 2 min antes do momento atual (requisito SP-API)
+  const safeUntil = new Date(Math.min(
+    new Date(`${untilISO}T23:59:59Z`).getTime(),
+    Date.now() - 3 * 60 * 1000
+  )).toISOString();
+  console.log(`Amazon: buscando pedidos ${sinceISO} → ${safeUntil.slice(0,16)}`);
   do {
-    // CreatedBefore deve ser pelo menos 2 min antes do momento atual (requisito SP-API)
-    const safeUntil = new Date(Math.min(
-      new Date(`${untilISO}T23:59:59Z`).getTime(),
-      Date.now() - 3 * 60 * 1000
-    )).toISOString();
     const params = {
       MarketplaceIds:  MARKETPLACE_ID,
       CreatedAfter:    `${sinceISO}T00:00:00Z`,
       CreatedBefore:   safeUntil,
       MaxResultsPerPage: 100,
     };
-    if (nextToken) params.NextToken = nextToken;
+    if (nextToken) { params.NextToken = nextToken; delete params.CreatedAfter; delete params.CreatedBefore; }
 
     const data   = await spGet('/orders/v0/orders', params);
     const orders = data.payload?.Orders || [];
