@@ -88,6 +88,16 @@ app.get('/mercadolivre/callback', async (req, res) => {
 });
 
 
+// Diagnóstico Amazon: chama SP-API diretamente e retorna resposta bruta
+app.get('/api/amazon/diag', async (_req, res) => {
+  try {
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const safeUntil = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const raw = await amazon.diagCall(since, safeUntil);
+    res.json(raw);
+  } catch (e) { res.status(500).json({ error: e.message, stack: e.stack?.slice(0, 500) }); }
+});
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Diagnóstico de integrações — mostra o que está configurado e o estado do Amazon
