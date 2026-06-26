@@ -316,9 +316,9 @@
         <div class="legend-row"><div class="legend-item"><div class="legend-sq" style="background:rgba(176,168,152,.55)"></div>Sessões</div><div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Conversão (%)</div></div>
       </div></div>
 
-      <div style="display:flex;flex-direction:column;gap:12px">
+      <div id="rightColCards" style="display:flex;flex-direction:column;gap:12px">
         <div class="card" id="cardFunnel"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
-        <div class="card" id="cardMlBreakdown" style="display:none"><div class="card-pad">
+        <div class="card" id="cardMlBreakdown" style="display:none;grid-column:1/-1"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Mercado Livre · Detalhe</div><div class="ct-sub">Tipo de listagem (Clássico = grátis · Destaque = pago)</div></div></div>
           <div class="metric-row" style="margin-top:12px">
             <div class="metric-cell"><div class="mc-type">Clássico</div><div class="mc-val" id="mlOrganic">—</div><div class="mc-meta">listagem grátis</div></div>
@@ -732,15 +732,40 @@ function updateCardVisibility() {
   const isTodos = channel === 'todos';
   const isShopify = channel === 'shopify' || channel === 'shopify_us';
   const isMarketplace = ['shopee', 'mercadolivre', 'amazon'].includes(channel);
-  const show = (id, visible) => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = visible ? '' : 'none';
-  };
+  const show = (id, visible) => { const el = document.getElementById(id); if (el) el.style.display = visible ? '' : 'none'; };
+
   show('cardChannelSplit', isTodos);
-  show('cardMarketing', isTodos || isMarketplace);
-  show('cardTraffic', isTodos || isShopify);
-  show('cardFunnel', isTodos || isShopify);
-  show('cardMlBreakdown', channel === 'mercadolivre');
+  show('cardMarketing',    isTodos || isMarketplace);
+  show('cardTraffic',      isTodos || isShopify);
+  show('cardFunnel',       isTodos || isShopify);
+  show('cardMlBreakdown',  channel === 'mercadolivre');
+
+  // Linha 1 (tendência + channel split + marketing): ajusta colunas conforme cards visíveis
+  const row1 = document.querySelector('.charts-row');
+  if (row1) {
+    if (isTodos)          row1.style.gridTemplateColumns = '1fr 240px 240px';
+    else if (isMarketplace) row1.style.gridTemplateColumns = '1fr 240px';
+    else                  row1.style.gridTemplateColumns = '1fr';
+  }
+
+  // Linha 2 (tráfego + coluna direita): quando tráfego está oculto, coluna direita ocupa tudo
+  const row2 = document.querySelector('.charts-row-2');
+  if (row2) row2.style.gridTemplateColumns = (isTodos || isShopify) ? '1fr 1fr' : '1fr';
+
+  // Coluna direita: quando ocupa full width, exibe cards em grid 2 colunas
+  const rightCol = document.getElementById('rightColCards');
+  if (rightCol) {
+    if (isMarketplace) {
+      rightCol.style.display = 'grid';
+      rightCol.style.gridTemplateColumns = '1fr 1fr';
+      rightCol.style.gap = '12px';
+      rightCol.style.flexDirection = '';
+    } else {
+      rightCol.style.display = 'flex';
+      rightCol.style.flexDirection = 'column';
+      rightCol.style.gridTemplateColumns = '';
+    }
+  }
 }
 
 // ── Refresh interval ──
