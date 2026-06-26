@@ -67,6 +67,13 @@
   .period-pill-active .val{color:var(--side-text)!important}
   .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
 
+  /* ── Market toggle buttons ── */
+  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px;margin-right:4px}
+  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
+  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+
   /* ── Period picker popup ── */
   .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
   .period-pop.open{display:flex}
@@ -185,8 +192,18 @@
 
 <div class="main">
   <div class="topbar">
+    <!-- Market toggle -->
+    <div class="mkt-toggle-wrap" id="mktToggleWrap">
+      <button class="mkt-btn active" id="mktBtnBr" data-market="br">
+        <img src="bandeira_brasil.webp" alt="BR" class="mkt-flag-img">
+        <span>Brasil</span>
+      </button>
+      <button class="mkt-btn" id="mktBtnUs" data-market="us">
+        <img src="bandeira_eua.svg" alt="EUA" class="mkt-flag-img">
+        <span>EUA</span>
+      </button>
+    </div>
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
-    <div id="mktFlag" title="Mercado ativo" style="font-size:20px;line-height:1;margin-right:2px">🇧🇷</div>
 
     <button class="sync-btn" id="syncBtn" title="Buscar dados novos agora">↻ Sincronizar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações de cores">⚙</button>
@@ -214,17 +231,6 @@
         <div class="csel-opt active" data-value="receita">Receita</div>
         <div class="csel-opt" data-value="pedidos">Pedidos</div>
         <div class="csel-opt" data-value="sessoes">Sessões</div>
-      </div>
-    </div>
-
-    <!-- Market -->
-    <div class="filter-pill csel" id="cselMarket">
-      <span class="lbl">Mercado</span>
-      <span class="val" id="marketVal">🇧🇷 Brasil</span>
-      <span class="arr">▾</span>
-      <div class="csel-pop">
-        <div class="csel-opt active" data-value="br">🇧🇷 Brasil</div>
-        <div class="csel-opt" data-value="us">🇺🇸 EUA</div>
       </div>
     </div>
 
@@ -712,10 +718,8 @@ function buildChannelDropdown() {
 
 // ── UI state sync ──
 function syncControls() {
-  document.getElementById('marketVal').textContent = market==='us' ? '🇺🇸 EUA' : '🇧🇷 Brasil';
-  document.getElementById('mktFlag').textContent = market==='us' ? '🇺🇸' : '🇧🇷';
+  document.querySelectorAll('.mkt-btn').forEach(b => b.classList.toggle('active', b.dataset.market === market));
   document.getElementById('navGeo').href = market==='us' ? 'geografia-us.html' : 'geografia.html';
-  document.querySelectorAll('#cselMarket .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === market));
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
   document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
   buildChannelDropdown();
@@ -755,7 +759,6 @@ function setupCsel(el) {
         const field = el.id;
         const val = opt.dataset.value;
         if (field==='cselMetric')  { metric=val; localStorage.setItem('coco_metric',metric); }
-        if (field==='cselMarket')  { market=val; localStorage.setItem('coco_market',market); channel='todos'; localStorage.setItem('coco_channel',channel); }
         if (field==='cselRefresh') { refreshMin=Number(val); localStorage.setItem('coco_refresh',refreshMin); applyRefresh(); }
         el.classList.remove('open');
         syncControls();
@@ -822,6 +825,17 @@ document.getElementById('applyRange').addEventListener('click',()=>{
   localStorage.setItem('coco_since',s); localStorage.setItem('coco_until',u);
   pop.classList.remove('open');
   syncControls(); loadData();
+});
+
+document.getElementById('mktToggleWrap').addEventListener('click', e => {
+  const btn = e.target.closest('.mkt-btn');
+  if (!btn || btn.dataset.market === market) return;
+  market = btn.dataset.market;
+  localStorage.setItem('coco_market', market);
+  channel = 'todos';
+  localStorage.setItem('coco_channel', channel);
+  syncControls();
+  loadData();
 });
 
 document.getElementById('syncBtn').addEventListener('click',async()=>{
