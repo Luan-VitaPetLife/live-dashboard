@@ -7,7 +7,6 @@
 <link rel="icon" href="logo.png" type="image/png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 <style>
   :root{
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -411,6 +410,42 @@ for (const [uf, name] of Object.entries(STATE_NAMES)) NAME_TO_UF[name] = uf;
 NAME_TO_UF['District of Columbia'] = 'DC';
 
 // Centroid coordinates [lat, lng]
+// Sub-regiões para dispersão das manchas por estados maiores
+const SUB_REGIONS = {
+  AK:[[64.2,-153.0],[66.0,-162.0],[60.0,-149.0]],
+  AZ:[[34.3,-111.9],[32.7,-111.8],[36.2,-112.0]],
+  CA:[[36.8,-119.4],[34.0,-118.3],[37.8,-122.4],[33.7,-117.8],[40.6,-122.5]],
+  CO:[[39.1,-105.4],[39.7,-104.9],[38.8,-104.8]],
+  FL:[[27.8,-81.6],[28.5,-81.4],[25.8,-80.2],[30.3,-81.7]],
+  GA:[[32.6,-83.4],[33.7,-84.4],[32.1,-81.2]],
+  ID:[[44.2,-114.5],[46.4,-116.9],[43.0,-112.4]],
+  IL:[[40.0,-89.2],[41.8,-87.6],[39.8,-88.9]],
+  KS:[[38.5,-98.4],[39.0,-95.7],[37.7,-100.0]],
+  KY:[[37.5,-85.3],[38.2,-85.8],[37.0,-84.5],[37.2,-82.5]],
+  LA:[[30.9,-91.8],[29.9,-90.1],[30.4,-91.2],[32.5,-93.8]],
+  MI:[[44.3,-85.4],[42.4,-83.0],[46.5,-84.5]],
+  MN:[[46.5,-94.7],[44.9,-93.2],[47.5,-92.0]],
+  MO:[[38.5,-92.5],[38.6,-90.2],[37.0,-94.5]],
+  MT:[[46.9,-110.5],[48.0,-106.0],[45.5,-108.5],[47.0,-115.0]],
+  NE:[[41.5,-99.9],[41.3,-96.0],[41.1,-103.0]],
+  NM:[[34.3,-106.0],[35.1,-106.6],[32.3,-106.8],[36.7,-105.9]],
+  NV:[[39.3,-117.1],[36.2,-115.2],[41.2,-117.7]],
+  NY:[[42.9,-75.5],[40.7,-74.0],[42.7,-74.0]],
+  NC:[[35.5,-79.6],[35.2,-80.9],[35.9,-78.5],[35.4,-82.6]],
+  ND:[[47.5,-100.5],[46.8,-96.8],[47.9,-102.8]],
+  OH:[[40.4,-82.8],[41.5,-81.7],[39.2,-84.5]],
+  OK:[[35.6,-96.9],[35.5,-97.5],[34.6,-99.0],[36.2,-95.8]],
+  OR:[[44.0,-120.5],[45.5,-122.7],[44.0,-121.3],[42.3,-118.5]],
+  PA:[[40.9,-77.8],[40.4,-80.0],[40.0,-75.1]],
+  SD:[[44.5,-100.3],[43.5,-96.7],[45.5,-100.4]],
+  TN:[[35.9,-86.2],[35.1,-89.9],[35.6,-83.6],[36.1,-87.5]],
+  TX:[[31.2,-99.3],[32.8,-96.8],[30.3,-97.7],[26.2,-97.9],[29.8,-95.4],[31.8,-106.4]],
+  VA:[[37.4,-78.7],[38.8,-77.2],[36.8,-76.3],[37.2,-80.4]],
+  WA:[[47.4,-120.5],[47.6,-122.3],[47.0,-121.0],[47.8,-118.5]],
+  WI:[[44.5,-89.8],[43.0,-88.0],[46.0,-90.0]],
+  WY:[[43.1,-107.6],[44.5,-104.9],[41.5,-110.6]],
+};
+
 const CENTROIDS = {
   AL:[32.7,-86.8],AK:[64.2,-153.0],AZ:[34.3,-111.9],AR:[34.8,-92.4],CA:[36.8,-119.4],
   CO:[39.1,-105.4],CT:[41.6,-72.7],DC:[38.9,-77.0],DE:[39.0,-75.5],FL:[27.8,-81.6],
@@ -441,6 +476,12 @@ function fmtDM(d) { return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.g
 // ── Color helpers ──
 function hexToRGB(hex) { const h=hex.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
 function lerpRGB(c1,c2,t){ return c1.map((v,i)=>Math.round(v+(c2[i]-v)*t)); }
+function heatGradientColor(t) {
+  const s=Math.max(0,Math.min(1,t));
+  const c0=hexToRGB(heatConfig.coldColor),c1=hexToRGB(heatConfig.midColor),c2=hexToRGB(heatConfig.hotColor);
+  const [r,g,b]=s<0.5?lerpRGB(c0,c1,s*2):lerpRGB(c1,c2,(s-0.5)*2);
+  return `rgb(${r},${g},${b})`;
+}
 
 // ── Choropleth config ──
 const CHORO_DEFAULTS = { lowColor:'#e8e3d8', midColor:'#c49568', highColor:'#8c3a20', borderColor:'#bbb5aa', borderWeight:0.8, fillOpacity:82 };
@@ -596,15 +637,47 @@ function drawChoropleth(isMoney, getValue, maxVal) {
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
-  setTileLayer(true);
+  // Fundo neutro — remove tile layer para nenhum outro país aparecer
+  if (currentTile) { map.removeLayer(currentTile); currentTile = null; }
+
   const totalAll=Object.values(stateData).reduce((a,x)=>a+getValue(x),0);
-  const heatPoints=[];
-  for(const [uf,s] of Object.entries(stateData)){
-    const c=CENTROIDS[uf]; if(!c) continue;
-    heatPoints.push([c[0],c[1],getValue(s)/maxVal]);
+
+  // Bordas dos estados sobre fundo neutro
+  if(heatConfig.borderWeight>0){
+    const borders=L.geoJSON(geojsonData,{filter:f=>!!f.properties._uf,style:{fillOpacity:0,color:heatConfig.borderColor,weight:heatConfig.borderWeight,opacity:0.85},interactive:false}).addTo(map);
+    mapLayers.push(borders);
   }
-  const heat=L.heatLayer(heatPoints,{radius:heatConfig.radius,blur:heatConfig.blur,maxZoom:8,max:1.0,minOpacity:heatConfig.minOpacity/100,gradient:{0.0:heatConfig.coldColor,0.5:heatConfig.midColor,1.0:heatConfig.hotColor}}).addTo(map);
-  mapLayers.push(heat);
+
+  // Círculos proporcionais: raio ∝ √(valor/máx) — diferença visual clara entre estados
+  // Sub-regiões distribuem a mancha pela área geográfica de cada estado.
+  const MAX_R=460000, MIN_R=40000; // metros
+  for(const [uf,s] of Object.entries(stateData)){
+    const val=getValue(s);
+    const t=val/maxVal;
+    const base=MIN_R+(MAX_R-MIN_R)*Math.sqrt(t);
+    const fill=heatGradientColor(t);
+    const pts=SUB_REGIONS[uf]||[CENTROIDS[uf]];
+    const subR=base/Math.sqrt(pts.length); // área total conservada entre sub-regiões
+    for(const pt of pts){
+      if(!pt) continue;
+      const circle=L.circle([pt[0],pt[1]],{
+        radius:subR, fillColor:fill, fillOpacity:0.18+t*0.48,
+        color:fill, weight:0.4, opacity:0.22,
+      }).addTo(map);
+      circle.on('click',()=>{
+        L.popup().setLatLng([pts[0][0],pts[0][1]]).setContent(`
+          <div class="pop-title">📍 ${STATE_NAMES[uf]||uf} · ${uf}</div>
+          <div class="pop-row"><span>Receita</span><strong>${fmtUSD(s.revenue,2)}</strong></div>
+          <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
+          <div class="pop-row"><span>Ticket médio</span><strong>${s.orders?fmtUSD(s.revenue/s.orders,2):'—'}</strong></div>
+          <div class="pop-row"><span>% do total</span><strong>${pctStr(val/Math.max(1,totalAll)*100)}</strong></div>
+        `).openOn(map);
+      });
+      mapLayers.push(circle);
+    }
+  }
+
+  // Pill labels no centroide de cada estado
   for(const [uf,s] of Object.entries(stateData)){
     const centroid=CENTROIDS[uf]; if(!centroid) continue;
     const val=getValue(s);
@@ -624,10 +697,7 @@ function drawHeatmap(isMoney, getValue, maxVal) {
     });
     mapLayers.push(marker);
   }
-  if(heatConfig.borderWeight>0){
-    const borders=L.geoJSON(geojsonData,{filter:f=>!!f.properties._uf,style:{fillOpacity:0,color:heatConfig.borderColor,weight:heatConfig.borderWeight,opacity:0.85},interactive:false}).addTo(map);
-    mapLayers.push(borders);
-  }
+
   const grad=document.getElementById('legendGrad');
   grad.className='';
   grad.style.cssText=`width:100px;height:7px;border-radius:4px;background:linear-gradient(to right,${heatConfig.coldColor},${heatConfig.midColor},${heatConfig.hotColor})`;
