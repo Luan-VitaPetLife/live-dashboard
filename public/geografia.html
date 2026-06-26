@@ -764,30 +764,34 @@ function drawHeatmap(isMoney, getValue, maxVal) {
   }).addTo(map);
   mapLayers.push(borders);
 
-  // Manchas de calor: um círculo por estado, raio proporcional a √(valor/máx).
-  // MAX_R muito reduzido para não invadir estados vizinhos.
-  const MAX_R = 85000, MIN_R = 18000; // metros
+  // Manchas de calor: múltiplos círculos por estado usando SUB_REGIONS,
+  // raio base pequeno dividido por √(nº de pontos) → manchas dispersas pelo estado.
+  const MAX_R = 60000, MIN_R = 12000; // metros — base total por estado
   for (const [uf, s] of Object.entries(stateData)) {
-    const centroid = CENTROIDS[uf]; if (!centroid) continue;
     const val  = getValue(s);
     const t    = val / maxVal;
-    const r    = MIN_R + (MAX_R - MIN_R) * Math.sqrt(t);
+    const base = MIN_R + (MAX_R - MIN_R) * Math.sqrt(t);
     const fill = heatGradientColor(t);
-    const circle = L.circle([centroid[0], centroid[1]], {
-      radius: r,
-      fillColor: fill, fillOpacity: 0.28 + t * 0.42,
-      color: 'none', weight: 0,
-    }).addTo(map);
-    circle.on('click', () => {
-      L.popup().setLatLng(centroid).setContent(`
-        <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
-        <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
-        <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
-        <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue / s.orders, 2) : '—'}</strong></div>
-        <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
-      `).openOn(map);
-    });
-    mapLayers.push(circle);
+    const pts  = SUB_REGIONS[uf] || [CENTROIDS[uf]];
+    const subR = base / Math.sqrt(pts.length); // cada ponto fica menor quando há mais pontos
+    for (const pt of pts) {
+      if (!pt) continue;
+      const circle = L.circle([pt[0], pt[1]], {
+        radius: subR,
+        fillColor: fill, fillOpacity: 0.30 + t * 0.38,
+        color: 'none', weight: 0,
+      }).addTo(map);
+      circle.on('click', () => {
+        L.popup().setLatLng([pts[0][0], pts[0][1]]).setContent(`
+          <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
+          <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
+          <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
+          <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue / s.orders, 2) : '—'}</strong></div>
+          <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
+        `).openOn(map);
+      });
+      mapLayers.push(circle);
+    }
   }
 
   // Pill labels no centroide de cada estado
