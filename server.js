@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard } from './src/metrics.js';
 import { runSync } from './src/sync.js';
-import { initStore, getAmazonBackoff, load } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -28,6 +28,12 @@ app.get('/api/dashboard', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Reset do backoff da Amazon (força próximo sync ignorar o intervalo de 1h)
+app.post('/api/amazon/reset-backoff', (_req, res) => {
+  setAmazonBackoff(0);
+  res.json({ ok: true, message: 'Backoff Amazon zerado. Chame POST /api/sync para sincronizar agora.' });
 });
 
 // Forçar uma sincronização manual (protegido por token)
