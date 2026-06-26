@@ -174,8 +174,7 @@
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
     <a class="nav-item active" href="index.html"><span class="nav-icon">↗</span> Revenue</a>
     <a class="nav-item"><span class="nav-icon">⊞</span> Segmentos</a>
-    <a class="nav-item" href="geografia.html"><span class="nav-icon">◎</span> Geografia 🇧🇷</a>
-    <a class="nav-item" href="geografia-us.html"><span class="nav-icon">◎</span> Geografia 🇺🇸</a></div>
+    <a class="nav-item" id="navGeo" href="geografia.html"><span class="nav-icon">◎</span> Geografia</a></div>
   <div class="nav-group"><div class="nav-label">Operações</div>
     <a class="nav-item"><span class="nav-icon">□</span> Produtos</a>
     <a class="nav-item"><span class="nav-icon">≡</span> Estoque</a>
@@ -715,6 +714,7 @@ function buildChannelDropdown() {
 function syncControls() {
   document.getElementById('marketVal').textContent = market==='us' ? '🇺🇸 EUA' : '🇧🇷 Brasil';
   document.getElementById('mktFlag').textContent = market==='us' ? '🇺🇸' : '🇧🇷';
+  document.getElementById('navGeo').href = market==='us' ? 'geografia-us.html' : 'geografia.html';
   document.querySelectorAll('#cselMarket .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === market));
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
   document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
