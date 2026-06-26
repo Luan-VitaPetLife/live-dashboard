@@ -174,7 +174,8 @@
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
     <a class="nav-item active" href="index.html"><span class="nav-icon">↗</span> Revenue</a>
     <a class="nav-item"><span class="nav-icon">⊞</span> Segmentos</a>
-    <a class="nav-item" href="geografia.html"><span class="nav-icon">◎</span> Geografia</a></div>
+    <a class="nav-item" href="geografia.html"><span class="nav-icon">◎</span> Geografia 🇧🇷</a>
+    <a class="nav-item" href="geografia-us.html"><span class="nav-icon">◎</span> Geografia 🇺🇸</a></div>
   <div class="nav-group"><div class="nav-label">Operações</div>
     <a class="nav-item"><span class="nav-icon">□</span> Produtos</a>
     <a class="nav-item"><span class="nav-icon">≡</span> Estoque</a>
@@ -186,6 +187,7 @@
 <div class="main">
   <div class="topbar">
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
+    <div id="mktFlag" title="Mercado ativo" style="font-size:20px;line-height:1;margin-right:2px">🇧🇷</div>
 
     <button class="sync-btn" id="syncBtn" title="Buscar dados novos agora">↻ Sincronizar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações de cores">⚙</button>
@@ -712,6 +714,7 @@ function buildChannelDropdown() {
 // ── UI state sync ──
 function syncControls() {
   document.getElementById('marketVal').textContent = market==='us' ? '🇺🇸 EUA' : '🇧🇷 Brasil';
+  document.getElementById('mktFlag').textContent = market==='us' ? '🇺🇸' : '🇧🇷';
   document.querySelectorAll('#cselMarket .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === market));
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
   document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
