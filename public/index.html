@@ -16,7 +16,7 @@
   body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
 
   /* ── Sidebar ── */
-  .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200}
+  .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:transform .25s cubic-bezier(.4,0,.2,1)}
   .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
   .brand-logo{width:72px;height:72px;object-fit:contain}
   .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
@@ -28,7 +28,7 @@
   .nav-icon{font-size:13px;opacity:.7;width:16px;text-align:center}
 
   /* ── Main ── */
-  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
 
   /* ── Topbar ── */
   .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:100}
@@ -169,10 +169,42 @@
   .ch220{position:relative;height:220px} .ch180{position:relative;height:180px}
   .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
   footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
+
+  /* ── Sidebar toggle ── */
+  .sidebar-toggle{height:32px;width:36px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:15px;color:var(--sub);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
+  .sidebar-toggle:hover{border-color:var(--ink);color:var(--text)}
+  .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;opacity:0;pointer-events:none;transition:opacity .25s}
+  body.sidebar-mobile-open .sidebar-overlay{opacity:1;pointer-events:auto}
+  body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
+  body.sidebar-hidden .sidebar{transform:translateX(-100%)}
+  body.sidebar-hidden .main{margin-left:0}
+
+  /* ── Responsivo ── */
+  @media(max-width:768px){
+    .sidebar{transform:translateX(-100%)}
+    .main{margin-left:0}
+    .content{padding:16px}
+    .topbar{padding:0 14px;gap:6px}
+    .kpi-strip{grid-template-columns:1fr 1fr}
+    .kpi-cell{border-right:none;border-bottom:1px solid var(--border)}
+    .kpi-cell:nth-child(odd){border-right:1px solid var(--border)}
+    .kpi-cell:last-child{grid-column:1/-1;border-right:none;border-bottom:none}
+    .charts-row{grid-template-columns:1fr!important}
+    .charts-row-2{grid-template-columns:1fr!important}
+    .metric-row{grid-template-columns:1fr 1fr}
+    .tbl th:nth-child(3),.tbl td:nth-child(3),
+    .tbl th:nth-child(7),.tbl td:nth-child(7){display:none}
+  }
+  @media(max-width:520px){
+    .filter-pill .lbl{display:none}
+    .mkt-btn span{display:none}
+    .topbar{gap:4px}
+  }
 </style>
 </head>
 <body>
 
+<div id="sidebarOverlay" class="sidebar-overlay"></div>
 <nav class="sidebar">
   <div class="brand">
     <img src="Logo.svg" alt="Coco and Luna" class="brand-logo">
@@ -192,6 +224,7 @@
 
 <div class="main">
   <div class="topbar">
+    <button id="sidebarToggle" class="sidebar-toggle" title="Mostrar/ocultar menu">☰</button>
     <!-- Market toggle -->
     <div class="mkt-toggle-wrap" id="mktToggleWrap">
       <button class="mkt-btn active" id="mktBtnBr" data-market="br">
@@ -915,6 +948,29 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
   try { await fetch('/api/sync',{method:'POST'}); } catch(e){}
   loadData();
 });
+
+// ── Sidebar toggle ──
+(function initSidebar() {
+  const isMobile = () => window.innerWidth <= 768;
+  const overlay = document.getElementById('sidebarOverlay');
+  const btn = document.getElementById('sidebarToggle');
+  if (!isMobile() && localStorage.getItem('coco_sidebar') === 'hidden') {
+    document.body.classList.add('sidebar-hidden');
+  }
+  btn.addEventListener('click', () => {
+    if (isMobile()) {
+      document.body.classList.toggle('sidebar-mobile-open');
+    } else {
+      const hidden = document.body.classList.toggle('sidebar-hidden');
+      localStorage.setItem('coco_sidebar', hidden ? 'hidden' : 'visible');
+    }
+  });
+  overlay.addEventListener('click', () => document.body.classList.remove('sidebar-mobile-open'));
+  window.addEventListener('resize', () => {
+    if (!isMobile()) document.body.classList.remove('sidebar-mobile-open');
+    else document.body.classList.remove('sidebar-hidden');
+  });
+})();
 
 // ── Init ──
 document.querySelectorAll('.csel').forEach(setupCsel);
