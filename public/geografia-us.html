@@ -492,16 +492,13 @@ const map = L.map('map', { center:[38,-97], zoom:4, minZoom:3, maxZoom:8, zoomCo
 
 let currentTile = null;
 function setTileLayer(withLabels) {
-  if (currentTile) map.removeLayer(currentTile);
-  const url = withLabels
-    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
-  currentTile = L.tileLayer(url, {
+  if (currentTile) { map.removeLayer(currentTile); currentTile = null; }
+  if (!withLabels) return; // coropleto: fundo neutro, sem países ao redor
+  currentTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
     subdomains:'abcd', maxZoom:19
   }).addTo(map);
 }
-setTileLayer(false);
 
 let geojsonData = null;
 let stateData   = {};
