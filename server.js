@@ -30,10 +30,13 @@ app.get('/api/dashboard', (req, res) => {
   }
 });
 
-// Reset do backoff da Amazon (força próximo sync ignorar o intervalo de 1h)
-app.post('/api/amazon/reset-backoff', (_req, res) => {
-  setAmazonBackoff(0);
-  res.json({ ok: true, message: 'Backoff Amazon zerado. Chame POST /api/sync para sincronizar agora.' });
+// Reset do backoff da Amazon. ?delay=N define um novo backoff de N minutos a partir de agora.
+app.post('/api/amazon/reset-backoff', (req, res) => {
+  const delay = Number(req.query.delay || 0);
+  const until = delay > 0 ? Date.now() + delay * 60 * 1000 : 0;
+  setAmazonBackoff(until);
+  const msg = until ? `Backoff Amazon definido para ${new Date(until).toISOString()}` : 'Backoff Amazon zerado.';
+  res.json({ ok: true, message: msg });
 });
 
 // Force-sync da Amazon: zera backoff e sincroniza imediatamente (sem race com o timer)
