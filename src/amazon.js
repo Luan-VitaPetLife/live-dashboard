@@ -151,6 +151,27 @@ async function spGet(path, params = {}) {
   return json;
 }
 
+// ── Diagnóstico: retorna resposta bruta do SP-API sem backoff ──────────
+export async function diagCall(sinceISO, safeUntil) {
+  const lwa   = await getLwaToken();
+  const creds = await assumeRole();
+  const url   = new URL(`https://${SP_HOST}/orders/v0/orders`);
+  url.searchParams.set('MarketplaceIds',    MARKETPLACE_ID);
+  url.searchParams.set('CreatedAfter',      `${sinceISO}T00:00:00Z`);
+  url.searchParams.set('CreatedBefore',     safeUntil);
+  url.searchParams.set('MaxResultsPerPage', '5');
+  url.searchParams.sort();
+  const hdrs = sigV4Headers({
+    method: 'GET', url: url.toString(),
+    accessKey: creds.accessKey, secretKey: creds.secretKey, sessionToken: creds.sessionToken,
+    region: 'us-east-1', service: 'execute-api',
+    extraHeaders: { 'x-amz-access-token': lwa },
+  });
+  const res  = await safeFetch(url.toString(), { headers: hdrs });
+  const text = await res.text();
+  return { status: res.status, headers: Object.fromEntries(res.headers), body: JSON.parse(text) };
+}
+
 // ── fetchOrders ─────────────────────────────────
 export async function fetchOrders(sinceISO, untilISO) {
   if (!isConfigured()) return [];
