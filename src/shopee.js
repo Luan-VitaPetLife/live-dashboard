@@ -111,6 +111,23 @@ async function shopCall(path, extraParams = {}, method = 'GET', body = null) {
   return json;
 }
 
+// Busca métricas de performance da loja (impressões, cliques, CTR, pedidos).
+// Retorna null se endpoint não disponível para este app.
+export async function fetchShopInsight(sinceISO, untilISO) {
+  if (!isConfigured() || !getShopeeTokens()) return null;
+  const timeFrom = Math.floor(Date.parse(sinceISO + 'T00:00:00-03:00') / 1000);
+  const timeTo   = Math.floor(Date.parse(untilISO + 'T23:59:59-03:00') / 1000);
+  try {
+    return await shopCall('/api/v2/insight/get_shop_insight', {
+      date_from: String(timeFrom),
+      date_to:   String(timeTo),
+    });
+  } catch (e) {
+    console.warn('Shopee insight indisponível:', e.message);
+    return { _error: e.message };
+  }
+}
+
 // Lista pedidos no intervalo e devolve normalizados (mesmo formato da Shopify).
 // A Shopee limita cada chamada a 15 dias — a janela é fatiada em chunks.
 export async function fetchOrders(sinceISO, untilISO) {
