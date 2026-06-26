@@ -82,7 +82,7 @@ function sigV4Headers({ method, url, body = '', accessKey, secretKey, sessionTok
 // ── Backoff após rate limit ─────────────────────
 // Quando SP-API retorna 429, recuamos por BACKOFF_MS para não renovar o throttle.
 // backoffUntil é persistido no store (sobrevive a deploys/restarts do Railway).
-const BACKOFF_MS = 25 * 60 * 1000; // 25 min
+const BACKOFF_MS = 60 * 60 * 1000; // 1h — também usado como intervalo mínimo entre syncs
 
 // ── LWA token ──────────────────────────────────
 let lwaCache = null;
