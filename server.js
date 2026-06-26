@@ -28,10 +28,12 @@ app.get('/api/dashboard', (req, res) => {
   }
 });
 
-// Forçar uma sincronização manual
-app.post('/api/sync', async (_req, res) => {
+// Forçar uma sincronização manual (protegido por token)
+app.post('/api/sync', async (req, res) => {
+  const secret = process.env.SYNC_SECRET;
+  if (secret && req.headers['x-sync-token'] !== secret) return res.status(401).json({ error: 'Não autorizado.' });
   try { res.json(await runSync()); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  catch (e) { res.status(500).json({ error: 'Sync falhou.' }); }
 });
 
 // ── Shopee OAuth ──

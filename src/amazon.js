@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────
 import 'dotenv/config';
 import crypto from 'crypto';
+import { getAmazonBackoff, setAmazonBackoff } from './store.js';
 
 const FETCH_TIMEOUT_MS = 20000; // 20s — evita travamento indefinido
 async function safeFetch(url, opts = {}) {
@@ -80,8 +81,8 @@ function sigV4Headers({ method, url, body = '', accessKey, secretKey, sessionTok
 
 // ── Backoff após rate limit ─────────────────────
 // Quando SP-API retorna 429, recuamos por BACKOFF_MS para não renovar o throttle.
+// backoffUntil é persistido no store (sobrevive a deploys/restarts do Railway).
 const BACKOFF_MS = 25 * 60 * 1000; // 25 min
-let backoffUntil = 0;
 
 // ── LWA token ──────────────────────────────────
 let lwaCache = null;
@@ -126,6 +127,7 @@ async function assumeRole() {
 async function spGet(path, params = {}) {
   const url = new URL(`https://${SP_HOST}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
+  url.searchParams.sort(); // SigV4 exige parâmetros em ordem alfabética
   const lwa   = await getLwaToken();
   const creds = await assumeRole();
   const hdrs  = sigV4Headers({
@@ -140,8 +142,9 @@ async function spGet(path, params = {}) {
     const codes = json.errors.map(e => e.code || '').filter(Boolean).join(',');
     const err   = new Error(`SP-API ${path} [HTTP ${res.status}${codes ? ' ' + codes : ''}]: ${json.errors.map(e => e.message).join('; ')}`);
     if (res.status === 429) {
-      backoffUntil = Date.now() + BACKOFF_MS;
-      console.warn(`Amazon: rate limit atingido — pausando Amazon por 4h (até ${new Date(backoffUntil).toISOString()})`);
+      const until = Date.now() + BACKOFF_MS;
+      setAmazonBackoff(until);
+      console.warn(`Amazon: rate limit — pausando por 25 min (até ${new Date(until).toISOString()})`);
     }
     throw err;
   }
@@ -155,6 +158,7 @@ export async function fetchOrders(sinceISO, untilISO) {
     console.warn('Amazon: AMAZON_AWS_ACCESS_KEY / AMAZON_AWS_SECRET_KEY não configurados — configure no Railway para ativar.');
     return [];
   }
+  const backoffUntil = getAmazonBackoff();
   if (backoffUntil > Date.now()) {
     const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
     console.log(`Amazon: em backoff por mais ${mins} min — pulando este sync.`);
