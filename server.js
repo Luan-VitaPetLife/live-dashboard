@@ -87,15 +87,6 @@ app.get('/mercadolivre/callback', async (req, res) => {
   }
 });
 
-// Diagnóstico: testa o endpoint de insight da Shopee e retorna a resposta bruta
-app.get('/api/shopee/insight-test', async (_req, res) => {
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const results = await shopee.probeAnalyticsEndpoints(since, today);
-    res.json(results);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
