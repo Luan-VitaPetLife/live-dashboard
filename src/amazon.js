@@ -7,6 +7,26 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 
+const FETCH_TIMEOUT_MS = 20000; // 20s — evita travamento indefinido
+async function safeFetch(url, opts = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...opts, signal: ctrl.signal });
+    return res;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(`Amazon: timeout após ${FETCH_TIMEOUT_MS / 1000}s em ${url}`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function safeJson(res) {
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { throw new Error(`Amazon: resposta não-JSON [HTTP ${res.status}]: ${text.slice(0, 200)}`); }
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 const CLIENT_ID      = process.env.AMAZON_CLIENT_ID;
 const CLIENT_SECRET  = process.env.AMAZON_CLIENT_SECRET;
 const REFRESH_TOKEN  = process.env.AMAZON_REFRESH_TOKEN;
@@ -67,13 +87,13 @@ let backoffUntil = 0;
 let lwaCache = null;
 async function getLwaToken() {
   if (lwaCache && lwaCache.exp > Date.now()) return lwaCache.token;
-  const res = await fetch('https://api.amazon.com/auth/o2/token', {
+  const res = await safeFetch('https://api.amazon.com/auth/o2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: REFRESH_TOKEN, client_id: CLIENT_ID, client_secret: CLIENT_SECRET }),
   });
-  const json = await res.json();
-  if (json.error) throw new Error(`Amazon LWA: ${json.error} — ${json.error_description || ''}`);
+  const json = await safeJson(res);
+  if (json.error) throw new Error(`Amazon LWA [HTTP ${res.status}]: ${json.error} — ${json.error_description || ''}`);
   lwaCache = { token: json.access_token, exp: Date.now() + (json.expires_in - 60) * 1000 };
   return json.access_token;
 }
@@ -90,8 +110,9 @@ async function assumeRole() {
     region: 'us-east-1', service: 'sts',
     extraHeaders: { 'content-type': 'application/x-www-form-urlencoded' },
   });
-  const res  = await fetch(url, { method: 'POST', headers: hdrs, body });
+  const res  = await safeFetch(url, { method: 'POST', headers: hdrs, body });
   const text = await res.text();
+  if (!res.ok && !text.includes('<AssumeRoleResult>')) throw new Error(`Amazon STS [HTTP ${res.status}]: ${text.slice(0, 300)}`);
   const ak   = text.match(/<AccessKeyId>(.*?)<\/AccessKeyId>/)?.[1];
   const sk   = text.match(/<SecretAccessKey>(.*?)<\/SecretAccessKey>/)?.[1];
   const tok  = text.match(/<SessionToken>(.*?)<\/SessionToken>/)?.[1];
@@ -113,8 +134,8 @@ async function spGet(path, params = {}) {
     region: 'us-east-1', service: 'execute-api',
     extraHeaders: { 'x-amz-access-token': lwa },
   });
-  const res  = await fetch(url.toString(), { headers: hdrs });
-  const json = await res.json();
+  const res  = await safeFetch(url.toString(), { headers: hdrs });
+  const json = await safeJson(res);
   if (json.errors) {
     const codes = json.errors.map(e => e.code || '').filter(Boolean).join(',');
     const err   = new Error(`SP-API ${path} [HTTP ${res.status}${codes ? ' ' + codes : ''}]: ${json.errors.map(e => e.message).join('; ')}`);
@@ -178,6 +199,7 @@ export async function fetchOrders(sinceISO, untilISO) {
       });
     }
     nextToken = data.payload?.NextToken || null;
+    if (nextToken) await sleep(2000); // respeita rate limit entre páginas
   } while (nextToken);
 
   return out;
