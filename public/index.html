@@ -318,6 +318,15 @@
 
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="card" id="cardFunnel"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
+        <div class="card" id="cardMlBreakdown" style="display:none"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title">Mercado Livre · Breakdown</div><div class="ct-sub">Tipo de listagem e publicidade</div></div></div>
+          <div class="metric-row" style="margin-top:12px">
+            <div class="metric-cell"><div class="mc-type">Orgânico</div><div class="mc-val" id="mlOrganic">—</div><div class="mc-meta">listagem grátis</div></div>
+            <div class="metric-cell"><div class="mc-type">Premium</div><div class="mc-val" id="mlPremium">—</div><div class="mc-meta">listagem paga</div></div>
+            <div class="metric-cell"><div class="mc-type">Custo ML Ads</div><div class="mc-val" id="mlAdCost">—</div><div class="mc-meta">publicidade</div></div>
+            <div class="metric-cell"><div class="mc-type">ROAS ML Ads</div><div class="mc-val" id="mlRoas" style="color:var(--green)">—</div><div class="mc-meta">receita / gasto</div></div>
+          </div>
+        </div></div>
         <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Top produtos</div><div class="ct-sub">Por receita</div></div></div><div id="topProducts"></div></div></div>
         <div class="card"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Anúncios Meta</div><div class="ct-sub">Instagram &amp; Facebook · período selecionado</div></div></div>
@@ -585,6 +594,13 @@ function render(d) {
   document.getElementById('metaRoas').textContent = k.adCost > 0 ? k.roas.toFixed(2) + 'x' : '—';
   document.getElementById('metaImpressions').textContent = k.adImpressions > 0 ? fmtInt(k.adImpressions) : '—';
   document.getElementById('metaClicks').textContent = k.adClicks > 0 ? fmtInt(k.adClicks) : '—';
+  // ML Breakdown card
+  { const ml = d.mlBreakdown;
+    document.getElementById('mlOrganic').textContent = ml && (ml.organic > 0 || ml.premium > 0) ? fmtMoney(ml.organic || 0) : '—';
+    document.getElementById('mlPremium').textContent = ml && (ml.organic > 0 || ml.premium > 0) ? fmtMoney(ml.premium || 0) : '—';
+    document.getElementById('mlAdCost').textContent = ml && ml.adCost > 0 ? fmtMoney(ml.adCost) : '—';
+    document.getElementById('mlRoas').textContent = ml && ml.roas > 0 ? ml.roas.toFixed(2) + 'x' : '—';
+  }
   document.getElementById('mktNote').textContent = k.adCost > 0 ? 'Meta Ads conectado · Google Ads em breve' : 'Meta Ads conectado · sincronize para ver os dados';
   document.getElementById('kpiConv').textContent = (k.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
   const dpp = k.conversionDeltaPP;
@@ -709,6 +725,7 @@ function updateCardVisibility() {
   show('cardMarketing', isTodos);
   show('cardTraffic', isTodos || isShopify);
   show('cardFunnel', isTodos || isShopify);
+  show('cardMlBreakdown', channel === 'mercadolivre');
 }
 
 // ── Refresh interval ──
