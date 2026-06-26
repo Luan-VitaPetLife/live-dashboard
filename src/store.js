@@ -24,6 +24,7 @@ const EMPTY = {
   orders: {},
   sessionsDaily: {},
   metaInsightsDaily: {},
+  metaUSInsightsDaily: {},
   shopeeTokens: null,
   mlTokens: null,
   lastSync: null,
@@ -48,10 +49,11 @@ export async function initStore() {
     for (const r of ord.rows)  cache.orders[r.id] = r.data;
     for (const r of sess.rows) cache.sessionsDaily[r.date] = r.data;
     for (const r of kv.rows) {
-      if (r.key === 'shopeeTokens')       cache.shopeeTokens       = r.value;
-      if (r.key === 'mlTokens')           cache.mlTokens           = r.value;
-      if (r.key === 'metaInsightsDaily')  cache.metaInsightsDaily  = r.value;
-      if (r.key === 'lastSync')           cache.lastSync           = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
+      if (r.key === 'shopeeTokens')         cache.shopeeTokens         = r.value;
+      if (r.key === 'mlTokens')             cache.mlTokens             = r.value;
+      if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
+      if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
+      if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -165,6 +167,12 @@ export function setMetaInsightsDaily(data) {
   if (USE_PG) pgKv('metaInsightsDaily', data);
 }
 export function getMetaInsightsDaily() { return load().metaInsightsDaily || {}; }
+
+export function setMetaUSInsightsDaily(data) {
+  const db = load(); db.metaUSInsightsDaily = data; saveJson();
+  if (USE_PG) pgKv('metaUSInsightsDaily', data);
+}
+export function getMetaUSInsightsDaily() { return load().metaUSInsightsDaily || {}; }
 
 // ── Último sync ───────────────────────────────
 export function setLastSync(ts) {
