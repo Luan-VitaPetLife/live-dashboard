@@ -7,7 +7,6 @@
 <link rel="icon" href="logo.png" type="image/png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 <style>
   :root{
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -538,6 +537,12 @@ function hexToRGB(hex) {
   return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
 }
 function lerpRGB(c1,c2,t){ return c1.map((v,i)=>Math.round(v+(c2[i]-v)*t)); }
+function heatGradientColor(t) {
+  const s=Math.max(0,Math.min(1,t));
+  const c0=hexToRGB(heatConfig.coldColor),c1=hexToRGB(heatConfig.midColor),c2=hexToRGB(heatConfig.hotColor);
+  const [r,g,b]=s<0.5?lerpRGB(c0,c1,s*2):lerpRGB(c1,c2,(s-0.5)*2);
+  return `rgb(${r},${g},${b})`;
+}
 
 // ── Choropleth config ──
 const CHORO_DEFAULTS = { lowColor:'#e8e3d8', midColor:'#c49568', highColor:'#8c3a20', borderColor:'#bbb5aa', borderWeight:0.8, fillOpacity:82 };
@@ -750,48 +755,61 @@ function drawChoropleth(isMoney, getValue, maxVal) {
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
-  // Tile with city labels for geographic context in heat mode
-  setTileLayer(true);
+  // Fundo neutro — remove tile layer para nenhum outro país aparecer
+  if (currentTile) { map.removeLayer(currentTile); currentTile = null; }
 
   const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
 
-  // Build heat points — each sub-region point gets the state's relative intensity
-  const heatPoints = [];
-  for (const [uf, s] of Object.entries(stateData)) {
-    const pts = SUB_REGIONS[uf] || [CENTROIDS[uf]];
-    const val = getValue(s);
-    const intensity = val / maxVal;
-    pts.forEach(pt => heatPoints.push([pt[0], pt[1], intensity]));
+  // Bordas dos estados sobre fundo neutro
+  if (heatConfig.borderWeight > 0) {
+    const borders = L.geoJSON(geojsonData, {
+      style: { fillOpacity:0, color:heatConfig.borderColor, weight:heatConfig.borderWeight, opacity:0.85 },
+      interactive: false,
+    }).addTo(map);
+    mapLayers.push(borders);
   }
 
-  // Leaflet.heat: smooth gaussian blobs with configurable gradient
-  const heat = L.heatLayer(heatPoints, {
-    radius: heatConfig.radius,
-    blur: heatConfig.blur,
-    maxZoom: 8,
-    max: 1.0,
-    minOpacity: heatConfig.minOpacity / 100,
-    gradient: {
-      0.0: heatConfig.coldColor,
-      0.5: heatConfig.midColor,
-      1.0: heatConfig.hotColor,
-    },
-  }).addTo(map);
-  mapLayers.push(heat);
+  // Círculos proporcionais: raio ∝ √(valor/máx) → diferença visual clara entre estados
+  // Sub-regiões distribuem a mancha pela área geográfica de cada estado.
+  const MAX_R = 340000, MIN_R = 38000; // metros
+  for (const [uf, s] of Object.entries(stateData)) {
+    const val  = getValue(s);
+    const t    = val / maxVal;
+    const base = MIN_R + (MAX_R - MIN_R) * Math.sqrt(t);
+    const fill = heatGradientColor(t);
+    const pts  = SUB_REGIONS[uf] || [CENTROIDS[uf]];
+    const subR = base / Math.sqrt(pts.length); // área total conservada entre sub-regiões
+    for (const pt of pts) {
+      if (!pt) continue;
+      const circle = L.circle([pt[0], pt[1]], {
+        radius: subR,
+        fillColor: fill, fillOpacity: 0.18 + t * 0.48,
+        color: fill, weight: 0.4, opacity: 0.22,
+      }).addTo(map);
+      circle.on('click', () => {
+        L.popup().setLatLng([pts[0][0], pts[0][1]]).setContent(`
+          <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
+          <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue,2)}</strong></div>
+          <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
+          <div class="pop-row"><span>Ticket médio</span><strong>${s.orders?fmtBRL(s.revenue/s.orders,2):'—'}</strong></div>
+          <div class="pop-row"><span>% do total</span><strong>${pctStr(val/Math.max(1,totalAll)*100)}</strong></div>
+        `).openOn(map);
+      });
+      mapLayers.push(circle);
+    }
+  }
 
-  // Pill labels — using explicit iconSize so Leaflet doesn't clip the content
+  // Pill labels no centroide de cada estado
   for (const [uf, s] of Object.entries(stateData)) {
     const centroid = CENTROIDS[uf];
     if (!centroid) continue;
-    const val    = getValue(s);
-    const label  = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
-    const text   = `${uf}: ${label}`;
-    const pillW  = Math.max(80, text.length * 7 + 28); // estimated pixel width
-    const icon   = L.divIcon({
+    const val   = getValue(s);
+    const label = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
+    const text  = `${uf}: ${label}`;
+    const pillW = Math.max(80, text.length * 7 + 28);
+    const icon  = L.divIcon({
       html: `<div style="width:${pillW}px;text-align:center;background:${heatConfig.pillColor};color:${heatConfig.textColor};padding:5px 0;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.28);cursor:pointer">${text}</div>`,
-      className: '',
-      iconSize: [pillW, 26],
-      iconAnchor: [pillW / 2, 13],
+      className: '', iconSize: [pillW, 26], iconAnchor: [pillW / 2, 13],
     });
     const marker = L.marker(centroid, { icon }).addTo(map);
     marker.on('click', () => {
@@ -806,16 +824,6 @@ function drawHeatmap(isMoney, getValue, maxVal) {
     mapLayers.push(marker);
   }
 
-  // State borders on top of heatmap for clear delimitation
-  if (heatConfig.borderWeight > 0) {
-    const borders = L.geoJSON(geojsonData, {
-      style: { fillOpacity:0, color:heatConfig.borderColor, weight:heatConfig.borderWeight, opacity:0.85 },
-      interactive: false,
-    }).addTo(map);
-    mapLayers.push(borders);
-  }
-
-  // Legend — set cssText to preserve width/height when overriding background
   const grad = document.getElementById('legendGrad');
   grad.className = '';
   grad.style.cssText = `width:100px;height:7px;border-radius:4px;background:linear-gradient(to right,${heatConfig.coldColor},${heatConfig.midColor},${heatConfig.hotColor})`;
