@@ -3,6 +3,9 @@
 //  Pode rodar via "npm run sync" (uma vez) ou pelo
 //  agendador do server.js (a cada N minutos).
 // ─────────────────────────────────────────────
+
+import { setAmazonBackoff } from './src/store.js';
+app.post('/api/amazon/reset-backoff', (req, res) => {   setAmazonBackoff(0);   res.json({ ok: true }); });
 import 'dotenv/config';
 import * as shopify from './shopify.js';
 import * as shopee from './shopee.js';
