@@ -757,49 +757,62 @@ function drawHeatmap(isMoney, getValue, maxVal) {
   setTileLayer(false);
   const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
 
-  const layer = L.geoJSON(geojsonData, {
-    style: feature => {
-      const uf = feature.properties._uf;
-      const s  = stateData[uf];
-      const t  = s && maxVal > 0 ? getValue(s) / maxVal : 0;
-      return {
-        fillColor:   t > 0 ? heatGradientColor(t) : '#d8d4ce',
-        fillOpacity: t > 0 ? 0.82 : 0.2,
-        color:   heatConfig.borderColor,
-        weight:  heatConfig.borderWeight,
-        opacity: 0.7,
-      };
-    },
-    onEachFeature: (feature, layer) => {
-      const uf   = feature.properties._uf;
-      const name = uf ? (STATE_NAMES[uf] || uf) : '?';
-      const s    = uf ? stateData[uf] : null;
-      if (s) {
-        const val   = getValue(s);
-        const label = isMoney ? fmtBRL(val) : fmtInt(val) + (s.orders === 1 ? ' pedido' : ' pedidos');
-        layer.bindTooltip(
-          `<div style="text-align:center;line-height:1.5"><div style="font-size:11px;font-weight:700;letter-spacing:.3px">${uf}</div><div style="font-size:10px;opacity:.85">${label}</div></div>`,
-          { permanent: true, direction: 'center', className: 'state-tooltip', offset: [0, 0] }
-        );
-      }
-      layer.on('click', () => {
-        const val = s ? getValue(s) : 0;
-        const pct = s && totalAll > 0 ? pctStr(val / totalAll * 100) : '—';
-        layer.bindPopup(`
-          <div class="pop-title">📍 ${name}${uf ? ' · ' + uf : ''}</div>
-          ${s ? `
-            <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
-            <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
-            <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue / s.orders, 2) : '—'}</strong></div>
-            <div class="pop-row"><span>% do total</span><strong>${pct}</strong></div>
-          ` : '<div style="color:#9c9790;font-size:12px">Sem vendas neste estado no período.</div>'}
-        `).openPopup();
-      });
-      layer.on('mouseover', () => { if (!stateData[uf]) return; layer.setStyle({ weight: Math.max(heatConfig.borderWeight + 1, 2), color: '#2d2a26' }); });
-      layer.on('mouseout',  () => { if (!stateData[uf]) return; layer.setStyle({ weight: heatConfig.borderWeight, color: heatConfig.borderColor }); });
-    },
+  // Bordas finas dos estados sobre o tile
+  const borders = L.geoJSON(geojsonData, {
+    style: { fillOpacity: 0, color: heatConfig.borderColor, weight: heatConfig.borderWeight, opacity: 0.5 },
+    interactive: false,
   }).addTo(map);
-  mapLayers.push(layer);
+  mapLayers.push(borders);
+
+  // Manchas de calor: um círculo por estado, raio proporcional a √(valor/máx).
+  // MAX_R muito reduzido para não invadir estados vizinhos.
+  const MAX_R = 85000, MIN_R = 18000; // metros
+  for (const [uf, s] of Object.entries(stateData)) {
+    const centroid = CENTROIDS[uf]; if (!centroid) continue;
+    const val  = getValue(s);
+    const t    = val / maxVal;
+    const r    = MIN_R + (MAX_R - MIN_R) * Math.sqrt(t);
+    const fill = heatGradientColor(t);
+    const circle = L.circle([centroid[0], centroid[1]], {
+      radius: r,
+      fillColor: fill, fillOpacity: 0.28 + t * 0.42,
+      color: 'none', weight: 0,
+    }).addTo(map);
+    circle.on('click', () => {
+      L.popup().setLatLng(centroid).setContent(`
+        <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
+        <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
+        <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
+        <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue / s.orders, 2) : '—'}</strong></div>
+        <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
+      `).openOn(map);
+    });
+    mapLayers.push(circle);
+  }
+
+  // Pill labels no centroide de cada estado
+  for (const [uf, s] of Object.entries(stateData)) {
+    const centroid = CENTROIDS[uf]; if (!centroid) continue;
+    const val   = getValue(s);
+    const label = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
+    const text  = `${uf}: ${label}`;
+    const pillW = Math.max(80, text.length * 7 + 28);
+    const icon  = L.divIcon({
+      html: `<div style="width:${pillW}px;text-align:center;background:${heatConfig.pillColor};color:${heatConfig.textColor};padding:5px 0;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.28);cursor:pointer">${text}</div>`,
+      className: '', iconSize: [pillW, 26], iconAnchor: [pillW / 2, 13],
+    });
+    const marker = L.marker(centroid, { icon }).addTo(map);
+    marker.on('click', () => {
+      L.popup().setLatLng(centroid).setContent(`
+        <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
+        <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
+        <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
+        <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue / s.orders, 2) : '—'}</strong></div>
+        <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
+      `).openOn(map);
+    });
+    mapLayers.push(marker);
+  }
 
   const grad = document.getElementById('legendGrad');
   grad.className = '';
