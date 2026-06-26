@@ -101,7 +101,15 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 
   // marketing por origem (apenas pedidos válidos do recorte atual)
   const mkt = {};
-  valid.forEach(o => { const s = normSource(o.source); mkt[s] = (mkt[s] || 0) + o.total; });
+  if (channel === 'mercadolivre') {
+    // Para ML: agrupar por tipo de listagem em vez de source
+    valid.forEach(o => {
+      const key = o.listingType === 'premium' ? 'Destaque' : 'Clássico';
+      mkt[key] = (mkt[key] || 0) + o.total;
+    });
+  } else {
+    valid.forEach(o => { const s = normSource(o.source); mkt[s] = (mkt[s] || 0) + o.total; });
+  }
   let mktEntries = Object.entries(mkt).sort((a, b) => b[1] - a[1]);
   if (mktEntries.length > 5) { const top = mktEntries.slice(0, 4); const rest = mktEntries.slice(4).reduce((a, e) => a + e[1], 0); top.push(['Outros', rest]); mktEntries = top; }
 
