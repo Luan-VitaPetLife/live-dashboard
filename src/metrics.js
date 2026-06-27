@@ -116,16 +116,26 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const emptySess = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0, conv: 0, series: buckets.map(b => ({ label: b.label, sessions: 0, conv: 0 })) };
   const sess = hasSessionData ? aggregateSessions(since, until, market) : emptySess;
   let trendLabels, trendData, trendTotal, trendFmt = metric === 'receita' ? 'money' : 'int';
+  let trendByChannel = null;
   if (metric === 'sessoes') {
     trendLabels = sess.series.map(p => p.label);
     trendData = sess.series.map(p => p.sessions);
     trendTotal = sess.sessions;
   } else {
     const series = buckets.map(() => 0);
-    valid.forEach(o => { const i = idx.get(bucketKey(o.createdAt, grain)); if (i != null) series[i] += metric === 'pedidos' ? 1 : o.total; });
+    const byChannelBuckets = buckets.map(() => ({}));
+    valid.forEach(o => {
+      const i = idx.get(bucketKey(o.createdAt, grain));
+      if (i != null) {
+        const v = metric === 'pedidos' ? 1 : o.total;
+        series[i] += v;
+        byChannelBuckets[i][o.channel] = (byChannelBuckets[i][o.channel] || 0) + v;
+      }
+    });
     trendLabels = buckets.map(b => b.label);
     trendData = series;
     trendTotal = metric === 'pedidos' ? count : revenue;
+    trendByChannel = byChannelBuckets;
   }
 
   // split por canal (receita real por canal; canais sem dados ficam 0)
@@ -166,9 +176,10 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   valid.forEach(o => {
     const s = o.state;
     if (s && o.total > 0) {
-      if (!byState[s]) byState[s] = { revenue: 0, orders: 0 };
+      if (!byState[s]) byState[s] = { revenue: 0, orders: 0, byChannel: {} };
       byState[s].revenue += o.total;
       byState[s].orders += 1;
+      byState[s].byChannel[o.channel] = (byState[s].byChannel[o.channel] || 0) + o.total;
     }
   });
 
@@ -255,7 +266,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       adCost, adImpressions, adClicks, roas, metaRevenue,
       conversion: sess.conv, conversionDeltaPP: (sess.conv - prevSess.conv) * 100,
     },
-    trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt },
+    trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt, byChannel: trendByChannel },
     channelSplit: byChannel,
     marketing: mktEntries.map(([name, value]) => ({ name, value })),
     traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series },
