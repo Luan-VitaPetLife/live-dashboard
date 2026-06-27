@@ -207,6 +207,29 @@
     .mkt-btn span{display:none}
     .topbar{gap:4px}
   }
+  /* ── Trend drilldown ── */
+  .trend-drilldown{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-top:8px}
+  .drill-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .drill-period{font-size:11px;color:var(--sub);flex:1}
+  .drill-total{font-size:13px;font-weight:600}
+  .drill-close{margin-left:4px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;transition:color .12s}
+  .drill-close:hover{color:var(--text)}
+  .drill-row{display:flex;align-items:center;gap:6px;padding:3px 0}
+  .drill-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .drill-name{width:100px;font-size:11px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+  .drill-bar{flex:1;height:4px;border-radius:2px;background:rgba(30,28,24,.1);overflow:hidden}
+  .drill-fill{height:100%;border-radius:2px}
+  .drill-val{font-size:11px;color:var(--sub);width:72px;text-align:right;flex-shrink:0}
+  .drill-pct{font-size:10px;color:var(--muted);width:30px;text-align:right;flex-shrink:0}
+  /* ── Settings toggle switch ── */
+  .sp-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--sub)}
+  .sp-toggle-row:last-child{border-bottom:none}
+  .sp-switch{position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0}
+  .sp-switch input{opacity:0;width:0;height:0}
+  .sp-switch-slider{position:absolute;inset:0;background:#ccc;border-radius:9px;transition:.2s;cursor:pointer}
+  .sp-switch-slider::before{content:'';position:absolute;height:14px;width:14px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s}
+  input:checked+.sp-switch-slider{background:var(--ink)}
+  input:checked+.sp-switch-slider::before{transform:translateX(14px)}
 </style>
 </head>
 <body>
@@ -330,6 +353,7 @@
         <div class="card-top"><div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div><div class="ct-val" id="trendVal">—</div></div>
         <div class="ch220"><canvas id="trendChart"></canvas></div>
         <div class="legend-row" id="trendLegend"></div>
+        <div id="trendDrilldown" class="trend-drilldown" style="display:none"></div>
       </div></div>
 
       <div class="card" id="cardChannelSplit"><div class="card-pad">
@@ -407,6 +431,13 @@
     <div class="sp-section">
       <div class="sp-section-title">Cores de marketing</div>
       <div id="sp-mkt-colors"></div>
+    </div>
+    <div class="sp-section">
+      <div class="sp-section-title">Análise de canais</div>
+      <label class="sp-toggle-row">
+        <span>Mostrar canais ao clicar no gráfico de tendência</span>
+        <label class="sp-switch"><input type="checkbox" id="toggleChanChart"><span class="sp-switch-slider"></span></label>
+      </label>
     </div>
   </div>
   <div class="sp-foot">
@@ -534,6 +565,45 @@ document.getElementById('spReset').addEventListener('click', () => {
   buildSettingsPanel();
   if (lastData) render(lastData);
 });
+// Toggle canal breakdown
+(function() {
+  const tog = document.getElementById('toggleChanChart');
+  if (!tog) return;
+  tog.checked = isChanDetail();
+  tog.addEventListener('change', () => {
+    localStorage.setItem('coco_chan_detail', tog.checked ? '1' : '0');
+    if (!tog.checked) document.getElementById('trendDrilldown').style.display = 'none';
+  });
+})();
+
+// ── Canal breakdown ──
+function isChanDetail() { return localStorage.getItem('coco_chan_detail') !== '0'; }
+function showTrendDrilldown(label, val, byChannel, money, metric) {
+  const el = document.getElementById('trendDrilldown');
+  const entries = Object.entries(byChannel).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  if (!entries.length) { el.style.display='none'; return; }
+  const total = entries.reduce((s,[,v])=>s+v,0)||1;
+  const metricLbl = METRIC_LABEL?.[metric]||'';
+  const rows = entries.map(([ch,v])=>{
+    const pct=Math.round(v/total*100);
+    const color=CH[ch]?.bg||'#888';
+    const lbl=CH[ch]?.label||ch;
+    const txtC=ch==='mercadolivre'?'#1a1a1a':'#fff';
+    return `<div class="drill-row">
+      <span class="drill-dot" style="background:${color}"></span>
+      <span class="drill-name">${lbl}</span>
+      <div class="drill-bar"><div class="drill-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span class="drill-val">${money?fmtMoney(v,0):fmtInt(v)}</span>
+      <span class="drill-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="drill-head">
+    <span class="drill-period">${label}${metricLbl?' · '+metricLbl:''}</span>
+    <span class="drill-total">${money?fmtMoney(val,0):fmtInt(val)}</span>
+    <button class="drill-close" onclick="document.getElementById('trendDrilldown').style.display='none'" title="Fechar"><i class="bi bi-x-lg"></i></button>
+  </div>${rows}`;
+  el.style.display='block';
+}
 
 // ── App state ──
 const CHAN = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre', shopify_us:'Shopify US' };
@@ -674,6 +744,16 @@ function render(d) {
   const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:'#2d2a26', borderWidth:1.5, tension:.4, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:'#faf8f4', pointBorderColor:'#2d2a26', pointBorderWidth:1.5, fill:false }];
   if (d.metric === 'receita') ds.push({ label:'Custo ads', data:t.data.map(()=>0), borderColor:'#b0a898', borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
   setChart('trendChart', { type:'line', data:{ labels:t.labels, datasets:ds }, options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{ label:c=>' '+c.dataset.label+': '+(money?fmtMoney(c.parsed.y,2):fmtInt(c.parsed.y)) }} }, scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ grid:{color:'rgba(30,28,24,0.06)'}, ticks:{callback:v=>money?fmtMoneyShort(v):fmtInt(v)} } } } });
+  // Click → drilldown de canais
+  document.getElementById('trendDrilldown').style.display = 'none';
+  const _tc = charts['trendChart'];
+  document.getElementById('trendChart').onclick = e => {
+    if (!isChanDetail() || !_tc) return;
+    const pts = _tc.getElementsAtEventForMode(e, 'index', {intersect:false}, true);
+    if (!pts.length) return;
+    const i = pts[0].index;
+    showTrendDrilldown(t.labels[i], t.data[i], t.byChannel?.[i]||{}, money, d.metric);
+  };
   document.getElementById('trendTitle').textContent = 'Tendência · ' + METRIC_LABEL[d.metric];
   document.getElementById('trendSub').textContent = (d.period.grain==='hour'?'Por hora · ':'Por dia · ') + label.toLowerCase();
   document.getElementById('trendVal').textContent = (money?fmtMoney(t.total):fmtInt(t.total)) + ' ' + METRIC_LABEL[d.metric].toUpperCase();
