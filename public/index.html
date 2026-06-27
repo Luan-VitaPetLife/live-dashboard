@@ -533,6 +533,7 @@ const MARKET_CHANNELS = {
     { value:'shopify',       label:'Shopify' },
     { value:'shopee',        label:'Shopee' },
     { value:'mercadolivre',  label:'Mercado Livre' },
+    { value:'amazon',        label:'Amazon' },
   ],
   us: [
     { value:'todos',      label:'Todos' },
@@ -768,7 +769,7 @@ function updateCardVisibility() {
   const show = (id, visible) => { const el = document.getElementById(id); if (el) el.style.display = visible ? '' : 'none'; };
 
   show('cardChannelSplit', isTodos);
-  show('cardMarketing',    isTodos || isMarketplace);
+  show('cardMarketing',    isTodos || isShopify);
   show('cardTraffic',      isTodos || isShopify);
   show('cardFunnel',       isTodos || isShopify);
   show('cardMlBreakdown',  channel === 'mercadolivre');
