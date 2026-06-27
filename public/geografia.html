@@ -22,6 +22,7 @@
   .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:3000}
   .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
   .brand-logo{width:148px;height:auto}
+  .nav-flag{width:15px;height:auto;vertical-align:middle;border-radius:2px;margin-left:3px;position:relative;top:-1px}
   .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
   .nav-group{margin-bottom:24px}
   .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
@@ -221,14 +222,14 @@
     <button id="sidebarToggle" class="sidebar-close-btn" title="Fechar menu"><i class="bi bi-layout-sidebar-reverse"></i></button>
   </div>
   <div class="brand">
-    <img src="Logo.svg" alt="Coco and Luna" class="brand-logo">
+    <a href="index.html" style="display:block;line-height:0"><img src="Logo.svg" alt="Coco and Luna" class="brand-logo"></a>
     <span class="brand-name">Dashboard<br>Vita Pet Life</span>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
     <a class="nav-item" href="index.html"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>
     <a class="nav-item" href="segmentos.html"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
-    <a class="nav-item active" href="geografia.html"><i class="bi bi-map nav-icon"></i> Geografia 🇧🇷</a>
-    <a class="nav-item" href="geografia-us.html"><i class="bi bi-map nav-icon"></i> Geografia 🇺🇸</a></div>
+    <a class="nav-item active" href="geografia.html"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></a>
+    <a class="nav-item" href="geografia-us.html"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></a></div>
   <div class="nav-group"><div class="nav-label">Operações</div>
     <a class="nav-item"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
     <a class="nav-item"><i class="bi bi-layers nav-icon"></i> Estoque</a>
