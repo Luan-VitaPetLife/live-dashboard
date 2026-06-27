@@ -44,8 +44,8 @@ const SEG_KW = {
 function classifySeg(item) {
   // Tags do Shopify têm prioridade (ex: "For Cats", "For Dogs")
   const tags = (item.tags || []).map(t => t.toLowerCase());
-  if (tags.some(t => t.includes('for cat') || t === 'cat' || t === 'cats')) return 'cat';
-  if (tags.some(t => t.includes('for dog') || t === 'dog' || t === 'dogs')) return 'dog';
+  if (tags.some(t => t.includes('for cat') || t.includes('para gato') || t === 'cat' || t === 'cats')) return 'cat';
+  if (tags.some(t => t.includes('for dog') || t.includes('para cão') || t.includes('para cao') || t === 'dog' || t === 'dogs')) return 'dog';
   // Fallback: palavras-chave no título
   const l = (item.title || '').toLowerCase();
   if (SEG_KW.cat.some(k => l.includes(k))) return 'cat';
@@ -61,12 +61,9 @@ const TYPE_KW = {
   'Liquid':     ['liquid'],
 };
 function classifyType(item) {
-  // productType do Shopify (campo explícito)
-  const pt = (item.productType || '').toLowerCase();
-  for (const [type, kws] of Object.entries(TYPE_KW)) {
-    if (kws.some(k => pt.includes(k))) return type;
-  }
-  // Fallback: título do produto
+  // productType do Shopify é a fonte autoritativa ("Pó", "Powder", "Soft Chews"…)
+  if (item.productType) return item.productType;
+  // Fallback por palavras-chave no título (Amazon e outros sem productType)
   const t = (item.title || '').toLowerCase();
   for (const [type, kws] of Object.entries(TYPE_KW)) {
     if (kws.some(k => t.includes(k))) return type;
