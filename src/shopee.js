@@ -13,6 +13,24 @@ import 'dotenv/config';
 import crypto from 'crypto';
 import { getShopeeTokens, setShopeeTokens } from './store.js';
 
+const BR_STATE = {
+  'acre':'AC','alagoas':'AL','amapá':'AP','amapa':'AP','amazonas':'AM',
+  'bahia':'BA','ceará':'CE','ceara':'CE','distrito federal':'DF',
+  'espírito santo':'ES','espirito santo':'ES','goiás':'GO','goias':'GO',
+  'maranhão':'MA','maranhao':'MA','mato grosso do sul':'MS','mato grosso':'MT',
+  'minas gerais':'MG','pará':'PA','para':'PA','paraíba':'PB','paraiba':'PB',
+  'paraná':'PR','parana':'PR','pernambuco':'PE','piauí':'PI','piaui':'PI',
+  'rio de janeiro':'RJ','rio grande do norte':'RN','rio grande do sul':'RS',
+  'rondônia':'RO','rondonia':'RO','roraima':'RR','santa catarina':'SC',
+  'são paulo':'SP','sao paulo':'SP','sergipe':'SE','tocantins':'TO',
+};
+function toUF(s) {
+  if (!s) return null;
+  const t = s.trim();
+  if (t.length === 2) return t.toUpperCase();
+  return BR_STATE[t.toLowerCase()] || null;
+}
+
 const PARTNER_ID = process.env.SHOPEE_PARTNER_ID;
 const PARTNER_KEY = process.env.SHOPEE_PARTNER_KEY;
 const SHOP_ID = process.env.SHOPEE_SHOP_ID;
@@ -154,7 +172,7 @@ export async function fetchOrders(sinceISO, untilISO) {
     if (!batch.length) break;
     const d = await shopCall('/api/v2/order/get_order_detail', {
       order_sn_list: batch.join(','),
-      response_optional_fields: 'order_status,total_amount,create_time,buyer_username,item_list',
+      response_optional_fields: 'order_status,total_amount,create_time,buyer_username,item_list,recipient_address',
     });
     for (const o of (d.response?.order_list || [])) {
       const cancelled = ['CANCELLED', 'UNPAID', 'INVOICE_PENDING'].includes(o.order_status);
@@ -169,7 +187,7 @@ export async function fetchOrders(sinceISO, untilISO) {
         total:     Number(o.total_amount) || 0,
         source:    'Shopee',
         customer:  o.buyer_username || '',
-        state:     null,
+        state:     toUF(o.recipient_address?.state),
         items: (o.item_list || []).map(it => ({
           title:  it.item_name,
           qty:    it.model_quantity_purchased || it.quantity || 1,
