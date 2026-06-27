@@ -44,7 +44,7 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
             customerJourneySummary { lastVisit { source } }
             customer { displayName }
             shippingAddress { provinceCode }
-            lineItems(first: 20) { edges { node { title quantity discountedTotalSet { shopMoney { amount } } } } }
+            lineItems(first: 20) { edges { node { title quantity discountedTotalSet { shopMoney { amount } } product { tags productType } } } }
           } }
           pageInfo { hasNextPage endCursor }
         }
@@ -65,9 +65,11 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
         customer:  n.customer?.displayName || '',
         state:     n.shippingAddress?.provinceCode || null,
         items:     (n.lineItems?.edges || []).map(x => ({
-          title:  x.node.title,
-          qty:    x.node.quantity,
-          amount: parseFloat(x.node.discountedTotalSet?.shopMoney?.amount || '0'),
+          title:       x.node.title,
+          qty:         x.node.quantity,
+          amount:      parseFloat(x.node.discountedTotalSet?.shopMoney?.amount || '0'),
+          tags:        x.node.product?.tags || [],
+          productType: x.node.product?.productType || null,
         })),
       });
     }

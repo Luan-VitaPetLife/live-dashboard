@@ -36,17 +36,42 @@ function buildBuckets(since, until, grain) {
 const isCancelled = o => o.cancelled;
 const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
 
-// ── Classificação de segmento por palavras-chave no título do produto ──
+// ── Classificação de segmento (espécie) ──
 const SEG_KW = {
   cat: ['gato','gatos','felino','felinos','cat','cats','feline','kitten','kitty','lisina'],
   dog: ['cachorro','cachorros','cão','cães','cao','caes','canino','caninos','dog','dogs','canine','puppy','pup'],
 };
-function classifySeg(title) {
-  if (!title) return 'other';
-  const l = title.toLowerCase();
+function classifySeg(item) {
+  // Tags do Shopify têm prioridade (ex: "For Cats", "For Dogs")
+  const tags = (item.tags || []).map(t => t.toLowerCase());
+  if (tags.some(t => t.includes('for cat') || t === 'cat' || t === 'cats')) return 'cat';
+  if (tags.some(t => t.includes('for dog') || t === 'dog' || t === 'dogs')) return 'dog';
+  // Fallback: palavras-chave no título
+  const l = (item.title || '').toLowerCase();
   if (SEG_KW.cat.some(k => l.includes(k))) return 'cat';
   if (SEG_KW.dog.some(k => l.includes(k))) return 'dog';
   return 'other';
+}
+
+// ── Classificação de tipo de produto ──
+const TYPE_KW = {
+  'Soft Chews': ['soft chew','soft chews','chew','chews'],
+  'Tablets':    ['tablet','tablets'],
+  'Powder':     ['powder'],
+  'Liquid':     ['liquid'],
+};
+function classifyType(item) {
+  // productType do Shopify (campo explícito)
+  const pt = (item.productType || '').toLowerCase();
+  for (const [type, kws] of Object.entries(TYPE_KW)) {
+    if (kws.some(k => pt.includes(k))) return type;
+  }
+  // Fallback: título do produto
+  const t = (item.title || '').toLowerCase();
+  for (const [type, kws] of Object.entries(TYPE_KW)) {
+    if (kws.some(k => t.includes(k))) return type;
+  }
+  return null;
 }
 
 function aggregateSessions(since, until, market = 'br') {
@@ -150,19 +175,22 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     }
   });
 
-  // segmentos por espécie (gato vs cão) — baseado em palavras-chave nos itens
+  // segmentos por espécie (gato vs cão) + tipo de produto
   const segAcc = {};
   valid.forEach(o => {
     o.items.forEach(it => {
       if (!it.title) return;
-      const seg = classifySeg(it.title);
-      if (!segAcc[seg]) segAcc[seg] = { revenue: 0, units: 0, orderIds: new Set(), products: {} };
+      const seg  = classifySeg(it);
+      const type = classifyType(it);
+      const qty  = it.qty || 1;
+      if (!segAcc[seg]) segAcc[seg] = { revenue: 0, units: 0, orderIds: new Set(), products: {}, byType: {} };
       segAcc[seg].revenue += it.amount || 0;
-      segAcc[seg].units  += it.qty || 1;
+      segAcc[seg].units  += qty;
       segAcc[seg].orderIds.add(o.id);
+      if (type) segAcc[seg].byType[type] = (segAcc[seg].byType[type] || 0) + qty;
       const p = segAcc[seg].products;
       if (!p[it.title]) p[it.title] = { qty: 0, revenue: 0 };
-      p[it.title].qty     += it.qty || 1;
+      p[it.title].qty     += qty;
       p[it.title].revenue += it.amount || 0;
     });
   });
@@ -174,6 +202,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       units:   v.units,
       orders:  v.orderIds.size,
       pct:     totalSegUnits > 0 ? v.units / totalSegUnits : 0,
+      byType:  v.byType,
       topProducts: Object.entries(v.products)
         .sort((a, b) => b[1].qty - a[1].qty)
         .slice(0, 5)
