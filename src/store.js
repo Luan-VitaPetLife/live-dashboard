@@ -56,6 +56,8 @@ export async function initStore() {
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
+      if (r.key === 'amazonBackoff')        cache.amazonBackoff        = Number(r.value);
+      if (r.key === 'amazonBRBackoff')      cache.amazonBRBackoff      = Number(r.value);
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
