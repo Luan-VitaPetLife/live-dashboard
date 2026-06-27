@@ -36,6 +36,19 @@ function buildBuckets(since, until, grain) {
 const isCancelled = o => o.cancelled;
 const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
 
+// ── Classificação de segmento por palavras-chave no título do produto ──
+const SEG_KW = {
+  cat: ['gato','gatos','felino','felinos','cat','cats','feline','kitten','kitty','lisina'],
+  dog: ['cachorro','cachorros','cão','cães','cao','caes','canino','caninos','dog','dogs','canine','puppy','pup'],
+};
+function classifySeg(title) {
+  if (!title) return 'other';
+  const l = title.toLowerCase();
+  if (SEG_KW.cat.some(k => l.includes(k))) return 'cat';
+  if (SEG_KW.dog.some(k => l.includes(k))) return 'dog';
+  return 'other';
+}
+
 function aggregateSessions(since, until, market = 'br') {
   const daily = getSessionsDaily(market);
   let s = 0, v = 0, c = 0, ck = 0, cp = 0;
@@ -137,6 +150,37 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     }
   });
 
+  // segmentos por espécie (gato vs cão) — baseado em palavras-chave nos itens
+  const segAcc = {};
+  valid.forEach(o => {
+    o.items.forEach(it => {
+      if (!it.title) return;
+      const seg = classifySeg(it.title);
+      if (!segAcc[seg]) segAcc[seg] = { revenue: 0, units: 0, orderIds: new Set(), products: {} };
+      segAcc[seg].revenue += it.amount || 0;
+      segAcc[seg].units  += it.qty || 1;
+      segAcc[seg].orderIds.add(o.id);
+      const p = segAcc[seg].products;
+      if (!p[it.title]) p[it.title] = { qty: 0, revenue: 0 };
+      p[it.title].qty     += it.qty || 1;
+      p[it.title].revenue += it.amount || 0;
+    });
+  });
+  const totalSegUnits = Object.values(segAcc).reduce((a, s) => a + s.units, 0);
+  const segments = {};
+  for (const [k, v] of Object.entries(segAcc)) {
+    segments[k] = {
+      revenue: v.revenue,
+      units:   v.units,
+      orders:  v.orderIds.size,
+      pct:     totalSegUnits > 0 ? v.units / totalSegUnits : 0,
+      topProducts: Object.entries(v.products)
+        .sort((a, b) => b[1].qty - a[1].qty)
+        .slice(0, 5)
+        .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue })),
+    };
+  }
+
   // pedidos recentes (todos os canais do mercado, mais novos primeiro)
   const recent = getOrders({ channel, since: null, until: null, market })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 10)
@@ -191,6 +235,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series },
     funnel: { sessions: sess.sessions, cart: sess.cart, checkout: sess.checkout, completed: sess.completed },
     topProducts,
+    segments,
     byState,
     recentOrders: recent,
     mlBreakdown,

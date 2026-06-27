@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Segmentos — Coco and Luna</title>
+<link rel="icon" href="logo.png" type="image/png">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<style>
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--tan:#c4b49a;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px;
+    --cat:#c4793a;--dog:#4a7ab8;--other:#9c9790; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* ── Sidebar ── */
+  .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+  .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
+  .brand-logo{width:72px;height:72px;object-fit:contain}
+  .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
+  .nav-group{margin-bottom:24px}
+  .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
+  .nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
+  .nav-item:hover{background:var(--side-hover);color:var(--side-text)}
+  .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
+  .nav-icon{font-size:13px;opacity:.7;width:16px;text-align:center}
+
+  /* ── Main ── */
+  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  .ldot.loading{background:var(--amber)} .ldot.error{background:var(--red);animation:none}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Market toggle ── */
+  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px}
+  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
+  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+
+  /* ── Filter pill / dropdown ── */
+  .filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none;position:relative}
+  .filter-pill:hover,.filter-pill.open{border-color:var(--ink);color:var(--text)}
+  .filter-pill .lbl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .filter-pill .val{font-weight:600;color:var(--text)}
+  .filter-pill .arr{color:var(--muted);font-size:9px;transition:transform .15s}
+  .filter-pill.open .arr{transform:rotate(180deg)}
+  .fp-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:140px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+  .filter-pill.open .fp-pop{display:flex}
+  .fp-opt{padding:9px 14px;font-size:12px;color:var(--sub);cursor:pointer;display:flex;align-items:center;gap:8px}
+  .fp-opt:hover{background:var(--surface2);color:var(--text)}
+  .fp-opt.active{color:var(--text);font-weight:600}
+  .fp-opt.active::before{content:'✓';font-size:11px;font-weight:700}
+  .fp-opt:not(.active)::before{content:'';display:inline-block;width:11px}
+
+  /* ── Period picker ── */
+  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+  .period-pop.open{display:flex}
+  .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
+  .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .pp-divider{height:1px;background:var(--border)}
+  .pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .pp-dates{display:flex;flex-direction:column;gap:8px}
+  .pp-field{display:flex;align-items:center;gap:10px}
+  .pp-field label{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+  .pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);appearance:none;outline:none;transition:border-color .12s}
+  .pp-field input[type=date]:focus{border-color:var(--ink)}
+  .pp-err{font-size:10px;color:var(--red);min-height:12px}
+  .pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer}
+  .pp-apply:hover{opacity:.85}
+  .period-pill-active{background:var(--ink)!important;border-color:var(--ink)!important}
+  .period-pill-active .lbl{color:rgba(240,235,224,.5)!important}
+  .period-pill-active .val{color:var(--side-text)!important}
+  .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
+
+  /* ── Sidebar toggle ── */
+  .sidebar-toggle{height:32px;width:36px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:15px;color:var(--sub);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .sidebar-toggle:hover{border-color:var(--ink);color:var(--text)}
+  .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;opacity:0;pointer-events:none;transition:opacity .25s}
+  body.sidebar-mobile-open .sidebar-overlay{opacity:1;pointer-events:auto}
+  body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
+  body.sidebar-hidden .sidebar{transform:translateX(-100%)}
+  body.sidebar-hidden .main{margin-left:0}
+  @media(max-width:768px){.sidebar{transform:translateX(-100%)}.main{margin-left:0}}
+
+  /* ── Content ── */
+  .content{flex:1;padding:28px}
+  .page-header{margin-bottom:24px}
+  .page-title{font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.3px}
+  .page-sub{font-size:12px;color:var(--sub);margin-top:3px}
+
+  /* ── Segment overview ── */
+  .seg-overview{display:grid;grid-template-columns:300px 1fr;gap:20px;margin-bottom:20px;align-items:start}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;display:flex;flex-direction:column;align-items:center;gap:16px}
+  .chart-card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);align-self:flex-start}
+  .donut-wrap{position:relative;width:200px;height:200px}
+  .donut-wrap canvas{position:absolute;inset:0}
+  .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .donut-center-val{font-size:22px;font-weight:700;color:var(--ink)}
+  .donut-center-sub{font-size:10px;color:var(--sub);font-weight:500}
+  .seg-legend{display:flex;flex-direction:column;gap:10px;width:100%}
+  .seg-legend-item{display:flex;align-items:center;gap:10px}
+  .leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .leg-name{font-size:12px;font-weight:600;color:var(--text);flex:1}
+  .leg-pct{font-size:12px;font-weight:700;color:var(--ink)}
+  .leg-units{font-size:11px;color:var(--sub)}
+
+  /* ── Segment cards ── */
+  .seg-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .seg-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .seg-card-header{padding:16px 20px 12px;border-bottom:1px solid var(--border)}
+  .seg-card-accent{height:4px;margin:-16px -20px 12px;border-radius:4px 4px 0 0}
+  .seg-card-accent.cat{background:var(--cat)}
+  .seg-card-accent.dog{background:var(--dog)}
+  .seg-card-accent.other{background:var(--other)}
+  .seg-card-name{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:8px}
+  .seg-kpis{display:flex;gap:20px}
+  .seg-kpi{display:flex;flex-direction:column}
+  .seg-kpi-val{font-size:18px;font-weight:700;color:var(--ink)}
+  .seg-kpi-lbl{font-size:10px;color:var(--sub);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+  .seg-pct-bar{height:4px;background:var(--border2);border-radius:2px;margin-top:10px}
+  .seg-pct-fill{height:4px;border-radius:2px;transition:width .4s}
+  .seg-pct-fill.cat{background:var(--cat)}
+  .seg-pct-fill.dog{background:var(--dog)}
+  .seg-pct-fill.other{background:var(--other)}
+  .seg-products-area{padding:16px 20px}
+  .seg-prod-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:10px}
+  .seg-prod-list{display:flex;flex-direction:column;gap:8px}
+  .seg-prod-item{display:flex;align-items:center;gap:10px}
+  .seg-prod-rank{font-size:11px;font-weight:700;color:var(--muted);width:14px;flex-shrink:0;text-align:right}
+  .seg-prod-name{flex:1;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seg-prod-qty{font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0}
+  .seg-prod-rev{font-size:10px;color:var(--sub);flex-shrink:0;min-width:64px;text-align:right}
+  .seg-empty{font-size:12px;color:var(--muted);font-style:italic;padding:8px 0}
+
+  /* ── Outros (não classificados) ── */
+  .other-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-top:16px}
+  .other-card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .other-note{font-size:11px;color:var(--muted)}
+
+  /* ── Footer ── */
+  .footer{font-size:10px;color:var(--muted);padding:12px 28px;border-top:1px solid var(--border);background:var(--surface)}
+
+  @media(max-width:768px){
+    .seg-overview{grid-template-columns:1fr}
+    .seg-cards{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebarOverlay" class="sidebar-overlay"></div>
+<nav class="sidebar">
+  <div class="brand">
+    <img src="Logo.svg" alt="Coco and Luna" class="brand-logo">
+    <span class="brand-name">Dashboard<br>Vita Pet Life</span>
+  </div>
+  <div class="nav-group"><div class="nav-label">Visão Geral</div>
+    <a class="nav-item" href="index.html"><span class="nav-icon">↗</span> Revenue</a>
+    <a class="nav-item active" href="segmentos.html"><span class="nav-icon">⊞</span> Segmentos</a>
+    <a class="nav-item" id="navGeo" href="geografia.html"><span class="nav-icon">◎</span> Geografia</a></div>
+  <div class="nav-group"><div class="nav-label">Operações</div>
+    <a class="nav-item"><span class="nav-icon">□</span> Produtos</a>
+    <a class="nav-item"><span class="nav-icon">≡</span> Estoque</a>
+    <a class="nav-item"><span class="nav-icon">$</span> Financeiro</a></div>
+  <div class="nav-group"><div class="nav-label">Marketing</div>
+    <a class="nav-item"><span class="nav-icon">◈</span> Campanhas</a></div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <button id="sidebarToggle" class="sidebar-toggle" title="Mostrar/ocultar menu">☰</button>
+    <div class="mkt-toggle-wrap">
+      <button class="mkt-btn active" data-market="br">
+        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img">
+        <span>Brasil</span>
+      </button>
+      <button class="mkt-btn" data-market="us">
+        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img">
+        <span>EUA</span>
+      </button>
+    </div>
+    <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
+    <div style="position:relative">
+      <div class="filter-pill period-pill-active" id="periodPill">
+        <span class="lbl">Período</span>
+        <span class="val" id="periodValue">30 dias</span>
+        <span class="arr">▾</span>
+      </div>
+      <div class="period-pop" id="periodPop">
+        <div class="pp-presets">
+          <button data-preset="today">Hoje</button>
+          <button data-preset="7d">7 dias</button>
+          <button data-preset="30d" class="active">30 dias</button>
+          <button data-preset="month">Este mês</button>
+        </div>
+        <div class="pp-divider"></div>
+        <div class="pp-section-label">Intervalo personalizado</div>
+        <div class="pp-dates">
+          <div class="pp-field"><label>De</label><input type="date" id="dateFrom"></div>
+          <div class="pp-field"><label>Até</label><input type="date" id="dateTo"></div>
+        </div>
+        <div class="pp-err" id="ppErr"></div>
+        <button class="pp-apply" id="applyRange">Aplicar intervalo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="page-header">
+      <div class="page-title">Segmentos</div>
+      <div class="page-sub" id="pageSub">Gato vs Cão · comparação por unidades vendidas</div>
+    </div>
+
+    <div class="seg-overview">
+      <!-- Donut -->
+      <div class="chart-card">
+        <div class="chart-card-title">Distribuição</div>
+        <div class="donut-wrap">
+          <canvas id="segChart"></canvas>
+          <div class="donut-center">
+            <div class="donut-center-val" id="totalUnits">—</div>
+            <div class="donut-center-sub">unidades</div>
+          </div>
+        </div>
+        <div class="seg-legend" id="segLegend"></div>
+      </div>
+
+      <!-- Segment cards -->
+      <div class="seg-cards" id="segCards"></div>
+    </div>
+
+    <!-- Não classificados -->
+    <div class="other-card" id="otherCard" style="display:none">
+      <div class="other-card-title">
+        Produtos não classificados
+        <span class="other-note">— títulos sem palavras-chave de espécie</span>
+      </div>
+      <div class="seg-prod-list" id="otherList"></div>
+    </div>
+  </div>
+
+  <div class="footer" id="footerDate"></div>
+</div>
+
+<script>
+// ── Utils ──
+const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+const isoLocal = d => { const z = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`; };
+const todayISO = isoLocal(new Date());
+
+let market = localStorage.getItem('coco_market') || 'br';
+let sinceDate = localStorage.getItem('coco_since') || isoLocal(addDays(new Date(),-29));
+let untilDate = localStorage.getItem('coco_until') || todayISO;
+
+// ── Formatters ──
+function fmtMoney(v) {
+  if (market === 'us') return '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+function fmtUnits(n) { return n.toLocaleString('pt-BR') + ' un'; }
+function rangeLabel(s, u) {
+  const fmt = d => { const [y,m,dd]=d.split('-'); return `${dd}/${m}`; };
+  return s===u ? fmt(s) : `${fmt(s)} – ${fmt(u)}`;
+}
+
+// ── Live indicator ──
+function setLive(state, msg) {
+  const dot = document.getElementById('liveDot');
+  document.getElementById('lastUpdate').textContent = msg;
+  dot.className = 'ldot' + (state==='loading'?' loading': state==='error'?' error':'');
+}
+
+// ── Chart ──
+let segChartInst = null;
+const SEG_COLORS = { cat:'#c4793a', dog:'#4a7ab8', other:'#c4b49a' };
+const SEG_LABELS = { cat:'Gato', dog:'Cão', other:'Outros' };
+
+function renderChart(segs) {
+  const keys = ['cat','dog'].filter(k => segs[k]?.units > 0);
+  if (segs.other?.units > 0) keys.push('other');
+  const data  = keys.map(k => segs[k].units);
+  const colors = keys.map(k => SEG_COLORS[k]);
+  const labels = keys.map(k => SEG_LABELS[k]);
+  const ctx = document.getElementById('segChart').getContext('2d');
+  if (segChartInst) segChartInst.destroy();
+  segChartInst = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#faf8f4', hoverOffset: 4 }] },
+    options: {
+      cutout: '68%',
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString('pt-BR')} un (${(ctx.parsed / ctx.dataset.data.reduce((a,b)=>a+b,0)*100).toFixed(1)}%)` }
+      }},
+      animation: { duration: 500 },
+    },
+  });
+}
+
+function renderLegend(segs) {
+  const total = (segs.cat?.units||0) + (segs.dog?.units||0) + (segs.other?.units||0);
+  document.getElementById('totalUnits').textContent = total.toLocaleString('pt-BR');
+  const keys = ['cat','dog'];
+  if (segs.other?.units > 0) keys.push('other');
+  document.getElementById('segLegend').innerHTML = keys.map(k => {
+    const s = segs[k] || { units:0, pct:0 };
+    return `<div class="seg-legend-item">
+      <div class="leg-dot" style="background:${SEG_COLORS[k]}"></div>
+      <span class="leg-name">${SEG_LABELS[k]}</span>
+      <span class="leg-pct">${(s.pct*100).toFixed(1)}%</span>
+      <span class="leg-units">${s.units.toLocaleString('pt-BR')} un</span>
+    </div>`;
+  }).join('');
+}
+
+function renderCards(segs) {
+  const totalUnits = (segs.cat?.units||0) + (segs.dog?.units||0);
+  const cards = ['cat','dog'].map(k => {
+    const s = segs[k] || { revenue:0, units:0, orders:0, pct:0, topProducts:[] };
+    const pctW = totalUnits > 0 ? Math.round(s.units / totalUnits * 100) : 0;
+    const prods = s.topProducts.length > 0
+      ? s.topProducts.map((p,i) => `
+        <div class="seg-prod-item">
+          <span class="seg-prod-rank">${i+1}.</span>
+          <span class="seg-prod-name" title="${p.title}">${p.title}</span>
+          <span class="seg-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
+          <span class="seg-prod-rev">${fmtMoney(p.revenue)}</span>
+        </div>`).join('')
+      : '<div class="seg-empty">Sem produtos no período</div>';
+    return `
+      <div class="seg-card">
+        <div class="seg-card-header">
+          <div class="seg-card-accent ${k}"></div>
+          <div class="seg-card-name">${SEG_LABELS[k]}</div>
+          <div class="seg-kpis">
+            <div class="seg-kpi">
+              <div class="seg-kpi-val">${fmtMoney(s.revenue)}</div>
+              <div class="seg-kpi-lbl">Receita</div>
+            </div>
+            <div class="seg-kpi">
+              <div class="seg-kpi-val">${s.units.toLocaleString('pt-BR')}</div>
+              <div class="seg-kpi-lbl">Unidades</div>
+            </div>
+            <div class="seg-kpi">
+              <div class="seg-kpi-val">${s.orders.toLocaleString('pt-BR')}</div>
+              <div class="seg-kpi-lbl">Pedidos</div>
+            </div>
+          </div>
+          <div class="seg-pct-bar"><div class="seg-pct-fill ${k}" style="width:${pctW}%"></div></div>
+        </div>
+        <div class="seg-products-area">
+          <div class="seg-prod-title">Top produtos · por unidades</div>
+          <div class="seg-prod-list">${prods}</div>
+        </div>
+      </div>`;
+  }).join('');
+  document.getElementById('segCards').innerHTML = cards;
+}
+
+function renderOther(segs) {
+  const other = segs.other;
+  const card = document.getElementById('otherCard');
+  if (!other || other.units === 0) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  document.getElementById('otherList').innerHTML = other.topProducts.map((p,i) => `
+    <div class="seg-prod-item">
+      <span class="seg-prod-rank">${i+1}.</span>
+      <span class="seg-prod-name" title="${p.title}">${p.title}</span>
+      <span class="seg-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
+      <span class="seg-prod-rev">${fmtMoney(p.revenue)}</span>
+    </div>`).join('');
+}
+
+// ── Render ──
+function render(d) {
+  const segs = d.segments || {};
+  renderChart(segs);
+  renderLegend(segs);
+  renderCards(segs);
+  renderOther(segs);
+  const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
+  document.getElementById('pageSub').textContent = `Gato vs Cão · ${rangeLabel(sinceDate, untilDate)} · última sincronização: ${up}`;
+  document.getElementById('footerDate').textContent = `Dashboard · Vita Pet Life · Segmentos · ${rangeLabel(sinceDate, untilDate)} · receita exclui cancelados · última sincronização: ${up}`;
+  setLive('ok', `Ao vivo · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`);
+}
+
+// ── Load ──
+async function loadData() {
+  setLive('loading','Atualizando…');
+  try {
+    const p = new URLSearchParams({ channel:'todos', metric:'receita', since:sinceDate, until:untilDate, market });
+    const r = await fetch('/api/dashboard?' + p);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    render(d);
+  } catch(e) {
+    setLive('error', 'Erro ao carregar');
+    console.error(e);
+  }
+}
+
+// ── Market toggle ──
+document.querySelectorAll('.mkt-btn').forEach(btn => {
+  if (btn.dataset.market === market) btn.classList.add('active');
+  else btn.classList.remove('active');
+  btn.addEventListener('click', () => {
+    market = btn.dataset.market;
+    localStorage.setItem('coco_market', market);
+    document.querySelectorAll('.mkt-btn').forEach(b => b.classList.toggle('active', b.dataset.market === market));
+    document.getElementById('navGeo').href = market === 'us' ? 'geografia-us.html' : 'geografia.html';
+    loadData();
+  });
+});
+document.getElementById('navGeo').href = market === 'us' ? 'geografia-us.html' : 'geografia.html';
+
+// ── Period picker ──
+function syncPeriodPill() {
+  document.getElementById('periodValue').textContent = rangeLabel(sinceDate, untilDate);
+  document.getElementById('dateFrom').value = sinceDate;
+  document.getElementById('dateTo').value = untilDate;
+}
+function applyPreset(p) {
+  const t = new Date(); t.setHours(0,0,0,0);
+  if (p==='today')  { sinceDate = untilDate = todayISO; }
+  else if (p==='7d')  { sinceDate = isoLocal(addDays(t,-6)); untilDate = todayISO; }
+  else if (p==='30d') { sinceDate = isoLocal(addDays(t,-29)); untilDate = todayISO; }
+  else if (p==='month') { const d=new Date(); sinceDate=isoLocal(new Date(d.getFullYear(),d.getMonth(),1)); untilDate=todayISO; }
+  localStorage.setItem('coco_since', sinceDate); localStorage.setItem('coco_until', untilDate);
+  syncPeriodPill();
+  document.querySelectorAll('.pp-presets button').forEach(b => b.classList.toggle('active', b.dataset.preset===p));
+  document.getElementById('periodPop').classList.remove('open');
+  document.getElementById('periodPill').classList.remove('open');
+  loadData();
+}
+document.getElementById('periodPill').addEventListener('click', e => {
+  e.stopPropagation();
+  const pop = document.getElementById('periodPop');
+  const pill = document.getElementById('periodPill');
+  const open = pop.classList.contains('open');
+  document.querySelectorAll('.period-pop').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('open'));
+  if (!open) { pop.classList.add('open'); pill.classList.add('open'); }
+});
+document.querySelectorAll('.pp-presets button').forEach(b => {
+  b.addEventListener('click', () => applyPreset(b.dataset.preset));
+});
+document.getElementById('applyRange').addEventListener('click', () => {
+  const f = document.getElementById('dateFrom').value;
+  const t = document.getElementById('dateTo').value;
+  const err = document.getElementById('ppErr');
+  if (!f || !t) { err.textContent='Preencha as duas datas.'; return; }
+  if (f > t)    { err.textContent='Data inicial deve ser anterior à final.'; return; }
+  err.textContent = '';
+  sinceDate = f; untilDate = t;
+  localStorage.setItem('coco_since', sinceDate); localStorage.setItem('coco_until', untilDate);
+  syncPeriodPill();
+  document.getElementById('periodPop').classList.remove('open');
+  document.getElementById('periodPill').classList.remove('open');
+  loadData();
+});
+
+// ── Sidebar toggle ──
+const isMobile = () => window.innerWidth <= 768;
+const overlay = document.getElementById('sidebarOverlay');
+const btn = document.getElementById('sidebarToggle');
+if (!isMobile() && localStorage.getItem('coco_sidebar') === 'hidden') document.body.classList.add('sidebar-hidden');
+btn.addEventListener('click', () => {
+  if (isMobile()) {
+    document.body.classList.toggle('sidebar-mobile-open');
+  } else {
+    const hidden = document.body.classList.toggle('sidebar-hidden');
+    localStorage.setItem('coco_sidebar', hidden ? 'hidden' : '');
+  }
+});
+overlay.addEventListener('click', () => document.body.classList.remove('sidebar-mobile-open'));
+
+// ── Close popups on outside click ──
+document.addEventListener('click', e => {
+  if (!e.target.closest('#periodPill') && !e.target.closest('#periodPop')) {
+    document.getElementById('periodPop').classList.remove('open');
+    document.getElementById('periodPill').classList.remove('open');
+  }
+});
+
+syncPeriodPill();
+loadData();
+</script>
+</body>
+</html>
