@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard } from './src/metrics.js';
 import { runSync } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, load } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -42,6 +42,22 @@ app.post('/api/amazon/reset-backoff', (req, res) => {
 // Force-sync da Amazon: zera backoff e sincroniza imediatamente (sem race com o timer)
 app.post('/api/amazon/force-sync', async (_req, res) => {
   setAmazonBackoff(0);
+  const report = await runSync();
+  res.json(report);
+});
+
+// Reset do backoff da Amazon BR.
+app.post('/api/amazon-br/reset-backoff', (req, res) => {
+  const delay = Number(req.query.delay || 0);
+  const until = delay > 0 ? Date.now() + delay * 60 * 1000 : 0;
+  setAmazonBRBackoff(until);
+  const msg = until ? `Backoff Amazon BR definido para ${new Date(until).toISOString()}` : 'Backoff Amazon BR zerado.';
+  res.json({ ok: true, message: msg });
+});
+
+// Force-sync da Amazon BR: zera backoff e sincroniza imediatamente.
+app.post('/api/amazon-br/force-sync', async (_req, res) => {
+  setAmazonBRBackoff(0);
   const report = await runSync();
   res.json(report);
 });
@@ -96,21 +112,31 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Diagnóstico de integrações — mostra o que está configurado e o estado do Amazon
 app.get('/api/status', (_req, res) => {
-  const backoffUntil = getAmazonBackoff();
-  const backoffActive = backoffUntil > Date.now();
+  const backoffUntil   = getAmazonBackoff();
+  const backoffActive  = backoffUntil > Date.now();
+  const backoffBRUntil  = getAmazonBRBackoff();
+  const backoffBRActive = backoffBRUntil > Date.now();
   const db = load();
 
   const has = key => Boolean(process.env[key]);
 
   res.json({
     amazon: {
-      configured: amazon.isConfigured(),
-      hasLwa:     has('AMAZON_CLIENT_ID') && has('AMAZON_CLIENT_SECRET') && has('AMAZON_REFRESH_TOKEN'),
+      configured:  amazon.isConfigured(),
+      hasLwa:      has('AMAZON_CLIENT_ID') && has('AMAZON_CLIENT_SECRET') && has('AMAZON_REFRESH_TOKEN'),
       hasAwsCreds: has('AMAZON_AWS_ACCESS_KEY') && has('AMAZON_AWS_SECRET_KEY'),
       hasRoleArn:  has('AMAZON_ROLE_ARN'),
       backoffActive,
-      backoffUntil: backoffActive ? new Date(backoffUntil).toISOString() : null,
-      nextSyncIn:   backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
+      backoffUntil:  backoffActive ? new Date(backoffUntil).toISOString() : null,
+      nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
+    },
+    amazon_br: {
+      configured:  amazon.isConfiguredBR(),
+      hasLwa:      has('AMAZON_BR_CLIENT_ID') && has('AMAZON_BR_CLIENT_SECRET') && has('AMAZON_BR_REFRESH_TOKEN'),
+      hasAwsCreds: has('AMAZON_AWS_ACCESS_KEY') && has('AMAZON_AWS_SECRET_KEY'),
+      backoffActive: backoffBRActive,
+      backoffUntil:  backoffBRActive ? new Date(backoffBRUntil).toISOString() : null,
+      nextSyncIn:    backoffBRActive ? `${Math.ceil((backoffBRUntil - Date.now()) / 60000)} min` : 'agora',
     },
     meta: {
       br: { configured: meta.isConfigured(), hasToken: has('META_ACCESS_TOKEN'), hasAccount: has('META_AD_ACCOUNT_ID') },
