@@ -40,8 +40,8 @@ const SP_HOST        = 'sellingpartnerapi-na.amazon.com';
 const CLIENT_ID_BR     = process.env.AMAZON_BR_CLIENT_ID     || process.env.AMAZON_CLIENT_ID;
 const CLIENT_SECRET_BR = process.env.AMAZON_BR_CLIENT_SECRET  || process.env.AMAZON_CLIENT_SECRET;
 const REFRESH_TOKEN_BR = process.env.AMAZON_BR_REFRESH_TOKEN;
-const MARKETPLACE_ID_BR = 'A2Q3Y263D00KWC';           // Amazon.com.br
-const SP_HOST_BR        = 'sellingpartnerapi-sa.amazon.com';
+const MARKETPLACE_ID_BR = 'A2Q3Y263D00KWC';           // Amazon.com.br (região NA)
+const SP_HOST_BR        = 'sellingpartnerapi-na.amazon.com'; // BR está na região North America
 
 // Compartilhado (mesmo IAM user/role para US e BR)
 const ROLE_ARN       = process.env.AMAZON_ROLE_ARN;
