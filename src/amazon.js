@@ -36,9 +36,9 @@ const REFRESH_TOKEN  = process.env.AMAZON_REFRESH_TOKEN;
 const MARKETPLACE_ID = 'ATVPDKIKX0DER';              // Amazon.com (US)
 const SP_HOST        = 'sellingpartnerapi-na.amazon.com';
 
-// Brasil
-const CLIENT_ID_BR     = process.env.AMAZON_BR_CLIENT_ID;
-const CLIENT_SECRET_BR = process.env.AMAZON_BR_CLIENT_SECRET;
+// Brasil — Client ID e Secret fazem fallback para US se não definidos separadamente
+const CLIENT_ID_BR     = process.env.AMAZON_BR_CLIENT_ID     || process.env.AMAZON_CLIENT_ID;
+const CLIENT_SECRET_BR = process.env.AMAZON_BR_CLIENT_SECRET  || process.env.AMAZON_CLIENT_SECRET;
 const REFRESH_TOKEN_BR = process.env.AMAZON_BR_REFRESH_TOKEN;
 const MARKETPLACE_ID_BR = 'A2Q3Y263D00KWC';           // Amazon.com.br
 const SP_HOST_BR        = 'sellingpartnerapi-sa.amazon.com';
