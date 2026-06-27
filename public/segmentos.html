@@ -6,6 +6,7 @@
 <title>Segmentos — Coco and Luna</title>
 <link rel="icon" href="logo.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -26,7 +27,7 @@
   .nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
   .nav-item:hover{background:var(--side-hover);color:var(--side-text)}
   .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
-  .nav-icon{font-size:13px;opacity:.7;width:16px;text-align:center}
+  .nav-icon{font-size:15px;width:16px;text-align:center;flex-shrink:0;line-height:1;opacity:.75}
 
   /* ── Main ── */
   .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s}
@@ -83,8 +84,14 @@
   .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
 
   /* ── Sidebar toggle ── */
-  .sidebar-toggle{height:32px;width:36px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:15px;color:var(--sub);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .sidebar-toggle:hover{border-color:var(--ink);color:var(--text)}
+  .sidebar-header{display:flex;justify-content:flex-end;padding:6px 10px 0}
+  .sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(240,235,224,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
+  .sidebar-close-btn:hover{background:rgba(240,235,224,.12);color:rgba(240,235,224,.9)}
+  .sidebar-open-btn{display:none;position:fixed;left:12px;top:11px;z-index:300;width:36px;height:32px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(30,28,24,.1);transition:all .15s}
+  .sidebar-open-btn:hover{border-color:var(--ink);color:var(--text)}
+  body.sidebar-hidden .sidebar-open-btn{display:flex}
+  @media(max-width:768px){.sidebar-open-btn{display:flex}}
+  body.sidebar-mobile-open .sidebar-open-btn{display:none!important}
   .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;opacity:0;pointer-events:none;transition:opacity .25s}
   body.sidebar-mobile-open .sidebar-overlay{opacity:1;pointer-events:auto}
   body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
@@ -168,25 +175,28 @@
 
 <div id="sidebarOverlay" class="sidebar-overlay"></div>
 <nav class="sidebar">
+  <div class="sidebar-header">
+    <button id="sidebarToggle" class="sidebar-close-btn" title="Fechar menu"><i class="bi bi-x-lg"></i></button>
+  </div>
   <div class="brand">
     <img src="Logo.svg" alt="Coco and Luna" class="brand-logo">
     <span class="brand-name">Dashboard<br>Vita Pet Life</span>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
-    <a class="nav-item" href="index.html"><span class="nav-icon">↗</span> Revenue</a>
-    <a class="nav-item active" href="segmentos.html"><span class="nav-icon">⊞</span> Segmentos</a>
-    <a class="nav-item" id="navGeo" href="geografia.html"><span class="nav-icon">◎</span> Geografia</a></div>
+    <a class="nav-item" href="index.html"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>
+    <a class="nav-item active" href="segmentos.html"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
+    <a class="nav-item" id="navGeo" href="geografia.html"><i class="bi bi-map nav-icon"></i> Geografia</a></div>
   <div class="nav-group"><div class="nav-label">Operações</div>
-    <a class="nav-item"><span class="nav-icon">□</span> Produtos</a>
-    <a class="nav-item"><span class="nav-icon">≡</span> Estoque</a>
-    <a class="nav-item"><span class="nav-icon">$</span> Financeiro</a></div>
+    <a class="nav-item"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
+    <a class="nav-item"><i class="bi bi-layers nav-icon"></i> Estoque</a>
+    <a class="nav-item"><i class="bi bi-wallet2 nav-icon"></i> Financeiro</a></div>
   <div class="nav-group"><div class="nav-label">Marketing</div>
-    <a class="nav-item"><span class="nav-icon">◈</span> Campanhas</a></div>
+    <a class="nav-item"><i class="bi bi-megaphone nav-icon"></i> Campanhas</a></div>
 </nav>
+<button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-list"></i></button>
 
 <div class="main">
   <div class="topbar">
-    <button id="sidebarToggle" class="sidebar-toggle" title="Mostrar/ocultar menu">☰</button>
     <div class="mkt-toggle-wrap">
       <button class="mkt-btn active" data-market="br">
         <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img">
@@ -500,16 +510,21 @@ document.getElementById('applyRange').addEventListener('click', () => {
 
 // ── Sidebar toggle ──
 const isMobile = () => window.innerWidth <= 768;
-const overlay = document.getElementById('sidebarOverlay');
-const btn = document.getElementById('sidebarToggle');
+const overlay  = document.getElementById('sidebarOverlay');
+const closeBtn = document.getElementById('sidebarToggle');
+const openBtn  = document.getElementById('sidebarOpen');
 if (!isMobile() && localStorage.getItem('coco_sidebar') === 'hidden') document.body.classList.add('sidebar-hidden');
-btn.addEventListener('click', () => {
+closeBtn.addEventListener('click', () => {
   if (isMobile()) {
-    document.body.classList.toggle('sidebar-mobile-open');
+    document.body.classList.remove('sidebar-mobile-open');
   } else {
     const hidden = document.body.classList.toggle('sidebar-hidden');
     localStorage.setItem('coco_sidebar', hidden ? 'hidden' : '');
   }
+});
+openBtn.addEventListener('click', () => {
+  if (isMobile()) document.body.classList.add('sidebar-mobile-open');
+  else { document.body.classList.remove('sidebar-hidden'); localStorage.setItem('coco_sidebar', ''); }
 });
 overlay.addEventListener('click', () => document.body.classList.remove('sidebar-mobile-open'));
 
