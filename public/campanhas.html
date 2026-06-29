@@ -109,6 +109,9 @@
   .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
   .camp-logo-img{background:#fff;border:1px solid var(--border);padding:5px}
   .camp-logo-img img{width:100%;height:100%;object-fit:contain;display:block}
+  /* Logos que já têm fundo/tile próprio preenchem o quadro inteiro (sem moldura branca) */
+  .camp-logo-fill{background:transparent;border:none;padding:0;overflow:hidden}
+  .camp-logo-fill img{object-fit:cover}
   .camp-ch-name{font-size:13px;font-weight:600;color:var(--text)}
   .camp-ch-type{font-size:10px;color:var(--muted);margin-top:2px}
   .camp-kpi-col{padding:16px 20px;min-width:140px;flex-shrink:0;border-right:1px solid var(--border)}
@@ -267,7 +270,7 @@
       <div class="camp-card ch-br" id="card-ml">
         <div class="camp-card-main">
           <div class="camp-ch-id">
-            <div class="camp-logo camp-logo-img"><img src="logo_mercadolivre.png" alt="Mercado Livre"></div>
+            <div class="camp-logo camp-logo-img camp-logo-fill"><img src="logo_mercadolivre.png" alt="Mercado Livre"></div>
             <div>
               <div class="camp-ch-name">Mercado Livre</div>
               <div class="camp-ch-type">ML Product Ads</div>
