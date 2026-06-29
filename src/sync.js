@@ -10,7 +10,7 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setAmazonBackoff, getAmazonBackoff, setAmazonBRBackoff, getAmazonBRBackoff, setMlAdCosts } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -22,7 +22,7 @@ function defaultWindow(days = 60) {
 
 export async function runSync() {
   const { since, until } = defaultWindow();
-  const { since: since90 } = defaultWindow(90); // Amazon usa 90 dias (pedidos mais antigos)
+  const { since: since30 } = defaultWindow(30); // Amazon usa 30 dias (janela menor = menos risco de paginação)
   const report = { shopify: 0, shopify_us: 0, shopee: 0, mercadolivre: 0, amazon: 0, amazon_br: 0, meta: 0, sessions: 0, errors: [] };
 
   // Shopify — pedidos
@@ -104,39 +104,26 @@ export async function runSync() {
   } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
 
   // Amazon BR — SP-API South America (A2Q3Y263D00KWC)
+  // Backoff exponencial gerenciado internamente por amazon.js; sync.js só chama e grava.
   try {
     if (amazon.isConfiguredBR() && amazon.hasAwsCreds()) {
-      const backoffUntil = getAmazonBRBackoff();
-      if (backoffUntil > Date.now()) {
-        const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
-        report.amazon_br_skipped = `próximo sync em ~${mins} min`;
-      } else {
-        const orders = await amazon.fetchOrdersBR(since90, until);
-        upsertOrders(orders);
-        report.amazon_br = orders.length;
-        setAmazonBRBackoff(Date.now() + 60 * 60 * 1000);
-      }
+      const orders = await amazon.fetchOrdersBR(since30, until);
+      upsertOrders(orders);
+      report.amazon_br = orders.length;
     }
   } catch (e) { report.errors.push('amazon_br.orders: ' + e.message); }
 
-  // Amazon EUA SP-API — intervalo mínimo de 1h entre syncs (rate limit da SP-API)
+  // Amazon EUA — SP-API North America (ATVPDKIKX0DER)
+  // Backoff exponencial gerenciado internamente por amazon.js; sync.js só chama e grava.
   try {
     if (!amazon.isConfigured()) {
       report.errors.push('amazon: credenciais LWA ausentes (AMAZON_CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN)');
     } else if (!amazon.hasAwsCreds()) {
       report.errors.push('amazon: credenciais AWS ausentes (AMAZON_AWS_ACCESS_KEY / AMAZON_AWS_SECRET_KEY)');
     } else {
-      const backoffUntil = getAmazonBackoff();
-      if (backoffUntil > Date.now()) {
-        const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
-        console.log(`Amazon: aguardando intervalo de 1h — próximo sync em ~${mins} min`);
-        report.amazon_skipped = `próximo sync em ~${mins} min`;
-      } else {
-        const orders = await amazon.fetchOrders(since90, until);
-        upsertOrders(orders);
-        report.amazon = orders.length;
-        setAmazonBackoff(Date.now() + 60 * 60 * 1000);
-      }
+      const orders = await amazon.fetchOrders(since30, until);
+      upsertOrders(orders);
+      report.amazon = orders.length;
     }
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
 

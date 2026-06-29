@@ -29,6 +29,8 @@ const EMPTY = {
   mlTokens: null,
   mlAdCosts: null,
   lastSync: null,
+  amazonBackoffCount: 0,
+  amazonBRBackoffCount: 0,
 };
 
 let cache = null;
@@ -56,8 +58,10 @@ export async function initStore() {
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
-      if (r.key === 'amazonBackoff')        cache.amazonBackoff        = Number(r.value);
-      if (r.key === 'amazonBRBackoff')      cache.amazonBRBackoff      = Number(r.value);
+      if (r.key === 'amazonBackoff')         cache.amazonBackoff         = Number(r.value);
+      if (r.key === 'amazonBRBackoff')       cache.amazonBRBackoff       = Number(r.value);
+      if (r.key === 'amazonBackoffCount')    cache.amazonBackoffCount    = Number(r.value);
+      if (r.key === 'amazonBRBackoffCount')  cache.amazonBRBackoffCount  = Number(r.value);
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -203,3 +207,15 @@ export function setAmazonBRBackoff(until) {
   if (USE_PG) pgKv('amazonBRBackoff', until);
 }
 export function getAmazonBRBackoff() { return load().amazonBRBackoff || 0; }
+
+export function setAmazonBackoffCount(count) {
+  const db = load(); db.amazonBackoffCount = count; saveJson();
+  if (USE_PG) pgKv('amazonBackoffCount', count);
+}
+export function getAmazonBackoffCount() { return load().amazonBackoffCount || 0; }
+
+export function setAmazonBRBackoffCount(count) {
+  const db = load(); db.amazonBRBackoffCount = count; saveJson();
+  if (USE_PG) pgKv('amazonBRBackoffCount', count);
+}
+export function getAmazonBRBackoffCount() { return load().amazonBRBackoffCount || 0; }

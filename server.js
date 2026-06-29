@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard } from './src/metrics.js';
 import { runSync } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, load } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -39,9 +39,10 @@ app.post('/api/amazon/reset-backoff', (req, res) => {
   res.json({ ok: true, message: msg });
 });
 
-// Force-sync da Amazon: zera backoff e sincroniza imediatamente (sem race com o timer)
+// Force-sync da Amazon: zera backoff + contador exponencial e sincroniza imediatamente (sem race com o timer)
 app.post('/api/amazon/force-sync', async (_req, res) => {
   setAmazonBackoff(0);
+  setAmazonBackoffCount(0);
   const report = await runSync();
   res.json(report);
 });
@@ -56,9 +57,10 @@ app.post('/api/amazon-br/reset-backoff', (req, res) => {
   res.json({ ok: true, message: msg });
 });
 
-// Force-sync da Amazon BR: zera backoff e sincroniza imediatamente.
+// Force-sync da Amazon BR: zera backoff + contador exponencial e sincroniza imediatamente.
 app.post('/api/amazon-br/force-sync', async (_req, res) => {
   setAmazonBRBackoff(0);
+  setAmazonBRBackoffCount(0);
   const report = await runSync();
   res.json(report);
 });
