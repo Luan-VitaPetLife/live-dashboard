@@ -48,12 +48,14 @@ app.post('/api/amazon/force-sync', async (_req, res) => {
 });
 
 
-// Reset do backoff da Amazon BR.
+// Reset do backoff da Amazon BR. (US e BR compartilham o mesmo balde de cota desde
+// a chamada combinada — então reseta os dois para destravar de fato.)
 app.post('/api/amazon-br/reset-backoff', (req, res) => {
   const delay = Number(req.query.delay || 0);
   const until = delay > 0 ? Date.now() + delay * 60 * 1000 : 0;
   setAmazonBRBackoff(until);
-  const msg = until ? `Backoff Amazon BR definido para ${new Date(until).toISOString()}` : 'Backoff Amazon BR zerado.';
+  setAmazonBackoff(until);
+  const msg = until ? `Backoff Amazon definido para ${new Date(until).toISOString()}` : 'Backoff Amazon zerado.';
   res.json({ ok: true, message: msg });
 });
 
@@ -61,6 +63,8 @@ app.post('/api/amazon-br/reset-backoff', (req, res) => {
 app.post('/api/amazon-br/force-sync', async (_req, res) => {
   setAmazonBRBackoff(0);
   setAmazonBRBackoffCount(0);
+  setAmazonBackoff(0);
+  setAmazonBackoffCount(0);
   const report = await runSync();
   res.json(report);
 });
@@ -134,12 +138,14 @@ app.get('/api/status', (_req, res) => {
       nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
     },
     amazon_br: {
+      // US e BR usam o mesmo app/token e o mesmo balde de cota (chamada combinada).
       configured:  amazon.isConfiguredBR(),
-      hasLwa:      has('AMAZON_BR_CLIENT_ID') && has('AMAZON_BR_CLIENT_SECRET') && has('AMAZON_BR_REFRESH_TOKEN'),
+      hasLwa:      has('AMAZON_CLIENT_ID') && has('AMAZON_CLIENT_SECRET') && has('AMAZON_REFRESH_TOKEN'),
       hasAwsCreds: has('AMAZON_AWS_ACCESS_KEY') && has('AMAZON_AWS_SECRET_KEY'),
-      backoffActive: backoffBRActive,
-      backoffUntil:  backoffBRActive ? new Date(backoffBRUntil).toISOString() : null,
-      nextSyncIn:    backoffBRActive ? `${Math.ceil((backoffBRUntil - Date.now()) / 60000)} min` : 'agora',
+      sharedWithUs:  true,
+      backoffActive, // mesmo backoff da US
+      backoffUntil:  backoffActive ? new Date(backoffUntil).toISOString() : null,
+      nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
     },
     meta: {
       br: { configured: meta.isConfigured(), hasToken: has('META_ACCESS_TOKEN'), hasAccount: has('META_AD_ACCOUNT_ID') },

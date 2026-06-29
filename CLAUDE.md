@@ -110,31 +110,38 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   Retorna zeros graciosamente se 403. Para ativar: re-autorizar via `/mercadolivre/connect` com escopo de ads.
 - `mlBreakdown` exposto em `metrics.js`: `{ organic, premium, adCost, adClicks, roas }`.
 
-### 4.7 Amazon SP-API (EUA + BR)
+### 4.7 Amazon SP-API (EUA + BR) — UM app, UMA chamada combinada
 - Implementado em `src/amazon.js`. Sem dependências externas (SigV4 e HMAC via `crypto` nativo do Node).
-- **Fluxo de autenticação (igual para US e BR):**
-  1. LWA token via `https://api.amazon.com/auth/o2/token` (refresh_token grant) — getter separado por mercado via `makeLwaGetter()`
-  2. STS AssumeRole em `https://sts.amazonaws.com/` usando AWS IAM User credentials (SigV4) — **compartilhado entre US e BR**
-  3. Credenciais temporárias do role usadas para assinar chamadas ao SP-API (SigV4 + `x-amz-access-token`)
-- **Endpoints e marketplace IDs:**
-  - EUA: `sellingpartnerapi-na.amazon.com` · Marketplace `ATVPDKIKX0DER`
-  - BR: `sellingpartnerapi-sa.amazon.com` · Marketplace `A2Q3Y263D00KWC`
-- **Funções exportadas:** `fetchOrders()` (US) e `fetchOrdersBR()` (BR). `isConfigured()` e `isConfiguredBR()` verificam credenciais por mercado.
-- **Restrição SP-API:** `CreatedBefore` deve ser pelo menos 2 min antes do momento atual — código já aplica margem de 3 min.
-- **Rate limit / backoff:** intervalo mínimo de **1h** entre syncs por mercado (aplicado após sucesso E após 429).
-  - Backoff US: `kv` chave `amazonBackoff`. Backoff BR: `kv` chave `amazonBRBackoff`. Independentes entre si.
-  - Endpoints de controle (US): `POST /api/amazon/reset-backoff` e `POST /api/amazon/force-sync`.
-- Sem `AMAZON_AWS_ACCESS_KEY` / `AMAZON_AWS_SECRET_KEY` → ambos retornam `[]` com aviso no console, nada quebra.
-- **IDs de pedido:** prefixo `amazon-us:` para pedidos EUA e `amazon-br:` para pedidos BR (evita colisão de IDs).
-- Pedidos Amazon: `channel: 'amazon'`, `market: 'us'` ou `'br'`, sem items detalhados (requer chamada extra ao SP-API).
+- **FATO CRÍTICO (verificado via `/sellers/v1/marketplaceParticipations`):** o **mesmo** app/refresh-token
+  (`AMAZON_CLIENT_ID/SECRET/REFRESH_TOKEN`) está autorizado para **US (`ATVPDKIKX0DER`) E BR (`A2Q3Y263D00KWC`)**.
+  Não existem mais credenciais BR separadas. `AMAZON_BR_*` foi abandonado. `isConfiguredBR()` === `isConfigured()`.
+- **Endpoint único:** `sellingpartnerapi-na.amazon.com` (região NA) serve **os dois** marketplaces (BR é região NA, não SA).
+- **Chamada COMBINADA (a correção do bug "Amazon US nunca aparecia"):** uma única requisição a `/orders/v0/orders`
+  com `MarketplaceIds=ATVPDKIKX0DER,A2Q3Y263D00KWC`. Cada pedido traz seu próprio `MarketplaceId` → separado por
+  `MARKET_BY_MP` em US (`channel: 'amazon_us'`, `market: 'us'`) e BR (`channel: 'amazon'`, `market: 'br'`).
+  - **Por que combinar:** a cota da Orders API (~0,0167 req/s, balde compartilhado por app/conta) era drenada pela
+    BR (que rodava primeiro no `sync.js`); a US vinha logo depois e levava 429 → backoff escalante → **US nunca ganhava a vez**.
+    Uma chamada só elimina a competição e usa metade da cota.
+- **Fluxo de autenticação:** 1) LWA token (`getLwaToken`) · 2) STS AssumeRole (IAM User, compartilhado) · 3) SigV4 + `x-amz-access-token`.
+- **Funções exportadas:** `fetchOrders(since, until)` devolve **US+BR juntos**. `fetchOrdersBR()` é no-op (compat) — BR já vem no `fetchOrders`.
+- **RDT (nome do comprador):** desativado por padrão — o app não tem o papel PII (retornava 403 e gastava requisição).
+  Reative com `AMAZON_FETCH_PII=1` só se o papel for aprovado.
+- **Restrição SP-API:** `CreatedBefore` ≥ 2 min antes de agora — código aplica margem de 3 min.
+- **Backoff (balde ÚNICO `kv.amazonBackoff`):** só dispara em 429; degraus 15→30→60→120 min; contador zera após sucesso.
+  Reset/force via `POST /api/amazon/{reset-backoff,force-sync}` (os `/api/amazon-br/*` também resetam o balde compartilhado).
+  - **⚠️ Se levar 429 mesmo combinado:** a cota da conta pode estar penalizada por excesso sustentado de chamadas. A cura é
+    PARAR de martelar (deixar o backoff agir, não usar force-sync em loop) e esperar a cota se restaurar — NÃO remover o backoff.
+- Sem `AMAZON_AWS_ACCESS_KEY` / `SECRET_KEY` → retorna `[]` com aviso, nada quebra.
+- **IDs de pedido:** `amazon-us:` (EUA) e `amazon-br:` (BR) — evita colisão.
 
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
 - Pedidos legados no banco (sem campo `market`) são inferidos como `'br'`.
 - Canal `shopify_us` implica `market: 'us'`.
 - `computeDashboard({ market })` separa tudo: byChannel, sessões, pedidos recentes.
-- `byChannel` BR: `{ shopify, shopee, amazon, mercadolivre }`. US: `{ shopify_us, amazon }`.
-- Pedidos Amazon BR (`channel: 'amazon'`, `market: 'br'`) aparecem naturalmente no byChannel BR junto com os outros canais.
+- `byChannel` BR: `{ shopify, shopee, amazon, mercadolivre }`. US: `{ shopify_us, amazon_us }`.
+- Pedidos Amazon BR (`channel: 'amazon'`, `market: 'br'`) aparecem no byChannel BR; Amazon US usa `channel: 'amazon_us'`.
+  **Atenção:** o canal US é `amazon_us` em TODO lugar (amazon.js, metrics.js byChannel, `CHAN`/`DEFAULT_CH`, dropdown, chOrder). Não misturar com `amazon`.
 - `getOrders({ market })` em store.js filtra corretamente legacy + novos pedidos.
 
 ### 4.9 Canais e UI — `public/index.html`

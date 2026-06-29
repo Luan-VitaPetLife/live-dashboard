@@ -103,17 +103,9 @@ export async function runSync() {
     }
   } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
 
-  // Amazon BR — SP-API South America (A2Q3Y263D00KWC)
-  // Backoff exponencial gerenciado internamente por amazon.js; sync.js só chama e grava.
-  try {
-    if (amazon.isConfiguredBR() && amazon.hasAwsCreds()) {
-      const orders = await amazon.fetchOrdersBR(since30, until);
-      upsertOrders(orders);
-      report.amazon_br = orders.length;
-    }
-  } catch (e) { report.errors.push('amazon_br.orders: ' + e.message); }
-
-  // Amazon EUA — SP-API North America (ATVPDKIKX0DER)
+  // Amazon US + BR — SP-API North America, chamada ÚNICA combinada (ATVPDKIKX0DER + A2Q3Y263D00KWC).
+  // Mesmo app/token cobre os dois marketplaces; cada pedido traz seu MarketplaceId e é separado
+  // por amazon.js. Isso usa metade da cota e elimina a US ser "roubada" pela BR.
   // Backoff exponencial gerenciado internamente por amazon.js; sync.js só chama e grava.
   try {
     if (!amazon.isConfigured()) {
@@ -123,7 +115,8 @@ export async function runSync() {
     } else {
       const orders = await amazon.fetchOrders(since30, until);
       upsertOrders(orders);
-      report.amazon = orders.length;
+      report.amazon    = orders.filter(o => o.market === 'us').length;
+      report.amazon_br = orders.filter(o => o.market === 'br').length;
     }
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
 

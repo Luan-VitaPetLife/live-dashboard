@@ -140,7 +140,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 
   // split por canal (receita real por canal; canais sem dados ficam 0)
   const byChannel = market === 'us'
-    ? { shopify_us: 0, amazon: 0 }
+    ? { shopify_us: 0, amazon_us: 0 }
     : { shopify: 0, shopee: 0, amazon: 0, mercadolivre: 0 };
   getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o)).forEach(o => { byChannel[o.channel] = (byChannel[o.channel] || 0) + o.total; });
 

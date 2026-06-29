@@ -9,9 +9,7 @@ import 'dotenv/config';
 import crypto from 'crypto';
 import {
   getAmazonBackoff,       setAmazonBackoff,
-  getAmazonBRBackoff,     setAmazonBRBackoff,
   getAmazonBackoffCount,  setAmazonBackoffCount,
-  getAmazonBRBackoffCount, setAmazonBRBackoffCount,
 } from './store.js';
 
 const FETCH_TIMEOUT_MS = 20000; // 20s — evita travamento indefinido
@@ -47,20 +45,25 @@ const REFRESH_TOKEN  = process.env.AMAZON_REFRESH_TOKEN;
 const MARKETPLACE_ID = 'ATVPDKIKX0DER';           // Amazon.com US
 const SP_HOST        = 'sellingpartnerapi-na.amazon.com';
 
-// Brasil — Client ID e Secret fazem fallback para US se não definidos separadamente
-const CLIENT_ID_BR      = process.env.AMAZON_BR_CLIENT_ID     || process.env.AMAZON_CLIENT_ID;
-const CLIENT_SECRET_BR  = process.env.AMAZON_BR_CLIENT_SECRET || process.env.AMAZON_CLIENT_SECRET;
-const REFRESH_TOKEN_BR  = process.env.AMAZON_BR_REFRESH_TOKEN;
+// Brasil — mesmo app/conta da US (autorização única cobre os dois marketplaces).
 const MARKETPLACE_ID_BR = 'A2Q3Y263D00KWC';        // Amazon.com.br (região NA)
-const SP_HOST_BR        = 'sellingpartnerapi-na.amazon.com';
+
+// Mapa MarketplaceId → mercado/canal. Cada pedido da Orders API traz seu MarketplaceId,
+// então uma única chamada combinada (US+BR) é separada por aqui.
+const MARKET_BY_MP = {
+  [MARKETPLACE_ID]:    { market: 'us', channel: 'amazon_us' },
+  [MARKETPLACE_ID_BR]: { market: 'br', channel: 'amazon' },
+};
+const ALL_MARKETPLACE_IDS = `${MARKETPLACE_ID},${MARKETPLACE_ID_BR}`;
 
 // Compartilhado (mesmo IAM user/role para US e BR)
 const ROLE_ARN       = process.env.AMAZON_ROLE_ARN;
 const AWS_ACCESS_KEY = process.env.AMAZON_AWS_ACCESS_KEY;
 const AWS_SECRET_KEY = process.env.AMAZON_AWS_SECRET_KEY;
 
-export function isConfigured()   { return Boolean(CLIENT_ID    && CLIENT_SECRET    && REFRESH_TOKEN); }
-export function isConfiguredBR() { return Boolean(CLIENT_ID_BR && CLIENT_SECRET_BR && REFRESH_TOKEN_BR); }
+export function isConfigured()   { return Boolean(CLIENT_ID && CLIENT_SECRET && REFRESH_TOKEN); }
+// Mantido por compatibilidade: a US e a BR usam o mesmo app/token (uma autorização cobre ambos).
+export function isConfiguredBR() { return isConfigured(); }
 export function hasAwsCreds()    { return Boolean(AWS_ACCESS_KEY && AWS_SECRET_KEY); }
 
 // ── Backoff exponencial (somente em 429) ─────────────────────────────────────
@@ -131,8 +134,7 @@ function makeLwaGetter(clientId, secret, refreshToken, label) {
   };
 }
 
-const getLwaToken   = makeLwaGetter(CLIENT_ID,    CLIENT_SECRET,    REFRESH_TOKEN,    '(US)');
-const getLwaTokenBR = makeLwaGetter(CLIENT_ID_BR, CLIENT_SECRET_BR, REFRESH_TOKEN_BR, '(BR)');
+const getLwaToken = makeLwaGetter(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, '(Amazon)');
 
 // ── STS AssumeRole ─────────────────────────────────────────────────────────────
 let roleCache = null;
@@ -223,25 +225,22 @@ async function spGet(host, getLwa, path, params = {}, onRateLimit, lwaOverride =
 }
 
 
-// ── fetchOrders genérico ───────────────────────────────────────────────────────
-async function _fetchOrders({
-  sinceISO, untilISO,
-  host, marketplaceId, getLwa,
-  market,
-  getBackoff, setBackoff,
-  getCount,   setCount,
-  label,
-}) {
+// ── fetchAllOrders — uma única chamada combinada para US + BR ────────────────────
+// A Orders API aceita vários MarketplaceIds num request só. Cada pedido traz seu
+// próprio MarketplaceId, então separamos US/BR no retorno. Isso usa metade da cota
+// (um único balde de rate limit compartilhado) e elimina a competição BR-vs-US.
+async function fetchAllOrders(sinceISO, untilISO) {
+  if (!isConfigured()) return [];
   if (!hasAwsCreds()) {
-    console.warn(`Amazon ${label}: AWS creds ausentes — configure AMAZON_AWS_ACCESS_KEY / SECRET_KEY.`);
+    console.warn('Amazon: AWS creds ausentes — configure AMAZON_AWS_ACCESS_KEY / SECRET_KEY.');
     return [];
   }
 
-  // Verificar backoff ativo antes de qualquer request
-  const backoffUntil = getBackoff();
+  // Verificar backoff ativo antes de qualquer request (balde único compartilhado)
+  const backoffUntil = getAmazonBackoff();
   if (backoffUntil > Date.now()) {
     const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
-    console.log(`Amazon ${label}: em backoff por mais ${mins} min — pulando este sync.`);
+    console.log(`Amazon: em backoff por mais ${mins} min — pulando este sync.`);
     return [];
   }
 
@@ -249,27 +248,30 @@ async function _fetchOrders({
     new Date(`${untilISO}T23:59:59Z`).getTime(),
     Date.now() - 3 * 60 * 1000, // SP-API exige CreatedBefore ≥ 2 min antes de agora
   )).toISOString();
-  console.log(`Amazon ${label}: buscando pedidos ${sinceISO} → ${safeUntil.slice(0, 16)}`);
+  console.log(`Amazon: buscando pedidos US+BR ${sinceISO} → ${safeUntil.slice(0, 16)}`);
 
   // Callback acionado pelo spGet ao receber HTTP 429
   const onRateLimit = () => {
-    const count = getCount();
+    const count = getAmazonBackoffCount();
     const delay = backoffDelayMs(count);
     const until = Date.now() + delay;
-    setCount(count + 1);
-    setBackoff(until);
-    console.warn(`Amazon ${label}: rate limit 429 (tentativa ${count + 1}) — backoff ${delay / 60000} min até ${new Date(until).toISOString()}`);
+    setAmazonBackoffCount(count + 1);
+    setAmazonBackoff(until);
+    console.warn(`Amazon: rate limit 429 (tentativa ${count + 1}) — backoff ${delay / 60000} min até ${new Date(until).toISOString()}`);
   };
 
-  // Obter RDT para campos PII (BuyerName). Falha não é fatal.
-  const rdt = await getRestrictedDataToken(host, getLwa, '/orders/v0/orders', ['buyerInfo']).catch(() => null);
+  // RDT (nome do comprador) é opcional: o app não tem o papel PII (retorna 403) e a
+  // chamada só gasta requisição. Ative com AMAZON_FETCH_PII=1 se um dia o papel for aprovado.
+  const rdt = process.env.AMAZON_FETCH_PII === '1'
+    ? await getRestrictedDataToken(SP_HOST, getLwaToken, '/orders/v0/orders', ['buyerInfo']).catch(() => null)
+    : null;
 
   const out = [];
   let nextToken = null;
 
   do {
     const params = {
-      MarketplaceIds:    marketplaceId,
+      MarketplaceIds:    ALL_MARKETPLACE_IDS,
       CreatedAfter:      `${sinceISO}T00:00:00Z`,
       CreatedBefore:     safeUntil,
       MaxResultsPerPage: 100,
@@ -281,13 +283,15 @@ async function _fetchOrders({
       delete params.CreatedBefore;
     }
 
-    const data   = await spGet(host, getLwa, '/orders/v0/orders', params, onRateLimit, rdt);
+    const data   = await spGet(SP_HOST, getLwaToken, '/orders/v0/orders', params, onRateLimit, rdt);
     const orders = data.payload?.Orders || [];
 
     for (const o of orders) {
+      // Separa US/BR pelo MarketplaceId do próprio pedido (default US se ausente)
+      const { market, channel } = MARKET_BY_MP[o.MarketplaceId] || MARKET_BY_MP[MARKETPLACE_ID];
       out.push({
         id:        `amazon-${market}:` + o.AmazonOrderId,
-        channel: market === 'us' ? 'amazon_us' : 'amazon',
+        channel,
         market,
         name:      '#' + o.AmazonOrderId,
         createdAt: o.PurchaseDate,
@@ -311,34 +315,17 @@ async function _fetchOrders({
   } while (nextToken);
 
   // Sync bem-sucedido: resetar contador de backoff exponencial
-  setCount(0);
+  setAmazonBackoffCount(0);
   return out;
 }
 
 // ── Exports públicos ───────────────────────────────────────────────────────────
-
+// Uma única chamada traz US e BR. fetchOrders devolve tudo; fetchOrdersBR é mantido
+// como no-op por compatibilidade (sync.js agora usa só fetchOrders).
 export async function fetchOrders(sinceISO, untilISO) {
-  if (!isConfigured()) return [];
-  return _fetchOrders({
-    sinceISO, untilISO,
-    host: SP_HOST, marketplaceId: MARKETPLACE_ID,
-    getLwa: getLwaToken,
-    market: 'us',
-    getBackoff: getAmazonBackoff,       setBackoff: setAmazonBackoff,
-    getCount:   getAmazonBackoffCount,  setCount:   setAmazonBackoffCount,
-    label: '(US)',
-  });
+  return fetchAllOrders(sinceISO, untilISO);
 }
 
-export async function fetchOrdersBR(sinceISO, untilISO) {
-  if (!isConfiguredBR()) return [];
-  return _fetchOrders({
-    sinceISO, untilISO,
-    host: SP_HOST_BR, marketplaceId: MARKETPLACE_ID_BR,
-    getLwa: getLwaTokenBR,
-    market: 'br',
-    getBackoff: getAmazonBRBackoff,       setBackoff: setAmazonBRBackoff,
-    getCount:   getAmazonBRBackoffCount,  setCount:   setAmazonBRBackoffCount,
-    label: '(BR)',
-  });
+export async function fetchOrdersBR() {
+  return []; // BR já vem incluído em fetchOrders (chamada combinada)
 }

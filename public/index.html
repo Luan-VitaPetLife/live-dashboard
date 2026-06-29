@@ -451,6 +451,7 @@ const DEFAULT_CH = {
   shopee:       { bg:'#EE4D2D', label:'Shopee' },
   mercadolivre: { bg:'#FFE600', label:'Mercado Livre' },
   amazon:       { bg:'#111111', label:'Amazon' },
+  amazon_us:    { bg:'#FF9900', label:'Amazon US' },
 };
 const DEFAULT_MKT = {
   Instagram:      '#E1306C',
@@ -604,7 +605,7 @@ function showTrendDrilldown(label, val, byChannel, money, metric) {
 }
 
 // ── App state ──
-const CHAN = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre', shopify_us:'Shopify US' };
+const CHAN = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', amazon_us:'Amazon US', mercadolivre:'Mercado Livre', shopify_us:'Shopify US' };
 const MARKET_CHANNELS = {
   br: [
     { value:'todos',         label:'Todos' },
@@ -711,14 +712,14 @@ function render(d) {
   }
   // Card de marketing — títulos e nota adaptados por canal
   { const ch = d.channel;
-    const isMkt = ['shopee','mercadolivre','amazon'].includes(ch);
+    const isMkt = ['shopee','mercadolivre','amazon','amazon_us'].includes(ch);
     document.getElementById('mktTitle').textContent = ch === 'mercadolivre' ? 'Distribuição por tipo' : 'Marketing por origem';
     document.getElementById('mktSub').textContent   = ch === 'mercadolivre' ? 'Clássico vs Destaque' : isMkt ? 'Receita do canal' : 'Receita atribuída';
     document.getElementById('mktCenterSub').textContent = ch === 'mercadolivre' ? 'Total ML' : isMkt ? 'Total' : 'Atribuída';
     document.getElementById('mktNote').textContent =
       ch === 'mercadolivre' ? 'Clássico = listagem grátis · Destaque = listagem paga' :
       ch === 'shopee'       ? 'Receita orgânica da Shopee · Ads em breve' :
-      ch === 'amazon'       ? 'Receita orgânica da Amazon · Ads em breve' :
+      (ch === 'amazon' || ch === 'amazon_us') ? 'Receita orgânica da Amazon · Ads em breve' :
       k.adCost > 0          ? 'Meta Ads conectado · Google Ads em breve' : 'Meta Ads conectado · sincronize para ver os dados';
   }
   document.getElementById('kpiConv').textContent = (k.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
@@ -755,7 +756,7 @@ function render(d) {
   // Channel split
   const cs = d.channelSplit;
   const chOrder = d.market === 'us'
-    ? [['shopify_us','Shopify US'],['amazon','Amazon']]
+    ? [['shopify_us','Shopify US'],['amazon_us','Amazon US']]
     : [['shopify','Shopify'],['shopee','Shopee'],['mercadolivre','Mercado Livre'],['amazon','Amazon']];
   const cTotal = chOrder.reduce((a,[k]) => a+(cs[k]||0), 0);
   drawDonut('channelChart', chOrder.map(([k])=>cs[k]||0), chOrder.map(([k])=>CH[k]?.bg||'#999'));
@@ -846,7 +847,7 @@ function statusTag(o) {
 function updateCardVisibility() {
   const isTodos = channel === 'todos';
   const isShopify = channel === 'shopify' || channel === 'shopify_us';
-  const isMarketplace = ['shopee', 'mercadolivre', 'amazon'].includes(channel);
+  const isMarketplace = ['shopee', 'mercadolivre', 'amazon', 'amazon_us'].includes(channel);
   const show = (id, visible) => { const el = document.getElementById(id); if (el) el.style.display = visible ? '' : 'none'; };
 
   show('cardChannelSplit', isTodos);
