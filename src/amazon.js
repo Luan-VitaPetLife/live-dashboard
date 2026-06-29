@@ -226,7 +226,7 @@ export async function fetchOrdersBR(sinceISO, untilISO) {
   return _fetchOrders({ sinceISO, untilISO, host: SP_HOST_BR, marketplaceId: MARKETPLACE_ID_BR, getLwa: getLwaTokenBR, market: 'br', getBackoff: getAmazonBRBackoff, setBackoff: setAmazonBRBackoff, label: '(BR)' });
 }
 
-// ── Diagnóstico passo a passo ───────────────────
+// ── Diagnóstico passo a passo (temporário — remover após resolver throttle) ──
 export async function diagAmazonUS() {
   const result = { lwa: null, sts: null, participations: null, orders7d: null };
 
