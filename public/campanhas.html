@@ -107,6 +107,8 @@
   .camp-card-main{display:flex;align-items:center;gap:0;padding:0}
   .camp-ch-id{display:flex;align-items:center;gap:12px;padding:16px 20px;min-width:210px;flex-shrink:0;border-right:1px solid var(--border)}
   .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
+  .camp-logo-img{background:#fff;border:1px solid var(--border);padding:5px}
+  .camp-logo-img img{width:100%;height:100%;object-fit:contain;display:block}
   .camp-ch-name{font-size:13px;font-weight:600;color:var(--text)}
   .camp-ch-type{font-size:10px;color:var(--muted);margin-top:2px}
   .camp-kpi-col{padding:16px 20px;min-width:140px;flex-shrink:0;border-right:1px solid var(--border)}
@@ -134,7 +136,7 @@
   .camp-expand-inner{padding:16px 20px 20px}
   .camp-expand-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px}
   .camp-expand-title{font-size:12px;font-weight:600;color:var(--sub)}
-  .camp-compare-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .camp-compare-wrap{display:none}
   .camp-compare-label{font-size:10px;color:var(--muted);white-space:nowrap}
   .camp-cmp-check{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);cursor:pointer;padding:4px 10px;border-radius:12px;border:1px solid var(--border2);background:var(--surface);transition:all .12s;user-select:none}
   .camp-cmp-check:hover{border-color:var(--ink);color:var(--text)}
@@ -234,9 +236,9 @@
         <div class="kc-sub" id="kpiSalesSub">—</div>
       </div>
       <div class="kpi-cell">
-        <div class="kc-label">Ticket Médio</div>
+        <div class="kc-label">Cliques (Ads)</div>
         <div class="kc-value" id="kpiTicket">—</div>
-        <div class="kc-sub" id="kpiTicketSub">pedidos via campanha</div>
+        <div class="kc-sub" id="kpiTicketSub">cliques Meta no período</div>
       </div>
       <div class="kpi-cell">
         <div class="kc-label">ROAS Geral</div>
@@ -252,7 +254,7 @@
       <div class="camp-card ch-br" id="card-ml">
         <div class="camp-card-main">
           <div class="camp-ch-id">
-            <div class="camp-logo" style="background:#FFE600;color:#1a1916">ML</div>
+            <div class="camp-logo camp-logo-img"><img src="logo_mercadolivre.png" alt="Mercado Livre"></div>
             <div>
               <div class="camp-ch-name">Mercado Livre</div>
               <div class="camp-ch-type">ML Product Ads</div>
@@ -265,8 +267,8 @@
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">Faturamento total</div>
-            <div class="camp-kpi-val" id="ml-revenue">R$ 28.660</div>
-            <div class="camp-kpi-sub">31% via campanha</div>
+            <div class="camp-kpi-val" id="ml-revenue">—</div>
+            <div class="camp-kpi-sub">receita total do canal</div>
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">ROAS</div>
@@ -314,7 +316,7 @@
       <div class="camp-card ch-br" id="card-meta_br">
         <div class="camp-card-main">
           <div class="camp-ch-id">
-            <div class="camp-logo" style="background:#1877F2;color:#fff;font-size:20px"><i class="bi bi-meta"></i></div>
+            <div class="camp-logo camp-logo-img"><img src="logo_meta.png" alt="Meta"></div>
             <div>
               <div class="camp-ch-name">Meta Ads</div>
               <div class="camp-ch-type">Instagram · Facebook</div>
@@ -375,7 +377,7 @@
       <div class="camp-card ch-br" id="card-shopee">
         <div class="camp-card-main">
           <div class="camp-ch-id">
-            <div class="camp-logo" style="background:#EE4D2D;color:#fff">S</div>
+            <div class="camp-logo camp-logo-img"><img src="logo_shopee.svg" alt="Shopee"></div>
             <div>
               <div class="camp-ch-name">Shopee</div>
               <div class="camp-ch-type">Shopee Ads</div>
@@ -388,8 +390,8 @@
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">Faturamento total</div>
-            <div class="camp-kpi-val" id="shopee-revenue">R$ 8.335</div>
-            <div class="camp-kpi-sub">32% via campanha</div>
+            <div class="camp-kpi-val" id="shopee-revenue">—</div>
+            <div class="camp-kpi-sub">receita total do canal</div>
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">ROAS</div>
@@ -437,7 +439,7 @@
       <div class="camp-card ch-us" id="card-meta_us">
         <div class="camp-card-main">
           <div class="camp-ch-id">
-            <div class="camp-logo" style="background:#1877F2;color:#fff;font-size:20px"><i class="bi bi-meta"></i></div>
+            <div class="camp-logo camp-logo-img"><img src="logo_meta.png" alt="Meta"></div>
             <div>
               <div class="camp-ch-name">Meta Ads</div>
               <div class="camp-ch-type">Instagram · Facebook</div>
@@ -494,7 +496,7 @@
       <div class="camp-card ch-us" id="card-amazon">
         <div class="camp-card-main">
           <div class="camp-ch-id">
-            <div class="camp-logo" style="background:#232F3E;color:#FF9900;font-size:16px;letter-spacing:0">a›</div>
+            <div class="camp-logo camp-logo-img"><img src="logo_amazon.webp" alt="Amazon"></div>
             <div>
               <div class="camp-ch-name">Amazon</div>
               <div class="camp-ch-type">Sponsored Products</div>
@@ -507,8 +509,8 @@
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">Faturamento total</div>
-            <div class="camp-kpi-val" id="amazon-revenue">$ 7.628</div>
-            <div class="camp-kpi-sub">50% via campanha</div>
+            <div class="camp-kpi-val" id="amazon-revenue">—</div>
+            <div class="camp-kpi-sub">receita total do canal</div>
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">ROAS</div>
@@ -551,72 +553,42 @@
     </div><!-- /camp-grid -->
   </div><!-- /content -->
 
-  <footer>Página visual (dados mockados) — backend será integrado após aprovação do layout</footer>
+  <footer>Dados reais via API. Gasto de Ads disponível para Meta (BR/US). Mercado Livre Ads requer autorização de Mercado Ads; Shopee e Amazon Ads não expõem gasto via API.</footer>
 </div><!-- /main -->
 
 <script>
-// ── Dados mockados (30 dias até 29/06/2026) ───────────────
-const LABELS = (() => {
-  const arr = [];
-  const base = new Date(2026, 5, 29);
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(base);
-    d.setDate(d.getDate() - i);
-    arr.push(d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
-  }
-  return arr;
-})();
-
-const DATA = {
-  ml: {
-    organic:  [580,620,490,710,680,520,600,750,640,580,700,630,550,820,690,610,740,660,580,770,630,590,680,720,540,810,670,620,750,700],
-    campaign: [220,280,190,340,310,240,290,380,310,250,320,290,230,410,340,280,360,300,250,390,280,260,310,340,210,390,310,280,350,320],
-    spend:    [55,68,47,82,76,58,72,94,77,62,79,71,57,102,84,69,89,74,62,97,70,64,77,84,52,97,77,69,87,79],
-  },
-  meta_br: {
-    organic:  Array(30).fill(0),
-    campaign: [420,550,380,690,610,470,540,720,610,480,650,580,440,800,670,530,700,590,480,740,550,500,620,660,420,770,600,540,700,640],
-    spend:    [105,118,92,140,132,108,122,145,130,110,135,124,100,148,138,115,142,126,108,145,120,112,134,138,98,145,128,116,140,130],
-  },
-  shopee: {
-    organic:  [145,185,120,235,215,155,180,252,216,154,220,190,140,270,230,170,244,204,154,254,175,162,202,230,126,266,204,180,238,220],
-    campaign: [62,85,54,105,95,68,80,112,96,68,98,84,62,120,102,76,108,90,68,112,78,72,90,102,56,118,90,80,106,98],
-    spend:    [15,20,13,25,23,16,19,27,23,16,24,20,15,29,25,18,26,22,16,27,19,17,22,25,13,28,22,19,26,24],
-  },
-  meta_us: {
-    organic:  Array(30).fill(0),
-    campaign: [380,490,340,610,540,420,480,640,540,430,580,510,390,710,590,470,620,520,430,660,490,445,550,590,375,690,535,480,625,570],
-    spend:    [95,108,82,128,120,98,110,132,118,100,122,112,90,135,125,104,128,114,98,132,108,102,120,126,88,133,116,104,128,118],
-  },
-  amazon: {
-    organic:  [180,220,160,290,260,190,220,300,260,190,270,240,175,320,280,210,295,250,190,305,215,200,250,280,165,315,245,218,285,262],
-    campaign: [95,120,80,155,140,100,115,160,138,98,140,122,90,170,148,110,155,130,98,160,115,105,132,148,85,168,130,115,152,140],
-    spend:    [28,35,23,45,41,29,34,47,40,29,41,36,26,50,43,32,45,38,29,47,34,31,39,43,25,49,38,34,44,41],
-  },
-};
-
-const CH_CFG = {
-  ml:       { color: '#d4a40a', colorBg: 'rgba(212,164,10,.15)', name: 'Mercado Livre' },
-  meta_br:  { color: '#1877F2', colorBg: 'rgba(24,119,242,.12)', name: 'Meta Ads BR' },
-  shopee:   { color: '#EE4D2D', colorBg: 'rgba(238,77,45,.12)',  name: 'Shopee' },
-  meta_us:  { color: '#1877F2', colorBg: 'rgba(24,119,242,.12)', name: 'Meta Ads US' },
-  amazon:   { color: '#FF9900', colorBg: 'rgba(255,153,0,.12)',  name: 'Amazon' },
-};
-
-const sum = arr => arr.reduce((a,b) => a+b, 0);
+// ── Tela de Campanhas — dados REAIS via /api/dashboard ─────
+// Gasto de Ads real: Meta BR e US. ML Ads aparece quando o app for autorizado
+// para Mercado Ads. Shopee/Amazon Ads não têm API pública de gasto (mostram —).
+const fmtInt = v => Math.round(v || 0).toLocaleString('pt-BR');
+function fmtMoney(v, mkt = market) {
+  return (mkt === 'us')
+    ? (v || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+    : (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+}
 
 // ── State ─────────────────────────────────────────────────
-let currentMarket = localStorage.getItem('coco_market') || 'br';
-const spendCharts = {};
+let market = localStorage.getItem('coco_market') || 'br';
+let current = null;            // último payload da API
+const miniCharts = {}, spendCharts = {};
+
+function rangeForPreset(p) {
+  const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
+  if (p === 'today') return { since: iso(today), until: iso(today), label: 'Hoje' };
+  if (p === '7d')   { const s = new Date(today); s.setDate(s.getDate() - 6); return { since: iso(s), until: iso(today), label: '7 dias' }; }
+  if (p === 'month'){ const s = new Date(today.getFullYear(), today.getMonth(), 1); return { since: iso(s), until: iso(today), label: 'Este mês' }; }
+  const s = new Date(today); s.setDate(s.getDate() - 29); return { since: iso(s), until: iso(today), label: '30 dias' };
+}
+let state = rangeForPreset('30d');
 
 // ── Market ────────────────────────────────────────────────
 function setMarket(m) {
-  currentMarket = m;
+  market = m;
   localStorage.setItem('coco_market', m);
   document.getElementById('mktBtnBr').classList.toggle('active', m === 'br');
   document.getElementById('mktBtnUs').classList.toggle('active', m === 'us');
   document.body.classList.toggle('market-us', m === 'us');
-  updateKpis();
+  load();
 }
 
 // ── Period picker ─────────────────────────────────────────
@@ -627,9 +599,11 @@ function togglePeriodPop() {
 function selectPreset(btn, label) {
   document.querySelectorAll('.pp-presets button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  state = rangeForPreset(btn.dataset.preset);
   document.getElementById('periodValue').textContent = label;
   document.getElementById('periodPop').classList.remove('open');
   document.getElementById('periodPill').classList.remove('open');
+  load();
 }
 function applyRange() {
   const from = document.getElementById('dateFrom').value;
@@ -638,149 +612,158 @@ function applyRange() {
   if (!from || !to) { err.textContent = 'Preencha as duas datas'; return; }
   if (from > to) { err.textContent = 'A data inicial deve ser anterior à final'; return; }
   err.textContent = '';
-  document.getElementById('periodValue').textContent = `${from.slice(8)}.${from.slice(5,7)} – ${to.slice(8)}.${to.slice(5,7)}`;
+  state = { since: from, until: to, label: `${from.slice(8)}.${from.slice(5,7)} – ${to.slice(8)}.${to.slice(5,7)}` };
+  document.getElementById('periodValue').textContent = state.label;
   document.getElementById('periodPop').classList.remove('open');
   document.getElementById('periodPill').classList.remove('open');
+  load();
 }
 document.addEventListener('click', e => {
   const wrap = document.getElementById('periodWrap');
-  if (!wrap.contains(e.target)) {
+  if (wrap && !wrap.contains(e.target)) {
     document.getElementById('periodPop').classList.remove('open');
     document.getElementById('periodPill').classList.remove('open');
   }
 });
 
-// ── KPIs ─────────────────────────────────────────────────
-function fmt(v, market) {
-  return market === 'us'
-    ? v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-    : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+// ── Carregamento ──────────────────────────────────────────
+async function load() {
+  try {
+    const r = await fetch(`/api/dashboard?market=${market}&since=${state.since}&until=${state.until}&metric=receita`);
+    current = await r.json();
+  } catch (e) { console.warn('Campanhas: falha ao carregar', e); return; }
+  render();
 }
 
-function updateKpis() {
-  const isBr = currentMarket === 'br';
-  const channels = isBr ? ['ml','meta_br','shopee'] : ['meta_us','amazon'];
+const setText  = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+const setLabel = (cardId, idx, txt) => { const c = document.getElementById(cardId); if (!c) return; const ls = c.querySelectorAll('.camp-kpi-label'); if (ls[idx]) ls[idx].textContent = txt; };
+const toggleCompare = () => {}; // recurso de comparação removido (era mock)
 
-  const totalSpend = channels.reduce((a,c) => a + sum(DATA[c].spend), 0);
-  const totalSales = channels.reduce((a,c) => a + sum(DATA[c].campaign), 0);
-  const totalOrders = channels.reduce((a,c) => {
-    const avgTicket = c === 'ml' ? 175 : c === 'meta_br' ? 120 : c === 'shopee' ? 95 : c === 'meta_us' ? 115 : 141;
-    return a + Math.round(sum(DATA[c].campaign) / avgTicket);
-  }, 0);
-  const roas = (totalSales / totalSpend).toFixed(2).replace('.',',');
+// ── Render ────────────────────────────────────────────────
+function render() {
+  const d = current; if (!d) return;
+  const k = d.kpis || {}, ml = d.mlBreakdown || {}, cs = d.channelSplit || {};
+  const labels = d.trend?.labels || [], tb = d.trend?.byChannel || [];
+  const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
+  setText('lastUpdate', 'sync: ' + updated);
+  setText('pageSub', (market === 'us' ? 'Vita Pet Life' : 'Coco and Luna') + ' · ' + state.label);
 
-  document.getElementById('kpiSpend').textContent = fmt(totalSpend, currentMarket);
-  document.getElementById('kpiSpendSub').textContent = `${channels.length} canais ativos`;
-  document.getElementById('kpiSales').textContent = fmt(totalSales, currentMarket);
-  document.getElementById('kpiSalesSub').textContent = `${totalOrders} pedidos`;
-  document.getElementById('kpiTicket').textContent = fmt(Math.round(totalSales / totalOrders), currentMarket);
-  document.getElementById('kpiRoas').textContent = `${roas}×`;
+  const metaSpend = k.adCost || 0, metaRev = k.metaRevenue || 0, metaRoas = k.roas || 0, metaClicks = k.adClicks || 0;
+  const mlSpend = market === 'br' ? (ml.adCost || 0) : 0;
+  const totalSpend = metaSpend + mlSpend;
+
+  // ── KPI strip ──
+  setText('kpiSpend', fmtMoney(totalSpend));
+  setText('kpiSpendSub', (totalSpend > 0) ? ('Meta' + (mlSpend > 0 ? ' + Mercado Ads' : '')) : 'sem gasto no período');
+  setText('kpiSales', fmtMoney(metaRev));
+  setText('kpiSalesSub', 'atribuição Meta (Instagram/Facebook)');
+  setText('kpiTicket', fmtInt(metaClicks));
+  setText('kpiRoas', totalSpend > 0 ? (metaRev / totalSpend).toFixed(2).replace('.', ',') + '×' : '—');
+
+  // ── Meta (BR/US) ──
+  const metaKey = market === 'br' ? 'meta_br' : 'meta_us';
+  setText(`${metaKey}-sales`, fmtMoney(metaRev));
+  setText(`${metaKey}-orders`, `${fmtInt(metaClicks)} cliques`);
+  setText(`${metaKey}-revenue`, fmtMoney(metaSpend));
+  setText(`${metaKey}-roas`, metaRoas > 0 ? metaRoas.toFixed(1).replace('.', ',') + '×' : '—');
+
+  if (market === 'br') {
+    // ── Mercado Livre ──
+    const mlAvail = (ml.adCost || 0) > 0;
+    setLabel('card-ml', 0, 'Gasto Ads');
+    setText('ml-sales', mlAvail ? fmtMoney(ml.adCost) : '—');
+    setText('ml-orders', mlAvail ? `${fmtInt(ml.adClicks)} cliques` : 'Mercado Ads não conectado');
+    setText('ml-revenue', fmtMoney(cs.mercadolivre || 0));
+    setText('ml-roas', mlAvail && ml.roas > 0 ? ml.roas.toFixed(1).replace('.', ',') + '×' : '—');
+    setText('ml-spend', mlAvail ? 'receita total ÷ gasto' : 'reautorize com escopo de Ads');
+    // ── Shopee ──
+    setLabel('card-shopee', 0, 'Gasto Ads');
+    setText('shopee-sales', '—');
+    setText('shopee-orders', 'Ads indisponível via API');
+    setText('shopee-revenue', fmtMoney(cs.shopee || 0));
+    setText('shopee-roas', '—');
+    setText('shopee-spend', 'dados só no Seller Center');
+  } else {
+    // ── Amazon US ──
+    setLabel('card-amazon', 0, 'Gasto Ads');
+    setText('amazon-sales', '—');
+    setText('amazon-orders', 'Ads indisponível via API');
+    setText('amazon-revenue', fmtMoney(cs.amazon_us || 0));
+    setText('amazon-roas', '—');
+    setText('amazon-spend', 'requer Amazon Ads API');
+  }
+
+  // ── Mini charts (séries reais) ──
+  const metaSeries = d.trend?.metaSpendDaily || labels.map(() => 0);
+  drawMini(metaKey, labels, metaSeries, '#1877F2', 'Gasto Meta / dia', 'Gasto');
+  if (market === 'br') {
+    drawMini('ml',     labels, tb.map(b => b.mercadolivre || 0), '#FFE600', 'Receita / dia', 'Receita');
+    drawMini('shopee', labels, tb.map(b => b.shopee || 0),       '#EE4D2D', 'Receita / dia', 'Receita');
+  } else {
+    drawMini('amazon', labels, tb.map(b => b.amazon_us || 0),    '#FF9900', 'Receita / dia', 'Receita');
+  }
+
+  // redesenha gráficos de expansão já abertos
+  Object.keys(spendCharts).forEach(key => {
+    if (document.getElementById('expand-' + key)?.style.display === 'block') drawSpend(key);
+  });
 }
 
 // ── Mini charts ───────────────────────────────────────────
-function initMiniChart(key) {
-  const canvas = document.getElementById(`mini-${key}`);
-  if (!canvas) return;
-  const d = DATA[key];
-  const color = CH_CFG[key].color;
-  const hasOrganic = d.organic.some(v => v > 0);
-
-  const datasets = [];
-  if (hasOrganic) {
-    datasets.push({
-      label: 'Orgânico', data: d.organic,
-      backgroundColor: 'rgba(30,28,24,.12)', stack: 'a', borderWidth: 0,
-    });
-  }
-  datasets.push({
-    label: 'Campanha', data: d.campaign,
-    backgroundColor: color, stack: 'a', borderWidth: 0,
-  });
-
-  new Chart(canvas, {
+function setCardHeader(key, headerTxt, color, legendTxt) {
+  const card = document.getElementById('card-' + key); if (!card) return;
+  const h = card.querySelector('.camp-chart-label-txt'); if (h) h.textContent = headerTxt;
+  const lg = card.querySelector('.camp-mini-legend');
+  if (lg) lg.innerHTML = `<span class="camp-leg-item"><span class="camp-leg-sq" style="background:${color}"></span>${legendTxt}</span>`;
+}
+function drawMini(key, labels, data, color, headerTxt, legendTxt) {
+  setCardHeader(key, headerTxt, color, legendTxt);
+  const canvas = document.getElementById('mini-' + key); if (!canvas) return;
+  if (miniCharts[key]) miniCharts[key].destroy();
+  miniCharts[key] = new Chart(canvas, {
     type: 'bar',
-    data: { labels: LABELS, datasets },
+    data: { labels, datasets: [{ data, backgroundColor: color, borderWidth: 0 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          mode: 'index',
-          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString('pt-BR')}` },
-        },
+        tooltip: { mode: 'index', callbacks: { label: ctx => ` ${ctx.raw.toLocaleString('pt-BR')}` } },
       },
-      scales: {
-        x: { display: false, stacked: true },
-        y: { display: false, stacked: true },
-      },
-      animation: { duration: 400 },
-      elements: { bar: { borderRadius: 1 } },
+      scales: { x: { display: false }, y: { display: false, beginAtZero: true } },
+      animation: { duration: 300 }, elements: { bar: { borderRadius: 1 } },
     },
   });
 }
 
-// ── Spend (expand) charts ─────────────────────────────────
-function initSpendChart(key) {
-  const canvas = document.getElementById(`spend-${key}`);
-  if (!canvas || spendCharts[key]) return;
-  const cfg = CH_CFG[key];
-  const isBr = ['ml','meta_br','shopee'].includes(key);
-  const prefix = isBr ? 'R$ ' : '$ ';
-
+// ── Spend (expand) charts — série real por canal ──────────
+function spendDataFor(key) {
+  const d = current, labels = d.trend?.labels || [], tb = d.trend?.byChannel || [];
+  if (key === 'meta_br' || key === 'meta_us')
+    return { labels, data: d.trend?.metaSpendDaily || labels.map(() => 0), prefix: market === 'us' ? '$ ' : 'R$ ', title: 'Gasto de Ads / dia — Meta', color: '#1877F2' };
+  if (key === 'ml')     return { labels, data: tb.map(b => b.mercadolivre || 0), prefix: 'R$ ', title: 'Receita / dia — Mercado Livre', color: '#d4a40a' };
+  if (key === 'shopee') return { labels, data: tb.map(b => b.shopee || 0),       prefix: 'R$ ', title: 'Receita / dia — Shopee', color: '#EE4D2D' };
+  if (key === 'amazon') return { labels, data: tb.map(b => b.amazon_us || 0),    prefix: '$ ',  title: 'Receita / dia — Amazon', color: '#FF9900' };
+  return { labels, data: labels.map(() => 0), prefix: 'R$ ', title: '', color: '#999' };
+}
+function drawSpend(key) {
+  const canvas = document.getElementById('spend-' + key); if (!canvas || !current) return;
+  const { labels, data, prefix, title, color } = spendDataFor(key);
+  const card = document.getElementById('card-' + key);
+  const t = card?.querySelector('.camp-expand-title'); if (t) t.textContent = title;
+  if (spendCharts[key]) spendCharts[key].destroy();
   spendCharts[key] = new Chart(canvas, {
     type: 'line',
-    data: {
-      labels: LABELS,
-      datasets: [{
-        label: cfg.name,
-        data: DATA[key].spend,
-        borderColor: cfg.color,
-        backgroundColor: cfg.colorBg,
-        borderWidth: 2, fill: true, tension: 0.4,
-        pointRadius: 0, pointHoverRadius: 4,
-      }],
-    },
+    data: { labels, datasets: [{ data, borderColor: color, backgroundColor: color + '22', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 4 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false, position: 'top',
-          labels: { font: { size: 11 }, color: '#6b6760', boxWidth: 12, padding: 12 }
-        },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${prefix}${ctx.raw.toLocaleString('pt-BR')}` } },
-      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${prefix}${ctx.raw.toLocaleString('pt-BR')}` } } },
       scales: {
-        x: {
-          ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#9c9790' },
-          grid: { color: 'rgba(30,28,24,.06)' },
-        },
-        y: {
-          ticks: { font: { size: 9 }, color: '#9c9790', callback: v => prefix + v },
-          grid: { color: 'rgba(30,28,24,.06)' },
-        },
+        x: { ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#9c9790' }, grid: { color: 'rgba(30,28,24,.06)' } },
+        y: { ticks: { font: { size: 9 }, color: '#9c9790', callback: v => prefix + v }, grid: { color: 'rgba(30,28,24,.06)' }, beginAtZero: true },
       },
     },
   });
-}
-
-function toggleCompare(checkbox, baseKey) {
-  const compareKey = checkbox.dataset.ch;
-  const chart = spendCharts[baseKey];
-  if (!chart) return;
-  const cfg = CH_CFG[compareKey];
-  if (checkbox.checked) {
-    chart.data.datasets.push({
-      label: cfg.name, data: DATA[compareKey].spend,
-      borderColor: cfg.color, backgroundColor: 'transparent',
-      borderWidth: 1.5, fill: false, tension: 0.4,
-      pointRadius: 0, pointHoverRadius: 3, borderDash: [4,3],
-    });
-    chart.options.plugins.legend.display = true;
-  } else {
-    chart.data.datasets = chart.data.datasets.filter(d => d.label !== cfg.name);
-    chart.options.plugins.legend.display = chart.data.datasets.length > 1;
-  }
-  chart.update();
 }
 
 // ── Expand toggle ─────────────────────────────────────────
@@ -790,14 +773,15 @@ function toggleExpand(key) {
   const isOpen = panel.style.display === 'block';
   panel.style.display = isOpen ? 'none' : 'block';
   btn.classList.toggle('open', !isOpen);
-  if (!isOpen) requestAnimationFrame(() => initSpendChart(key));
+  if (!isOpen) requestAnimationFrame(() => drawSpend(key));
 }
 
 // ── Init ─────────────────────────────────────────────────
 (function init(){
-  setMarket(currentMarket);
-  updateKpis();
-  ['ml','meta_br','shopee','meta_us','amazon'].forEach(initMiniChart);
+  document.getElementById('mktBtnBr').classList.toggle('active', market === 'br');
+  document.getElementById('mktBtnUs').classList.toggle('active', market === 'us');
+  document.body.classList.toggle('market-us', market === 'us');
+  load();
 })();
 </script>
 </body>

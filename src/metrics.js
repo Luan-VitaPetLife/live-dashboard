@@ -236,6 +236,12 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const metaRevenue = valid.filter(o => metaSources.has(normSource(o.source))).reduce((a, o) => a + o.total, 0);
   const roas = adCost > 0 ? metaRevenue / adCost : 0;
 
+  // Série diária de gasto do Meta alinhada aos buckets da tendência (para a tela de Campanhas).
+  const metaSpendDaily = buckets.map(b => {
+    const m = metaDaily[b.key.slice(0, 10)];
+    return m ? m.spend : 0;
+  });
+
   // ML breakdown: orgânico vs premium + custo de anúncios (apenas mercado BR)
   const mlOrders = valid.filter(o => o.channel === 'mercadolivre');
   const mlBreakdown = {
@@ -266,7 +272,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       adCost, adImpressions, adClicks, roas, metaRevenue,
       conversion: sess.conv, conversionDeltaPP: (sess.conv - prevSess.conv) * 100,
     },
-    trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt, byChannel: trendByChannel },
+    trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt, byChannel: trendByChannel, metaSpendDaily },
     channelSplit: byChannel,
     marketing: mktEntries.map(([name, value]) => ({ name, value })),
     traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series },

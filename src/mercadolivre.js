@@ -85,12 +85,14 @@ async function validToken() {
   return tk;
 }
 
-// GET autenticado na API do ML.
-async function apiGet(path, params = {}) {
+// GET autenticado na API do ML. `extraHeaders` permite enviar Api-Version (Mercado Ads).
+async function apiGet(path, params = {}, extraHeaders = {}) {
   const tk = await validToken();
   const url = new URL(API_BASE + path);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-  const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${tk.access_token}` } });
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${tk.access_token}`, ...extraHeaders },
+  });
   const json = await res.json();
   if (json.error) throw new Error(`ML ${path}: ${json.error} ${json.message || ''}`);
   return json;
@@ -169,29 +171,46 @@ export async function fetchOrders(sinceISO, untilISO) {
   return out;
 }
 
-// Busca custo de anúncios do ML Product Ads no intervalo.
-// Retorna zeros graciosamente se o token não tiver acesso ao escopo de advertising.
+// Busca custo de anúncios do ML Product Ads (Mercado Ads) no intervalo.
+// Fluxo correto da API (todos exigem header Api-Version: 1):
+//   1. Resolver advertiser_id: GET /advertising/advertisers?product_id=PADS
+//   2. Métricas por campanha: GET /marketplace/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search
+//      com metrics=clicks,prints,cost e date_from/date_to — somamos cost/clicks/prints.
+// Retorna zeros graciosamente se o app não tiver permissão de Mercado Ads (403) ou sem campanhas.
+const ADS_HEADERS = { 'Api-Version': '1' };
+
 export async function fetchAdCosts(sinceISO, untilISO) {
   const EMPTY_COSTS = { spend: 0, clicks: 0, impressions: 0 };
   if (!isConfigured() || !getMlTokens()) return EMPTY_COSTS;
   try {
-    const tk = getMlTokens();
-    const sellerId = tk.user_id;
-    if (!sellerId) return EMPTY_COSTS;
+    // 1. Descobrir o advertiser de Product Ads (PADS) ligado a esta conta.
+    const adv = await apiGet('/advertising/advertisers', { product_id: 'PADS' }, ADS_HEADERS);
+    const advertiser = (adv.advertisers || [])[0];
+    if (!advertiser?.advertiser_id) {
+      console.warn('ML Ads: nenhum advertiser PADS vinculado a esta conta.');
+      return EMPTY_COSTS;
+    }
+    const { advertiser_id, site_id } = advertiser;
 
-    // Endpoint de clicks/spend por período (Product Ads API)
+    // 2. Métricas agregadas das campanhas no período.
     const data = await apiGet(
-      `/advertising/product_ads/advertisers/${sellerId}/clicks`,
-      { date_from: sinceISO, date_to: untilISO }
+      `/marketplace/advertising/${site_id}/advertisers/${advertiser_id}/product_ads/campaigns/search`,
+      { date_from: sinceISO, date_to: untilISO, metrics: 'clicks,prints,cost', limit: 100 },
+      ADS_HEADERS,
     );
 
-    return {
-      spend:       Number(data.total_cost       ?? data.spend       ?? 0),
-      clicks:      Number(data.total_clicks     ?? data.clicks      ?? 0),
-      impressions: Number(data.total_impressions ?? data.impressions ?? 0),
-    };
+    const results = data.results || [];
+    const acc = results.reduce((a, c) => {
+      const m = c.metrics || c; // métricas podem vir aninhadas em "metrics" ou no próprio item
+      a.spend       += Number(m.cost   ?? 0);
+      a.clicks      += Number(m.clicks ?? 0);
+      a.impressions += Number(m.prints ?? m.impressions ?? 0);
+      return a;
+    }, { spend: 0, clicks: 0, impressions: 0 });
+
+    return acc;
   } catch (e) {
-    console.warn('ML Ads API indisponível (pode requerer escopo adicional):', e.message);
+    console.warn('ML Ads API indisponível (verifique permissão de Mercado Ads no app + reautorize):', e.message);
     return EMPTY_COSTS;
   }
 }

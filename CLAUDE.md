@@ -105,9 +105,12 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Breakdown de listagem:** cada pedido tem campo `listingType: 'organic' | 'premium' | null`.
   - `free` → `'organic'` (Clássico — listagem grátis).
   - `bronze/silver/gold_*` → `'premium'` (Destaque — listagem paga).
-- **ML Product Ads (`fetchAdCosts`):** tenta `/advertising/product_ads/advertisers/{sellerId}/clicks`.
-  Requer escopo `write:product_ads` no OAuth — token atual provavelmente não tem esse escopo.
-  Retorna zeros graciosamente se 403. Para ativar: re-autorizar via `/mercadolivre/connect` com escopo de ads.
+- **ML Product Ads (`fetchAdCosts`) — fluxo correto (Mercado Ads API, exige header `Api-Version: 1`):**
+  1. Resolver advertiser: `GET /advertising/advertisers?product_id=PADS` → `advertiser_id` + `site_id`.
+  2. Métricas: `GET /marketplace/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search`
+     com `metrics=clicks,prints,cost` + `date_from`/`date_to`; soma `cost`/`clicks`/`prints` dos `results`.
+  - **Por que ainda vinha zero:** o código antigo usava `seller_id` num endpoint inexistente e SEM o header `Api-Version`. Corrigido.
+  - **Pré-requisito:** o app precisa ter permissão de **Mercado Ads** habilitada e a conta reautorizada via `/mercadolivre/connect`. Sem isso, `/advertising/advertisers` retorna 403 e `fetchAdCosts` devolve zeros graciosamente.
 - `mlBreakdown` exposto em `metrics.js`: `{ organic, premium, adCost, adClicks, roas }`.
 
 ### 4.7 Amazon SP-API (EUA + BR) — UM app, UMA chamada combinada
