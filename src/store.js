@@ -114,7 +114,16 @@ export function getOrders({ channel = 'todos', since = null, until = null, marke
   const db = load();
   let arr = Object.values(db.orders);
   // Market filter: pedidos sem campo market são legados e pertencem ao BR.
-  if (market) arr = arr.filter(o => (o.market || (o.channel === 'shopify_us' ? 'us' : 'br')) === market);
+  // No src/store.js, altere a linha do filtro para:
+if (market) {
+  arr = arr.filter(o => {
+    // Fallback: se o canal for 'amazon' e o ID do pedido começar com 'amazon-us:', força 'us'
+    const inferredMarket = o.market || 
+                           (o.channel === 'shopify_us' ? 'us' : 
+                           (o.channel === 'amazon' && o.id.startsWith('amazon-us:') ? 'us' : 'br'));
+    return inferredMarket === market;
+  });
+}
   if (channel && channel !== 'todos') arr = arr.filter(o => o.channel === channel);
   const tz = market === 'us' ? 'Z' : '-03:00';
   if (since) { const t = Date.parse(since + 'T00:00:00' + tz); arr = arr.filter(o => Date.parse(o.createdAt) >= t); }
