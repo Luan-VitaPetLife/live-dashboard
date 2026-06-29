@@ -376,12 +376,21 @@
         </div>
       </div>
 
+      <div class="right-col-stack" style="display:flex;flex-direction:column;gap:12px;min-width:0">
       <div class="card" id="cardMarketing"><div class="card-pad">
         <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
         <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
         <div class="donut-rows" id="mktRows"></div>
         <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
       </div></div>
+
+      <div class="card" id="cardSalesSplit"><div class="card-pad">
+        <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub">Vendas pagas vs orgânicas</div></div></div>
+        <div class="donut-center-wrap"><canvas id="salesSplitChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="ssCenter">—</div><div class="dcl-sub">Total</div></div></div>
+        <div class="donut-rows" id="salesSplitRows"></div>
+        <div class="card-note">Campanha = origem Meta (Instagram/Facebook) + Destaque do Mercado Livre</div>
+      </div></div>
+      </div>
     </div>
 
     <div class="card"><div class="card-pad">
@@ -754,6 +763,17 @@ function render(d) {
     ? d.marketing.map(e=>{ const pc=mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%'; return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${MKT_COLORS[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(e.value)}</span></div></div>`; }).join('')
     : '<div class="muted-state">Sem receita atribuída.</div>';
 
+  // Sales split: orgânico x campanha
+  const ss = d.salesSplit || { organic:0, campaign:0, organicOrders:0, campaignOrders:0 };
+  const ssRows = [['Campanha', ss.campaign, ss.campaignOrders, '#a05a3a'], ['Orgânico', ss.organic, ss.organicOrders, '#6a8c6e']];
+  const ssTotal = ss.organic + ss.campaign;
+  drawDonut('salesSplitChart', ssRows.map(r=>r[1]), ssRows.map(r=>r[3]));
+  document.getElementById('ssCenter').textContent = fmtMoneyShort(ssTotal);
+  document.getElementById('salesSplitRows').innerHTML = ssRows.map(([nm,v,ord,col])=>{
+    const pc = ssTotal>0?(v/ssTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%';
+    return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${col}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(v)} · ${fmtInt(ord)} ped.</span></div></div>`;
+  }).join('');
+
   // Traffic
   const tf = d.traffic;
   const hasTraffic =
@@ -831,6 +851,7 @@ function updateCardVisibility() {
 
   show('cardChannelSplit', isTodos);
   show('cardMarketing',    isTodos || isShopify);
+  show('cardSalesSplit',   isTodos || isShopify);
   show('cardTraffic',      isTodos || isShopify);
   show('cardFunnel',       isTodos || isShopify);
   show('cardMlBreakdown',  channel === 'mercadolivre');

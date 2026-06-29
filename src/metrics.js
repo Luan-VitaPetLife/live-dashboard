@@ -242,6 +242,17 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     return m ? m.spend : 0;
   });
 
+  // Vendas orgânicas x campanha (pagas): campanha = origem Meta (IG/FB) OU listagem ML "Destaque" (premium).
+  const isCampaignOrder = o => metaSources.has(normSource(o.source)) || o.listingType === 'premium';
+  const campaignOrdersList = valid.filter(isCampaignOrder);
+  const campaignSales = sum(campaignOrdersList, o => o.total);
+  const salesSplit = {
+    campaign:       campaignSales,
+    organic:        revenue - campaignSales,
+    campaignOrders: campaignOrdersList.length,
+    organicOrders:  count - campaignOrdersList.length,
+  };
+
   // ML breakdown: orgânico vs premium + custo de anúncios (apenas mercado BR)
   const mlOrders = valid.filter(o => o.channel === 'mercadolivre');
   const mlBreakdown = {
@@ -274,6 +285,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     },
     trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt, byChannel: trendByChannel, metaSpendDaily },
     channelSplit: byChannel,
+    salesSplit,
     marketing: mktEntries.map(([name, value]) => ({ name, value })),
     traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series },
     funnel: { sessions: sess.sessions, cart: sess.cart, checkout: sess.checkout, completed: sess.completed },
