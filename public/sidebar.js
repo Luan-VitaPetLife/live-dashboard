@@ -32,8 +32,18 @@
 </nav>
 <button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-layout-sidebar"></i></button>`;
 
+  // CSS próprio do componente (bandeiras do menu). Fica aqui para a sidebar ser
+  // autossuficiente — páginas sem essa regra renderizavam a bandeira em tamanho natural.
+  const css = '.sidebar .nav-flag{width:15px;height:auto;vertical-align:middle;border-radius:2px;margin-left:3px;position:relative;top:-1px}';
+
   function mount() {
     if (document.querySelector('nav.sidebar')) return; // idempotente
+    if (!document.getElementById('sidebarComponentStyle')) {
+      const style = document.createElement('style');
+      style.id = 'sidebarComponentStyle';
+      style.textContent = css;
+      document.head.appendChild(style);
+    }
     document.body.insertAdjacentHTML('afterbegin', html);
 
     // Item ativo conforme o arquivo atual ('/' = index.html)
