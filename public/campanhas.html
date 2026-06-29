@@ -176,34 +176,10 @@
 </head>
 <body>
 
-<div id="sidebarOverlay" class="sidebar-overlay"></div>
-<nav class="sidebar">
-  <div class="sidebar-header">
-    <button id="sidebarToggle" class="sidebar-close-btn" title="Fechar menu"><i class="bi bi-layout-sidebar-reverse"></i></button>
-  </div>
-  <div class="brand">
-    <a href="index.html" style="display:block;line-height:0"><img src="Logo.svg" alt="Coco and Luna" class="brand-logo"></a>
-    <span class="brand-name">Dashboard<br>Vita Pet Life</span>
-  </div>
-  <div class="nav-group"><div class="nav-label">Visão Geral</div>
-    <a class="nav-item" href="index.html"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>
-    <a class="nav-item" href="segmentos.html"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
-    <a class="nav-item" id="navGeo" href="geografia.html"><i class="bi bi-map nav-icon"></i> Geografia</a></div>
-  <div class="nav-group"><div class="nav-label">Operações</div>
-    <a class="nav-item"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
-    <a class="nav-item"><i class="bi bi-layers nav-icon"></i> Estoque</a>
-    <a class="nav-item"><i class="bi bi-wallet2 nav-icon"></i> Financeiro</a></div>
-  <div class="nav-group"><div class="nav-label">Marketing</div>
-    <a class="nav-item active" href="campanhas.html"><i class="bi bi-megaphone nav-icon"></i> Campanhas</a></div>
-</nav>
-<button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-layout-sidebar"></i></button>
+<script src="sidebar.js"></script>
 
 <div class="main">
   <div class="topbar">
-    <button class="settings-btn" id="sidebarOpenTopbar" title="Abrir/fechar menu"
-      onclick="document.body.classList.toggle('sidebar-hidden');localStorage.setItem('coco_sidebar',document.body.classList.contains('sidebar-hidden')?'hidden':'')">
-      <i class="bi bi-layout-sidebar"></i>
-    </button>
     <div class="mkt-toggle-wrap">
       <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
         <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
@@ -633,28 +609,6 @@ const sum = arr => arr.reduce((a,b) => a+b, 0);
 let currentMarket = localStorage.getItem('coco_market') || 'br';
 const spendCharts = {};
 
-// ── Sidebar ───────────────────────────────────────────────
-(function initSidebar(){
-  const saved = localStorage.getItem('coco_sidebar');
-  if (saved === 'hidden') document.body.classList.add('sidebar-hidden');
-
-  document.getElementById('sidebarToggle').addEventListener('click', () => {
-    document.body.classList.add('sidebar-hidden');
-    localStorage.setItem('coco_sidebar','hidden');
-  });
-  document.getElementById('sidebarOpen').addEventListener('click', () => {
-    if (window.innerWidth <= 768) {
-      document.body.classList.add('sidebar-mobile-open');
-    } else {
-      document.body.classList.remove('sidebar-hidden');
-      localStorage.setItem('coco_sidebar','');
-    }
-  });
-  document.getElementById('sidebarOverlay').addEventListener('click', () => {
-    document.body.classList.remove('sidebar-mobile-open');
-  });
-})();
-
 // ── Market ────────────────────────────────────────────────
 function setMarket(m) {
   currentMarket = m;
@@ -663,9 +617,6 @@ function setMarket(m) {
   document.getElementById('mktBtnUs').classList.toggle('active', m === 'us');
   document.body.classList.toggle('market-us', m === 'us');
   updateKpis();
-  // Update geo link
-  const geo = document.getElementById('navGeo');
-  if (geo) geo.href = m === 'us' ? 'geografia-us.html' : 'geografia.html';
 }
 
 // ── Period picker ─────────────────────────────────────────

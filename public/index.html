@@ -237,31 +237,10 @@
 </head>
 <body>
 
-<div id="sidebarOverlay" class="sidebar-overlay"></div>
-<nav class="sidebar">
-  <div class="sidebar-header">
-    <button id="sidebarToggle" class="sidebar-close-btn" title="Fechar menu"><i class="bi bi-layout-sidebar-reverse"></i></button>
-  </div>
-  <div class="brand">
-    <a href="index.html" style="display:block;line-height:0"><img src="Logo.svg" alt="Coco and Luna" class="brand-logo"></a>
-    <span class="brand-name">Dashboard<br>Vita Pet Life</span>
-  </div>
-  <div class="nav-group"><div class="nav-label">Visão Geral</div>
-    <a class="nav-item active" href="index.html"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>
-    <a class="nav-item" href="segmentos.html"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
-    <a class="nav-item" id="navGeo" href="geografia.html"><i class="bi bi-map nav-icon"></i> Geografia</a></div>
-  <div class="nav-group"><div class="nav-label">Operações</div>
-    <a class="nav-item"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
-    <a class="nav-item"><i class="bi bi-layers nav-icon"></i> Estoque</a>
-    <a class="nav-item"><i class="bi bi-wallet2 nav-icon"></i> Financeiro</a></div>
-  <div class="nav-group"><div class="nav-label">Marketing</div>
-    <a class="nav-item"><i class="bi bi-megaphone nav-icon"></i> Campanhas</a></div>
-</nav>
-<button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-layout-sidebar"></i></button>
+<script src="sidebar.js"></script>
 
 <div class="main">
   <div class="topbar">
-    <button id="sidebarOpenTopbar" class="settings-btn" title="Abrir/fechar menu" onclick="document.body.classList.toggle('sidebar-hidden');localStorage.setItem('coco_sidebar',document.body.classList.contains('sidebar-hidden')?'hidden':'')"><i class="bi bi-layout-sidebar"></i></button>
     <!-- Market toggle -->
     <div class="mkt-toggle-wrap" id="mktToggleWrap">
       <button class="mkt-btn active" id="mktBtnBr" data-market="br">
@@ -906,7 +885,6 @@ function buildChannelDropdown() {
 // ── UI state sync ──
 function syncControls() {
   document.querySelectorAll('.mkt-btn').forEach(b => b.classList.toggle('active', b.dataset.market === market));
-  document.getElementById('navGeo').href = market==='us' ? 'geografia-us.html' : 'geografia.html';
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
   document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
   buildChannelDropdown();
@@ -1031,38 +1009,6 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
   try { await fetch('/api/sync',{method:'POST'}); } catch(e){}
   loadData();
 });
-
-// ── Sidebar toggle ──
-(function initSidebar() {
-  const isMobile = () => window.innerWidth <= 768;
-  const overlay = document.getElementById('sidebarOverlay');
-  const closeBtn = document.getElementById('sidebarToggle');
-  const openBtn  = document.getElementById('sidebarOpen');
-  if (!isMobile() && localStorage.getItem('coco_sidebar') === 'hidden') {
-    document.body.classList.add('sidebar-hidden');
-  }
-  closeBtn.addEventListener('click', () => {
-    if (isMobile()) {
-      document.body.classList.remove('sidebar-mobile-open');
-    } else {
-      const hidden = document.body.classList.toggle('sidebar-hidden');
-      localStorage.setItem('coco_sidebar', hidden ? 'hidden' : 'visible');
-    }
-  });
-  openBtn.addEventListener('click', () => {
-    if (isMobile()) {
-      document.body.classList.add('sidebar-mobile-open');
-    } else {
-      document.body.classList.remove('sidebar-hidden');
-      localStorage.setItem('coco_sidebar', 'visible');
-    }
-  });
-  overlay.addEventListener('click', () => document.body.classList.remove('sidebar-mobile-open'));
-  window.addEventListener('resize', () => {
-    if (!isMobile()) document.body.classList.remove('sidebar-mobile-open');
-    else document.body.classList.remove('sidebar-hidden');
-  });
-})();
 
 // ── Init ──
 document.querySelectorAll('.csel').forEach(setupCsel);

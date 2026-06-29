@@ -249,32 +249,10 @@
 </head>
 <body>
 
-<div id="sidebarOverlay" class="sidebar-overlay"></div>
-<nav class="sidebar">
-  <div class="sidebar-header">
-    <button id="sidebarToggle" class="sidebar-close-btn" title="Fechar menu"><i class="bi bi-layout-sidebar-reverse"></i></button>
-  </div>
-  <div class="brand">
-    <a href="index.html" style="display:block;line-height:0"><img src="Logo.svg" alt="Coco and Luna" class="brand-logo"></a>
-    <span class="brand-name">Dashboard<br>Vita Pet Life</span>
-  </div>
-  <div class="nav-group"><div class="nav-label">Visão Geral</div>
-    <a class="nav-item" href="index.html"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>
-    <a class="nav-item" href="segmentos.html"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
-    <a class="nav-item active" href="geografia.html"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></a>
-    <a class="nav-item" href="geografia-us.html"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></a></div>
-  <div class="nav-group"><div class="nav-label">Operações</div>
-    <a class="nav-item"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
-    <a class="nav-item"><i class="bi bi-layers nav-icon"></i> Estoque</a>
-    <a class="nav-item"><i class="bi bi-wallet2 nav-icon"></i> Financeiro</a></div>
-  <div class="nav-group"><div class="nav-label">Marketing</div>
-    <a class="nav-item"><i class="bi bi-megaphone nav-icon"></i> Campanhas</a></div>
-</nav>
-<button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-layout-sidebar"></i></button>
+<script src="sidebar.js"></script>
 
 <div class="main">
   <div class="topbar">
-    <button id="sidebarOpenTopbar" class="settings-btn" title="Abrir/fechar menu" onclick="document.body.classList.toggle('sidebar-hidden');localStorage.setItem('coco_sidebar',document.body.classList.contains('sidebar-hidden')?'hidden':'')"><i class="bi bi-layout-sidebar"></i></button>
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
     <button class="sync-btn" id="syncBtn"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações do mapa"><i class="bi bi-gear-fill"></i></button>
@@ -1301,27 +1279,6 @@ syncControls();
   }
 })();
 
-// ── Sidebar toggle ──
-(function() {
-  const isMobile = () => window.innerWidth <= 768;
-  const overlay  = document.getElementById('sidebarOverlay');
-  const closeBtn = document.getElementById('sidebarToggle');
-  const openBtn  = document.getElementById('sidebarOpen');
-  if (!isMobile() && localStorage.getItem('coco_sidebar') === 'hidden') document.body.classList.add('sidebar-hidden');
-  closeBtn.addEventListener('click', () => {
-    if (isMobile()) document.body.classList.remove('sidebar-mobile-open');
-    else { const h = document.body.classList.toggle('sidebar-hidden'); localStorage.setItem('coco_sidebar', h ? 'hidden' : ''); }
-  });
-  openBtn.addEventListener('click', () => {
-    if (isMobile()) document.body.classList.add('sidebar-mobile-open');
-    else { document.body.classList.remove('sidebar-hidden'); localStorage.setItem('coco_sidebar', ''); }
-  });
-  overlay.addEventListener('click', () => document.body.classList.remove('sidebar-mobile-open'));
-  window.addEventListener('resize', () => {
-    if (!isMobile()) document.body.classList.remove('sidebar-mobile-open');
-    else document.body.classList.remove('sidebar-hidden');
-  });
-})();
 </script>
 </body>
 </html>
