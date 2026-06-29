@@ -134,7 +134,7 @@
   .delta-val.up{background:rgba(61,122,82,.1);color:var(--green)} .delta-val.down{background:rgba(155,58,58,.09);color:var(--red)} .delta-val.flat{background:rgba(30,28,24,.06);color:var(--muted)}
 
   /* ── Cards ── */
-  .charts-row{display:grid;grid-template-columns:1fr 240px 240px;gap:12px;align-items:start}
+  .charts-row{display:grid;grid-template-columns:1fr 240px;gap:12px;align-items:start}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative}
   .card-pad{padding:18px 20px}
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
@@ -361,13 +361,14 @@
         <div class="donut-rows" id="channelRows"></div>
       </div></div>
 
-      <div class="card" id="cardMarketing"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
-        <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
-        <div class="donut-rows" id="mktRows"></div>
-        <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
-      </div></div>
     </div>
+
+    <div class="card" id="cardMarketing"><div class="card-pad">
+      <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
+      <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
+      <div class="donut-rows" id="mktRows"></div>
+      <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
+    </div></div>
 
     <div class="charts-row-2">
       <div class="card" id="cardTraffic"><div class="card-pad">
@@ -847,11 +848,10 @@ function updateCardVisibility() {
   show('cardFunnel',       isTodos || isShopify);
   show('cardMlBreakdown',  channel === 'mercadolivre');
 
-  // Linha 1 (tendência + channel split + marketing): ajusta colunas conforme cards visíveis
+  // Linha 1 (tendência + channel split): channel split visível só em 'todos'
   const row1 = document.querySelector('.charts-row');
   if (row1) {
-    if (isTodos) row1.style.gridTemplateColumns = '1fr 240px 240px';
-    else         row1.style.gridTemplateColumns = '1fr';
+    row1.style.gridTemplateColumns = isTodos ? '1fr 240px' : '1fr';
   }
 
   // Linha 2 (tráfego + coluna direita): quando tráfego está oculto, coluna direita ocupa tudo
