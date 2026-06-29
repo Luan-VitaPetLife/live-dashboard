@@ -166,12 +166,38 @@ async function assumeRole() {
   return roleCache;
 }
 
+// ── Restricted Data Token (para campos PII como BuyerName) ───────────────────
+// Token válido por 15 min. Um único RDT por sync — cobrindo o caminho /orders/v0/orders.
+async function getRestrictedDataToken(host, getLwa, resourcePath, dataElements) {
+  const url  = `https://${host}/tokens/2021-03-01/restrictedDataTokens`;
+  const lwa  = await getLwa();
+  const creds = await assumeRole();
+  const body  = JSON.stringify({
+    restrictedResources: [{ method: 'GET', path: resourcePath, dataElements }],
+  });
+  const hdrs = sigV4Headers({
+    method: 'POST', url, body,
+    accessKey: creds.accessKey, secretKey: creds.secretKey, sessionToken: creds.sessionToken,
+    region: 'us-east-1', service: 'execute-api',
+    extraHeaders: { 'x-amz-access-token': lwa, 'content-type': 'application/json' },
+  });
+  const res  = await safeFetch(url, { method: 'POST', headers: hdrs, body });
+  const json = await safeJson(res);
+  if (!res.ok || !json.restrictedDataToken) {
+    // Falha não é fatal: logamos e continuamos sem nome do comprador
+    console.warn(`Amazon RDT [HTTP ${res.status}]: ${JSON.stringify(json).slice(0, 200)} — buyer names ficarão vazios.`);
+    return null;
+  }
+  return json.restrictedDataToken;
+}
+
 // ── SP-API GET ─────────────────────────────────────────────────────────────────
-async function spGet(host, getLwa, path, params = {}, onRateLimit) {
+// lwaOverride: RDT token para substituir o LWA em chamadas com dados restritos
+async function spGet(host, getLwa, path, params = {}, onRateLimit, lwaOverride = null) {
   const url = new URL(`https://${host}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   url.searchParams.sort(); // SigV4 exige parâmetros em ordem alfabética
-  const lwa   = await getLwa();
+  const lwa   = lwaOverride || await getLwa();
   const creds = await assumeRole();
   const hdrs  = sigV4Headers({
     method: 'GET', url: url.toString(),
@@ -195,6 +221,7 @@ async function spGet(host, getLwa, path, params = {}, onRateLimit) {
   }
   return json;
 }
+
 
 // ── fetchOrders genérico ───────────────────────────────────────────────────────
 async function _fetchOrders({
@@ -234,6 +261,9 @@ async function _fetchOrders({
     console.warn(`Amazon ${label}: rate limit 429 (tentativa ${count + 1}) — backoff ${delay / 60000} min até ${new Date(until).toISOString()}`);
   };
 
+  // Obter RDT para campos PII (BuyerName). Falha não é fatal.
+  const rdt = await getRestrictedDataToken(host, getLwa, '/orders/v0/orders', ['buyerInfo']).catch(() => null);
+
   const out = [];
   let nextToken = null;
 
@@ -251,7 +281,7 @@ async function _fetchOrders({
       delete params.CreatedBefore;
     }
 
-    const data   = await spGet(host, getLwa, '/orders/v0/orders', params, onRateLimit);
+    const data   = await spGet(host, getLwa, '/orders/v0/orders', params, onRateLimit, rdt);
     const orders = data.payload?.Orders || [];
 
     for (const o of orders) {
@@ -267,7 +297,12 @@ async function _fetchOrders({
         source:    'Amazon',
         customer:  o.BuyerInfo?.BuyerName || '',
         state:     o.ShippingAddress?.StateOrRegion || null,
-        items:     [],
+        // items: array de tamanho = total de unidades do pedido (sem detalhes de produto)
+        // Campos vêm no Orders API sem chamada extra. title vazio é ignorado em topProducts.
+        items:     Array.from(
+          { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
+          () => ({ title: '', qty: 1, amount: 0 })
+        ),
       });
     }
 
