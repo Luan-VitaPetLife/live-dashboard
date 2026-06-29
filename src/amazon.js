@@ -287,7 +287,7 @@ async function _fetchOrders({
     for (const o of orders) {
       out.push({
         id:        `amazon-${market}:` + o.AmazonOrderId,
-        channel:   'amazon',
+        channel: market === 'us' ? 'amazon_us' : 'amazon',
         market,
         name:      '#' + o.AmazonOrderId,
         createdAt: o.PurchaseDate,
