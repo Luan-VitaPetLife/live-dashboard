@@ -90,8 +90,8 @@ function saveJson() {
 
 function pgKv(key, value) {
   pool.query(
-    'INSERT INTO kv(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=$2',
-    [key, value]
+    'INSERT INTO kv(key,value) VALUES($1,$2::jsonb) ON CONFLICT(key) DO UPDATE SET value=$2::jsonb',
+    [key, JSON.stringify(value)]
   ).catch(e => console.error('PG kv error:', e.message));
 }
 
