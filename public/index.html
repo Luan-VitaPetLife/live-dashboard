@@ -261,6 +261,7 @@
 
 <div class="main">
   <div class="topbar">
+    <button id="sidebarOpenTopbar" class="settings-btn" title="Abrir/fechar menu" onclick="document.body.classList.toggle('sidebar-hidden');localStorage.setItem('coco_sidebar',document.body.classList.contains('sidebar-hidden')?'hidden':'')"><i class="bi bi-layout-sidebar"></i></button>
     <!-- Market toggle -->
     <div class="mkt-toggle-wrap" id="mktToggleWrap">
       <button class="mkt-btn active" id="mktBtnBr" data-market="br">
@@ -831,7 +832,7 @@ function render(d) {
   const now=new Date(), hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
   setLive('ok',`Ao vivo · ${hh}:${mm}`);
   const up = d.updatedAt?new Date(d.updatedAt).toLocaleString('pt-BR'):'—';
-  document.getElementById('footerDate').textContent = `Dashboard - Vita Pet Life · Coco and Luna · ${CHAN[d.channel]} · período ${label} · receita exclui cancelados · última sincronização: ${up}`;
+  document.getElementById('footerDate').textContent = `Dashboard - Vita Pet Life · Coco and Luna · ${CHAN[d.channel]} · período ${label} · última sincronização: ${up}`;
   updateCardVisibility();
 }
 

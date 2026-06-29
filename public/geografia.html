@@ -274,6 +274,7 @@
 
 <div class="main">
   <div class="topbar">
+    <button id="sidebarOpenTopbar" class="settings-btn" title="Abrir/fechar menu" onclick="document.body.classList.toggle('sidebar-hidden');localStorage.setItem('coco_sidebar',document.body.classList.contains('sidebar-hidden')?'hidden':'')"><i class="bi bi-layout-sidebar"></i></button>
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
     <button class="sync-btn" id="syncBtn"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações do mapa"><i class="bi bi-gear-fill"></i></button>

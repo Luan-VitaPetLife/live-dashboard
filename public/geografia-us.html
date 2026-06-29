@@ -249,6 +249,7 @@
 
 <div class="main">
   <div class="topbar">
+    <button id="sidebarOpenTopbar" class="settings-btn" title="Abrir/fechar menu" onclick="document.body.classList.toggle('sidebar-hidden');localStorage.setItem('coco_sidebar',document.body.classList.contains('sidebar-hidden')?'hidden':'')"><i class="bi bi-layout-sidebar"></i></button>
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
     <button class="sync-btn" id="syncBtn"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações do mapa"><i class="bi bi-gear-fill"></i></button>
@@ -422,7 +423,6 @@
       <div class="sp-range-row"><span class="sp-row-label">Suavidade</span><input type="range" class="sp-range" id="hcBlur" min="5" max="55" value="28"><span class="sp-range-val" id="hcBlurVal">28</span></div>
       <div class="sp-range-row"><span class="sp-row-label">Opacidade mín.</span><input type="range" class="sp-range" id="hcMinOp" min="0" max="60" value="30"><span class="sp-range-val" id="hcMinOpVal">30%</span></div>
     </div>
-  </div>
     <div class="sp-section">
       <div class="sp-section-title">Análise de canais</div>
       <label class="sp-toggle-row">
