@@ -142,7 +142,20 @@
   .camp-cmp-check:hover{border-color:var(--ink);color:var(--text)}
   .camp-cmp-check input[type=checkbox]{width:11px;height:11px;accent-color:var(--ink);cursor:pointer;flex-shrink:0}
   .camp-cmp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-  .camp-spend-chart-wrap{position:relative;height:160px}
+  /* ── Cards de campanha (no painel "Gastos") ── */
+  .camp-campaigns{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .cmp-loading,.cmp-empty{font-size:12px;color:var(--muted);padding:14px 2px;grid-column:1/-1}
+  .cmp-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:12px}
+  .cmp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .cmp-name{font-size:12px;font-weight:600;color:var(--text);line-height:1.3;word-break:break-word}
+  .cmp-status{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+  .cmp-status.on{background:rgba(61,122,82,.12);color:var(--green)}
+  .cmp-status.off{background:rgba(30,28,24,.08);color:var(--muted)}
+  .cmp-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 8px}
+  .cmp-metric{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .cmp-m-label{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+  .cmp-m-val{font-size:14px;font-weight:400;color:var(--text);letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cmp-m-val.pos{color:var(--green)}
 
   /* ── Channel visibility ── */
   .ch-br{} .ch-us{display:none!important}
@@ -307,7 +320,7 @@
                 </label>
               </div>
             </div>
-            <div class="camp-spend-chart-wrap"><canvas id="spend-ml"></canvas></div>
+            <div class="camp-campaigns" id="camps-ml"></div>
           </div>
         </div>
       </div>
@@ -368,7 +381,7 @@
                 </label>
               </div>
             </div>
-            <div class="camp-spend-chart-wrap"><canvas id="spend-meta_br"></canvas></div>
+            <div class="camp-campaigns" id="camps-meta_br"></div>
           </div>
         </div>
       </div>
@@ -430,7 +443,7 @@
                 </label>
               </div>
             </div>
-            <div class="camp-spend-chart-wrap"><canvas id="spend-shopee"></canvas></div>
+            <div class="camp-campaigns" id="camps-shopee"></div>
           </div>
         </div>
       </div>
@@ -487,7 +500,7 @@
                 </label>
               </div>
             </div>
-            <div class="camp-spend-chart-wrap"><canvas id="spend-meta_us"></canvas></div>
+            <div class="camp-campaigns" id="camps-meta_us"></div>
           </div>
         </div>
       </div>
@@ -545,7 +558,7 @@
                 </label>
               </div>
             </div>
-            <div class="camp-spend-chart-wrap"><canvas id="spend-amazon"></canvas></div>
+            <div class="camp-campaigns" id="camps-amazon"></div>
           </div>
         </div>
       </div>
@@ -570,7 +583,8 @@ function fmtMoney(v, mkt = market) {
 // ── State ─────────────────────────────────────────────────
 let market = localStorage.getItem('coco_market') || 'br';
 let current = null;            // último payload da API
-const miniCharts = {}, spendCharts = {};
+const miniCharts = {};
+const campCache = {}; // cache de campanhas por market|since|until
 
 function rangeForPreset(p) {
   const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
@@ -703,9 +717,9 @@ function render() {
     drawMini('amazon', labels, tb.map(b => b.amazon_us || 0),    '#FF9900', 'Receita / dia', 'Receita');
   }
 
-  // redesenha gráficos de expansão já abertos
-  Object.keys(spendCharts).forEach(key => {
-    if (document.getElementById('expand-' + key)?.style.display === 'block') drawSpend(key);
+  // re-renderiza painéis de campanha abertos (mercado/período mudou)
+  ['ml','meta_br','shopee','meta_us','amazon'].forEach(key => {
+    if (document.getElementById('expand-' + key)?.style.display === 'block') renderCampaigns(key);
   });
 }
 
@@ -735,35 +749,58 @@ function drawMini(key, labels, data, color, headerTxt, legendTxt) {
   });
 }
 
-// ── Spend (expand) charts — série real por canal ──────────
-function spendDataFor(key) {
-  const d = current, labels = d.trend?.labels || [], tb = d.trend?.byChannel || [];
-  if (key === 'meta_br' || key === 'meta_us')
-    return { labels, data: d.trend?.metaSpendDaily || labels.map(() => 0), prefix: market === 'us' ? '$ ' : 'R$ ', title: 'Gasto de Ads / dia — Meta', color: '#1877F2' };
-  if (key === 'ml')     return { labels, data: tb.map(b => b.mercadolivre || 0), prefix: 'R$ ', title: 'Receita / dia — Mercado Livre', color: '#d4a40a' };
-  if (key === 'shopee') return { labels, data: tb.map(b => b.shopee || 0),       prefix: 'R$ ', title: 'Receita / dia — Shopee', color: '#EE4D2D' };
-  if (key === 'amazon') return { labels, data: tb.map(b => b.amazon_us || 0),    prefix: '$ ',  title: 'Receita / dia — Amazon', color: '#FF9900' };
-  return { labels, data: labels.map(() => 0), prefix: 'R$ ', title: '', color: '#999' };
+// ── Cards de campanha (painel "Gastos") ───────────────────
+const CH_OF_KEY = { ml:'mercadolivre', meta_br:'meta', meta_us:'meta', shopee:null, amazon:null };
+
+async function loadCampaigns() {
+  const ck = `${market}|${state.since}|${state.until}`;
+  if (campCache[ck]) return campCache[ck];
+  const r = await fetch(`/api/campaigns?market=${market}&since=${state.since}&until=${state.until}`);
+  const data = await r.json();
+  campCache[ck] = data;
+  return data;
 }
-function drawSpend(key) {
-  const canvas = document.getElementById('spend-' + key); if (!canvas || !current) return;
-  const { labels, data, prefix, title, color } = spendDataFor(key);
+
+const escapeHtml = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const pct = (v, dec = 1) => (v || 0).toFixed(dec).replace('.', ',') + '%';
+
+function campaignCardHTML(c, chKey) {
+  const money = v => fmtMoney(v, market);
+  const roas = c.roas > 0 ? c.roas.toFixed(2).replace('.', ',') + '×' : '—';
+  const m = [['Gasto', money(c.spend)]];
+  if (chKey === 'meta') {
+    m.push(['Receita', money(c.revenue), c.revenue > 0], ['ROAS', roas, c.roas >= 1], ['Pedidos', fmtInt(c.orders)],
+           ['Cliques', fmtInt(c.clicks)], ['Impressões', fmtInt(c.impressions)], ['Alcance', fmtInt(c.reach)],
+           ['CTR', pct(c.ctr, 2)], ['CPC', money(c.cpc)]);
+  } else {
+    m.push(['Vendas', money(c.revenue), c.revenue > 0], ['ROAS', roas, c.roas >= 1], ['Unidades', fmtInt(c.orders)],
+           ['Cliques', fmtInt(c.clicks)], ['Impressões', fmtInt(c.impressions)], ['ACOS', pct(c.acos)], ['CTR', pct(c.ctr, 2)]);
+  }
+  const st = c.status ? `<span class="cmp-status ${/activ|enabl|^on$/i.test(c.status) ? 'on' : 'off'}">${escapeHtml(c.status)}</span>` : '';
+  return `<div class="cmp-card">
+    <div class="cmp-head"><span class="cmp-name">${escapeHtml(c.name)}</span>${st}</div>
+    <div class="cmp-metrics">${m.map(([l, v, pos]) => `<div class="cmp-metric"><span class="cmp-m-label">${l}</span><span class="cmp-m-val${pos ? ' pos' : ''}">${v}</span></div>`).join('')}</div>
+  </div>`;
+}
+
+async function renderCampaigns(key) {
+  const box = document.getElementById('camps-' + key); if (!box) return;
   const card = document.getElementById('card-' + key);
-  const t = card?.querySelector('.camp-expand-title'); if (t) t.textContent = title;
-  if (spendCharts[key]) spendCharts[key].destroy();
-  spendCharts[key] = new Chart(canvas, {
-    type: 'line',
-    data: { labels, datasets: [{ data, borderColor: color, backgroundColor: color + '22', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 4 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${prefix}${ctx.raw.toLocaleString('pt-BR')}` } } },
-      scales: {
-        x: { ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#9c9790' }, grid: { color: 'rgba(30,28,24,.06)' } },
-        y: { ticks: { font: { size: 9 }, color: '#9c9790', callback: v => prefix + v }, grid: { color: 'rgba(30,28,24,.06)' }, beginAtZero: true },
-      },
-    },
-  });
+  const title = card?.querySelector('.camp-expand-title');
+  if (title) title.textContent = 'Campanhas no período';
+  const chKey = CH_OF_KEY[key];
+  if (!chKey) { box.innerHTML = `<div class="cmp-empty">Este canal não expõe campanhas via API (gasto não disponível).</div>`; return; }
+
+  box.innerHTML = `<div class="cmp-loading">Carregando campanhas…</div>`;
+  let data;
+  try { data = await loadCampaigns(); }
+  catch (e) { box.innerHTML = `<div class="cmp-empty">Falha ao carregar campanhas.</div>`; return; }
+
+  const ch = data.channels?.[chKey];
+  if (!ch?.available) { box.innerHTML = `<div class="cmp-empty">Canal de Ads não conectado.</div>`; return; }
+  const camps = ch.campaigns || [];
+  if (camps.length === 0) { box.innerHTML = `<div class="cmp-empty">Nenhuma campanha com atividade no período.</div>`; return; }
+  box.innerHTML = camps.map(c => campaignCardHTML(c, chKey)).join('');
 }
 
 // ── Expand toggle ─────────────────────────────────────────
@@ -773,7 +810,7 @@ function toggleExpand(key) {
   const isOpen = panel.style.display === 'block';
   panel.style.display = isOpen ? 'none' : 'block';
   btn.classList.toggle('open', !isOpen);
-  if (!isOpen) requestAnimationFrame(() => drawSpend(key));
+  if (!isOpen) renderCampaigns(key);
 }
 
 // ── Init ─────────────────────────────────────────────────

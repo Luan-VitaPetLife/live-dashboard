@@ -184,8 +184,7 @@ export async function fetchAdCosts(sinceISO, untilISO) {
   if (!isConfigured() || !getMlTokens()) return EMPTY_COSTS;
   try {
     // 1. Descobrir o advertiser de Product Ads (PADS) ligado a esta conta.
-    const adv = await apiGet('/advertising/advertisers', { product_id: 'PADS' }, ADS_HEADERS);
-    const advertiser = (adv.advertisers || [])[0];
+    const advertiser = await getPadsAdvertiser();
     if (!advertiser?.advertiser_id) {
       console.warn('ML Ads: nenhum advertiser PADS vinculado a esta conta.');
       return EMPTY_COSTS;
@@ -212,5 +211,51 @@ export async function fetchAdCosts(sinceISO, untilISO) {
   } catch (e) {
     console.warn('ML Ads API indisponível (verifique permissão de Mercado Ads no app + reautorize):', e.message);
     return EMPTY_COSTS;
+  }
+}
+
+// Resolve o advertiser de Product Ads (PADS) ligado à conta. null se não houver/sem permissão.
+async function getPadsAdvertiser() {
+  const adv = await apiGet('/advertising/advertisers', { product_id: 'PADS' }, ADS_HEADERS);
+  return (adv.advertisers || [])[0] || null;
+}
+
+// Busca métricas por CAMPANHA no intervalo (Mercado Ads). Array vazio se sem acesso/campanhas.
+// Retorna: { name, status, spend, revenue, orders, clicks, impressions, ctr, acos, roas }
+export async function fetchCampaigns(sinceISO, untilISO) {
+  if (!isConfigured() || !getMlTokens()) return [];
+  try {
+    const advertiser = await getPadsAdvertiser();
+    if (!advertiser?.advertiser_id) return [];
+    const { advertiser_id, site_id } = advertiser;
+
+    const data = await apiGet(
+      `/marketplace/advertising/${site_id}/advertisers/${advertiser_id}/product_ads/campaigns/search`,
+      { date_from: sinceISO, date_to: untilISO, metrics: 'clicks,prints,cost,acos,total_amount,units_quantity', limit: 100 },
+      ADS_HEADERS,
+    );
+
+    return (data.results || []).map(c => {
+      const m = c.metrics || c;
+      const spend = Number(m.cost ?? 0);
+      const sales = Number(m.total_amount ?? m.amount ?? 0);
+      const clicks = Number(m.clicks ?? 0);
+      const prints = Number(m.prints ?? m.impressions ?? 0);
+      return {
+        name:        c.name || ('Campanha ' + (c.id ?? '')),
+        status:      c.status || null,
+        spend,
+        revenue:     sales,
+        orders:      Number(m.units_quantity ?? m.direct_units_quantity ?? 0),
+        clicks,
+        impressions: prints,
+        ctr:         prints > 0 ? (clicks / prints) * 100 : 0,
+        acos:        Number(m.acos ?? (sales > 0 ? (spend / sales) * 100 : 0)),
+        roas:        spend > 0 ? sales / spend : 0,
+      };
+    }).sort((a, b) => b.spend - a.spend);
+  } catch (e) {
+    console.warn('ML campaigns indisponível:', e.message);
+    return [];
   }
 }

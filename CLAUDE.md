@@ -259,6 +259,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - `npm run sync` faz uma sincronização única (útil para testar credenciais).
 - Endpoints:
   - `GET /api/dashboard?channel=&metric=&since=YYYY-MM-DD&until=YYYY-MM-DD&market=br|us`
+  - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
   - `POST /api/sync`
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
   - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente

@@ -30,6 +30,41 @@ app.get('/api/dashboard', (req, res) => {
   }
 });
 
+// Campanhas por canal (ao vivo, com cache de 5 min). Usado pelo detalhamento da tela de Campanhas.
+// Meta (BR/US) e Mercado Ads retornam campanha a campanha; Shopee/Amazon não têm API de gasto.
+const campaignCache = new Map();
+app.get('/api/campaigns', async (req, res) => {
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  const { since, until } = req.query;
+  if (!since || !until) return res.status(400).json({ error: 'Parâmetros since/until obrigatórios.' });
+
+  const key = `${market}|${since}|${until}`;
+  const cached = campaignCache.get(key);
+  if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
+
+  const channels = {};
+  try {
+    if (market === 'br') {
+      const [mlC, metaC] = await Promise.all([
+        ml.fetchCampaigns(since, until).catch(() => []),
+        meta.fetchCampaigns(since, until).catch(() => []),
+      ]);
+      channels.mercadolivre = { available: ml.isConfigured(), campaigns: mlC };
+      channels.meta = { available: meta.isConfigured(), campaigns: metaC };
+    } else {
+      const usAcc = process.env.META_US_AD_ACCOUNT_ID;
+      const metaC = await meta.fetchCampaigns(since, until, usAcc).catch(() => []);
+      channels.meta = { available: meta.isConfigured(usAcc), campaigns: metaC };
+    }
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+
+  const data = { market, since, until, channels };
+  campaignCache.set(key, { ts: Date.now(), data });
+  res.json(data);
+});
+
 // Reset do backoff da Amazon. ?delay=N define um novo backoff de N minutos a partir de agora.
 app.post('/api/amazon/reset-backoff', (req, res) => {
   const delay = Number(req.query.delay || 0);
