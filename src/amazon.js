@@ -225,3 +225,70 @@ export async function fetchOrdersBR(sinceISO, untilISO) {
   if (!isConfiguredBR()) return [];
   return _fetchOrders({ sinceISO, untilISO, host: SP_HOST_BR, marketplaceId: MARKETPLACE_ID_BR, getLwa: getLwaTokenBR, market: 'br', getBackoff: getAmazonBRBackoff, setBackoff: setAmazonBRBackoff, label: '(BR)' });
 }
+
+// ── Diagnóstico passo a passo ───────────────────
+export async function diagAmazonUS() {
+  const result = { lwa: null, sts: null, participations: null, orders7d: null };
+
+  // 1. LWA token
+  try {
+    const res  = await safeFetch('https://api.amazon.com/auth/o2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: REFRESH_TOKEN, client_id: CLIENT_ID, client_secret: CLIENT_SECRET }),
+    });
+    const text = await res.text();
+    const json = JSON.parse(text);
+    result.lwa = json.error
+      ? { ok: false, status: res.status, error: json.error, desc: json.error_description }
+      : { ok: true, status: res.status, expires_in: json.expires_in, token_prefix: json.access_token?.slice(0, 20) };
+  } catch (e) { result.lwa = { ok: false, error: e.message }; }
+
+  if (!result.lwa?.ok) return result;
+
+  // 2. STS AssumeRole
+  try {
+    const url  = 'https://sts.amazonaws.com/';
+    const body = new URLSearchParams({ Action: 'AssumeRole', RoleArn: ROLE_ARN, RoleSessionName: 'diag-session', Version: '2011-06-15', DurationSeconds: 900 }).toString();
+    const hdrs = sigV4Headers({ method: 'POST', url, body, accessKey: AWS_ACCESS_KEY, secretKey: AWS_SECRET_KEY, region: 'us-east-1', service: 'sts', extraHeaders: { 'content-type': 'application/x-www-form-urlencoded' } });
+    const res  = await safeFetch(url, { method: 'POST', headers: hdrs, body });
+    const text = await res.text();
+    const hasRole = text.includes('<AssumeRoleResult>');
+    result.sts = { ok: res.ok && hasRole, status: res.status, hasCredentials: hasRole, snippet: text.slice(0, 200) };
+  } catch (e) { result.sts = { ok: false, error: e.message }; }
+
+  if (!result.sts?.ok) return result;
+
+  // 3. /sellers/v1/marketplaceParticipations (cota diferente da Orders API)
+  try {
+    const url  = new URL(`https://${SP_HOST}/sellers/v1/marketplaceParticipations`);
+    const lwa  = await getLwaToken();
+    const creds = await assumeRole();
+    const hdrs = sigV4Headers({ method: 'GET', url: url.toString(), accessKey: creds.accessKey, secretKey: creds.secretKey, sessionToken: creds.sessionToken, region: 'us-east-1', service: 'execute-api', extraHeaders: { 'x-amz-access-token': lwa } });
+    const res  = await safeFetch(url.toString(), { headers: hdrs });
+    const text = await res.text();
+    const respHeaders = Object.fromEntries([...res.headers.entries()].filter(([k]) => k.startsWith('x-amzn') || k === 'content-type'));
+    result.participations = { ok: res.ok, status: res.status, headers: respHeaders, body: text.slice(0, 400) };
+  } catch (e) { result.participations = { ok: false, error: e.message }; }
+
+  // 4. Orders API — últimos 7 dias, 1 resultado apenas
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const safeUntil = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const url  = new URL(`https://${SP_HOST}/orders/v0/orders`);
+    url.searchParams.set('MarketplaceIds', MARKETPLACE_ID);
+    url.searchParams.set('CreatedAfter', `${since}T00:00:00Z`);
+    url.searchParams.set('CreatedBefore', safeUntil);
+    url.searchParams.set('MaxResultsPerPage', '1');
+    url.searchParams.sort();
+    const lwa  = await getLwaToken();
+    const creds = await assumeRole();
+    const hdrs = sigV4Headers({ method: 'GET', url: url.toString(), accessKey: creds.accessKey, secretKey: creds.secretKey, sessionToken: creds.sessionToken, region: 'us-east-1', service: 'execute-api', extraHeaders: { 'x-amz-access-token': lwa } });
+    const res  = await safeFetch(url.toString(), { headers: hdrs });
+    const text = await res.text();
+    const respHeaders = Object.fromEntries([...res.headers.entries()].filter(([k]) => k.startsWith('x-amzn') || k === 'retry-after' || k === 'content-type'));
+    result.orders7d = { ok: res.ok, status: res.status, headers: respHeaders, body: text.slice(0, 600) };
+  } catch (e) { result.orders7d = { ok: false, error: e.message }; }
+
+  return result;
+}

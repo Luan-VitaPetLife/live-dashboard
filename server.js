@@ -46,6 +46,12 @@ app.post('/api/amazon/force-sync', async (_req, res) => {
   res.json(report);
 });
 
+// Diagnóstico passo a passo da Amazon US (LWA → STS → Participations → Orders)
+app.get('/api/amazon/diag', async (_req, res) => {
+  try { res.json(await amazon.diagAmazonUS()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Reset do backoff da Amazon BR.
 app.post('/api/amazon-br/reset-backoff', (req, res) => {
   const delay = Number(req.query.delay || 0);
