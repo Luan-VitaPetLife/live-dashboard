@@ -867,9 +867,8 @@ function updateCardVisibility() {
   // Linha 1 (tendência + channel split + marketing): ajusta colunas conforme cards visíveis
   const row1 = document.querySelector('.charts-row');
   if (row1) {
-    if (isTodos)          row1.style.gridTemplateColumns = '1fr 240px 240px';
-    else if (isMarketplace) row1.style.gridTemplateColumns = '1fr 240px';
-    else                  row1.style.gridTemplateColumns = '1fr';
+    if (isTodos) row1.style.gridTemplateColumns = '1fr 240px 240px';
+    else         row1.style.gridTemplateColumns = '1fr';
   }
 
   // Linha 2 (tráfego + coluna direita): quando tráfego está oculto, coluna direita ocupa tudo
