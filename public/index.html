@@ -134,6 +134,8 @@
   .delta-val.up{background:rgba(61,122,82,.1);color:var(--green)} .delta-val.down{background:rgba(155,58,58,.09);color:var(--red)} .delta-val.flat{background:rgba(30,28,24,.06);color:var(--muted)}
 
   /* ── Cards ── */
+  .two-col-layout{display:grid;grid-template-columns:3fr 1fr;gap:12px;align-items:start}
+  .left-cards{display:flex;flex-direction:column;gap:12px;min-width:0}
   .charts-row{display:grid;grid-template-columns:1fr 240px;gap:12px;align-items:start}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative}
   .card-pad{padding:18px 20px}
@@ -196,6 +198,7 @@
     .kpi-cell{border-right:none;border-bottom:1px solid var(--border)}
     .kpi-cell:nth-child(odd){border-right:1px solid var(--border)}
     .kpi-cell:last-child{grid-column:1/-1;border-right:none;border-bottom:none}
+    .two-col-layout{grid-template-columns:1fr!important}
     .charts-row{grid-template-columns:1fr!important}
     .charts-row-2{grid-template-columns:1fr!important}
     .metric-row{grid-template-columns:1fr 1fr}
@@ -347,55 +350,58 @@
       <div class="kpi-cell"><div class="kc-label">Conversão</div><div class="kc-value" id="kpiConv">—</div><div class="kc-delta" id="kpiConvDelta"></div></div>
     </div>
 
-    <div class="charts-row">
-      <div class="card"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div><div class="ct-val" id="trendVal">—</div></div>
-        <div class="ch220"><canvas id="trendChart"></canvas></div>
-        <div class="legend-row" id="trendLegend"></div>
-        <div id="trendDrilldown" class="trend-drilldown" style="display:none"></div>
-      </div></div>
+    <div class="two-col-layout" id="twoColLayout">
+      <div class="left-cards">
+        <div class="charts-row">
+          <div class="card"><div class="card-pad">
+            <div class="card-top"><div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div><div class="ct-val" id="trendVal">—</div></div>
+            <div class="ch220"><canvas id="trendChart"></canvas></div>
+            <div class="legend-row" id="trendLegend"></div>
+            <div id="trendDrilldown" class="trend-drilldown" style="display:none"></div>
+          </div></div>
 
-      <div class="card" id="cardChannelSplit"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title">Channel split</div><div class="ct-sub">Receita por canal</div></div></div>
-        <div class="donut-center-wrap"><canvas id="channelChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="chCenter">—</div><div class="dcl-sub">Total</div></div></div>
-        <div class="donut-rows" id="channelRows"></div>
-      </div></div>
-
-    </div>
-
-    <div class="card" id="cardMarketing"><div class="card-pad">
-      <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
-      <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
-      <div class="donut-rows" id="mktRows"></div>
-      <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
-    </div></div>
-
-    <div class="charts-row-2">
-      <div class="card" id="cardTraffic"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div><div class="ct-val" id="trafficVal">—</div></div>
-        <div class="metric-row">
-          <div class="metric-cell"><div class="mc-type">Sessões</div><div class="mc-val" id="mSessions">—</div><div class="mc-meta" id="mSessionsMeta">&nbsp;</div></div>
-          <div class="metric-cell"><div class="mc-type">Visitantes</div><div class="mc-val" id="mVisitors">—</div><div class="mc-meta">únicos</div></div>
-          <div class="metric-cell"><div class="mc-type">Add. carrinho</div><div class="mc-val" id="mCart">—</div><div class="mc-meta" id="mCartMeta">&nbsp;</div></div>
-          <div class="metric-cell"><div class="mc-type">Conversão</div><div class="mc-val" id="mConv" style="color:var(--green)">—</div><div class="mc-meta">sessão → compra</div></div>
+          <div class="card" id="cardChannelSplit"><div class="card-pad">
+            <div class="card-top"><div><div class="ct-title">Channel split</div><div class="ct-sub">Receita por canal</div></div></div>
+            <div class="donut-center-wrap"><canvas id="channelChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="chCenter">—</div><div class="dcl-sub">Total</div></div></div>
+            <div class="donut-rows" id="channelRows"></div>
+          </div></div>
         </div>
-        <div class="ch180"><canvas id="trafficChart"></canvas></div>
-        <div class="legend-row"><div class="legend-item"><div class="legend-sq" style="background:rgba(176,168,152,.55)"></div>Sessões</div><div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Conversão (%)</div></div>
-      </div></div>
 
-      <div id="rightColCards" style="display:flex;flex-direction:column;gap:12px">
-        <div class="card" id="cardFunnel"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
-        <div class="card" id="cardMlBreakdown" style="display:none;grid-column:1/-1"><div class="card-pad">
-          <div class="card-top"><div><div class="ct-title">Mercado Livre · Detalhe</div><div class="ct-sub">Tipo de listagem (Clássico = grátis · Destaque = pago)</div></div></div>
-          <div class="metric-row" style="margin-top:12px">
-            <div class="metric-cell"><div class="mc-type">Clássico</div><div class="mc-val" id="mlOrganic">—</div><div class="mc-meta">listagem grátis</div></div>
-            <div class="metric-cell"><div class="mc-type">Destaque</div><div class="mc-val" id="mlPremium">—</div><div class="mc-meta">listagem paga (Bronze/Gold)</div></div>
-            <div class="metric-cell"><div class="mc-type">Custo ML Ads</div><div class="mc-val" id="mlAdCost">—</div><div class="mc-meta">Product Ads</div></div>
-            <div class="metric-cell"><div class="mc-type">ROAS ML Ads</div><div class="mc-val" id="mlRoas" style="color:var(--green)">—</div><div class="mc-meta">receita / gasto</div></div>
+        <div class="charts-row-2">
+          <div class="card" id="cardTraffic"><div class="card-pad">
+            <div class="card-top"><div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div><div class="ct-val" id="trafficVal">—</div></div>
+            <div class="metric-row">
+              <div class="metric-cell"><div class="mc-type">Sessões</div><div class="mc-val" id="mSessions">—</div><div class="mc-meta" id="mSessionsMeta">&nbsp;</div></div>
+              <div class="metric-cell"><div class="mc-type">Visitantes</div><div class="mc-val" id="mVisitors">—</div><div class="mc-meta">únicos</div></div>
+              <div class="metric-cell"><div class="mc-type">Add. carrinho</div><div class="mc-val" id="mCart">—</div><div class="mc-meta" id="mCartMeta">&nbsp;</div></div>
+              <div class="metric-cell"><div class="mc-type">Conversão</div><div class="mc-val" id="mConv" style="color:var(--green)">—</div><div class="mc-meta">sessão → compra</div></div>
+            </div>
+            <div class="ch180"><canvas id="trafficChart"></canvas></div>
+            <div class="legend-row"><div class="legend-item"><div class="legend-sq" style="background:rgba(176,168,152,.55)"></div>Sessões</div><div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Conversão (%)</div></div>
+          </div></div>
+
+          <div id="rightColCards" style="display:flex;flex-direction:column;gap:12px">
+            <div class="card" id="cardFunnel"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
+            <div class="card" id="cardMlBreakdown" style="display:none;grid-column:1/-1"><div class="card-pad">
+              <div class="card-top"><div><div class="ct-title">Mercado Livre · Detalhe</div><div class="ct-sub">Tipo de listagem (Clássico = grátis · Destaque = pago)</div></div></div>
+              <div class="metric-row" style="margin-top:12px">
+                <div class="metric-cell"><div class="mc-type">Clássico</div><div class="mc-val" id="mlOrganic">—</div><div class="mc-meta">listagem grátis</div></div>
+                <div class="metric-cell"><div class="mc-type">Destaque</div><div class="mc-val" id="mlPremium">—</div><div class="mc-meta">listagem paga (Bronze/Gold)</div></div>
+                <div class="metric-cell"><div class="mc-type">Custo ML Ads</div><div class="mc-val" id="mlAdCost">—</div><div class="mc-meta">Product Ads</div></div>
+                <div class="metric-cell"><div class="mc-type">ROAS ML Ads</div><div class="mc-val" id="mlRoas" style="color:var(--green)">—</div><div class="mc-meta">receita / gasto</div></div>
+              </div>
+            </div></div>
+            <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Top produtos</div><div class="ct-sub">Por receita</div></div></div><div id="topProducts"></div></div></div>
           </div>
-        </div></div>
-        <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Top produtos</div><div class="ct-sub">Por receita</div></div></div><div id="topProducts"></div></div></div>
+        </div>
       </div>
+
+      <div class="card" id="cardMarketing"><div class="card-pad">
+        <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
+        <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
+        <div class="donut-rows" id="mktRows"></div>
+        <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
+      </div></div>
     </div>
 
     <div class="card"><div class="card-pad">
@@ -848,13 +854,15 @@ function updateCardVisibility() {
   show('cardFunnel',       isTodos || isShopify);
   show('cardMlBreakdown',  channel === 'mercadolivre');
 
-  // Linha 1 (tendência + channel split): channel split visível só em 'todos'
-  const row1 = document.querySelector('.charts-row');
-  if (row1) {
-    row1.style.gridTemplateColumns = isTodos ? '1fr 240px' : '1fr';
-  }
+  // Layout externo: Marketing visível = 3fr 1fr; oculto = só coluna esquerda
+  const outerLayout = document.getElementById('twoColLayout');
+  if (outerLayout) outerLayout.style.gridTemplateColumns = (isTodos || isShopify) ? '3fr 1fr' : '1fr';
 
-  // Linha 2 (tráfego + coluna direita): quando tráfego está oculto, coluna direita ocupa tudo
+  // Linha interna (tendência + channel split): channel split visível só em 'todos'
+  const row1 = document.querySelector('.charts-row');
+  if (row1) row1.style.gridTemplateColumns = isTodos ? '1fr 240px' : '1fr';
+
+  // Linha inferior (tráfego + coluna direita): coluna direita ocupa tudo se tráfego oculto
   const row2 = document.querySelector('.charts-row-2');
   if (row2) row2.style.gridTemplateColumns = (isTodos || isShopify) ? '1fr 1fr' : '1fr';
 
