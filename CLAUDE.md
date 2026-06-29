@@ -6,8 +6,8 @@
 ## 1. O que é
 
 Dashboard de vendas **multi-mercado e multicanal** das lojas de Luan (suplementos para pets).
-- **Brasil 🇧🇷:** loja Shopify BR (`cocoandluna.com.br`) + Shopee + Mercado Livre
-- **EUA 🇺🇸:** loja Shopify US (`vita-pet-life.myshopify.com`) + Amazon SP-API
+- **Brasil 🇧🇷:** loja Shopify BR (`cocoandluna.com.br`) + Shopee + Mercado Livre + Amazon BR (SP-API)
+- **EUA 🇺🇸:** loja Shopify US (`vita-pet-life.myshopify.com`) + Amazon US (SP-API)
 
 Objetivo do dono (Luan, perfil de negócio, não-dev): uma tela única, ao vivo, com todos os canais.
 Idioma da interface: **pt-BR**. Valores BR em **BRL**, valores US em **USD**.
@@ -23,10 +23,11 @@ do repositório `https://github.com/Luan-VitaPetLife/live-dashboard.git`).
 - Volume ~73 pedidos/30 dias. Paginação simples já dá conta.
 - Produto principal: **"Lisina para gatos - 120g"** (e combos); também "Daily".
 - Versão da Admin API: **2026-04** (`SHOPIFY_API_VERSION`). Não usar versões anteriores a 2025-10.
+- Amazon BR: SP-API endpoint South America (`sellingpartnerapi-sa.amazon.com`), Marketplace ID `A2Q3Y263D00KWC`. Credenciais LWA separadas (`AMAZON_BR_*`), mas compartilha o mesmo IAM User/Role da conta US.
 
 ### EUA
 - Shopify US: **vita-pet-life.myshopify.com** · ~99 pedidos/30 dias confirmados.
-- Amazon: SP-API configurado com LWA + AWS SigV4 via IAM AssumeRole.
+- Amazon US: SP-API configurado com LWA + AWS SigV4 via IAM AssumeRole.
   - IAM User: `arn:aws:iam::354674816862:user/usdashboard`
   - IAM Role: `arn:aws:iam::354674816862:role/SellingPartnerAPIRole`
   - Marketplace ID: `ATVPDKIKX0DER` (Amazon.com US)
@@ -40,7 +41,7 @@ src/store.js            Banco híbrido: Postgres em produção (DATABASE_URL), J
 src/shopify.js          Pedidos via GraphQL Admin API + sessões via ShopifyQL (multi-store via cfg)
 src/shopee.js           Shopee Open API v2: assinatura HMAC, OAuth, refresh de token
 src/mercadolivre.js     Mercado Livre OAuth 2.0 + API de pedidos + fetchAdCosts (ML Product Ads)
-src/amazon.js           Amazon SP-API: LWA token + AWS SigV4 + STS AssumeRole + Orders API
+src/amazon.js           Amazon SP-API (EUA + BR): LWA token por mercado + AWS SigV4 + STS AssumeRole + Orders API
 src/meta.js             Meta Marketing API: gasto diário BR e US (fetchInsights aceita accountId)
 src/metrics.js          Calcula o payload da dashboard por mercado (receita SEMPRE exclui cancelados)
 src/sync.js             Orquestra a busca de todos os canais BR e US e grava no store
@@ -59,7 +60,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - Variável `DATABASE_URL` presente → usa Postgres (Railway). Ausente → JSON em `data/db.json`.
 - `initStore()` é async e DEVE ser chamado com `await` antes de `app.listen()`.
 - Tabelas Postgres: `orders` (id TEXT PK, data JSONB), `sessions_daily` (date TEXT PK, data JSONB), `kv` (key TEXT PK, value JSONB).
-- `kv` guarda: `shopeeTokens`, `mlTokens`, `metaInsightsDaily`, `metaUSInsightsDaily`, `mlAdCosts`, `amazonBackoff`, `lastSync`.
+- `kv` guarda: `shopeeTokens`, `mlTokens`, `metaInsightsDaily`, `metaUSInsightsDaily`, `mlAdCosts`, `amazonBackoff`, `amazonBRBackoff`, `lastSync`.
 - `getOrders({ channel, since, until, market })` — filtra por mercado. Pedidos legados sem campo `market` são inferidos como `'br'` (exceto `channel === 'shopify_us'` → `'us'`).
 
 ## 4. Decisões e conhecimento de domínio (IMPORTANTE — não reinventar)
@@ -109,20 +110,23 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   Retorna zeros graciosamente se 403. Para ativar: re-autorizar via `/mercadolivre/connect` com escopo de ads.
 - `mlBreakdown` exposto em `metrics.js`: `{ organic, premium, adCost, adClicks, roas }`.
 
-### 4.7 Amazon SP-API
+### 4.7 Amazon SP-API (EUA + BR)
 - Implementado em `src/amazon.js`. Sem dependências externas (SigV4 e HMAC via `crypto` nativo do Node).
-- **Fluxo de autenticação:**
-  1. LWA token via `https://api.amazon.com/auth/o2/token` (refresh_token grant)
-  2. STS AssumeRole em `https://sts.amazonaws.com/` usando AWS IAM User credentials (SigV4)
+- **Fluxo de autenticação (igual para US e BR):**
+  1. LWA token via `https://api.amazon.com/auth/o2/token` (refresh_token grant) — getter separado por mercado via `makeLwaGetter()`
+  2. STS AssumeRole em `https://sts.amazonaws.com/` usando AWS IAM User credentials (SigV4) — **compartilhado entre US e BR**
   3. Credenciais temporárias do role usadas para assinar chamadas ao SP-API (SigV4 + `x-amz-access-token`)
-- **Endpoint:** `https://sellingpartnerapi-na.amazon.com/orders/v0/orders`
+- **Endpoints e marketplace IDs:**
+  - EUA: `sellingpartnerapi-na.amazon.com` · Marketplace `ATVPDKIKX0DER`
+  - BR: `sellingpartnerapi-sa.amazon.com` · Marketplace `A2Q3Y263D00KWC`
+- **Funções exportadas:** `fetchOrders()` (US) e `fetchOrdersBR()` (BR). `isConfigured()` e `isConfiguredBR()` verificam credenciais por mercado.
 - **Restrição SP-API:** `CreatedBefore` deve ser pelo menos 2 min antes do momento atual — código já aplica margem de 3 min.
-- **Rate limit / backoff:** intervalo mínimo de **1h** entre syncs (aplicado após sucesso E após 429).
-  Backoff persistido no Postgres (`kv`, chave `amazonBackoff`). Endpoints de diagnóstico:
-  - `POST /api/amazon/reset-backoff` — zera o backoff manualmente.
-  - `POST /api/amazon/force-sync` — zera + sincroniza atomicamente (evita race com o timer).
-- Sem `AMAZON_AWS_ACCESS_KEY` / `AMAZON_AWS_SECRET_KEY` → retorna `[]` com aviso no console, nada quebra.
-- Pedidos Amazon: `channel: 'amazon'`, `market: 'us'`, moeda USD, sem items detalhados (requer chamada extra).
+- **Rate limit / backoff:** intervalo mínimo de **1h** entre syncs por mercado (aplicado após sucesso E após 429).
+  - Backoff US: `kv` chave `amazonBackoff`. Backoff BR: `kv` chave `amazonBRBackoff`. Independentes entre si.
+  - Endpoints de controle (US): `POST /api/amazon/reset-backoff` e `POST /api/amazon/force-sync`.
+- Sem `AMAZON_AWS_ACCESS_KEY` / `AMAZON_AWS_SECRET_KEY` → ambos retornam `[]` com aviso no console, nada quebra.
+- **IDs de pedido:** prefixo `amazon-us:` para pedidos EUA e `amazon-br:` para pedidos BR (evita colisão de IDs).
+- Pedidos Amazon: `channel: 'amazon'`, `market: 'us'` ou `'br'`, sem items detalhados (requer chamada extra ao SP-API).
 
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
@@ -130,6 +134,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - Canal `shopify_us` implica `market: 'us'`.
 - `computeDashboard({ market })` separa tudo: byChannel, sessões, pedidos recentes.
 - `byChannel` BR: `{ shopify, shopee, amazon, mercadolivre }`. US: `{ shopify_us, amazon }`.
+- Pedidos Amazon BR (`channel: 'amazon'`, `market: 'br'`) aparecem naturalmente no byChannel BR junto com os outros canais.
 - `getOrders({ market })` em store.js filtra corretamente legacy + novos pedidos.
 
 ### 4.9 Canais e UI — `public/index.html`
@@ -220,10 +225,13 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 | `META_ACCESS_TOKEN` | Token de acesso de longa duração (System User) — único token para BR e EUA |
 | `META_AD_ACCOUNT_ID` | Conta de anúncios BR — Coco and Luna (sem prefixo `act_`) |
 | `META_US_AD_ACCOUNT_ID` | Conta de anúncios EUA — Vita Pet Life (`826249215807271`, sem prefixo `act_`) |
-| `AMAZON_CLIENT_ID` | LWA Client ID do app SP-API |
-| `AMAZON_CLIENT_SECRET` | LWA Client Secret |
-| `AMAZON_REFRESH_TOKEN` | LWA Refresh Token (obtido via autorização do app) |
-| `AMAZON_ROLE_ARN` | ARN do IAM Role com permissões SP-API |
+| `AMAZON_CLIENT_ID` | LWA Client ID do app SP-API (EUA) |
+| `AMAZON_CLIENT_SECRET` | LWA Client Secret (EUA) |
+| `AMAZON_REFRESH_TOKEN` | LWA Refresh Token (EUA) |
+| `AMAZON_BR_CLIENT_ID` | LWA Client ID do app SP-API (Brasil) |
+| `AMAZON_BR_CLIENT_SECRET` | LWA Client Secret (Brasil) |
+| `AMAZON_BR_REFRESH_TOKEN` | LWA Refresh Token (Brasil) |
+| `AMAZON_ROLE_ARN` | ARN do IAM Role com permissões SP-API — compartilhado entre EUA e BR |
 | `AMAZON_AWS_ACCESS_KEY` | Access Key do IAM User com permissão `sts:AssumeRole` no role acima |
 | `AMAZON_AWS_SECRET_KEY` | Secret Key do mesmo IAM User |
 | `DATABASE_URL` | Connection string Postgres (Railway injeta via `${{Postgres.DATABASE_URL}}`) |
@@ -249,15 +257,18 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /health`
 
-## 8. Status das integrações (26/06/2026)
+## 8. Status das integrações (29/06/2026)
 
-### Amazon SP-API — situação atual
-- **IAM Role `SellingPartnerAPIRole`**: política `SPAPIInvokePolicy` adicionada com `execute-api:Invoke` em `*`. Trust policy inclui `usdashboard` user. ✅
-- **Autenticação confirmada:** diagCall retornou 5 pedidos reais de março/2026 (IL, CO, MN, WV...) com HTTP 200. ✅
-- **Janela de sync:** expandida para **90 dias** (antes era 60 dias) — pedidos de março estão no range. ✅
-- **Rate limit SP-API:** 0.0167 req/s (burst 20). Backoff de 1h aplicado após cada sync bem-sucedido ou 429. Múltiplos force-syncs durante debug esgotaram o burst em 26/06 — comportamento normal em produção, não voltará a acontecer.
+### Amazon US SP-API — ativo ✅
+- **IAM Role `SellingPartnerAPIRole`**: política `SPAPIInvokePolicy` com `execute-api:Invoke` em `*`. Trust policy inclui `usdashboard` user. ✅
+- **Autenticação confirmada:** retornou pedidos reais de março/2026 com HTTP 200. ✅
+- **Janela de sync:** 90 dias. Rate limit: 0.0167 req/s (burst 20). Backoff de 1h por sync.
 - **Endpoint `POST /api/amazon/reset-backoff?delay=N`:** aceita `delay` em minutos para definir backoff customizado.
-- **Próximo sync automático:** ~18:28 horário de Brasília em 26/06. Se não funcionar, o próximo é 15 min depois (o sync automático roda a cada 15 min e pula Amazon enquanto o backoff está ativo — quando expira, o próximo ciclo inclui Amazon).
+
+### Amazon BR SP-API — código implementado, aguardando credenciais ⏳
+- Código em `src/amazon.js` (`fetchOrdersBR`) e bloco de sync em `src/sync.js` já prontos.
+- **Pendente:** cadastrar `AMAZON_BR_CLIENT_ID`, `AMAZON_BR_CLIENT_SECRET`, `AMAZON_BR_REFRESH_TOKEN` no Railway. Requer criação/autorização de app SP-API separado para o marketplace Brasil (`A2Q3Y263D00KWC`).
+- Sem as credenciais BR, o bloco é silenciosamente ignorado (nada quebra).
 
 ### Shopee — ativa ✅
 - Credenciais de produção configuradas: Partner ID 2037711, Shop ID 1502160212.
@@ -270,7 +281,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 
 ## 9. Próximos passos (backlog priorizado)
 
-1. **Confirmar Amazon**: sync automático pós-18:28 de 26/06 deve trazer pedidos de março/abril/maio/junho. Se falhar por 429, o próximo ciclo de 15 min tentará novamente automaticamente.
+1. **Amazon BR:** criar/autorizar app SP-API para marketplace Brasil e cadastrar `AMAZON_BR_*` no Railway — código já está pronto.
 2. Decidir tratamento de **PENDING** (contar só pagos?) — ver 4.1.
 3. **Google Ads** para custo/ROAS de Google.
 4. **ML Ads:** re-autorizar OAuth com escopo `write:product_ads` para ativar custo de campanha no card ML Breakdown.
