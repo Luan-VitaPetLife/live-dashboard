@@ -63,7 +63,9 @@ export function isConfigured()   { return Boolean(CLIENT_ID    && CLIENT_SECRET 
 export function isConfiguredBR() { return Boolean(CLIENT_ID_BR && CLIENT_SECRET_BR && REFRESH_TOKEN_BR); }
 export function hasAwsCreds()    { return Boolean(AWS_ACCESS_KEY && AWS_SECRET_KEY); }
 
-// ── Backoff exponencial (somente em 429 crítico) ─────────────────────────────
+// ── Backoff exponencial (somente em 429) ─────────────────────────────────────
+// Degraus: 15 → 30 → 60 → 120 min (cap). Contador resetado após sync bem-sucedido.
+// Sem backoff após sync bem-sucedido — o intervalo de 15 min do agendador é suficiente.
 const BACKOFF_STEPS_MS = [15, 30, 60, 120].map(m => m * 60 * 1000);
 
 function backoffDelayMs(count) {
@@ -165,6 +167,7 @@ async function assumeRole() {
 }
 
 // ── Restricted Data Token (para campos PII como BuyerName) ───────────────────
+// Token válido por 15 min. Um único RDT por sync — cobrindo o caminho /orders/v0/orders.
 async function getRestrictedDataToken(host, getLwa, resourcePath, dataElements) {
   const url  = `https://${host}/tokens/2021-03-01/restrictedDataTokens`;
   const lwa  = await getLwa();
@@ -181,6 +184,7 @@ async function getRestrictedDataToken(host, getLwa, resourcePath, dataElements) 
   const res  = await safeFetch(url, { method: 'POST', headers: hdrs, body });
   const json = await safeJson(res);
   if (!res.ok || !json.restrictedDataToken) {
+    // Falha não é fatal: logamos e continuamos sem nome do comprador
     console.warn(`Amazon RDT [HTTP ${res.status}]: ${JSON.stringify(json).slice(0, 200)} — buyer names ficarão vazios.`);
     return null;
   }
@@ -188,11 +192,11 @@ async function getRestrictedDataToken(host, getLwa, resourcePath, dataElements) 
 }
 
 // ── SP-API GET ─────────────────────────────────────────────────────────────────
-async function spGet(host, getLwa, path, params = {}, lwaOverride = null) {
+// lwaOverride: RDT token para substituir o LWA em chamadas com dados restritos
+async function spGet(host, getLwa, path, params = {}, onRateLimit, lwaOverride = null) {
   const url = new URL(`https://${host}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-  url.searchParams.sort(); 
-  
+  url.searchParams.sort(); // SigV4 exige parâmetros em ordem alfabética
   const lwa   = lwaOverride || await getLwa();
   const creds = await assumeRole();
   const hdrs  = sigV4Headers({
@@ -201,13 +205,13 @@ async function spGet(host, getLwa, path, params = {}, lwaOverride = null) {
     region: 'us-east-1', service: 'execute-api',
     extraHeaders: { 'x-amz-access-token': lwa },
   });
-  
   const res = await safeFetch(url.toString(), { headers: hdrs });
 
-  // HTTP 429 — Retorna erro customizado para ser capturado no retry interno
+  // HTTP 429 — acionar callback antes de tentar parsear o corpo
   if (res.status === 429) {
+    if (onRateLimit) onRateLimit();
     const errBody = await res.text().catch(() => '');
-    throw new Error(`SP-API 429 QuotaExceeded: ${errBody.slice(0, 200)}`);
+    throw new Error(`SP-API ${path} [HTTP 429 QuotaExceeded]: ${errBody.slice(0, 200)}`);
   }
 
   const json = await safeJson(res);
@@ -233,6 +237,7 @@ async function _fetchOrders({
     return [];
   }
 
+  // Verificar backoff ativo antes de qualquer request
   const backoffUntil = getBackoff();
   if (backoffUntil > Date.now()) {
     const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
@@ -242,84 +247,70 @@ async function _fetchOrders({
 
   const safeUntil = new Date(Math.min(
     new Date(`${untilISO}T23:59:59Z`).getTime(),
-    Date.now() - 3 * 60 * 1000, 
+    Date.now() - 3 * 60 * 1000, // SP-API exige CreatedBefore ≥ 2 min antes de agora
   )).toISOString();
   console.log(`Amazon ${label}: buscando pedidos ${sinceISO} → ${safeUntil.slice(0, 16)}`);
 
+  // Callback acionado pelo spGet ao receber HTTP 429
+  const onRateLimit = () => {
+    const count = getCount();
+    const delay = backoffDelayMs(count);
+    const until = Date.now() + delay;
+    setCount(count + 1);
+    setBackoff(until);
+    console.warn(`Amazon ${label}: rate limit 429 (tentativa ${count + 1}) — backoff ${delay / 60000} min até ${new Date(until).toISOString()}`);
+  };
+
+  // Obter RDT para campos PII (BuyerName). Falha não é fatal.
   const rdt = await getRestrictedDataToken(host, getLwa, '/orders/v0/orders', ['buyerInfo']).catch(() => null);
 
   const out = [];
   let nextToken = null;
-  let hasMorePages = true;
-  let consecutive429 = 0;
 
-  while (hasMorePages) {
+  do {
     const params = {
       MarketplaceIds:    marketplaceId,
+      CreatedAfter:      `${sinceISO}T00:00:00Z`,
+      CreatedBefore:     safeUntil,
       MaxResultsPerPage: 100,
     };
-
     if (nextToken) {
+      // NextToken substitui CreatedAfter/CreatedBefore na paginação
       params.NextToken = nextToken;
-    } else {
-      params.CreatedAfter  = `${sinceISO}T00:00:00Z`;
-      params.CreatedBefore = safeUntil;
+      delete params.CreatedAfter;
+      delete params.CreatedBefore;
     }
 
-    try {
-      const data   = await spGet(host, getLwa, '/orders/v0/orders', params, rdt);
-      const orders = data.payload?.Orders || [];
+    const data   = await spGet(host, getLwa, '/orders/v0/orders', params, onRateLimit, rdt);
+    const orders = data.payload?.Orders || [];
 
-      for (const o of orders) {
-        out.push({
-          id:        `amazon-${market}:` + o.AmazonOrderId,
-          channel:   'amazon',
-          market,
-          name:      '#' + o.AmazonOrderId,
-          createdAt: o.PurchaseDate,
-          status:    o.OrderStatus,
-          cancelled: ['Canceled', 'PendingAvailability'].includes(o.OrderStatus),
-          total:     Number(o.OrderTotal?.Amount || 0),
-          source:    'Amazon',
-          customer:  o.BuyerInfo?.BuyerName || '',
-          state:     o.ShippingAddress?.StateOrRegion || null,
-          items:     Array.from(
-            { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
-            () => ({ title: '', qty: 1, amount: 0 })
-          ),
-        });
-      }
-
-      nextToken = data.payload?.NextToken || null;
-      hasMorePages = Boolean(nextToken);
-      
-      consecutive429 = 0; // Resetou o rate limit
-
-      if (hasMorePages) await sleep(2000); // Pausa padrão antes da próxima página
-
-    } catch (err) {
-      if (err.message.includes('429 QuotaExceeded')) {
-        consecutive429++;
-        
-        // Se tomarmos mais de 10 seguidos (algo raro se esperarmos certo), aí sim acionamos o backoff global
-        if (consecutive429 > 10) {
-          const count = getCount();
-          const delay = backoffDelayMs(count);
-          setCount(count + 1);
-          setBackoff(Date.now() + delay);
-          console.error(`Amazon ${label}: Limite de retries excedido na paginação. Backoff global acionado (${delay / 60000} min).`);
-          break; // Retorna o que já conseguiu capturar e encerra o fluxo atual
-        }
-        
-        // Amazon Orders API regenera 1 req a cada 60 segundos exatos. Pausar o loop e não avançar o NextToken
-        console.warn(`Amazon ${label}: Rate Limit atingido. Aguardando 60s para restaurar a quota da API (Tentativa ${consecutive429}/10)...`);
-        await sleep(60000); 
-      } else {
-        throw err; // Outros erros quebram o fluxo normalmente
-      }
+    for (const o of orders) {
+      out.push({
+        id:        `amazon-${market}:` + o.AmazonOrderId,
+        channel:   'amazon',
+        market,
+        name:      '#' + o.AmazonOrderId,
+        createdAt: o.PurchaseDate,
+        status:    o.OrderStatus,
+        cancelled: ['Canceled', 'PendingAvailability'].includes(o.OrderStatus),
+        total:     Number(o.OrderTotal?.Amount || 0),
+        source:    'Amazon',
+        customer:  o.BuyerInfo?.BuyerName || '',
+        state:     o.ShippingAddress?.StateOrRegion || null,
+        // items: array de tamanho = total de unidades do pedido (sem detalhes de produto)
+        // Campos vêm no Orders API sem chamada extra. title vazio é ignorado em topProducts.
+        items:     Array.from(
+          { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
+          () => ({ title: '', qty: 1, amount: 0 })
+        ),
+      });
     }
-  }
 
+    nextToken = data.payload?.NextToken || null;
+    if (nextToken) await sleep(2000); // pausa antes de buscar próxima página
+  } while (nextToken);
+
+  // Sync bem-sucedido: resetar contador de backoff exponencial
   setCount(0);
   return out;
 }
