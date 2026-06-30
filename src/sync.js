@@ -22,7 +22,7 @@ function defaultWindow(days = 60) {
 
 export async function runSync() {
   const { since, until } = defaultWindow();
-  const { since: since30 } = defaultWindow(30); // Amazon usa 30 dias (janela menor = menos risco de paginação)
+  const { since: since7 } = defaultWindow(7); // Amazon: janela curta reduz chamadas paginadas
   const report = { shopify: 0, shopify_us: 0, shopee: 0, mercadolivre: 0, amazon: 0, amazon_br: 0, meta: 0, sessions: 0, errors: [] };
 
   // Shopify — pedidos
@@ -103,17 +103,17 @@ export async function runSync() {
     }
   } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
 
-  // Amazon US + BR — SP-API North America, chamada ÚNICA combinada (ATVPDKIKX0DER + A2Q3Y263D00KWC).
-  // Mesmo app/token cobre os dois marketplaces; cada pedido traz seu MarketplaceId e é separado
-  // por amazon.js. Isso usa metade da cota e elimina a US ser "roubada" pela BR.
-  // Backoff exponencial gerenciado internamente por amazon.js; sync.js só chama e grava.
+  // Amazon US + BR — duas chamadas separadas, cada uma com seu próprio LWA token e backoff.
+  // US requer AMAZON_REFRESH_TOKEN (autorizar em sellercentral.amazon.com — NA Seller Central).
+  // BR requer AMAZON_BR_REFRESH_TOKEN (autorizar em sellercentral.amazon.com.br — BR Seller Central).
+  // Backoff exponencial independente por mercado, gerenciado internamente em amazon.js.
   try {
     if (!amazon.isConfigured()) {
       report.errors.push('amazon: credenciais LWA ausentes (AMAZON_CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN)');
     } else if (!amazon.hasAwsCreds()) {
       report.errors.push('amazon: credenciais AWS ausentes (AMAZON_AWS_ACCESS_KEY / AMAZON_AWS_SECRET_KEY)');
     } else {
-      const orders = await amazon.fetchOrders(since30, until);
+      const orders = await amazon.fetchOrders(since7, until);
       upsertOrders(orders);
       report.amazon    = orders.filter(o => o.market === 'us').length;
       report.amazon_br = orders.filter(o => o.market === 'br').length;
