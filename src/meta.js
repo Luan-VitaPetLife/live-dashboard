@@ -75,46 +75,69 @@ function pickAction(arr, types) {
   return 0;
 }
 
+// Busca status (effective_status) de todas as campanhas da conta (para enriquecer os insights).
+async function fetchCampaignStatuses(actId) {
+  const map = {};
+  let after = null;
+  do {
+    const params = { fields: 'id,effective_status', limit: 200 };
+    if (after) params.after = after;
+    const json = await graphGet(`/${actId}/campaigns`, params);
+    for (const c of (json.data || [])) map[c.id] = c.effective_status || null;
+    after = json.paging?.cursors?.after && json.paging?.next ? json.paging.cursors.after : null;
+  } while (after);
+  return map;
+}
+
 // Busca métricas por CAMPANHA no intervalo (agregado, sem time_increment).
-// Retorna array: { name, spend, revenue, orders, clicks, impressions, reach, ctr, cpc, roas }
+// Retorna array: { name, status, spend, revenue, orders, clicks, impressions, reach, ctr, cpc, roas }
 export async function fetchCampaigns(sinceISO, untilISO, accountId = AD_ACCOUNT_ID) {
   if (!isConfigured(accountId)) return [];
   const actId = String(accountId).startsWith('act_') ? accountId : `act_${accountId}`;
-  const fields = 'campaign_name,spend,impressions,clicks,reach,ctr,cpc,actions,action_values';
+  const fields = 'campaign_id,campaign_name,spend,impressions,clicks,reach,ctr,cpc,actions,action_values';
   const PURCHASE = ['purchase', 'omni_purchase', 'onsite_web_purchase', 'offsite_conversion.fb_pixel_purchase'];
-  const out = [];
 
-  let after = null;
-  do {
-    const params = {
-      fields,
-      time_range: JSON.stringify({ since: sinceISO, until: untilISO }),
-      level: 'campaign',
-      limit: 100,
-    };
-    if (after) params.after = after;
+  // Busca insights e status em paralelo
+  const [statusMap, insights] = await Promise.all([
+    fetchCampaignStatuses(actId).catch(() => ({})),
+    (async () => {
+      const out = [];
+      let after = null;
+      do {
+        const params = {
+          fields,
+          time_range: JSON.stringify({ since: sinceISO, until: untilISO }),
+          level: 'campaign',
+          limit: 100,
+        };
+        if (after) params.after = after;
+        const json = await graphGet(`/${actId}/insights`, params);
+        for (const row of (json.data || [])) {
+          const spend   = Number(row.spend || 0);
+          const revenue = pickAction(row.action_values, PURCHASE);
+          out.push({
+            id:          row.campaign_id || null,
+            name:        row.campaign_name || 'Campanha',
+            spend,
+            revenue,
+            orders:      pickAction(row.actions, PURCHASE),
+            clicks:      Number(row.clicks || 0),
+            impressions: Number(row.impressions || 0),
+            reach:       Number(row.reach || 0),
+            ctr:         Number(row.ctr || 0),
+            cpc:         Number(row.cpc || 0),
+            roas:        spend > 0 ? revenue / spend : 0,
+          });
+        }
+        after = json.paging?.cursors?.after && json.paging?.next ? json.paging.cursors.after : null;
+      } while (after);
+      return out;
+    })(),
+  ]);
 
-    const json = await graphGet(`/${actId}/insights`, params);
-    for (const row of (json.data || [])) {
-      const spend   = Number(row.spend || 0);
-      const revenue = pickAction(row.action_values, PURCHASE);
-      out.push({
-        name:        row.campaign_name || 'Campanha',
-        spend,
-        revenue,
-        orders:      pickAction(row.actions, PURCHASE),
-        clicks:      Number(row.clicks || 0),
-        impressions: Number(row.impressions || 0),
-        reach:       Number(row.reach || 0),
-        ctr:         Number(row.ctr || 0),
-        cpc:         Number(row.cpc || 0),
-        roas:        spend > 0 ? revenue / spend : 0,
-      });
-    }
-    after = json.paging?.cursors?.after && json.paging?.next ? json.paging.cursors.after : null;
-  } while (after);
-
-  return out.sort((a, b) => b.spend - a.spend);
+  return insights
+    .map(c => ({ ...c, status: statusMap[c.id] || null }))
+    .sort((a, b) => b.spend - a.spend);
 }
 
 export { AD_ACCOUNT_ID_US };

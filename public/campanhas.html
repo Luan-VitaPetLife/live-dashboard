@@ -135,7 +135,11 @@
   .camp-expand-btn.open i{transform:rotate(180deg)}
 
   /* ── Expand panel ── */
+  @keyframes expandDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes collapseUp{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-8px)}}
   .camp-expand-panel{border-top:1px solid var(--border);background:var(--surface2);display:none}
+  .camp-expand-panel.anim-open{animation:expandDown .22s ease forwards}
+  .camp-expand-panel.anim-close{animation:collapseUp .16s ease forwards}
   .camp-expand-inner{padding:16px 20px 20px}
   .camp-expand-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px}
   .camp-expand-title{font-size:12px;font-weight:600;color:var(--sub)}
@@ -302,7 +306,7 @@
           </div>
           <div class="camp-expand-col">
             <button class="camp-expand-btn" id="btn-ml" onclick="toggleExpand('ml')">
-              <i class="bi bi-chevron-down"></i> Gastos
+              <i class="bi bi-chevron-down"></i> Campanhas
             </button>
           </div>
         </div>
@@ -350,7 +354,7 @@
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">ROAS</div>
             <div class="camp-kpi-val" id="meta_br-roas">4,7×</div>
-            <div class="camp-kpi-sub">Conta BR (Coco &amp; Luna)</div>
+            <div class="camp-kpi-sub">Conta BR (Coco and Luna)</div>
           </div>
           <div class="camp-chart-col">
             <div class="camp-chart-label">
@@ -363,7 +367,7 @@
           </div>
           <div class="camp-expand-col">
             <button class="camp-expand-btn" id="btn-meta_br" onclick="toggleExpand('meta_br')">
-              <i class="bi bi-chevron-down"></i> Gastos
+              <i class="bi bi-chevron-down"></i> Campanhas
             </button>
           </div>
         </div>
@@ -424,7 +428,7 @@
           </div>
           <div class="camp-expand-col">
             <button class="camp-expand-btn" id="btn-amazon_br" onclick="toggleExpand('amazon_br')">
-              <i class="bi bi-chevron-down"></i> Gastos
+              <i class="bi bi-chevron-down"></i> Campanhas
             </button>
           </div>
         </div>
@@ -474,7 +478,7 @@
           </div>
           <div class="camp-expand-col">
             <button class="camp-expand-btn" id="btn-meta_us" onclick="toggleExpand('meta_us')">
-              <i class="bi bi-chevron-down"></i> Gastos
+              <i class="bi bi-chevron-down"></i> Campanhas
             </button>
           </div>
         </div>
@@ -532,7 +536,7 @@
           </div>
           <div class="camp-expand-col">
             <button class="camp-expand-btn" id="btn-amazon" onclick="toggleExpand('amazon')">
-              <i class="bi bi-chevron-down"></i> Gastos
+              <i class="bi bi-chevron-down"></i> Campanhas
             </button>
           </div>
         </div>
@@ -707,7 +711,7 @@ function render() {
 
   // re-renderiza painéis de campanha abertos (mercado/período mudou)
   ['ml','meta_br','amazon_br','meta_us','amazon'].forEach(key => {
-    if (document.getElementById('expand-' + key)?.style.display === 'block') renderCampaigns(key);
+    if (document.getElementById('expand-' + key)?.dataset.open === '1') renderCampaigns(key);
   });
 }
 
@@ -795,10 +799,26 @@ async function renderCampaigns(key) {
 function toggleExpand(key) {
   const panel = document.getElementById(`expand-${key}`);
   const btn   = document.getElementById(`btn-${key}`);
-  const isOpen = panel.style.display === 'block';
-  panel.style.display = isOpen ? 'none' : 'block';
-  btn.classList.toggle('open', !isOpen);
-  if (!isOpen) renderCampaigns(key);
+  const isOpen = panel.dataset.open === '1';
+
+  if (isOpen) {
+    panel.dataset.open = '0';
+    btn.classList.remove('open');
+    panel.classList.remove('anim-open');
+    panel.classList.add('anim-close');
+    panel.addEventListener('animationend', () => {
+      panel.style.display = 'none';
+      panel.classList.remove('anim-close');
+    }, { once: true });
+  } else {
+    panel.dataset.open = '1';
+    panel.style.display = 'block';
+    panel.classList.remove('anim-close');
+    panel.offsetHeight; // força reflow antes da animação
+    panel.classList.add('anim-open');
+    btn.classList.add('open');
+    renderCampaigns(key);
+  }
 }
 
 // ── Init ─────────────────────────────────────────────────
