@@ -161,9 +161,8 @@
   .cmp-m-val.pos{color:var(--green)}
 
   /* ── Channel visibility ── */
-  .ch-br{} .ch-us{display:none!important}
+  body:not(.market-us) .ch-us{display:none!important}
   body.market-us .ch-br{display:none!important}
-  body.market-us .ch-us{}
 
   /* ── Responsive ── */
   @media(max-width:768px){
@@ -389,64 +388,52 @@
         </div>
       </div>
 
-      <!-- ── Shopee ─────────────────────────────────────── -->
-      <div class="camp-card ch-br" id="card-shopee">
+      <!-- ── Amazon BR ─────────────────────────────────── -->
+      <div class="camp-card ch-br" id="card-amazon_br">
         <div class="camp-card-main">
           <div class="camp-ch-id">
-            <div class="camp-logo camp-logo-img"><img src="logo_shopee.svg" alt="Shopee"></div>
+            <div class="camp-logo camp-logo-img"><img src="logo_amazon.webp" alt="Amazon"></div>
             <div>
-              <div class="camp-ch-name">Shopee</div>
-              <div class="camp-ch-type">Shopee Ads</div>
+              <div class="camp-ch-name">Amazon</div>
+              <div class="camp-ch-type">Amazon Ads</div>
             </div>
           </div>
           <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Vendas campanha</div>
-            <div class="camp-kpi-val" id="shopee-sales">R$ 2.635</div>
-            <div class="camp-kpi-sub" id="shopee-orders">28 pedidos</div>
+            <div class="camp-kpi-label">Gasto Ads</div>
+            <div class="camp-kpi-val" id="amazon_br-sales">—</div>
+            <div class="camp-kpi-sub" id="amazon_br-orders">Ads indisponível via API</div>
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">Faturamento total</div>
-            <div class="camp-kpi-val" id="shopee-revenue">—</div>
+            <div class="camp-kpi-val" id="amazon_br-revenue">—</div>
             <div class="camp-kpi-sub">receita total do canal</div>
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">ROAS</div>
-            <div class="camp-kpi-val" id="shopee-roas">4,2×</div>
-            <div class="camp-kpi-sub" id="shopee-spend">Gasto: R$ 634</div>
+            <div class="camp-kpi-val" id="amazon_br-roas">—</div>
+            <div class="camp-kpi-sub" id="amazon_br-spend">requer Amazon Ads API</div>
           </div>
           <div class="camp-chart-col">
             <div class="camp-chart-label">
-              <span class="camp-chart-label-txt">Orgânico vs Campanha</span>
+              <span class="camp-chart-label-txt">Receita / dia</span>
               <div class="camp-mini-legend">
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:#EE4D2D"></span>Camp.</span>
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:rgba(30,28,24,.14)"></span>Org.</span>
+                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:#FF9900"></span>Amazon BR</span>
               </div>
             </div>
-            <div class="camp-mini-canvas-wrap"><canvas id="mini-shopee"></canvas></div>
+            <div class="camp-mini-canvas-wrap"><canvas id="mini-amazon_br"></canvas></div>
           </div>
           <div class="camp-expand-col">
-            <button class="camp-expand-btn" id="btn-shopee" onclick="toggleExpand('shopee')">
+            <button class="camp-expand-btn" id="btn-amazon_br" onclick="toggleExpand('amazon_br')">
               <i class="bi bi-chevron-down"></i> Gastos
             </button>
           </div>
         </div>
-        <div class="camp-expand-panel" id="expand-shopee">
+        <div class="camp-expand-panel" id="expand-amazon_br">
           <div class="camp-expand-inner">
             <div class="camp-expand-head">
-              <div class="camp-expand-title">Gasto da campanha no período — Shopee</div>
-              <div class="camp-compare-wrap">
-                <span class="camp-compare-label">Comparar com:</span>
-                <label class="camp-cmp-check">
-                  <input type="checkbox" data-ch="ml" onchange="toggleCompare(this,'shopee')">
-                  <span class="camp-cmp-dot" style="background:#d4a40a"></span> Mercado Livre
-                </label>
-                <label class="camp-cmp-check">
-                  <input type="checkbox" data-ch="meta_br" onchange="toggleCompare(this,'shopee')">
-                  <span class="camp-cmp-dot" style="background:#1877F2"></span> Meta
-                </label>
-              </div>
+              <div class="camp-expand-title">Campanhas no período — Amazon BR</div>
             </div>
-            <div class="camp-campaigns" id="camps-shopee"></div>
+            <div class="camp-campaigns" id="camps-amazon_br"></div>
           </div>
         </div>
       </div>
@@ -569,7 +556,7 @@
     </div><!-- /camp-grid -->
   </div><!-- /content -->
 
-  <footer>Dados reais via API. Gasto de Ads disponível para Meta (BR/US). Mercado Livre Ads requer autorização de Mercado Ads; Shopee e Amazon Ads não expõem gasto via API.</footer>
+  <footer>Dados reais via API. Gasto de Ads disponível para Meta (BR/US) e Mercado Livre Ads. Amazon Ads não expõe gasto via SP-API Orders.</footer>
 </div><!-- /main -->
 
 <script>
@@ -693,16 +680,14 @@ function render() {
     setText('ml-revenue', fmtMoney(cs.mercadolivre || 0));
     setText('ml-roas', mlAvail && ml.roas > 0 ? ml.roas.toFixed(1).replace('.', ',') + '×' : '—');
     setText('ml-spend', mlAvail ? 'receita total ÷ gasto' : 'reautorize com escopo de Ads');
-    // ── Shopee ──
-    setLabel('card-shopee', 0, 'Gasto Ads');
-    setText('shopee-sales', '—');
-    setText('shopee-orders', 'Ads indisponível via API');
-    setText('shopee-revenue', fmtMoney(cs.shopee || 0));
-    setText('shopee-roas', '—');
-    setText('shopee-spend', 'dados só no Seller Center');
+    // ── Amazon BR ──
+    setText('amazon_br-sales', '—');
+    setText('amazon_br-orders', 'Ads indisponível via API');
+    setText('amazon_br-revenue', fmtMoney(cs.amazon || 0));
+    setText('amazon_br-roas', '—');
+    setText('amazon_br-spend', 'requer Amazon Ads API');
   } else {
     // ── Amazon US ──
-    setLabel('card-amazon', 0, 'Gasto Ads');
     setText('amazon-sales', '—');
     setText('amazon-orders', 'Ads indisponível via API');
     setText('amazon-revenue', fmtMoney(cs.amazon_us || 0));
@@ -714,14 +699,14 @@ function render() {
   const metaSeries = d.trend?.metaSpendDaily || labels.map(() => 0);
   drawMini(metaKey, labels, metaSeries, '#1877F2', 'Gasto Meta / dia', 'Gasto');
   if (market === 'br') {
-    drawMini('ml',     labels, tb.map(b => b.mercadolivre || 0), '#FFE600', 'Receita / dia', 'Receita');
-    drawMini('shopee', labels, tb.map(b => b.shopee || 0),       '#EE4D2D', 'Receita / dia', 'Receita');
+    drawMini('ml',        labels, tb.map(b => b.mercadolivre || 0), '#FFE600', 'Receita / dia', 'Receita');
+    drawMini('amazon_br', labels, tb.map(b => b.amazon       || 0), '#FF9900', 'Receita / dia', 'Receita');
   } else {
-    drawMini('amazon', labels, tb.map(b => b.amazon_us || 0),    '#FF9900', 'Receita / dia', 'Receita');
+    drawMini('amazon', labels, tb.map(b => b.amazon_us || 0), '#FF9900', 'Receita / dia', 'Receita');
   }
 
   // re-renderiza painéis de campanha abertos (mercado/período mudou)
-  ['ml','meta_br','shopee','meta_us','amazon'].forEach(key => {
+  ['ml','meta_br','amazon_br','meta_us','amazon'].forEach(key => {
     if (document.getElementById('expand-' + key)?.style.display === 'block') renderCampaigns(key);
   });
 }
@@ -753,7 +738,7 @@ function drawMini(key, labels, data, color, headerTxt, legendTxt) {
 }
 
 // ── Cards de campanha (painel "Gastos") ───────────────────
-const CH_OF_KEY = { ml:'mercadolivre', meta_br:'meta', meta_us:'meta', shopee:null, amazon:null };
+const CH_OF_KEY = { ml:'mercadolivre', meta_br:'meta', meta_us:'meta', amazon_br:null, amazon:null };
 
 async function loadCampaigns() {
   const ck = `${market}|${state.since}|${state.until}`;
