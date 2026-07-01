@@ -122,29 +122,46 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - **Pré-requisito:** o app ML precisa ter permissão **Mercado Ads** e token gerado via `/mercadolivre/connect`. Sem isso, `/advertising/advertisers` retorna 403 e as funções devolvem zeros/vazio graciosamente.
 - `mlBreakdown` exposto em `metrics.js`: `{ organic, premium, adCost, adClicks, roas }`.
 
-### 4.7 Amazon SP-API (EUA + BR) — UM app, UMA chamada combinada
+### 4.7 Amazon SP-API (EUA + BR) — pendente reautorizar US; combinação automática enquanto isso
 - Implementado em `src/amazon.js`. Sem dependências externas (SigV4 e HMAC via `crypto` nativo do Node).
-- **FATO CRÍTICO (verificado via `/sellers/v1/marketplaceParticipations`):** o **mesmo** app/refresh-token
-  (`AMAZON_CLIENT_ID/SECRET/REFRESH_TOKEN`) está autorizado para **US (`ATVPDKIKX0DER`) E BR (`A2Q3Y263D00KWC`)**.
-  Não existem mais credenciais BR separadas. `AMAZON_BR_*` foi abandonado. `isConfiguredBR()` === `isConfigured()`.
-- **Endpoint único:** `sellingpartnerapi-na.amazon.com` (região NA) serve **os dois** marketplaces (BR é região NA, não SA).
-- **Chamada COMBINADA (a correção do bug "Amazon US nunca aparecia"):** uma única requisição a `/orders/v0/orders`
-  com `MarketplaceIds=ATVPDKIKX0DER,A2Q3Y263D00KWC`. Cada pedido traz seu próprio `MarketplaceId` → separado por
-  `MARKET_BY_MP` em US (`channel: 'amazon_us'`, `market: 'us'`) e BR (`channel: 'amazon'`, `market: 'br'`).
-  - **Por que combinar:** a cota da Orders API (~0,0167 req/s, balde compartilhado por app/conta) era drenada pela
-    BR (que rodava primeiro no `sync.js`); a US vinha logo depois e levava 429 → backoff escalante → **US nunca ganhava a vez**.
-    Uma chamada só elimina a competição e usa metade da cota.
-- **Fluxo de autenticação:** 1) LWA token (`getLwaToken`) · 2) STS AssumeRole (IAM User, compartilhado) · 3) SigV4 + `x-amz-access-token`.
-- **Funções exportadas:** `fetchOrders(since, until)` devolve **US+BR juntos**. `fetchOrdersBR()` é no-op (compat) — BR já vem no `fetchOrders`.
+- **FATO CRÍTICO ATUAL (descoberto 01/07/2026):** o app **só foi autorizado no Brazil Seller Central**.
+  `AMAZON_REFRESH_TOKEN` (US) e `AMAZON_BR_REFRESH_TOKEN` no Railway são **o mesmo valor** — ou seja, a US
+  **nunca foi de fato autorizada** em `sellercentral.amazon.com` (NA Seller Central, conta Vita Pet Life).
+  Uma afirmação anterior deste arquivo ("mesmo token cobre US e BR, verificado via `marketplaceParticipations`")
+  estava **errada** ou descrevia um estado que não se sustentou — não confiar nela. `amazon_us` no payload do
+  dashboard fica em 0 até a reautorização acontecer.
+  - **Ação pendente (só o Luan pode fazer):** logar em `sellercentral.amazon.com` (conta US, Vita Pet Life — não a BR)
+    e autorizar o app SP-API lá, gerando um `AMAZON_REFRESH_TOKEN` novo e **diferente** do `AMAZON_BR_REFRESH_TOKEN`.
+    Atualizar só essa variável no Railway. Sem isso nenhuma mudança de código traz dado dos EUA.
+- **Endpoint único:** `sellingpartnerapi-na.amazon.com` (região NA) serve os dois marketplaces (BR é região NA, não SA).
+- **Combinação automática (`SAME_TOKEN` em `amazon.js`):** como os dois tokens hoje são idênticos (mesma conta, mesma
+  cota real na Amazon), `fetchOrders()` detecta isso e faz **uma única chamada** a `/orders/v0/orders` com
+  `MarketplaceIds=ATVPDKIKX0DER,A2Q3Y263D00KWC` (metade das requisições reais) em vez de duas chamadas separadas
+  contra o mesmo balde. Cada pedido retornado traz seu próprio `MarketplaceId` → separado por `MARKET_BY_MP` em
+  US (`channel: 'amazon_us'`, `market: 'us'`) e BR (`channel: 'amazon'`, `market: 'br'`).
+  - **Por que isso importa:** entre 30/06 e 01/07 o código fazia sempre DUAS chamadas (US e BR) tratando-as como
+    cotas independentes (`kv.amazonBackoff` e `kv.amazonBRBackoff` separados) — mas por serem o mesmo token, as duas
+    batiam na MESMA cota real, dobrando as requisições por sync e um 429 de um lado não freava o outro. Isso é o
+    suspeito nº 1 para a penalização sustentada de 429 que persistiu por dias.
+  - **Quando a US for reautorizada com token próprio:** `SAME_TOKEN` vira `false` automaticamente e o código volta
+    sozinho a fazer duas chamadas separadas com backoff independente (`getLwaTokenUS`/`getLwaTokenBR`,
+    `kv.amazonBackoff`/`kv.amazonBRBackoff`) — não precisa mexer no código de novo, só trocar a variável no Railway.
+- **Fluxo de autenticação:** 1) LWA token (getter próprio por token) · 2) STS AssumeRole (IAM User, compartilhado) · 3) SigV4 + `x-amz-access-token`.
+- **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
 - **RDT (nome do comprador):** desativado por padrão — o app não tem o papel PII (retornava 403 e gastava requisição).
   Reative com `AMAZON_FETCH_PII=1` só se o papel for aprovado.
 - **Restrição SP-API:** `CreatedBefore` ≥ 2 min antes de agora — código aplica margem de 3 min.
-- **Backoff (balde ÚNICO `kv.amazonBackoff`):** só dispara em 429; degraus 15→30→60→120 min; contador zera após sucesso.
-  Reset/force via `POST /api/amazon/{reset-backoff,force-sync}` (os `/api/amazon-br/*` também resetam o balde compartilhado).
+- **Backoff:** só dispara em 429; degraus 15→30→60→120 min; contador zera após sucesso. Enquanto `SAME_TOKEN`, usa o
+  balde único `kv.amazonBackoff` (o `kv.amazonBRBackoff` fica sem uso até haver token BR de verdade distinto).
+  Reset/force via `POST /api/amazon/{reset-backoff,force-sync}`.
   - **⚠️ Se levar 429 mesmo combinado:** a cota da conta pode estar penalizada por excesso sustentado de chamadas. A cura é
     PARAR de martelar (deixar o backoff agir, não usar force-sync em loop) e esperar a cota se restaurar — NÃO remover o backoff.
+    **NÃO rodar `/api/sync` ou `/api/amazon/force-sync` só para "testar" enquanto a cota estiver se recuperando.**
 - Sem `AMAZON_AWS_ACCESS_KEY` / `SECRET_KEY` → retorna `[]` com aviso, nada quebra.
 - **IDs de pedido:** `amazon-us:` (EUA) e `amazon-br:` (BR) — evita colisão.
+- **Variável fantasma:** `AMAZON_RESET_BACKOFF` já existiu como variável no Railway mas **nunca foi lida por nenhum
+  código** (nem hoje, nem no histórico do git) — não faz nada, pode remover. O reset real é o endpoint
+  `POST /api/amazon/reset-backoff`.
 
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.

@@ -103,10 +103,9 @@ export async function runSync() {
     }
   } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
 
-  // Amazon US + BR — duas chamadas separadas, cada uma com seu próprio LWA token e backoff.
-  // US requer AMAZON_REFRESH_TOKEN (autorizar em sellercentral.amazon.com — NA Seller Central).
-  // BR requer AMAZON_BR_REFRESH_TOKEN (autorizar em sellercentral.amazon.com.br — BR Seller Central).
-  // Backoff exponencial independente por mercado, gerenciado internamente em amazon.js.
+  // Amazon US + BR — amazon.js decide sozinho se combina numa chamada só (tokens
+  // ainda idênticos, mesma conta/cota) ou faz duas separadas (tokens já distintos).
+  // Backoff gerenciado internamente em amazon.js. Ver CLAUDE.md 4.7.
   try {
     if (!amazon.isConfigured()) {
       report.errors.push('amazon: credenciais LWA ausentes (AMAZON_CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN)');

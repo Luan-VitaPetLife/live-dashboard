@@ -8,8 +8,12 @@
 //       → autorizar em sellercentral.amazon.com.br (Brazil Seller Central)
 //  Compartilhado: AMAZON_ROLE_ARN, AMAZON_AWS_ACCESS_KEY, AMAZON_AWS_SECRET_KEY
 //
-//  Cada marketplace tem seu próprio LWA token e backoff independente.
-//  Dois chamadas separadas por sync (US → pausa 3s → BR).
+//  Estado atual (ver CLAUDE.md 4.7): a US ainda NÃO foi autorizada com token próprio —
+//  AMAZON_REFRESH_TOKEN e AMAZON_BR_REFRESH_TOKEN são o MESMO token (mesma conta/mesma
+//  cota real). Enquanto isso for verdade, fetchOrders() faz UMA chamada combinada
+//  (metade das requisições reais) em vez de duas contra o mesmo balde de rate limit.
+//  Quando a US virar um token de verdade diferente do BR, o código detecta sozinho
+//  (SAME_TOKEN vira false) e volta a fazer duas chamadas com backoff independente.
 // ─────────────────────────────────────────────
 import 'dotenv/config';
 import crypto from 'crypto';
@@ -197,15 +201,17 @@ async function spGet(getLwa, path, params = {}, onRateLimit, lwaOverride = null)
   return json;
 }
 
-// ── fetchMarketplaceOrders — busca pedidos de UM marketplace com seu próprio token ──
+// ── fetchMarketplaceOrders — busca pedidos de um ou mais marketplaces com UM token ──
+// marketplaceId aceita um ID único ("US") ou vários separados por vírgula (chamada
+// combinada). Cada pedido retornado traz seu próprio MarketplaceId — usado para
+// separar US/BR no resultado, independente de quantos IDs foram pedidos de uma vez.
 async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilISO,
-    getBackoff, setBackoff, getBackoffCount, setBackoffCount }) {
+    getBackoff, setBackoff, getBackoffCount, setBackoffCount, label }) {
 
   const backoffUntil = getBackoff();
   if (backoffUntil > Date.now()) {
     const mins = Math.ceil((backoffUntil - Date.now()) / 60000);
-    const { market } = MARKET_BY_MP[marketplaceId] || {};
-    console.log(`Amazon ${(market || '?').toUpperCase()}: backoff ativo por mais ${mins} min — pulando.`);
+    console.log(`Amazon ${label}: backoff ativo por mais ${mins} min — pulando.`);
     return [];
   }
 
@@ -214,8 +220,7 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
     Date.now() - 3 * 60 * 1000,
   )).toISOString();
 
-  const { market, channel } = MARKET_BY_MP[marketplaceId] || {};
-  console.log(`Amazon ${(market || '?').toUpperCase()}: buscando ${sinceISO} → ${safeUntil.slice(0, 16)}`);
+  console.log(`Amazon ${label}: buscando ${sinceISO} → ${safeUntil.slice(0, 16)}`);
 
   const onRateLimit = () => {
     const count = getBackoffCount();
@@ -223,7 +228,7 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
     const until = Date.now() + delay;
     setBackoffCount(count + 1);
     setBackoff(until);
-    console.warn(`Amazon ${(market || '?').toUpperCase()}: 429 (tentativa ${count + 1}) — backoff ${delay / 60000} min`);
+    console.warn(`Amazon ${label}: 429 (tentativa ${count + 1}) — backoff ${delay / 60000} min`);
   };
 
   const rdt = process.env.AMAZON_FETCH_PII === '1'
@@ -261,6 +266,7 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
     const orders = data.payload?.Orders || [];
 
     for (const o of orders) {
+      const { market, channel } = MARKET_BY_MP[o.MarketplaceId] || MARKET_BY_MP[MARKETPLACE_ID];
       out.push({
         id:        `amazon-${market}:` + o.AmazonOrderId,
         channel,
@@ -288,13 +294,34 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
   return out;
 }
 
-// ── Exports públicos ───────────────────────────────────────────────────────────
-// fetchOrders faz TWO chamadas independentes: US com AMAZON_REFRESH_TOKEN,
-// BR com AMAZON_BR_REFRESH_TOKEN. Backoffs separados — 429 de um não bloqueia o outro.
+// AMAZON_REFRESH_TOKEN e AMAZON_BR_REFRESH_TOKEN, quando IDÊNTICOS, são a mesma conta/
+// autorização na Amazon (o app só foi autorizado num Seller Central) — logo, o MESMO
+// balde de cota real, mesmo que o código trate US/BR como buckets separados. Nesse
+// caso, uma única chamada combinada usa metade das requisições reais sem nenhuma perda
+// (o token continua só enxergando o marketplace pra que foi autorizado). Quando a US for
+// autorizada com um token PRÓPRIO e diferente (ver CLAUDE.md 4.7), viram duas contas
+// reais com cotas reais independentes — aí sim compensa manter as duas chamadas.
+const SAME_TOKEN = Boolean(REFRESH_TOKEN) && REFRESH_TOKEN === REFRESH_TOKEN_BR;
+const ALL_MARKETPLACE_IDS = `${MARKETPLACE_ID},${MARKETPLACE_ID_BR}`;
+
 export async function fetchOrders(sinceISO, untilISO) {
   if (!hasAwsCreds()) {
     console.warn('Amazon: AWS creds ausentes — configure AMAZON_AWS_ACCESS_KEY / SECRET_KEY.');
     return [];
+  }
+  if (!isConfigured() && !isConfiguredBR()) {
+    console.warn('Amazon: nenhum refresh token configurado.');
+    return [];
+  }
+
+  if (SAME_TOKEN) {
+    console.warn('Amazon: AMAZON_REFRESH_TOKEN === AMAZON_BR_REFRESH_TOKEN — mesma conta/mesma cota. Chamada combinada (não reautorizado para US ainda; ver CLAUDE.md 4.7).');
+    return fetchMarketplaceOrders({
+      getLwa: getLwaTokenUS, marketplaceId: ALL_MARKETPLACE_IDS, sinceISO, untilISO,
+      getBackoff: getAmazonBackoff, setBackoff: setAmazonBackoff,
+      getBackoffCount: getAmazonBackoffCount, setBackoffCount: setAmazonBackoffCount,
+      label: '(combinado US+BR)',
+    }).catch(e => { console.error('Amazon (combinado):', e.message); return []; });
   }
 
   const results = [];
@@ -304,14 +331,15 @@ export async function fetchOrders(sinceISO, untilISO) {
       getLwa: getLwaTokenUS, marketplaceId: MARKETPLACE_ID, sinceISO, untilISO,
       getBackoff: getAmazonBackoff, setBackoff: setAmazonBackoff,
       getBackoffCount: getAmazonBackoffCount, setBackoffCount: setAmazonBackoffCount,
+      label: 'US',
     }).catch(e => { console.error('Amazon US:', e.message); return []; });
     results.push(...us);
   } else {
     console.warn('Amazon US: AMAZON_REFRESH_TOKEN não configurado — autorize o app no NA Seller Central.');
   }
 
-  // Pausa entre chamadas para respeitar a cota (US e BR são contas separadas mas
-  // compartilham o mesmo IAM; a SP-API trata as cotas por seller account individualmente)
+  // Pausa entre chamadas: tokens diferentes = contas realmente separadas, cada uma
+  // com sua própria cota — a pausa só evita rajada, não é disputa pelo mesmo balde.
   if (isConfigured() && isConfiguredBR()) await sleep(3000);
 
   if (isConfiguredBR()) {
@@ -319,6 +347,7 @@ export async function fetchOrders(sinceISO, untilISO) {
       getLwa: getLwaTokenBR, marketplaceId: MARKETPLACE_ID_BR, sinceISO, untilISO,
       getBackoff: getAmazonBRBackoff, setBackoff: setAmazonBRBackoff,
       getBackoffCount: getAmazonBRBackoffCount, setBackoffCount: setAmazonBRBackoffCount,
+      label: 'BR',
     }).catch(e => { console.error('Amazon BR:', e.message); return []; });
     results.push(...br);
   } else {
