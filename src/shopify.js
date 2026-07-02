@@ -72,7 +72,7 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
           productType: x.node.product?.productType || null,
           // Presente quando o item foi vendido através de um combo (Shopify Bundles):
           // o produto aparece como item individual, mas com qty/preço do combo.
-          bundle:      x.node.lineItemGroup ? { id: x.node.lineItemGroup.id, title: x.node.lineItemGroup.title } : null,
+          bundle:      x.node.lineItemGroup ? { id: x.node.lineItemGroup.id, title: x.node.lineItemGroup.title, qty: x.node.lineItemGroup.quantity } : null,
         })),
       });
     }
