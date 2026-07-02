@@ -43,6 +43,7 @@ src/shopee.js           Shopee Open API v2: assinatura HMAC, OAuth, refresh de t
 src/mercadolivre.js     Mercado Livre OAuth 2.0 + pedidos + fetchAdCosts + fetchCampaigns (Mercado Ads)
 src/amazon.js           Amazon SP-API (EUA + BR): chamada combinada, LWA + SigV4 + STS AssumeRole
 src/meta.js             Meta Marketing API: gasto diário + fetchCampaigns (nível campanha, BR e US)
+src/googleads.js        Google Ads API: OAuth + fetchCampaigns (nível campanha, só EUA por enquanto)
 src/metrics.js          Calcula o payload da dashboard por mercado; inclui salesSplit
 src/sync.js             Orquestra a busca de todos os canais BR e US e grava no store
 public/index.html       Dashboard principal (toggle de mercado, receita, tendência, canais, pedidos)
@@ -214,8 +215,9 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Painel "Gastos":** ao clicar em um canal, exibe cards individuais de cada campanha retornados por `/api/campaigns`. Cada card mostra: nome, status, gasto, receita, ROAS, pedidos, cliques, impressões, CTR, ACoS (ML).
   - Logo do canal em cada card: `logo_mercadolivre.png` com `.camp-logo-fill` (sem borda/padding, `object-fit:cover`). Meta/Shopee/Amazon com `.camp-logo-img` (fundo branco, borda, padding — para logos com transparência).
   - `.cmp-status.on` / `.cmp-status.off` indicam campanha ativa/pausada.
-- Mercado Livre e Meta BR aparecem no mercado BR; apenas Meta US no mercado US.
+- Mercado Livre e Meta BR aparecem no mercado BR; apenas Meta US no mercado US. Google Ads aparece só no mercado US (card `#card-google_us`).
 - Período sincronizado com o seletor da própria página (não herda do `index.html`).
+- **Card Google Ads (só EUA):** ao contrário dos demais cards (que puxam o resumo do próprio `/api/dashboard`), o card do Google Ads (`loadGoogleCard()`) busca `/api/campaigns` diretamente e soma `spend/revenue/clicks` das campanhas retornadas para preencher os KPIs do próprio card — não está integrado ao payload de `/api/dashboard` nem ao `mlBreakdown`/`salesSplit` (decisão consciente, ver 4.12). Mini-chart mostra gasto por campanha (barras), não série diária (a API do Google Ads aqui só é consultada agregada por período, sem `segments.date`).
 
 ### 4.10 Páginas de Geografia — `public/geografia.html` e `public/geografia-us.html`
 - **Biblioteca:** Leaflet.js 1.9.4 (CDN unpkg).
@@ -232,6 +234,20 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Popup ao clicar:** receita, pedidos, ticket médio, % do total.
 - **Modal de estado:** clique em card de ranking abre modal com 4 KPIs + gráfico de barras comparativo.
 - **Dados:** campo `byState` do `/api/dashboard` → `{ [UF]: { revenue, orders } }`. `byState` filtra `o.total > 0`.
+
+### 4.12 Google Ads — EUA apenas (implementado 01/07/2026)
+- Implementado em `src/googleads.js`. OAuth 2.0 (authorization_code) + refresh_token de longa duração, seguindo o mesmo padrão de `mercadolivre.js` (`/googleads/connect` → autoriza → `/googleads/callback` troca `code` por tokens, salvos no store via `kv.googleAdsTokens`).
+- **Escopo atual — só EUA:** a conta Google Ads é chamada "Coco and Luna" (nome da marca BR) mas **só roda campanhas dos EUA** hoje. O negócio tem loja nos dois países — `cocoandluna.com.br` (BR) e **`thecocoandluna.com`** (EUA, além do já documentado `vita-pet-life.myshopify.com`) — mas o Luan confirmou que essa conta de Ads só serve o mercado americano por enquanto. Por isso a integração é exposta **apenas no mercado US** de `/api/campaigns`, e `fetchOrders`/`metrics.js`/`sync.js` **não foram tocados** — nenhuma mudança no cálculo de KPI/ROAS do dashboard principal.
+- **Google Ads API é separada da UI do Google Ads** — requer projeto próprio no Google Cloud Console:
+  1. Criar projeto em `console.cloud.google.com` e ativar a API "Google Ads API".
+  2. Configurar a tela de consentimento OAuth (OAuth consent screen).
+  3. Criar credencial OAuth Client ID do tipo **Web application**, com Redirect URI = `https://live-dashboard-vitapetlife.up.railway.app/googleads/callback` (mesmo padrão dos outros callbacks do projeto).
+  4. Gerar um **Developer Token** no Google Ads API Center (dentro da conta Google Ads) — nasce em nível "Test accounts"; precisa solicitar aprovação de **"Basic access"** para consultar a conta real "Coco and Luna".
+  5. Se o Developer Token tiver sido gerado sob uma conta gerenciadora (MCC) — fluxo comum ao criar o token — preencher também `GOOGLE_ADS_LOGIN_CUSTOMER_ID` (Customer ID da MCC, sem hífen) para o header `login-customer-id`; sem MCC, deixar em branco.
+- **Customer ID:** `134-411-4329` → sem hífen `1344114329` (variável `GOOGLE_ADS_CUSTOMER_ID`).
+- **Consulta:** GAQL (Google Ads Query Language) via REST `POST /customers/{id}/googleAds:search`, paginado por `pageToken`/`nextPageToken`. `fetchCampaigns(sinceISO, untilISO)` agrega `cost_micros` (÷1e6 → moeda), `clicks`, `impressions`, `conversions`, `conversions_value` por `campaign.id` no intervalo — **agregado no período, sem granularidade diária** (não usa `segments.date` no SELECT).
+- **Retorna zeros/vazio graciosamente** se não configurado ou não autorizado — nada quebra (mesmo padrão de todo o projeto).
+- Exposto em `/api/campaigns?market=us` como `channels.google = { available, campaigns }`. **Não** entra no payload de `/api/dashboard` nem no cálculo de `adCost`/`roas` do dashboard principal — decisão deliberada para não expandir escopo além do pedido (fica restrito à tela de Campanhas, igual ao padrão de Meta/ML já usados ali).
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -279,6 +295,12 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 | `AMAZON_ROLE_ARN` | ARN do IAM Role com permissões SP-API — compartilhado entre EUA e BR |
 | `AMAZON_AWS_ACCESS_KEY` | Access Key do IAM User com permissão `sts:AssumeRole` no role acima |
 | `AMAZON_AWS_SECRET_KEY` | Secret Key do mesmo IAM User |
+| `GOOGLE_ADS_CLIENT_ID` | OAuth Client ID (tipo Web application) do projeto Google Cloud |
+| `GOOGLE_ADS_CLIENT_SECRET` | OAuth Client Secret do mesmo projeto |
+| `GOOGLE_ADS_REDIRECT_URL` | URL de callback OAuth (`/googleads/callback`) |
+| `GOOGLE_ADS_DEVELOPER_TOKEN` | Developer Token do Google Ads API Center — precisa de aprovação "Basic access" |
+| `GOOGLE_ADS_CUSTOMER_ID` | Customer ID da conta "Coco and Luna" sem hífen (`1344114329`) — só EUA, ver 4.12 |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Customer ID da MCC (sem hífen) — só se o Developer Token tiver sido gerado sob uma conta gerenciadora |
 | `DATABASE_URL` | Connection string Postgres (Railway injeta via `${{Postgres.DATABASE_URL}}`) |
 
 **Armadilhas conhecidas:**
@@ -294,13 +316,14 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - `npm run sync` faz uma sincronização única (útil para testar credenciais).
 - Endpoints:
   - `GET /api/dashboard?channel=&metric=&since=YYYY-MM-DD&until=YYYY-MM-DD&market=br|us`
-  - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
+  - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta + Google Ads. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
   - `POST /api/sync`
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
   - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente
   - `POST /api/amazon/force-sync` — zera backoff + executa sync atomicamente
   - `GET /shopee/connect` e `GET /shopee/callback`
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
+  - `GET /googleads/connect` e `GET /googleads/callback`
   - `GET /health`
 
 ## 8. Status das integrações (30/06/2026)
@@ -323,10 +346,14 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - 140 pedidos no banco.
 - **ML Ads:** dados de gasto por campanha confirmados (~R$ 1.937 no período testado). `fetchCampaigns()` e `fetchAdCosts()` operacionais. Escopo `write:product_ads` já habilitado no token atual.
 
+### Google Ads (EUA) — código pronto ⏳, aguardando credenciais
+- Implementado em `src/googleads.js` (ver 4.12). Código não quebra nada sem credenciais — só falta o Luan criar o projeto no Google Cloud, gerar Developer Token com Basic access, e rodar `/googleads/connect` uma vez.
+- Só EUA (conta "Coco and Luna", Customer ID `1344114329`, roda campanhas apenas nos EUA hoje).
+
 ## 9. Próximos passos (backlog priorizado)
 
 1. Decidir tratamento de **PENDING** (contar só pagos?) — ver 4.1.
-2. **Google Ads** para custo/ROAS de Google (sem integração ainda).
+2. **Google Ads:** falta o Luan configurar o projeto no Google Cloud + Developer Token e autorizar via `/googleads/connect` — ver 4.12. Código já implementado.
 3. **ML Ads ROAS por campanha:** o campo `listingType === 'premium'` pode não estar capturando todos os pedidos Destaque — verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.
 4. Login/usuários se mais pessoas precisarem acessar.
 5. **Amazon US na produção:** após quotas se recuperarem do período de sobrecarga, confirmar que pedidos US aparecem na dashboard (o código está correto — era problema de quota penalizada).

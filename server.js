@@ -12,6 +12,7 @@ import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
 import * as meta from './src/meta.js';
+import * as googleads from './src/googleads.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -53,8 +54,12 @@ app.get('/api/campaigns', async (req, res) => {
       channels.meta = { available: meta.isConfigured(), campaigns: metaC };
     } else {
       const usAcc = process.env.META_US_AD_ACCOUNT_ID;
-      const metaC = await meta.fetchCampaigns(since, until, usAcc).catch(() => []);
+      const [metaC, googleC] = await Promise.all([
+        meta.fetchCampaigns(since, until, usAcc).catch(() => []),
+        googleads.fetchCampaigns(since, until).catch(() => []),
+      ]);
       channels.meta = { available: meta.isConfigured(usAcc), campaigns: metaC };
+      channels.google = { available: googleads.isConfigured(), campaigns: googleC };
     }
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -148,6 +153,23 @@ app.get('/mercadolivre/callback', async (req, res) => {
   }
 });
 
+// ── Google Ads OAuth ──
+app.get('/googleads/connect', (req, res) => {
+  try { res.redirect(googleads.buildAuthUrl()); }
+  catch (e) { res.status(400).send(e.message); }
+});
+
+app.get('/googleads/callback', async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('Faltou o parâmetro "code" do Google Ads.');
+    await googleads.exchangeCode(code);
+    res.send('<h2>Google Ads conectado com sucesso!</h2><p>Pode fechar esta aba e voltar à dashboard.</p>');
+  } catch (e) {
+    res.status(500).send('Erro ao conectar o Google Ads: ' + e.message);
+  }
+});
+
 
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -185,6 +207,12 @@ app.get('/api/status', (_req, res) => {
     meta: {
       br: { configured: meta.isConfigured(), hasToken: has('META_ACCESS_TOKEN'), hasAccount: has('META_AD_ACCOUNT_ID') },
       us: { configured: meta.isConfigured(process.env.META_US_AD_ACCOUNT_ID), hasToken: has('META_ACCESS_TOKEN'), hasAccount: has('META_US_AD_ACCOUNT_ID') },
+    },
+    google_ads: {
+      configured:   googleads.isConfigured(),
+      hasCreds:     has('GOOGLE_ADS_CLIENT_ID') && has('GOOGLE_ADS_CLIENT_SECRET') && has('GOOGLE_ADS_DEVELOPER_TOKEN'),
+      hasCustomerId: has('GOOGLE_ADS_CUSTOMER_ID'),
+      authorized:   Boolean(db.googleAdsTokens),
     },
     shopify: {
       br: { configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') },

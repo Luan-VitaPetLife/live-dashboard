@@ -28,6 +28,7 @@ const EMPTY = {
   shopeeTokens: null,
   mlTokens: null,
   mlAdCosts: null,
+  googleAdsTokens: null,
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
@@ -55,6 +56,7 @@ export async function initStore() {
       if (r.key === 'shopeeTokens')         cache.shopeeTokens         = r.value;
       if (r.key === 'mlTokens')             cache.mlTokens             = r.value;
       if (r.key === 'mlAdCosts')            cache.mlAdCosts            = r.value;
+      if (r.key === 'googleAdsTokens')      cache.googleAdsTokens      = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -184,6 +186,13 @@ export function setMlAdCosts(data) {
   if (USE_PG) pgKv('mlAdCosts', data);
 }
 export function getMlAdCosts() { return load().mlAdCosts || null; }
+
+// ── Tokens Google Ads ─────────────────────────
+export function setGoogleAdsTokens(tokens) {
+  const db = load(); db.googleAdsTokens = tokens; saveJson();
+  if (USE_PG) pgKv('googleAdsTokens', tokens);
+}
+export function getGoogleAdsTokens() { return load().googleAdsTokens; }
 
 // ── Meta Insights ─────────────────────────────
 export function setMetaInsightsDaily(data) {

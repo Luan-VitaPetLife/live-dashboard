@@ -499,6 +499,53 @@
         </div>
       </div>
 
+      <!-- ── Google Ads (EUA) ─────────────────────────── -->
+      <div class="camp-card ch-us" id="card-google_us">
+        <div class="camp-card-main">
+          <div class="camp-ch-id">
+            <div class="camp-logo camp-logo-img"><img src="logo_google_ads.webp" alt="Google Ads"></div>
+            <div>
+              <div class="camp-ch-name">Google Ads</div>
+              <div class="camp-ch-type">Search · Display</div>
+            </div>
+          </div>
+          <div class="camp-kpi-col">
+            <div class="camp-kpi-label">Gasto Ads</div>
+            <div class="camp-kpi-val" id="google_us-sales">—</div>
+            <div class="camp-kpi-sub" id="google_us-orders">carregando…</div>
+          </div>
+          <div class="camp-kpi-col">
+            <div class="camp-kpi-label">Vendas atribuídas</div>
+            <div class="camp-kpi-val" id="google_us-revenue">—</div>
+            <div class="camp-kpi-sub">conversões (Google Ads)</div>
+          </div>
+          <div class="camp-kpi-col">
+            <div class="camp-kpi-label">ROAS</div>
+            <div class="camp-kpi-val" id="google_us-roas">—</div>
+            <div class="camp-kpi-sub">retorno sobre gasto</div>
+          </div>
+          <div class="camp-chart-col">
+            <div class="camp-chart-label">
+              <span class="camp-chart-label-txt">Gasto por campanha</span>
+            </div>
+            <div class="camp-mini-canvas-wrap"><canvas id="mini-google_us"></canvas></div>
+          </div>
+          <div class="camp-expand-col">
+            <button class="camp-expand-btn" id="btn-google_us" onclick="toggleExpand('google_us')">
+              <i class="bi bi-chevron-down"></i> Campanhas
+            </button>
+          </div>
+        </div>
+        <div class="camp-expand-panel" id="expand-google_us">
+          <div class="camp-expand-inner">
+            <div class="camp-expand-head">
+              <div class="camp-expand-title">Campanhas no período — Google Ads</div>
+            </div>
+            <div class="camp-campaigns" id="camps-google_us"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Amazon US ─────────────────────────────────── -->
       <div class="camp-card ch-us" id="card-amazon">
         <div class="camp-card-main">
@@ -560,7 +607,7 @@
     </div><!-- /camp-grid -->
   </div><!-- /content -->
 
-  <footer>Dados reais via API. Gasto de Ads disponível para Meta (BR/US) e Mercado Livre Ads. Amazon Ads não expõe gasto via SP-API Orders.</footer>
+  <footer>Dados reais via API. Gasto de Ads disponível para Meta (BR/US), Mercado Livre Ads e Google Ads (EUA). Amazon Ads não expõe gasto via SP-API Orders.</footer>
 </div><!-- /main -->
 
 <script>
@@ -697,6 +744,8 @@ function render() {
     setText('amazon-revenue', fmtMoney(cs.amazon_us || 0));
     setText('amazon-roas', '—');
     setText('amazon-spend', 'requer Amazon Ads API');
+    // ── Google Ads (EUA) ──
+    loadGoogleCard();
   }
 
   // ── Mini charts (séries reais) ──
@@ -710,8 +759,51 @@ function render() {
   }
 
   // re-renderiza painéis de campanha abertos (mercado/período mudou)
-  ['ml','meta_br','amazon_br','meta_us','amazon'].forEach(key => {
+  ['ml','meta_br','amazon_br','meta_us','amazon','google_us'].forEach(key => {
     if (document.getElementById('expand-' + key)?.dataset.open === '1') renderCampaigns(key);
+  });
+}
+
+// ── Google Ads (EUA) — card próprio, alimentado por /api/campaigns ──
+async function loadGoogleCard() {
+  setText('google_us-orders', 'carregando…');
+  let data;
+  try { data = await loadCampaigns(); }
+  catch (e) { setText('google_us-orders', 'falha ao carregar'); return; }
+
+  const g = data.channels?.google;
+  if (!g?.available) {
+    setText('google_us-sales', '—');
+    setText('google_us-orders', 'Google Ads não conectado');
+    setText('google_us-revenue', '—');
+    setText('google_us-roas', '—');
+    return;
+  }
+
+  const camps = g.campaigns || [];
+  const spend   = camps.reduce((s, c) => s + (c.spend   || 0), 0);
+  const revenue = camps.reduce((s, c) => s + (c.revenue || 0), 0);
+  const clicks  = camps.reduce((s, c) => s + (c.clicks  || 0), 0);
+  const roas    = spend > 0 ? revenue / spend : 0;
+
+  setText('google_us-sales', fmtMoney(spend));
+  setText('google_us-orders', camps.length ? `${fmtInt(clicks)} cliques` : 'sem campanhas no período');
+  setText('google_us-revenue', fmtMoney(revenue));
+  setText('google_us-roas', roas > 0 ? roas.toFixed(1).replace('.', ',') + '×' : '—');
+
+  const canvas = document.getElementById('mini-google_us');
+  if (!canvas) return;
+  if (miniCharts.google_us) miniCharts.google_us.destroy();
+  const labels = camps.map(c => (c.name.length > 14 ? c.name.slice(0, 14) + '…' : c.name));
+  miniCharts.google_us = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: camps.map(c => c.spend || 0), backgroundColor: '#4285F4', borderWidth: 0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmtMoney(ctx.raw) } } },
+      scales: { x: { display: false }, y: { display: false, beginAtZero: true } },
+      animation: { duration: 300 }, elements: { bar: { borderRadius: 1 } },
+    },
   });
 }
 
@@ -742,7 +834,7 @@ function drawMini(key, labels, data, color, headerTxt, legendTxt) {
 }
 
 // ── Cards de campanha (painel "Gastos") ───────────────────
-const CH_OF_KEY = { ml:'mercadolivre', meta_br:'meta', meta_us:'meta', amazon_br:null, amazon:null };
+const CH_OF_KEY = { ml:'mercadolivre', meta_br:'meta', meta_us:'meta', amazon_br:null, amazon:null, google_us:'google' };
 
 async function loadCampaigns() {
   const ck = `${market}|${state.since}|${state.until}`;
@@ -764,6 +856,9 @@ function campaignCardHTML(c, chKey) {
     m.push(['Receita', money(c.revenue), c.revenue > 0], ['ROAS', roas, c.roas >= 1], ['Pedidos', fmtInt(c.orders)],
            ['Cliques', fmtInt(c.clicks)], ['Impressões', fmtInt(c.impressions)], ['Alcance', fmtInt(c.reach)],
            ['CTR', pct(c.ctr, 2)], ['CPC', money(c.cpc)]);
+  } else if (chKey === 'google') {
+    m.push(['Vendas', money(c.revenue), c.revenue > 0], ['ROAS', roas, c.roas >= 1], ['Conversões', fmtInt(c.orders)],
+           ['Cliques', fmtInt(c.clicks)], ['Impressões', fmtInt(c.impressions)], ['CTR', pct(c.ctr, 2)]);
   } else {
     m.push(['Vendas', money(c.revenue), c.revenue > 0], ['ROAS', roas, c.roas >= 1], ['Unidades', fmtInt(c.orders)],
            ['Cliques', fmtInt(c.clicks)], ['Impressões', fmtInt(c.impressions)], ['ACOS', pct(c.acos)], ['CTR', pct(c.ctr, 2)]);
