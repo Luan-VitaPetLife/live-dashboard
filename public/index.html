@@ -804,11 +804,14 @@ function render(d) {
   // Top products
   const isAllCh = d.channel === 'todos';
   if (d.topProducts.length) {
-    const prodRows = d.topProducts.map(([nm,ch,v],i) => {
+    const prodRows = d.topProducts.map(([nm,ch,v,avQty,,cbQty],i) => {
       const isLast = i === d.topProducts.length - 1;
       const name = nm.length>36?nm.slice(0,36)+'…':nm;
       const badge = isAllCh ? ' '+chBadgeHTML(ch) : '';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name}${badge}</span><span style="font-weight:500;white-space:nowrap">${fmtMoney(v)}</span></div>`;
+      const qtyLine = cbQty > 0
+        ? `${fmtInt(avQty+cbQty)} un · ${fmtInt(avQty)} avulso + ${fmtInt(cbQty)} via combo`
+        : `${fmtInt(avQty)} un`;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="min-width:0"><div style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name}${badge}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${qtyLine}</div></div><span style="font-weight:500;white-space:nowrap">${fmtMoney(v)}</span></div>`;
     }).join('');
     const prodTotal = d.topProducts.reduce((a,[,,v])=>a+v, 0);
     const totalRow = `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px"><span style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">Total top ${d.topProducts.length}</span><span style="font-weight:600">${fmtMoney(prodTotal)}</span></div>`;

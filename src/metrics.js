@@ -159,17 +159,23 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   if (mktEntries.length > 5) { const top = mktEntries.slice(0, 4); const rest = mktEntries.slice(4).reduce((a, e) => a + e[1], 0); top.push(['Outros', rest]); mktEntries = top; }
 
   // top produtos (agrupado por título + canal para diferenciar o mesmo produto em marketplaces diferentes)
+  // Combos Shopify (Bundles) vendem o produto como item individual, com qty/preço do combo —
+  // por isso a receita/qty são sempre corretos, mas separamos avulso x combo para visibilidade (it.bundle).
   const pmap = {};
   valid.forEach(o => o.items.forEach(it => {
     if (it.title) {
       const key = `${it.title}|||${o.channel}`;
-      pmap[key] = (pmap[key] || 0) + it.amount;
+      if (!pmap[key]) pmap[key] = { revenue: 0, avulsoQty: 0, avulsoRevenue: 0, comboQty: 0, comboRevenue: 0 };
+      const p = pmap[key], qty = it.qty || 0;
+      p.revenue += it.amount;
+      if (it.bundle) { p.comboQty += qty; p.comboRevenue += it.amount; }
+      else           { p.avulsoQty += qty; p.avulsoRevenue += it.amount; }
     }
   }));
   const topProducts = Object.entries(pmap)
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].revenue - a[1].revenue)
     .slice(0, 5)
-    .map(([key, value]) => { const [title, ch] = key.split('|||'); return [title, ch, value]; });
+    .map(([key, p]) => { const [title, ch] = key.split('|||'); return [title, ch, p.revenue, p.avulsoQty, p.avulsoRevenue, p.comboQty, p.comboRevenue]; });
 
   // por estado (endereço de entrega dos pedidos válidos)
   const byState = {};

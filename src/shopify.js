@@ -44,7 +44,7 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
             customerJourneySummary { lastVisit { source } }
             customer { displayName }
             shippingAddress { provinceCode }
-            lineItems(first: 20) { edges { node { title quantity discountedTotalSet { shopMoney { amount } } product { tags productType } } } }
+            lineItems(first: 20) { edges { node { title quantity discountedTotalSet { shopMoney { amount } } product { tags productType } lineItemGroup { id title quantity } } } }
           } }
           pageInfo { hasNextPage endCursor }
         }
@@ -70,6 +70,9 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
           amount:      parseFloat(x.node.discountedTotalSet?.shopMoney?.amount || '0'),
           tags:        x.node.product?.tags || [],
           productType: x.node.product?.productType || null,
+          // Presente quando o item foi vendido através de um combo (Shopify Bundles):
+          // o produto aparece como item individual, mas com qty/preço do combo.
+          bundle:      x.node.lineItemGroup ? { id: x.node.lineItemGroup.id, title: x.node.lineItemGroup.title } : null,
         })),
       });
     }
