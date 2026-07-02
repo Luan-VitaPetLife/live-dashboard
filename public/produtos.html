@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produtos — Coco and Luna</title>
+<link rel="icon" href="logo.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<style>
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* ── Sidebar ── */
+  .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+  .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
+  .brand-logo{width:148px;height:auto}
+  .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
+  .nav-group{margin-bottom:24px}
+  .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
+  .nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
+  .nav-item:hover{background:var(--side-hover);color:var(--side-text)}
+  .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
+  .nav-icon{font-size:15px;width:16px;text-align:center;flex-shrink:0;line-height:1;opacity:.75}
+
+  /* ── Main ── */
+  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Market toggle ── */
+  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px}
+  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
+  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+
+  /* ── Filter pill ── */
+  .filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none;position:relative}
+  .filter-pill:hover,.filter-pill.open{border-color:var(--ink);color:var(--text)}
+  .filter-pill .lbl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .filter-pill .val{font-weight:600;color:var(--text)}
+  .filter-pill .arr{color:var(--muted);font-size:9px;transition:transform .15s}
+  .filter-pill.open .arr{transform:rotate(180deg)}
+  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+  .period-pop.open{display:flex}
+  .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s;font-family:inherit}
+  .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
+  .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .pp-divider{height:1px;background:var(--border)}
+  .pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .pp-dates{display:flex;flex-direction:column;gap:8px}
+  .pp-field{display:flex;align-items:center;gap:10px}
+  .pp-field label{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+  .pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);appearance:none;outline:none;transition:border-color .12s}
+  .pp-field input[type=date]:focus{border-color:var(--ink)}
+  .pp-err{font-size:10px;color:var(--red);min-height:12px}
+  .pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit}
+  .pp-apply:hover{opacity:.85}
+
+  /* ── Sidebar toggle ── */
+  .sidebar-header{display:flex;justify-content:flex-end;padding:6px 10px 0}
+  .sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(240,235,224,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
+  .sidebar-close-btn:hover{background:rgba(240,235,224,.12);color:rgba(240,235,224,.9)}
+  .sidebar-open-btn{display:none;position:fixed;left:12px;top:11px;z-index:300;width:36px;height:32px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(30,28,24,.1);transition:all .15s}
+  .sidebar-open-btn:hover{border-color:var(--ink);color:var(--text)}
+  body.sidebar-hidden .sidebar-open-btn{display:flex}
+  @media(max-width:768px){.sidebar-open-btn{display:flex}}
+  body.sidebar-mobile-open .sidebar-open-btn{display:none!important}
+  .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;opacity:0;pointer-events:none;transition:opacity .25s}
+  body.sidebar-mobile-open .sidebar-overlay{opacity:1;pointer-events:auto}
+  body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
+  body.sidebar-hidden .sidebar{transform:translateX(-100%)}
+  body.sidebar-hidden .main{margin-left:0}
+
+  /* ── Content ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  /* ── Market visibility (mesmo padrão de campanhas.html) ── */
+  body:not(.market-us) .ch-us{display:none!important}
+  body.market-us .ch-br{display:none!important}
+
+  /* ── Product cards ── */
+  .prod-grid{display:flex;flex-direction:column;gap:12px}
+  .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
+  .camp-logo-img{background:#fff;border:1px solid var(--border);padding:5px}
+  .camp-logo-img img{width:100%;height:100%;object-fit:contain;display:block}
+  .camp-logo-fill{background:transparent;border:none;padding:0;overflow:hidden}
+  .camp-logo-fill img{object-fit:cover}
+  .camp-ch-name{font-size:13px;font-weight:600;color:var(--text)}
+  .camp-ch-type{font-size:10px;color:var(--muted);margin-top:2px}
+  .prod-head-stats{display:flex;gap:28px;margin-left:auto}
+  .prod-stat-lbl{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .prod-stat-val{font-size:17px;font-weight:300;letter-spacing:-.4px}
+  .prod-table-wrap{max-height:420px;overflow-y:auto;overflow-x:auto}
+  .prod-table{width:100%;border-collapse:collapse;font-size:12px}
+  .prod-table thead th{position:sticky;top:0;background:var(--surface2);text-align:left;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:9px 20px;border-bottom:1px solid var(--border);white-space:nowrap}
+  .prod-table thead th.num,.prod-table td.prod-num{text-align:right}
+  .prod-table tbody td{padding:9px 20px;border-bottom:1px solid var(--border)}
+  .prod-table tbody tr:last-child td{border-bottom:none}
+  .prod-name{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prod-combo{font-size:10px;color:var(--muted);margin-top:2px}
+  .prod-num{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .prod-empty{text-align:center;color:var(--muted);font-style:italic;padding:20px}
+
+  @media(max-width:768px){
+    .sidebar{transform:translateX(-100%)}
+    .main{margin-left:0}
+    .content{padding:16px}
+    .prod-head-stats{gap:16px;margin-left:0}
+  }
+</style>
+</head>
+<body>
+
+<script src="sidebar.js"></script>
+
+<div class="main">
+  <div class="topbar">
+    <div class="mkt-toggle-wrap">
+      <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
+        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
+      </button>
+      <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
+        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
+      </button>
+    </div>
+    <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">—</span></div>
+    <!-- Period -->
+    <div style="position:relative" id="periodWrap">
+      <div class="filter-pill" id="periodPill" onclick="togglePeriodPop()">
+        <span class="lbl">Período</span>
+        <span class="val" id="periodValue">30 dias</span>
+        <span class="arr">▾</span>
+      </div>
+      <div class="period-pop" id="periodPop">
+        <div class="pp-presets">
+          <button data-preset="today" onclick="selectPreset(this,'Hoje')">Hoje</button>
+          <button data-preset="7d" onclick="selectPreset(this,'7 dias')">7 dias</button>
+          <button data-preset="30d" class="active" onclick="selectPreset(this,'30 dias')">30 dias</button>
+          <button data-preset="month" onclick="selectPreset(this,'Este mês')">Este mês</button>
+        </div>
+        <div class="pp-divider"></div>
+        <div class="pp-section-label">Intervalo personalizado</div>
+        <div class="pp-dates">
+          <div class="pp-field"><label>De</label><input type="date" id="dateFrom"></div>
+          <div class="pp-field"><label>Até</label><input type="date" id="dateTo"></div>
+        </div>
+        <div class="pp-err" id="ppErr"></div>
+        <button class="pp-apply" onclick="applyRange()">Aplicar intervalo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div>
+      <div class="page-title">Produtos</div>
+      <div class="page-sub" id="pageSub">Coco and Luna · últimos 30 dias</div>
+    </div>
+
+    <div class="prod-grid" id="prodGrid"></div>
+  </div>
+
+  <footer style="padding:0 28px 20px;font-size:11px;color:var(--muted)">Receita exclui pedidos cancelados. Combos do Shopify BR (Bundles) aparecem quebrados entre vendas avulsas e vendas via combo.</footer>
+</div>
+
+<script>
+const fmtInt = v => Math.round(v || 0).toLocaleString('pt-BR');
+function fmtMoney(v, mkt = market) {
+  return (mkt === 'us')
+    ? (v || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+    : (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+}
+
+// ── Metadados de canal (mesmas cores de index.html/DEFAULT_CH) ──
+const CH_META = {
+  shopify:      { name: 'Shopify BR',    color: '#95BF47', badge: 'S' },
+  shopee:       { name: 'Shopee',        color: '#EE4D2D', logo: 'logo_shopee.svg' },
+  mercadolivre: { name: 'Mercado Livre', color: '#FFE600', logo: 'logo_mercadolivre.png', logoFill: true },
+  amazon:       { name: 'Amazon BR',     color: '#111111', logo: 'logo_amazon.webp' },
+  shopify_us:   { name: 'Shopify US',    color: '#7EAD3C', badge: 'S' },
+  amazon_us:    { name: 'Amazon US',     color: '#FF9900', logo: 'logo_amazon.webp' },
+};
+const CHANNELS_BR = ['shopify', 'shopee', 'amazon', 'mercadolivre'];
+const CHANNELS_US = ['shopify_us', 'amazon_us'];
+
+function contrastText(hex) {
+  const h = (hex || '#000').replace('#', '');
+  if (h.length !== 6) return '#fff';
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return (0.299*r + 0.587*g + 0.114*b) / 255 > 0.55 ? '#333' : '#fff';
+}
+
+// ── State ─────────────────────────────────────────────────
+let market = localStorage.getItem('coco_market') || 'br';
+let current = null;
+
+function rangeForPreset(p) {
+  const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
+  if (p === 'today') return { since: iso(today), until: iso(today), label: 'Hoje' };
+  if (p === '7d')   { const s = new Date(today); s.setDate(s.getDate() - 6); return { since: iso(s), until: iso(today), label: '7 dias' }; }
+  if (p === 'month'){ const s = new Date(today.getFullYear(), today.getMonth(), 1); return { since: iso(s), until: iso(today), label: 'Este mês' }; }
+  const s = new Date(today); s.setDate(s.getDate() - 29); return { since: iso(s), until: iso(today), label: '30 dias' };
+}
+let state = rangeForPreset('30d');
+
+// ── Market ────────────────────────────────────────────────
+function setMarket(m) {
+  market = m;
+  localStorage.setItem('coco_market', m);
+  document.getElementById('mktBtnBr').classList.toggle('active', m === 'br');
+  document.getElementById('mktBtnUs').classList.toggle('active', m === 'us');
+  document.body.classList.toggle('market-us', m === 'us');
+  load();
+}
+
+// ── Period picker ─────────────────────────────────────────
+function togglePeriodPop() {
+  document.getElementById('periodPop').classList.toggle('open');
+  document.getElementById('periodPill').classList.toggle('open');
+}
+function selectPreset(btn, label) {
+  document.querySelectorAll('.pp-presets button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state = rangeForPreset(btn.dataset.preset);
+  document.getElementById('periodValue').textContent = label;
+  document.getElementById('periodPop').classList.remove('open');
+  document.getElementById('periodPill').classList.remove('open');
+  load();
+}
+function applyRange() {
+  const from = document.getElementById('dateFrom').value;
+  const to = document.getElementById('dateTo').value;
+  const err = document.getElementById('ppErr');
+  if (!from || !to) { err.textContent = 'Preencha as duas datas'; return; }
+  if (from > to) { err.textContent = 'A data inicial deve ser anterior à final'; return; }
+  err.textContent = '';
+  state = { since: from, until: to, label: `${from.slice(8)}.${from.slice(5,7)} – ${to.slice(8)}.${to.slice(5,7)}` };
+  document.getElementById('periodValue').textContent = state.label;
+  document.getElementById('periodPop').classList.remove('open');
+  document.getElementById('periodPill').classList.remove('open');
+  load();
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('periodWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('periodPop').classList.remove('open');
+    document.getElementById('periodPill').classList.remove('open');
+  }
+});
+
+const setText = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+
+// ── Render ────────────────────────────────────────────────
+function logoHTML(meta) {
+  if (meta.logo) {
+    const cls = meta.logoFill ? 'camp-logo camp-logo-img camp-logo-fill' : 'camp-logo camp-logo-img';
+    return `<div class="${cls}"><img src="${meta.logo}" alt="${meta.name}"></div>`;
+  }
+  return `<div class="camp-logo" style="background:${meta.color};color:${contrastText(meta.color)}">${meta.badge}</div>`;
+}
+
+function comboBits(p) {
+  if (!p.comboQty) return '';
+  const parts = Object.entries(p.comboBySize || {})
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([size, n]) => `${n} combo de ${size}`);
+  return `${p.avulsoQty || 0} avulso, ${parts.join(', ')}`;
+}
+
+function rowHTML(p) {
+  const combo = comboBits(p);
+  return `<tr>
+    <td><div class="prod-name" title="${p.title}">${p.title}</div>${combo ? `<div class="prod-combo">${combo}</div>` : ''}</td>
+    <td class="prod-num">${fmtInt(p.qty)}</td>
+    <td class="prod-num">${fmtMoney(p.revenue)}</td>
+    <td class="prod-num">${fmtMoney(p.avgTicket)}</td>
+  </tr>`;
+}
+
+function cardHTML(ch) {
+  const meta = CH_META[ch];
+  const chClass = CHANNELS_US.includes(ch) ? 'ch-us' : 'ch-br';
+  const data = current?.channels?.[ch];
+  const products = data?.products || [];
+  const rows = products.length
+    ? products.map(rowHTML).join('')
+    : '<tr><td colspan="4" class="prod-empty">Sem vendas no período</td></tr>';
+  return `
+    <div class="prod-card ${chClass}">
+      <div class="prod-card-head">
+        ${logoHTML(meta)}
+        <div>
+          <div class="camp-ch-name">${meta.name}</div>
+          <div class="camp-ch-type">${products.length} produto${products.length === 1 ? '' : 's'}</div>
+        </div>
+        <div class="prod-head-stats">
+          <div>
+            <div class="prod-stat-lbl">Receita</div>
+            <div class="prod-stat-val">${fmtMoney(data?.revenue || 0)}</div>
+          </div>
+          <div>
+            <div class="prod-stat-lbl">Pedidos</div>
+            <div class="prod-stat-val">${fmtInt(data?.orders || 0)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="prod-table-wrap">
+        <table class="prod-table">
+          <thead><tr><th>Produto</th><th class="num">Qtd</th><th class="num">Receita</th><th class="num">Ticket médio</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function render() {
+  const d = current; if (!d) return;
+  const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
+  setText('lastUpdate', 'sync: ' + updated);
+  setText('pageSub', (market === 'us' ? 'Vita Pet Life' : 'Coco and Luna') + ' · ' + state.label);
+  const channels = market === 'us' ? CHANNELS_US : CHANNELS_BR;
+  document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
+}
+
+// ── Carregamento ──────────────────────────────────────────
+async function load() {
+  try {
+    const r = await fetch(`/api/products?market=${market}&since=${state.since}&until=${state.until}`);
+    current = await r.json();
+  } catch (e) { console.warn('Produtos: falha ao carregar', e); return; }
+  render();
+}
+
+// ── Init ─────────────────────────────────────────────────
+(function init(){
+  document.getElementById('mktBtnBr').classList.toggle('active', market === 'br');
+  document.getElementById('mktBtnUs').classList.toggle('active', market === 'us');
+  document.body.classList.toggle('market-us', market === 'us');
+  load();
+})();
+</script>
+</body>
+</html>

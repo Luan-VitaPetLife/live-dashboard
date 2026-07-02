@@ -5,7 +5,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { computeDashboard } from './src/metrics.js';
+import { computeDashboard, computeProducts } from './src/metrics.js';
 import { runSync } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
@@ -26,6 +26,17 @@ app.get('/api/dashboard', (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const { channel = 'todos', metric = 'receita', since = today, until = today, market = 'br' } = req.query;
     res.json(computeDashboard({ channel, metric, since, until, market }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Catálogo completo de produtos por canal (para a tela de Produtos) — vem direto do store, sem cache.
+app.get('/api/products', (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { since = today, until = today, market = 'br' } = req.query;
+    res.json(computeProducts({ market, since, until }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

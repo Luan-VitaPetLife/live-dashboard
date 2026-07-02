@@ -24,7 +24,7 @@
     <a class="nav-item" data-page="geografia.html" href="geografia.html"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></a>
     <a class="nav-item" data-page="geografia-us.html" href="geografia-us.html"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></a></div>
   <div class="nav-group"><div class="nav-label">Operações</div>
-    <a class="nav-item"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
+    <a class="nav-item" data-page="produtos.html" href="produtos.html"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
     <a class="nav-item"><i class="bi bi-layers nav-icon"></i> Estoque</a>
     <a class="nav-item"><i class="bi bi-wallet2 nav-icon"></i> Financeiro</a></div>
   <div class="nav-group"><div class="nav-label">Marketing</div>

@@ -332,3 +332,49 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     updatedAt: load().lastSync,
   };
 }
+
+// Catálogo completo de produtos por canal (para a tela de Produtos) — sem limite de top-N,
+// com a mesma quebra avulso x combo (Shopify Bundles) usada no Top Produtos/Segmentos.
+export function computeProducts({ market = 'br', since, until } = {}) {
+  const orders = getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o));
+  const seenBundleIds = new Set();
+  const byChannel = {};
+  orders.forEach(o => {
+    if (!byChannel[o.channel]) byChannel[o.channel] = { revenue: 0, orders: 0, products: {} };
+    const c = byChannel[o.channel];
+    c.revenue += o.total;
+    c.orders += 1;
+    o.items.forEach(it => {
+      if (!it.title) return;
+      if (!c.products[it.title]) c.products[it.title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {} };
+      const p = c.products[it.title], qty = it.qty || 0;
+      p.revenue += it.amount || 0;
+      if (it.bundle) {
+        p.comboQty += qty;
+        const size = comboSize(it.bundle);
+        if (size && !seenBundleIds.has(it.bundle.id)) {
+          seenBundleIds.add(it.bundle.id);
+          p.comboBySize[size] = (p.comboBySize[size] || 0) + (it.bundle.qty || 1);
+        }
+      } else {
+        p.avulsoQty += qty;
+      }
+    });
+  });
+
+  const channels = {};
+  for (const [ch, c] of Object.entries(byChannel)) {
+    const products = Object.entries(c.products)
+      .map(([title, p]) => {
+        const qty = p.avulsoQty + p.comboQty;
+        return {
+          title, qty, revenue: p.revenue,
+          avgTicket: qty > 0 ? p.revenue / qty : 0,
+          avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
+        };
+      })
+      .sort((a, b) => b.revenue - a.revenue);
+    channels[ch] = { revenue: c.revenue, orders: c.orders, products };
+  }
+  return { market, since, until, channels, updatedAt: load().lastSync };
+}
