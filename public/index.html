@@ -149,6 +149,14 @@
   .dr-left{display:flex;align-items:center;gap:8px;color:var(--sub)} .dr-swatch{width:7px;height:7px;border-radius:2px;flex-shrink:0}
   .dr-right{display:flex;align-items:center;gap:8px} .dr-pct{color:var(--muted);font-size:11px} .dr-val{font-weight:500}
   .card-note{margin-top:10px;font-size:10px;color:var(--muted)}
+  .ss-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:14px}
+  .ss-cell{display:flex;flex-direction:column;align-items:center;text-align:center}
+  .ss-cell-title{font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px}
+  .ss-pie-wrap{position:relative;width:88px;height:88px}
+  .ss-cell-legend{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:10px;color:var(--sub)}
+  .ss-leg-item{display:flex;align-items:center;gap:5px;justify-content:center}
+  .ss-leg-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+  .ss-cell-total{font-size:11px;font-weight:500;color:var(--muted);margin-top:4px}
   .charts-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
   .metric-cell{padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)}
@@ -386,10 +394,9 @@
       </div></div>
 
       <div class="card" id="cardSalesSplit"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub">Vendas pagas vs orgânicas, por dia</div></div><div class="ct-val" id="ssVal">—</div></div>
-        <div class="ch220"><canvas id="salesSplitChart"></canvas></div>
-        <div class="legend-row" id="salesSplitLegend"></div>
-        <div class="card-note">Campanha = origem Meta (Instagram/Facebook) + Destaque do Mercado Livre</div>
+        <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub">Por canal</div></div></div>
+        <div class="ss-grid" id="ssGrid"></div>
+        <div class="card-note">Campanha = origem Meta (Instagram/Facebook) + Destaque do Mercado Livre. Canais sem esse tipo de atribuição (Shopee, Amazon) aparecem 100% orgânicos.</div>
       </div></div>
       </div>
     </div>
@@ -758,25 +765,28 @@ function render(d) {
     ? d.marketing.map(e=>{ const pc=mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%'; return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${MKT_COLORS[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(e.value)}</span></div></div>`; }).join('')
     : '<div class="muted-state">Sem receita atribuída.</div>';
 
-  // Sales split: orgânico x campanha — gráfico de linhas individuais, por dia
-  const ss = d.salesSplit || { organic:0, campaign:0, organicOrders:0, campaignOrders:0 };
-  const ssTotal = ss.organic + ss.campaign;
-  document.getElementById('ssVal').textContent = fmtMoneyShort(ssTotal);
-  const ssd = d.trend?.salesSplitDaily || { campaign: [], organic: [] };
-  const ssLabels = d.trend?.labels || [];
-  setChart('salesSplitChart', {
-    type: 'line',
-    data: { labels: ssLabels, datasets: [
-      { label:'Campanha', data: ssd.campaign, borderColor:'#a05a3a', borderWidth:1.5, tension:.4, pointRadius:2, pointHoverRadius:4, fill:false },
-      { label:'Orgânico',  data: ssd.organic,  borderColor:'#6a8c6e', borderWidth:1.5, tension:.4, pointRadius:2, pointHoverRadius:4, fill:false },
-    ] },
-    options: { responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false },
-      plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{ label:c=>' '+c.dataset.label+': '+fmtMoney(c.parsed.y,2) }} },
-      scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ grid:{color:'rgba(30,28,24,0.06)'}, ticks:{callback:v=>fmtMoneyShort(v)} } } },
+  // Sales split: orgânico x campanha — uma pizza por canal (canais sem atribuição, ex. Shopee/Amazon,
+  // ficam naturalmente 100% orgânicos, já que isCampaignOrder nunca é true pra eles).
+  const ssc = d.salesSplitByChannel || {};
+  const ssChannels = d.market === 'us' ? ['shopify_us', 'amazon_us'] : ['shopify', 'shopee', 'mercadolivre', 'amazon'];
+  document.getElementById('ssGrid').innerHTML = ssChannels.map(ch => `
+    <div class="ss-cell">
+      <div class="ss-cell-title">${CHAN[ch] || ch}</div>
+      <div class="ss-pie-wrap"><canvas id="ssPie-${ch}"></canvas></div>
+      <div class="ss-cell-legend" id="ssLeg-${ch}"></div>
+      <div class="ss-cell-total" id="ssTotal-${ch}">—</div>
+    </div>`).join('');
+  ssChannels.forEach(ch => {
+    const s = ssc[ch] || { campaign: 0, organic: 0 };
+    const total = s.campaign + s.organic;
+    drawDonut(`ssPie-${ch}`, [s.campaign, s.organic], ['#a05a3a', '#6a8c6e']);
+    const campPct = total > 0 ? Math.round(s.campaign / total * 100) : 0;
+    const orgPct  = total > 0 ? 100 - campPct : 100;
+    document.getElementById(`ssLeg-${ch}`).innerHTML =
+      `<div class="ss-leg-item"><span class="ss-leg-dot" style="background:#a05a3a"></span>Campanha ${campPct}%</div>` +
+      `<div class="ss-leg-item"><span class="ss-leg-dot" style="background:#6a8c6e"></span>Orgânico ${orgPct}%</div>`;
+    document.getElementById(`ssTotal-${ch}`).textContent = fmtMoney(total);
   });
-  document.getElementById('salesSplitLegend').innerHTML =
-    `<div class="legend-item"><div class="legend-line" style="background:#a05a3a"></div>Campanha (${fmtMoney(ss.campaign)})</div>` +
-    `<div class="legend-item"><div class="legend-line" style="background:#6a8c6e"></div>Orgânico (${fmtMoney(ss.organic)})</div>`;
 
   // Traffic
   const tf = d.traffic;

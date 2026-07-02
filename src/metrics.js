@@ -36,6 +36,12 @@ function buildBuckets(since, until, grain) {
 const isCancelled = o => o.cancelled;
 const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
 
+// Vendas orgânicas x campanha (pagas): campanha = origem Meta (IG/FB) OU listagem ML "Destaque" (premium).
+// Canais sem esse tipo de atribuição (Shopee, Amazon) sempre caem em "orgânico" — não é omissão, é porque
+// não há como saber se uma venda ali veio de anúncio (sem tracking de origem/listing type nesses canais).
+const metaSources = new Set(['Instagram', 'Facebook', 'instagram', 'facebook', 'ig', 'fb']);
+const isCampaignOrder = o => metaSources.has(normSource(o.source)) || o.listingType === 'premium';
+
 // ── Classificação de segmento (espécie) ──
 const SEG_KW = {
   cat: ['gato','gatos','felino','felinos','cat','cats','feline','kitten','kitty','lisina'],
@@ -295,7 +301,6 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   { let d = parseISO(since); const end = parseISO(until);
     while (d <= end) { const k = isoUTC(d); const m = metaDaily[k]; if (m) { adCost += m.spend; adImpressions += m.impressions; adClicks += m.clicks; } d = addDays(d, 1); }
   }
-  const metaSources = new Set(['Instagram', 'Facebook', 'instagram', 'facebook', 'ig', 'fb']);
   const metaRevenue = valid.filter(o => metaSources.has(normSource(o.source))).reduce((a, o) => a + o.total, 0);
   const roas = adCost > 0 ? metaRevenue / adCost : 0;
 
@@ -306,7 +311,6 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   });
 
   // Vendas orgânicas x campanha (pagas): campanha = origem Meta (IG/FB) OU listagem ML "Destaque" (premium).
-  const isCampaignOrder = o => metaSources.has(normSource(o.source)) || o.listingType === 'premium';
   const campaignOrdersList = valid.filter(isCampaignOrder);
   const campaignSales = sum(campaignOrdersList, o => o.total);
   const salesSplit = {
@@ -316,13 +320,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     organicOrders:  count - campaignOrdersList.length,
   };
 
-  // Série diária orgânico x campanha, alinhada aos mesmos buckets da tendência (gráfico individual por linha).
-  const salesSplitDaily = { campaign: buckets.map(() => 0), organic: buckets.map(() => 0) };
-  valid.forEach(o => {
-    const i = idx.get(bucketKey(o.createdAt, grain));
-    if (i == null) return;
-    if (isCampaignOrder(o)) salesSplitDaily.campaign[i] += o.total;
-    else salesSplitDaily.organic[i] += o.total;
+  // Orgânico x Campanha POR CANAL (para os gráficos de pizza individuais da tela Revenue) —
+  // sempre todos os canais do mercado, independente do filtro de canal selecionado na tela.
+  const salesSplitByChannel = {};
+  getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o)).forEach(o => {
+    if (!salesSplitByChannel[o.channel]) salesSplitByChannel[o.channel] = { campaign: 0, organic: 0, campaignOrders: 0, organicOrders: 0 };
+    const s = salesSplitByChannel[o.channel];
+    if (isCampaignOrder(o)) { s.campaign += o.total; s.campaignOrders++; }
+    else { s.organic += o.total; s.organicOrders++; }
   });
 
   // ML breakdown: orgânico vs premium + custo de anúncios (apenas mercado BR)
@@ -355,9 +360,10 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       adCost, adImpressions, adClicks, roas, metaRevenue,
       conversion: sess.conv, conversionDeltaPP: (sess.conv - prevSess.conv) * 100,
     },
-    trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt, byChannel: trendByChannel, metaSpendDaily, salesSplitDaily },
+    trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt, byChannel: trendByChannel, metaSpendDaily },
     channelSplit: byChannel,
     salesSplit,
+    salesSplitByChannel,
     marketing: mktEntries.map(([name, value]) => ({ name, value })),
     traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series },
     funnel: { sessions: sess.sessions, cart: sess.cart, checkout: sess.checkout, completed: sess.completed },

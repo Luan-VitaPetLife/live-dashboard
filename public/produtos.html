@@ -356,8 +356,10 @@ function cardHTML(ch) {
     <td>Total</td>
     <td class="prod-num">${fmtInt(totalQty)}</td>
     <td class="prod-num">${fmtMoney(data.revenue)}</td>
-    <td class="prod-num prod-total-note">${data.profitProductsCount || 0} de ${products.length} c/ COG</td>
-    <td colspan="3"></td>
+    <td class="prod-num">—</td>
+    <td class="prod-num prod-total-note">${data.profitProductsCount || 0}/${products.length} c/ COG</td>
+    <td></td>
+    <td></td>
     <td class="prod-num">${data.totalProfit != null ? fmtMoney(data.totalProfit) : '—'}</td>
     <td class="prod-num">${data.profitPct != null ? fmtPct(data.profitPct) : '—'}</td>
   </tr></tfoot>` : '';
