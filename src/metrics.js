@@ -89,6 +89,9 @@ function aggregateSessions(since, until, market = 'br') {
 
 function normSource(s) { if (!s || !s.trim()) return 'Direto'; const t = s.trim(); return t[0].toUpperCase() + t.slice(1); }
 
+// Extrai o tamanho do combo do título do lineItemGroup ("Combo de 2 unidades" → 2).
+function comboSize(bundle) { return Number((/combo de (\d+)/i.exec(bundle?.title || '') || [])[1]) || null; }
+
 export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br' }) {
   const span = daySpan(since, until);
   const grain = span <= 2 ? 'hour' : 'day';
@@ -174,7 +177,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     if (it.bundle) {
       p.comboQty += qty;
       p.comboRevenue += it.amount;
-      const size = Number((/combo de (\d+)/i.exec(it.bundle.title || '') || [])[1]) || null;
+      const size = comboSize(it.bundle);
       if (size && !seenBundleIds.has(it.bundle.id)) {
         seenBundleIds.add(it.bundle.id);
         p.comboBySize[size] = (p.comboBySize[size] || 0) + (it.bundle.qty || 1);
@@ -206,6 +209,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 
   // segmentos por espécie (gato vs cão) + tipo de produto
   const segAcc = {};
+  const seenBundleIdsSeg = new Set();
   valid.forEach(o => {
     o.items.forEach(it => {
       if (!it.title) return;
@@ -218,9 +222,19 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       segAcc[seg].orderIds.add(o.id);
       if (type) segAcc[seg].byType[type] = (segAcc[seg].byType[type] || 0) + qty;
       const p = segAcc[seg].products;
-      if (!p[it.title]) p[it.title] = { qty: 0, revenue: 0 };
+      if (!p[it.title]) p[it.title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {} };
       p[it.title].qty     += qty;
       p[it.title].revenue += it.amount || 0;
+      if (it.bundle) {
+        p[it.title].comboQty += qty;
+        const size = comboSize(it.bundle);
+        if (size && !seenBundleIdsSeg.has(it.bundle.id)) {
+          seenBundleIdsSeg.add(it.bundle.id);
+          p[it.title].comboBySize[size] = (p[it.title].comboBySize[size] || 0) + (it.bundle.qty || 1);
+        }
+      } else {
+        p[it.title].avulsoQty += qty;
+      }
     });
   });
   const totalSegUnits = Object.values(segAcc).reduce((a, s) => a + s.units, 0);
@@ -235,7 +249,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       topProducts: Object.entries(v.products)
         .sort((a, b) => b[1].qty - a[1].qty)
         .slice(0, 5)
-        .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue })),
+        .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue, avulsoQty: d.avulsoQty, comboQty: d.comboQty, comboBySize: d.comboBySize })),
     };
   }
 

@@ -144,7 +144,9 @@
   .seg-prod-list{display:flex;flex-direction:column;gap:8px}
   .seg-prod-item{display:flex;align-items:center;gap:10px}
   .seg-prod-rank{font-size:11px;font-weight:700;color:var(--muted);width:14px;flex-shrink:0;text-align:right}
-  .seg-prod-name{flex:1;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seg-prod-main{flex:1;min-width:0}
+  .seg-prod-name{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seg-prod-combo{font-size:9px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .seg-prod-qty{font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0}
   .seg-prod-rev{font-size:10px;color:var(--sub);flex-shrink:0;min-width:64px;text-align:right}
   .seg-empty{font-size:12px;color:var(--muted);font-style:italic;padding:8px 0}
@@ -322,6 +324,14 @@ function renderLegend(segs) {
 
 const TYPE_ORDER = ['Soft Chews','Tablets','Powder','Pó','Liquid'];
 
+function comboBits(p) {
+  if (!p.comboQty) return '';
+  const parts = Object.entries(p.comboBySize||{})
+    .sort((a,b)=>Number(a[0])-Number(b[0]))
+    .map(([size,n])=>`${n} combo de ${size}`);
+  return `${p.avulsoQty||0} avulso, ${parts.join(', ')}`;
+}
+
 function renderCards(segs) {
   const totalUnits = (segs.cat?.units||0) + (segs.dog?.units||0);
   const cards = ['cat','dog'].map(k => {
@@ -332,7 +342,10 @@ function renderCards(segs) {
       ? s.topProducts.map((p,i) => `
         <div class="seg-prod-item">
           <span class="seg-prod-rank">${i+1}.</span>
-          <span class="seg-prod-name" title="${p.title}">${p.title}</span>
+          <div class="seg-prod-main">
+            <div class="seg-prod-name" title="${p.title}">${p.title}</div>
+            ${comboBits(p) ? `<div class="seg-prod-combo">${comboBits(p)}</div>` : ''}
+          </div>
           <span class="seg-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
           <span class="seg-prod-rev">${fmtMoney(p.revenue)}</span>
         </div>`).join('')
@@ -394,7 +407,10 @@ function renderOther(segs) {
   document.getElementById('otherList').innerHTML = other.topProducts.map((p,i) => `
     <div class="seg-prod-item">
       <span class="seg-prod-rank">${i+1}.</span>
-      <span class="seg-prod-name" title="${p.title}">${p.title}</span>
+      <div class="seg-prod-main">
+        <div class="seg-prod-name" title="${p.title}">${p.title}</div>
+        ${comboBits(p) ? `<div class="seg-prod-combo">${comboBits(p)}</div>` : ''}
+      </div>
       <span class="seg-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
       <span class="seg-prod-rev">${fmtMoney(p.revenue)}</span>
     </div>`).join('');

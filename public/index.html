@@ -814,7 +814,8 @@ function render(d) {
       const bits = [];
       if (avQty > 0) bits.push(`${fmtInt(avQty)} avulso`);
       bits.push(...comboParts);
-      const qtyLine = bits.length ? bits.join(', ') : '0 un';
+      const total = avQty + (p.comboQty || 0);
+      const qtyLine = bits.length ? `${fmtInt(total)} un total · ${bits.join(', ')}` : '0 un';
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="min-width:0"><div style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name}${badge}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${qtyLine}</div></div><span style="font-weight:500;white-space:nowrap">${fmtMoney(v)}</span></div>`;
     }).join('');
     const prodTotal = d.topProducts.reduce((a,p)=>a+p.revenue, 0);
