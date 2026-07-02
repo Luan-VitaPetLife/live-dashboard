@@ -126,6 +126,15 @@
   .prod-combo{font-size:10px;color:var(--muted);margin-top:2px}
   .prod-num{white-space:nowrap;font-variant-numeric:tabular-nums}
   .prod-empty{text-align:center;color:var(--muted);font-style:italic;padding:20px}
+  .prod-muted{color:var(--muted)}
+  .prod-input{width:64px;text-align:right;font-size:12px;font-family:inherit;color:var(--text);padding:4px 6px;border:1px solid var(--border2);border-radius:5px;background:var(--surface2);outline:none;transition:border-color .12s;font-variant-numeric:tabular-nums}
+  .prod-input:focus{border-color:var(--ink);background:#fff}
+  .prod-input::placeholder{color:var(--muted)}
+  .prod-input-pct{width:52px}
+  .prod-profit-pos{color:var(--green)}
+  .prod-profit-neg{color:var(--red)}
+  .prod-total-row td{font-weight:600;background:var(--surface2);border-top:2px solid var(--border2)}
+  .prod-total-note{font-size:9px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
 
   @media(max-width:768px){
     .sidebar{transform:translateX(-100%)}
@@ -299,12 +308,20 @@ function comboBits(p) {
   return `${p.avulsoQty || 0} avulso, ${parts.join(', ')}`;
 }
 
-function rowHTML(p) {
+const escAttr = s => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+const fmtPct = v => (v * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
+
+function rowHTML(p, ch) {
   const combo = comboBits(p);
   const thumb = p.image
     ? `<img class="prod-thumb" src="${p.image}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
     : `<div class="prod-thumb-ph"><i class="bi bi-image"></i></div>`;
   const typeTag = p.type ? `<span class="prod-type-tag">${p.type}</span>` : '';
+  const dataAttrs = `data-channel="${escAttr(ch)}" data-title="${escAttr(p.title)}"`;
+  const profitCells = p.profit != null
+    ? `<td class="prod-num ${p.profit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg'}">${fmtMoney(p.profit)}</td>
+       <td class="prod-num ${p.profit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg'}">${fmtPct(p.profitPct)}</td>`
+    : `<td class="prod-num prod-muted">—</td><td class="prod-num prod-muted">—</td>`;
   return `<tr>
     <td>
       <div class="prod-name-wrap">
@@ -318,6 +335,10 @@ function rowHTML(p) {
     <td class="prod-num">${fmtInt(p.qty)}</td>
     <td class="prod-num">${fmtMoney(p.revenue)}</td>
     <td class="prod-num">${fmtMoney(p.avgTicket)}</td>
+    <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.cog ?? ''}" ${dataAttrs} data-field="cog" title="Custo do produto (COG), por unidade"></td>
+    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.taxPct ?? ''}" ${dataAttrs} data-field="taxPct" title="% de imposto sobre a venda"></td>
+    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.commissionPct ?? ''}" ${dataAttrs} data-field="commissionPct" title="% de comissão do marketplace"></td>
+    ${profitCells}
   </tr>`;
 }
 
@@ -327,9 +348,19 @@ function cardHTML(ch) {
   const data = current?.channels?.[ch];
   const products = data?.products || [];
   const rows = products.length
-    ? products.map(rowHTML).join('')
-    : '<tr><td colspan="4" class="prod-empty">Sem vendas no período</td></tr>';
+    ? products.map(p => rowHTML(p, ch)).join('')
+    : '<tr><td colspan="9" class="prod-empty">Sem vendas no período</td></tr>';
   const collapsed = collapsedState[ch] ? ' collapsed' : '';
+  const totalQty = products.reduce((a, p) => a + p.qty, 0);
+  const footRow = products.length ? `<tfoot><tr class="prod-total-row">
+    <td>Total</td>
+    <td class="prod-num">${fmtInt(totalQty)}</td>
+    <td class="prod-num">${fmtMoney(data.revenue)}</td>
+    <td class="prod-num prod-total-note">${data.profitProductsCount || 0} de ${products.length} c/ COG</td>
+    <td colspan="3"></td>
+    <td class="prod-num">${data.totalProfit != null ? fmtMoney(data.totalProfit) : '—'}</td>
+    <td class="prod-num">${data.profitPct != null ? fmtPct(data.profitPct) : '—'}</td>
+  </tr></tfoot>` : '';
   return `
     <div class="prod-card ${chClass}${collapsed}" id="prod-card-${ch}">
       <div class="prod-card-head">
@@ -352,11 +383,34 @@ function cardHTML(ch) {
       </div>
       <div class="prod-table-wrap">
         <table class="prod-table">
-          <thead><tr><th>Produto</th><th class="num">Qtd</th><th class="num">Receita</th><th class="num">Ticket médio</th></tr></thead>
+          <thead><tr>
+            <th>Produto</th><th class="num">Qtd</th><th class="num">Receita</th><th class="num">Ticket médio</th>
+            <th class="num">COG (un.)</th><th class="num">Impostos %</th><th class="num">Comissão %</th>
+            <th class="num">Lucro</th><th class="num">Lucro %</th>
+          </tr></thead>
           <tbody>${rows}</tbody>
+          ${footRow}
         </table>
       </div>
     </div>`;
+}
+
+async function onFinanceEdit(e) {
+  const inp = e.target;
+  const { channel, title, field } = inp.dataset;
+  const value = inp.value === '' ? null : Number(inp.value);
+  inp.disabled = true;
+  try {
+    await fetch('/api/products/finance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel, title, [field]: value }),
+    });
+    await load();
+  } catch (err) {
+    console.warn('Produtos: falha ao salvar dado financeiro', err);
+    inp.disabled = false;
+  }
 }
 
 function render() {
@@ -366,6 +420,7 @@ function render() {
   setText('pageSub', (market === 'us' ? 'Vita Pet Life' : 'Coco and Luna') + ' · ' + state.label);
   const channels = market === 'us' ? CHANNELS_US : CHANNELS_BR;
   document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
+  document.querySelectorAll('.prod-input').forEach(inp => inp.addEventListener('change', onFinanceEdit));
 }
 
 // ── Carregamento ──────────────────────────────────────────

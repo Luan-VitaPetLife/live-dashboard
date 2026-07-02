@@ -29,6 +29,7 @@ const EMPTY = {
   mlTokens: null,
   mlAdCosts: null,
   googleAdsTokens: null,
+  productFinance: {},
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
@@ -57,6 +58,7 @@ export async function initStore() {
       if (r.key === 'mlTokens')             cache.mlTokens             = r.value;
       if (r.key === 'mlAdCosts')            cache.mlAdCosts            = r.value;
       if (r.key === 'googleAdsTokens')      cache.googleAdsTokens      = r.value;
+      if (r.key === 'productFinance')       cache.productFinance       = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -193,6 +195,17 @@ export function setGoogleAdsTokens(tokens) {
   if (USE_PG) pgKv('googleAdsTokens', tokens);
 }
 export function getGoogleAdsTokens() { return load().googleAdsTokens; }
+
+// ── Dados financeiros editáveis por produto (COG, impostos, comissão) ──
+// Chave: "canal|||título do produto" (mesma chave usada no agrupamento de Top Produtos/Produtos).
+export function setProductFinance(key, patch) {
+  const db = load();
+  if (!db.productFinance) db.productFinance = {};
+  db.productFinance[key] = { ...(db.productFinance[key] || {}), ...patch };
+  saveJson();
+  if (USE_PG) pgKv('productFinance', db.productFinance);
+}
+export function getProductFinance() { return load().productFinance || {}; }
 
 // ── Meta Insights ─────────────────────────────
 export function setMetaInsightsDaily(data) {

@@ -93,7 +93,7 @@
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
   /* ── KPI strip ── */
-  .kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
   .kpi-cell{padding:16px 20px;border-right:1px solid var(--border)}
   .kpi-cell:last-child{border-right:none}
   .kc-label{font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
@@ -250,14 +250,19 @@
         <div class="kc-sub" id="kpiSpendSub">—</div>
       </div>
       <div class="kpi-cell">
-        <div class="kc-label">Vendas Atribuídas</div>
+        <div class="kc-label">Pedidos</div>
+        <div class="kc-value" id="kpiOrders">—</div>
+        <div class="kc-sub">pedidos no período</div>
+      </div>
+      <div class="kpi-cell">
+        <div class="kc-label">Vendas Atribuídas Geral</div>
         <div class="kc-value" id="kpiSales">—</div>
         <div class="kc-sub" id="kpiSalesSub">—</div>
       </div>
       <div class="kpi-cell">
-        <div class="kc-label">Cliques (Ads)</div>
-        <div class="kc-value" id="kpiTicket">—</div>
-        <div class="kc-sub" id="kpiTicketSub">cliques Meta no período</div>
+        <div class="kc-label">Faturamento Geral</div>
+        <div class="kc-value" id="kpiRevenue">—</div>
+        <div class="kc-sub">receita total do período</div>
       </div>
       <div class="kpi-cell">
         <div class="kc-label">ROAS Geral</div>
@@ -695,7 +700,7 @@ const setLabel = (cardId, idx, txt) => { const c = document.getElementById(cardI
 const toggleCompare = () => {}; // recurso de comparação removido (era mock)
 
 // ── Render ────────────────────────────────────────────────
-function render() {
+async function render() {
   const d = current; if (!d) return;
   const k = d.kpis || {}, ml = d.mlBreakdown || {}, cs = d.channelSplit || {};
   const labels = d.trend?.labels || [], tb = d.trend?.byChannel || [];
@@ -705,15 +710,33 @@ function render() {
 
   const metaSpend = k.adCost || 0, metaRev = k.metaRevenue || 0, metaRoas = k.roas || 0, metaClicks = k.adClicks || 0;
   const mlSpend = market === 'br' ? (ml.adCost || 0) : 0;
-  const totalSpend = metaSpend + mlSpend;
+  const mlPremiumRev = market === 'br' ? (ml.premium || 0) : 0;
 
-  // ── KPI strip ──
-  setText('kpiSpend', fmtMoney(totalSpend));
-  setText('kpiSpendSub', (totalSpend > 0) ? ('Meta' + (mlSpend > 0 ? ' + Mercado Ads' : '')) : 'sem gasto no período');
-  setText('kpiSales', fmtMoney(metaRev));
-  setText('kpiSalesSub', 'atribuição Meta (Instagram/Facebook)');
-  setText('kpiTicket', fmtInt(metaClicks));
-  setText('kpiRoas', totalSpend > 0 ? (metaRev / totalSpend).toFixed(2).replace('.', ',') + '×' : '—');
+  // Google Ads só existe no mercado US e não vem em /api/dashboard (ver CLAUDE.md 4.12) —
+  // busca à parte via /api/campaigns (mesmo cache já usado pelo card do Google) para poder
+  // somar no "geral" do topo da tela.
+  let googleSpend = 0, googleRevenue = 0;
+  if (market === 'us') {
+    try {
+      const camps = await loadCampaigns();
+      const gCamps = camps?.channels?.google?.campaigns || [];
+      googleSpend   = gCamps.reduce((a, c) => a + (c.spend   || 0), 0);
+      googleRevenue = gCamps.reduce((a, c) => a + (c.revenue || 0), 0);
+    } catch (e) { /* segue sem Google no total geral */ }
+  }
+
+  const gastoGeral       = metaSpend + mlSpend + googleSpend;
+  const vendasGeral      = metaRev + mlPremiumRev + googleRevenue;
+  const faturamentoGeral = k.revenue || 0;
+
+  // ── KPI strip (geral = soma de todos os canais de ads ativos no mercado atual) ──
+  setText('kpiSpend', fmtMoney(gastoGeral));
+  setText('kpiSpendSub', [metaSpend > 0 && 'Meta', mlSpend > 0 && 'Mercado Ads', googleSpend > 0 && 'Google Ads'].filter(Boolean).join(' + ') || 'sem gasto no período');
+  setText('kpiOrders', fmtInt(k.orders || 0));
+  setText('kpiSales', fmtMoney(vendasGeral));
+  setText('kpiSalesSub', [metaRev > 0 && 'Meta', mlPremiumRev > 0 && 'ML Destaque', googleRevenue > 0 && 'Google Ads'].filter(Boolean).join(' + ') || 'sem vendas atribuídas no período');
+  setText('kpiRevenue', fmtMoney(faturamentoGeral));
+  setText('kpiRoas', gastoGeral > 0 ? (vendasGeral / gastoGeral).toFixed(2).replace('.', ',') + '×' : '—');
 
   // ── Meta (BR/US) ──
   const metaKey = market === 'br' ? 'meta_br' : 'meta_us';

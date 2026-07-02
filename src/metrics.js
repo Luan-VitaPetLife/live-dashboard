@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, load } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, load } from './store.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -91,6 +91,34 @@ function normSource(s) { if (!s || !s.trim()) return 'Direto'; const t = s.trim(
 
 // Extrai o tamanho do combo do título do lineItemGroup ("Combo de 2 unidades" → 2).
 function comboSize(bundle) { return Number((/combo de (\d+)/i.exec(bundle?.title || '') || [])[1]) || null; }
+
+// Remove o sufixo "- Combo de N unidades" de um título, revelando o título do produto-base
+// (ex: "Lisina ... - Combo de 3 unidades - Ajuda ..." → "Lisina ... - Ajuda ...").
+function stripComboSuffix(title) { return (title || '').replace(/\s*-\s*combo de \d+ unidades?/i, '').trim(); }
+const hasComboTag = it => (it.tags || []).some(t => (t || '').trim().toLowerCase() === 'combo');
+
+// Alíquota efetiva de Simples Nacional (DAS sobre o faturamento) — informada pelo Luan em 02/07/2026.
+// É um valor único da empresa (não varia por produto); editável por linha se um produto tiver regra diferente.
+const TAX_PCT_DEFAULT = 2.64;
+
+// COG (custo do produto) de referência por linha de produto — informado pelo Luan em 02/07/2026.
+// Vale para o SKU principal citado; variações de tamanho/combo herdam o mesmo valor até serem ajustadas
+// manualmente (o custo real por grama pode diferir). Sem correspondência conhecida, fica null (editável).
+function defaultCog(title) {
+  const t = (title || '').toLowerCase();
+  if (t.includes('daily')) return 17.32;
+  if (t.includes('lisina') || t.includes('lysine')) return 15.21;
+  return null;
+}
+
+// Comissão de referência por canal (marketplace) — editável por produto na tela de Produtos.
+// Shopify (BR/US) não é marketplace: comissão de venda é 0% (taxa de gateway é outro assunto).
+const DEFAULT_COMMISSION_PCT = {
+  shopify: 0, shopify_us: 0,
+  shopee: 18,
+  mercadolivre: 14,
+  amazon: 12, amazon_us: 12,
+};
 
 export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br' }) {
   const span = daySpan(since, until);
@@ -288,6 +316,15 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     organicOrders:  count - campaignOrdersList.length,
   };
 
+  // Série diária orgânico x campanha, alinhada aos mesmos buckets da tendência (gráfico individual por linha).
+  const salesSplitDaily = { campaign: buckets.map(() => 0), organic: buckets.map(() => 0) };
+  valid.forEach(o => {
+    const i = idx.get(bucketKey(o.createdAt, grain));
+    if (i == null) return;
+    if (isCampaignOrder(o)) salesSplitDaily.campaign[i] += o.total;
+    else salesSplitDaily.organic[i] += o.total;
+  });
+
   // ML breakdown: orgânico vs premium + custo de anúncios (apenas mercado BR)
   const mlOrders = valid.filter(o => o.channel === 'mercadolivre');
   const mlBreakdown = {
@@ -318,7 +355,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       adCost, adImpressions, adClicks, roas, metaRevenue,
       conversion: sess.conv, conversionDeltaPP: (sess.conv - prevSess.conv) * 100,
     },
-    trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt, byChannel: trendByChannel, metaSpendDaily },
+    trend: { labels: trendLabels, data: trendData, total: trendTotal, fmt: trendFmt, byChannel: trendByChannel, metaSpendDaily, salesSplitDaily },
     channelSplit: byChannel,
     salesSplit,
     marketing: mktEntries.map(([name, value]) => ({ name, value })),
@@ -346,13 +383,24 @@ export function computeProducts({ market = 'br', since, until } = {}) {
     c.orders += 1;
     o.items.forEach(it => {
       if (!it.title) return;
-      if (!c.products[it.title]) c.products[it.title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
-      const p = c.products[it.title], qty = it.qty || 0;
+      // Produtos com tag "combo" vendidos como si mesmos (não via Shopify Bundles) somem da
+      // listagem — a venda é atribuída ao produto-base (título sem o sufixo "Combo de N unidades"),
+      // contando como pacotes de combo do mesmo tamanho (mesma lógica do combo via Bundles).
+      const taggedSize = hasComboTag(it) ? comboSize({ title: it.title }) : null;
+      const title = taggedSize ? stripComboSuffix(it.title) : it.title;
+
+      if (!c.products[title]) c.products[title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
+      const p = c.products[title], qty = it.qty || 0;
       p.revenue += it.amount || 0;
       if (!p.type) p.type = classifyType(it);
       if (!p.image && it.image) p.image = it.image;
-      if (it.bundle) {
-        p.comboQty += qty;
+
+      if (taggedSize) {
+        const packages = qty; // aqui o item É o produto-combo: qty = nº de pacotes comprados
+        p.comboQty += packages * taggedSize;
+        p.comboBySize[taggedSize] = (p.comboBySize[taggedSize] || 0) + packages;
+      } else if (it.bundle) {
+        p.comboQty += qty; // aqui qty = unidades de componente (Shopify já quebrou o combo)
         const size = comboSize(it.bundle);
         if (size && !seenBundleIds.has(it.bundle.id)) {
           seenBundleIds.add(it.bundle.id);
@@ -364,20 +412,42 @@ export function computeProducts({ market = 'br', since, until } = {}) {
     });
   });
 
+  const finance = getProductFinance();
   const channels = {};
   for (const [ch, c] of Object.entries(byChannel)) {
     const products = Object.entries(c.products)
       .map(([title, p]) => {
         const qty = p.avulsoQty + p.comboQty;
+        const revenue = p.revenue;
+        const ov = finance[`${ch}|||${title}`] || {};
+        const cog           = ov.cog != null ? Number(ov.cog) : defaultCog(title);
+        const taxPct        = ov.taxPct != null ? Number(ov.taxPct) : TAX_PCT_DEFAULT;
+        const commissionPct = ov.commissionPct != null ? Number(ov.commissionPct) : (DEFAULT_COMMISSION_PCT[ch] ?? 0);
+        const taxAmount        = taxPct != null ? revenue * taxPct / 100 : 0;
+        const commissionAmount = commissionPct != null ? revenue * commissionPct / 100 : 0;
+        const cogTotal = cog != null ? cog * qty : null;
+        const profit   = cog != null ? revenue - cogTotal - taxAmount - commissionAmount : null;
         return {
-          title, qty, revenue: p.revenue,
-          avgTicket: qty > 0 ? p.revenue / qty : 0,
+          title, qty, revenue,
+          avgTicket: qty > 0 ? revenue / qty : 0,
           avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
           type: p.type, image: p.image,
+          cog, taxPct, commissionPct,
+          taxAmount, commissionAmount, cogTotal, profit,
+          profitPct: (profit != null && revenue > 0) ? profit / revenue : null,
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
-    channels[ch] = { revenue: c.revenue, orders: c.orders, products };
+
+    const withProfit = products.filter(p => p.profit != null);
+    const totalProfit = withProfit.reduce((a, p) => a + p.profit, 0);
+    const totalProfitRevenue = withProfit.reduce((a, p) => a + p.revenue, 0);
+    channels[ch] = {
+      revenue: c.revenue, orders: c.orders, products,
+      totalProfit: withProfit.length ? totalProfit : null,
+      profitPct: (withProfit.length && totalProfitRevenue > 0) ? totalProfit / totalProfitRevenue : null,
+      profitProductsCount: withProfit.length,
+    };
   }
   return { market, since, until, channels, updatedAt: load().lastSync };
 }

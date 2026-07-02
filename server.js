@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts } from './src/metrics.js';
 import { runSync } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, load } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -19,6 +19,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 
 // Dados da dashboard
 app.get('/api/dashboard', (req, res) => {
@@ -40,6 +41,18 @@ app.get('/api/products', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Salva/edita dados financeiros de um produto (COG, % imposto, % comissão) — usado pela tela de Produtos.
+app.post('/api/products/finance', (req, res) => {
+  const { channel, title, cog, taxPct, commissionPct } = req.body || {};
+  if (!channel || !title) return res.status(400).json({ error: 'channel e title são obrigatórios.' });
+  const patch = {};
+  if (cog !== undefined)           patch.cog = cog === null || cog === '' ? null : Number(cog);
+  if (taxPct !== undefined)        patch.taxPct = taxPct === null || taxPct === '' ? null : Number(taxPct);
+  if (commissionPct !== undefined) patch.commissionPct = commissionPct === null || commissionPct === '' ? null : Number(commissionPct);
+  setProductFinance(`${channel}|||${title}`, patch);
+  res.json({ ok: true });
 });
 
 // Campanhas por canal (ao vivo, com cache de 5 min). Usado pelo detalhamento da tela de Campanhas.

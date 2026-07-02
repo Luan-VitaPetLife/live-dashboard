@@ -327,7 +327,8 @@
       <div class="kpi-cell"><div class="kc-label">Receita Total</div><div class="kc-value" id="kpiRevenue">—</div><div class="kc-delta" id="kpiRevenueDelta"></div></div>
       <div class="kpi-cell"><div class="kc-label">Pedidos</div><div class="kc-value" id="kpiOrders">—</div><div class="kc-delta" id="kpiOrdersDelta"></div></div>
       <div class="kpi-cell"><div class="kc-label">Ticket Médio</div><div class="kc-value" id="kpiAov">—</div><div class="kc-delta" id="kpiAovDelta"></div></div>
-      <div class="kpi-cell"><div class="kc-label">Conversão</div><div class="kc-value" id="kpiConv">—</div><div class="kc-delta" id="kpiConvDelta"></div></div>
+      <div class="kpi-cell"><div class="kc-label">ROAS</div><div class="kc-value" id="kpiRoas">—</div><div class="kc-delta" id="kpiRoasSub">retorno sobre gasto (Meta Ads)</div></div>
+      <div class="kpi-cell"><div class="kc-label">ACOS</div><div class="kc-value" id="kpiAcos">—</div><div class="kc-delta" id="kpiAcosSub">gasto ÷ vendas atribuídas</div></div>
     </div>
 
     <div class="two-col-layout" id="twoColLayout">
@@ -385,9 +386,9 @@
       </div></div>
 
       <div class="card" id="cardSalesSplit"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub">Vendas pagas vs orgânicas</div></div></div>
-        <div class="donut-center-wrap"><canvas id="salesSplitChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="ssCenter">—</div><div class="dcl-sub">Total</div></div></div>
-        <div class="donut-rows" id="salesSplitRows"></div>
+        <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub">Vendas pagas vs orgânicas, por dia</div></div><div class="ct-val" id="ssVal">—</div></div>
+        <div class="ch220"><canvas id="salesSplitChart"></canvas></div>
+        <div class="legend-row" id="salesSplitLegend"></div>
         <div class="card-note">Campanha = origem Meta (Instagram/Facebook) + Destaque do Mercado Livre</div>
       </div></div>
       </div>
@@ -710,14 +711,8 @@ function render(d) {
       (ch === 'amazon' || ch === 'amazon_us') ? 'Receita orgânica da Amazon · Ads em breve' :
       k.adCost > 0          ? 'Meta Ads conectado · Google Ads em breve' : 'Meta Ads conectado · sincronize para ver os dados';
   }
-  document.getElementById('kpiConv').textContent = (k.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
-  const dpp = k.conversionDeltaPP;
-  if (dpp === null || dpp === undefined || isNaN(dpp)) {
-    document.getElementById('kpiConvDelta').innerHTML = '<span class="delta-val flat">—</span> vs. período anterior';
-  } else {
-    const up = dpp >= 0, cls = Math.abs(dpp) < 0.005 ? 'flat' : (up ? 'up' : 'down');
-    document.getElementById('kpiConvDelta').innerHTML = `<span class="delta-val ${cls}">${up?'↑':'↓'} ${Math.abs(dpp).toLocaleString('pt-BR',{maximumFractionDigits:2})}pp</span> vs. período anterior`;
-  }
+  document.getElementById('kpiRoas').textContent = k.roas > 0 ? k.roas.toLocaleString('pt-BR',{maximumFractionDigits:2})+'×' : '—';
+  document.getElementById('kpiAcos').textContent = (k.roas > 0) ? (100/k.roas).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%' : '—';
 
   // Trend
   const t = d.trend, money = t.fmt === 'money';
@@ -763,16 +758,25 @@ function render(d) {
     ? d.marketing.map(e=>{ const pc=mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%'; return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${MKT_COLORS[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(e.value)}</span></div></div>`; }).join('')
     : '<div class="muted-state">Sem receita atribuída.</div>';
 
-  // Sales split: orgânico x campanha
+  // Sales split: orgânico x campanha — gráfico de linhas individuais, por dia
   const ss = d.salesSplit || { organic:0, campaign:0, organicOrders:0, campaignOrders:0 };
-  const ssRows = [['Campanha', ss.campaign, ss.campaignOrders, '#a05a3a'], ['Orgânico', ss.organic, ss.organicOrders, '#6a8c6e']];
   const ssTotal = ss.organic + ss.campaign;
-  drawDonut('salesSplitChart', ssRows.map(r=>r[1]), ssRows.map(r=>r[3]));
-  document.getElementById('ssCenter').textContent = fmtMoneyShort(ssTotal);
-  document.getElementById('salesSplitRows').innerHTML = ssRows.map(([nm,v,ord,col])=>{
-    const pc = ssTotal>0?(v/ssTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%';
-    return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${col}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(v)} · ${fmtInt(ord)} ped.</span></div></div>`;
-  }).join('');
+  document.getElementById('ssVal').textContent = fmtMoneyShort(ssTotal);
+  const ssd = d.trend?.salesSplitDaily || { campaign: [], organic: [] };
+  const ssLabels = d.trend?.labels || [];
+  setChart('salesSplitChart', {
+    type: 'line',
+    data: { labels: ssLabels, datasets: [
+      { label:'Campanha', data: ssd.campaign, borderColor:'#a05a3a', borderWidth:1.5, tension:.4, pointRadius:2, pointHoverRadius:4, fill:false },
+      { label:'Orgânico',  data: ssd.organic,  borderColor:'#6a8c6e', borderWidth:1.5, tension:.4, pointRadius:2, pointHoverRadius:4, fill:false },
+    ] },
+    options: { responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{ label:c=>' '+c.dataset.label+': '+fmtMoney(c.parsed.y,2) }} },
+      scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ grid:{color:'rgba(30,28,24,0.06)'}, ticks:{callback:v=>fmtMoneyShort(v)} } } },
+  });
+  document.getElementById('salesSplitLegend').innerHTML =
+    `<div class="legend-item"><div class="legend-line" style="background:#a05a3a"></div>Campanha (${fmtMoney(ss.campaign)})</div>` +
+    `<div class="legend-item"><div class="legend-line" style="background:#6a8c6e"></div>Orgânico (${fmtMoney(ss.organic)})</div>`;
 
   // Traffic
   const tf = d.traffic;

@@ -209,12 +209,14 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - `lastData` armazena último payload da API para re-render ao trocar cores sem nova requisição.
 - Top Produtos: quando canal = `todos`, exibe badge de canal + soma total no rodapé.
 - Pedidos Recentes: linha de resumo com total dos pedidos válidos.
-- **Card Orgânico x Campanha (`#cardSalesSplit`):** donut chart + linhas detalhadas mostrando receita/pedidos de vendas de campanha (Meta IG/FB + ML Destaque/premium) vs orgânicas. Dados vêm do campo `salesSplit` do payload `/api/dashboard`. Agrupado em `.right-col-stack` com `#cardMarketing`.
+- **Card Orgânico x Campanha (`#cardSalesSplit`, alterado 02/07/2026):** gráfico de **linhas individuais** (Campanha x Orgânico, uma linha cada) por dia — não é mais donut. Dados vêm de `trend.salesSplitDaily` (`{ campaign: [], organic: [] }`, alinhado aos mesmos buckets/labels de `trend.labels`) calculado em `computeDashboard()`; os totais agregados continuam em `salesSplit` (usado na legenda/`ct-val`). Agrupado em `.right-col-stack` com `#cardMarketing`.
+- **KPI strip principal (alterado 02/07/2026):** 5 células — Receita Total, Pedidos, Ticket Médio, **ROAS**, **ACOS** (`#kpiRoas`/`#kpiAcos`). O KPI "Conversão" foi removido daqui (a métrica de conversão de sessão→compra continua existindo no card de Tráfego, `#mConv`, que é outro contexto). ROAS = `kpis.roas` (metaRevenue ÷ adCost, já calculado no backend). ACOS = `100/roas` (gasto ÷ vendas atribuídas, em %) — a grade CSS do `.kpi-strip` já era `repeat(5,1fr)` antes dessa mudança (pensada pra isso).
 - Paleta/design: tema "earthy" com variáveis CSS no `:root`. Manter visual.
 
 ### 4.11 Tela de Campanhas — `public/campanhas.html`
 - Usa dados reais de dois endpoints: `/api/dashboard` (KPIs, tendência, gasto diário Meta) e `/api/campaigns` (campanha a campanha).
 - **Painel "Visão Geral":** KPIs de receita, pedidos, gasto, ROAS por canal. Mini charts de tendência com `trend.byChannel` e `trend.metaSpendDaily`.
+- **KPI strip do topo — todos "geral" (alterado 02/07/2026):** `render()` agora é `async` porque precisa buscar `/api/campaigns` (via `loadCampaigns()`, já cacheado) além de `/api/dashboard`, para somar o Google Ads no "geral" quando `market==='us'` (Google não entra em `/api/dashboard`, ver 4.12). 5 células: **Gasto Total** (Meta + Mercado Ads + Google Ads), **Pedidos** (`kpis.orders`), **Vendas Atribuídas Geral** (Meta + ML Destaque/premium + Google Ads), **Faturamento Geral** (`kpis.revenue`, receita total do período — não é atribuição, é o total da loja), **ROAS Geral** (vendas atribuídas geral ÷ gasto geral). O KPI de "Cliques" foi removido.
 - **Painel "Gastos":** ao clicar em um canal, exibe cards individuais de cada campanha retornados por `/api/campaigns`. Cada card mostra: nome, status, gasto, receita, ROAS, pedidos, cliques, impressões, CTR, ACoS (ML).
   - Logo do canal em cada card: `logo_mercadolivre.png` com `.camp-logo-fill` (sem borda/padding, `object-fit:cover`). Meta/Shopee/Amazon com `.camp-logo-img` (fundo branco, borda, padding — para logos com transparência).
   - `.cmp-status.on` / `.cmp-status.off` indicam campanha ativa/pausada.
@@ -263,6 +265,16 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - Mercado Livre: **não** vem no pedido. `fetchOrders()` faz uma chamada em lote extra (`GET /items?ids=...`, multiget de até 20 ids) para resolver `thumbnail` por `item.id`, mesmo padrão já usado para resolver `state` via `/shipments/{id}`. Falha graciosamente (sem imagem) se o item não for encontrado.
   - Amazon (BR/US): **sem imagem, tipo ou nome real do produto** — ver item 6 do backlog (seção 9): itens do pedido nunca são buscados.
 - **Tipo de produto:** reaproveita `classifyType()` já usada em Segmentos (productType do Shopify como fonte autoritativa, fallback por palavras-chave no título para os demais canais).
+
+#### 4.13.1 Colunas financeiras editáveis (implementado 02/07/2026)
+- Colunas adicionadas na tabela: **COG** (custo do produto, por unidade), **Impostos %**, **Comissão %**, **Lucro** (R$) e **Lucro %** — todas calculadas em `computeProducts()` (`metrics.js`) e as 3 primeiras são **editáveis inline** na tabela (`<input type="number">`).
+- **Persistência:** `POST /api/products/finance` (`{ channel, title, cog?, taxPct?, commissionPct? }`) salva em `store.js` → `productFinance[ "canal|||título" ]` (mesma chave de agrupamento usada em Top Produtos). `null`/`''` limpa o campo (volta a usar o padrão). Editar um input recarrega a tela inteira (`load()`) pra recalcular tudo com o novo valor — simples e sempre consistente, sem duplicar a fórmula no front.
+- **Fórmula:** `Lucro = Receita − (COG × Qtd) − (Receita × Impostos%) − (Receita × Comissão%)`. `Lucro % = Lucro ÷ Receita`. Se **COG não estiver preenchido** (nem override nem padrão), `profit`/`profitPct` ficam `null` e a linha mostra "—" (não assume custo zero, pra não inflar o lucro por engano).
+- **Padrão de Impostos — 2,64% fixo** (Simples Nacional, alíquota efetiva do DAS informada pelo Luan em 02/07/2026 — **não varia por produto**, é da empresa toda). Editável por linha se algum produto tiver regra tributária diferente.
+- **Padrão de COG** (`defaultCog()` em `metrics.js`): valores de referência informados pelo Luan em 02/07/2026 — **R$ 15,21** para produtos com "lisina"/"lysine" no título, **R$ 17,32** para "daily" no título. Variações de tamanho/combo do mesmo produto (240g, 360g, combos) herdam o mesmo valor por enquanto — o custo real por grama pode ser diferente e precisa ser ajustado manualmente linha a linha.
+- **Padrão de Comissão** (`DEFAULT_COMMISSION_PCT` em `metrics.js`): valores de referência típicos por canal, não confirmados com o Luan — **Shopee 18%, Mercado Livre 14%, Amazon 12%** (BR e US), **Shopify BR/US 0%** (não é marketplace, a taxa de gateway de pagamento é outro assunto, não modelada aqui). Editável por produto se a taxa real for diferente.
+- **Totais por canal:** `channels[ch].totalProfit`/`profitPct` somam só os produtos com COG preenchido (`profitProductsCount`) — a tabela mostra "X de Y produtos c/ COG" no rodapé pra deixar claro que o total pode estar parcial.
+- **Produtos com tag "combo" somem da listagem (implementado 02/07/2026):** produtos Shopify vendidos como o combo em si (tag `combo`, case-insensitive, **não** via Shopify Bundles/`lineItemGroup`) não aparecem como linha própria — a venda é atribuída ao produto-base via `stripComboSuffix()` (remove o sufixo `" - Combo de N unidades"` do título) e contabilizada em `comboBySize`, exatamente como os combos vendidos via Bundles. O "produto-base" precisa ter esse título exato (sem o sufixo de combo) pra a mesclagem funcionar — se não existir, cria uma linha nova só com a quantidade do combo. A contagem aparece no textinho `.prod-combo` sob o nome do produto-base (mesmo lugar de sempre), não em resumo separado.
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -333,6 +345,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - `GET /api/dashboard?channel=&metric=&since=YYYY-MM-DD&until=YYYY-MM-DD&market=br|us`
   - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta + Google Ads. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
   - `GET /api/products?market=br|us&since=&until=` — catálogo completo de produtos por canal (sem cache, direto do store). Usado pela tela de Produtos (`produtos.html`).
+  - `POST /api/products/finance` — salva/edita COG, % impostos ou % comissão de um produto (`{ channel, title, cog?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `POST /api/sync`
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
   - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente
