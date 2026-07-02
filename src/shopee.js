@@ -192,6 +192,7 @@ export async function fetchOrders(sinceISO, untilISO) {
           title:  it.item_name,
           qty:    it.model_quantity_purchased || it.quantity || 1,
           amount: (Number(it.model_discounted_price ?? it.model_original_price) || 0) * (it.model_quantity_purchased || 1),
+          image:  it.image_info?.image_url || null,
         })),
       });
     }

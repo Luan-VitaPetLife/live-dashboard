@@ -94,7 +94,7 @@
   /* ── Product cards ── */
   .prod-grid{display:flex;flex-direction:column;gap:12px}
   .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-  .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:relative}
   .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
   .camp-logo-img{background:#fff;border:1px solid var(--border);padding:5px}
   .camp-logo-img img{width:100%;height:100%;object-fit:contain;display:block}
@@ -102,16 +102,27 @@
   .camp-logo-fill img{object-fit:cover}
   .camp-ch-name{font-size:13px;font-weight:600;color:var(--text)}
   .camp-ch-type{font-size:10px;color:var(--muted);margin-top:2px}
-  .prod-head-stats{display:flex;gap:28px;margin-left:auto}
+  .prod-head-stats{display:flex;gap:28px;margin-left:auto;margin-right:34px}
   .prod-stat-lbl{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
   .prod-stat-val{font-size:17px;font-weight:300;letter-spacing:-.4px}
+  .prod-collapse-btn{position:absolute;top:14px;right:16px;width:26px;height:26px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s}
+  .prod-collapse-btn:hover{border-color:var(--ink);color:var(--text)}
+  .prod-collapse-btn i{transition:transform .2s}
+  .prod-card.collapsed .prod-collapse-btn i{transform:rotate(-90deg)}
+  .prod-card.collapsed .prod-table-wrap{display:none}
   .prod-table-wrap{max-height:420px;overflow-y:auto;overflow-x:auto}
   .prod-table{width:100%;border-collapse:collapse;font-size:12px}
   .prod-table thead th{position:sticky;top:0;background:var(--surface2);text-align:left;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:9px 20px;border-bottom:1px solid var(--border);white-space:nowrap}
   .prod-table thead th.num,.prod-table td.prod-num{text-align:right}
   .prod-table tbody td{padding:9px 20px;border-bottom:1px solid var(--border)}
   .prod-table tbody tr:last-child td{border-bottom:none}
-  .prod-name{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prod-name-wrap{display:flex;align-items:center;gap:10px}
+  .prod-thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--surface2);border:1px solid var(--border)}
+  .prod-thumb-ph{width:34px;height:34px;border-radius:6px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
+  .prod-name-col{min-width:0}
+  .prod-name-line{display:flex;align-items:center;gap:7px;min-width:0}
+  .prod-name{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prod-type-tag{font-size:9px;font-weight:700;letter-spacing:.3px;color:var(--sage);background:rgba(106,140,110,.12);border-radius:4px;padding:2px 6px;flex-shrink:0;white-space:nowrap}
   .prod-combo{font-size:10px;color:var(--muted);margin-top:2px}
   .prod-num{white-space:nowrap;font-variant-numeric:tabular-nums}
   .prod-empty{text-align:center;color:var(--muted);font-style:italic;padding:20px}
@@ -187,11 +198,11 @@ function fmtMoney(v, mkt = market) {
 
 // ── Metadados de canal (mesmas cores de index.html/DEFAULT_CH) ──
 const CH_META = {
-  shopify:      { name: 'Shopify BR',    color: '#95BF47', badge: 'S' },
+  shopify:      { name: 'Shopify BR',    color: '#95BF47', logo: 'logo_shopify.png' },
   shopee:       { name: 'Shopee',        color: '#EE4D2D', logo: 'logo_shopee.svg' },
   mercadolivre: { name: 'Mercado Livre', color: '#FFE600', logo: 'logo_mercadolivre.png', logoFill: true },
   amazon:       { name: 'Amazon BR',     color: '#111111', logo: 'logo_amazon.webp' },
-  shopify_us:   { name: 'Shopify US',    color: '#7EAD3C', badge: 'S' },
+  shopify_us:   { name: 'Shopify US',    color: '#7EAD3C', logo: 'logo_shopify.png' },
   amazon_us:    { name: 'Amazon US',     color: '#FF9900', logo: 'logo_amazon.webp' },
 };
 const CHANNELS_BR = ['shopify', 'shopee', 'amazon', 'mercadolivre'];
@@ -207,6 +218,13 @@ function contrastText(hex) {
 // ── State ─────────────────────────────────────────────────
 let market = localStorage.getItem('coco_market') || 'br';
 let current = null;
+const collapsedState = JSON.parse(localStorage.getItem('coco_produtos_collapsed') || '{}');
+
+function toggleCollapse(ch) {
+  collapsedState[ch] = !collapsedState[ch];
+  localStorage.setItem('coco_produtos_collapsed', JSON.stringify(collapsedState));
+  document.getElementById(`prod-card-${ch}`)?.classList.toggle('collapsed', collapsedState[ch]);
+}
 
 function rangeForPreset(p) {
   const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
@@ -283,8 +301,20 @@ function comboBits(p) {
 
 function rowHTML(p) {
   const combo = comboBits(p);
+  const thumb = p.image
+    ? `<img class="prod-thumb" src="${p.image}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
+    : `<div class="prod-thumb-ph"><i class="bi bi-image"></i></div>`;
+  const typeTag = p.type ? `<span class="prod-type-tag">${p.type}</span>` : '';
   return `<tr>
-    <td><div class="prod-name" title="${p.title}">${p.title}</div>${combo ? `<div class="prod-combo">${combo}</div>` : ''}</td>
+    <td>
+      <div class="prod-name-wrap">
+        ${thumb}
+        <div class="prod-name-col">
+          <div class="prod-name-line"><span class="prod-name" title="${p.title}">${p.title}</span>${typeTag}</div>
+          ${combo ? `<div class="prod-combo">${combo}</div>` : ''}
+        </div>
+      </div>
+    </td>
     <td class="prod-num">${fmtInt(p.qty)}</td>
     <td class="prod-num">${fmtMoney(p.revenue)}</td>
     <td class="prod-num">${fmtMoney(p.avgTicket)}</td>
@@ -299,9 +329,11 @@ function cardHTML(ch) {
   const rows = products.length
     ? products.map(rowHTML).join('')
     : '<tr><td colspan="4" class="prod-empty">Sem vendas no período</td></tr>';
+  const collapsed = collapsedState[ch] ? ' collapsed' : '';
   return `
-    <div class="prod-card ${chClass}">
+    <div class="prod-card ${chClass}${collapsed}" id="prod-card-${ch}">
       <div class="prod-card-head">
+        <button class="prod-collapse-btn" onclick="toggleCollapse('${ch}')" title="Minimizar/expandir"><i class="bi bi-chevron-down"></i></button>
         ${logoHTML(meta)}
         <div>
           <div class="camp-ch-name">${meta.name}</div>

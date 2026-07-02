@@ -140,6 +140,7 @@ export async function fetchOrders(sinceISO, untilISO) {
           title:  it.item?.title || '',
           qty:    it.quantity || 1,
           amount: Number(it.unit_price || 0) * (it.quantity || 1),
+          _itemId: it.item?.id || null,
         })),
       });
     }
@@ -166,6 +167,26 @@ export async function fetchOrders(sinceISO, untilISO) {
     out.forEach(o => { o.state = stateMap[o._sid] || null; delete o._sid; });
   } else {
     out.forEach(o => { delete o._sid; });
+  }
+
+  // Busca thumbnail dos produtos em lotes (multiget, até 20 ids por chamada) — usada na tela de Produtos.
+  // Falha graciosamente: sem thumbnail, os itens ficam sem imagem, nada quebra.
+  const itemIds = [...new Set(out.flatMap(o => o.items.map(it => it._itemId).filter(Boolean)))];
+  if (itemIds.length > 0) {
+    const thumbMap = {};
+    const BATCH = 20;
+    for (let i = 0; i < itemIds.length; i += BATCH) {
+      const batch = itemIds.slice(i, i + BATCH);
+      try {
+        const res = await apiGet('/items', { ids: batch.join(',') });
+        for (const r of (Array.isArray(res) ? res : [])) {
+          if (r.code === 200 && r.body?.id) thumbMap[r.body.id] = r.body.thumbnail || null;
+        }
+      } catch { /* sem thumbnail — segue sem imagem */ }
+    }
+    out.forEach(o => o.items.forEach(it => { it.image = thumbMap[it._itemId] || null; delete it._itemId; }));
+  } else {
+    out.forEach(o => o.items.forEach(it => { delete it._itemId; }));
   }
 
   return out;

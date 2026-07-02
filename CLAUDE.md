@@ -48,6 +48,7 @@ src/metrics.js          Calcula o payload da dashboard por mercado; inclui sales
 src/sync.js             Orquestra a busca de todos os canais BR e US e grava no store
 public/index.html       Dashboard principal (toggle de mercado, receita, tendência, canais, pedidos)
 public/campanhas.html   Tela de Campanhas: visão de gastos reais por canal + cards por campanha
+public/produtos.html    Tela de Produtos: catálogo completo por canal (tabela com foto, tipo, qtd, receita)
 public/sidebar.js       Componente de sidebar compartilhado (IIFE) — incluído em todos os HTMLs
 public/geografia.html   Mapa geográfico por estado BR (Leaflet.js, Voyager tile, coropleto + calor)
 public/geografia-us.html Mapa geográfico por estado US (Leaflet.js, Voyager tile, coropleto + calor)
@@ -58,6 +59,8 @@ public/logo_mercadolivre.png  Logo ML usada na tela de campanhas
 public/logo_meta.png         Logo Meta usada na tela de campanhas
 public/logo_shopee.svg       Logo Shopee usada na tela de campanhas
 public/logo_amazon.webp      Logo Amazon usada na tela de campanhas
+public/logo_shopify.png      Logo Shopify usada na tela de produtos (BR e US)
+public/logo_google_ads.webp  Logo Google Ads usada na tela de campanhas
 ```
 
 Fluxo: `sync.js` busca pedidos/sessões → grava em `store` → `metrics.js` calcula → `/api/dashboard`
@@ -249,6 +252,18 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Retorna zeros/vazio graciosamente** se não configurado ou não autorizado — nada quebra (mesmo padrão de todo o projeto).
 - Exposto em `/api/campaigns?market=us` como `channels.google = { available, campaigns }`. **Não** entra no payload de `/api/dashboard` nem no cálculo de `adCost`/`roas` do dashboard principal — decisão deliberada para não expandir escopo além do pedido (fica restrito à tela de Campanhas, igual ao padrão de Meta/ML já usados ali).
 
+### 4.13 Tela de Produtos — `public/produtos.html` (implementado 02/07/2026)
+- Panorama do catálogo completo por canal (sem limite de top-N, ao contrário do card de Top Produtos do dashboard principal). Um card por canal, com toggle BR/EUA igual às outras telas (`ch-br`/`ch-us` + `body.market-us`).
+- Endpoint próprio: `GET /api/products?market=br|us&since=&until=` → `computeProducts()` em `metrics.js`. Sem cache (é agregação local sobre o store, não chamada a API externa — rápido o suficiente para calcular a cada request).
+- Cada card mostra: logo do canal, receita total, nº de pedidos, e uma tabela rolável (`max-height` com `overflow-y`) de todos os produtos vendidos no período, ordenada por receita: **Produto** (com miniatura da imagem, tag de tipo — Pó/Soft Chews/Tablets/Liquid — e a quebra avulso/combo quando aplicável), **Qtd**, **Receita**, **Ticket médio**.
+- **Botão de minimizar por card** (canto superior direito, chevron): colapsa/expande a tabela. Estado persistido em `localStorage('coco_produtos_collapsed')`, por canal.
+- **Imagem do produto por canal:**
+  - Shopify (BR/US): `LineItem.image.url` já vem na mesma query GraphQL de pedidos — sem custo extra.
+  - Shopee: `item_list[].image_info.image_url` já vem no `get_order_detail` — sem custo extra.
+  - Mercado Livre: **não** vem no pedido. `fetchOrders()` faz uma chamada em lote extra (`GET /items?ids=...`, multiget de até 20 ids) para resolver `thumbnail` por `item.id`, mesmo padrão já usado para resolver `state` via `/shipments/{id}`. Falha graciosamente (sem imagem) se o item não for encontrado.
+  - Amazon (BR/US): **sem imagem, tipo ou nome real do produto** — ver item 6 do backlog (seção 9): itens do pedido nunca são buscados.
+- **Tipo de produto:** reaproveita `classifyType()` já usada em Segmentos (productType do Shopify como fonte autoritativa, fallback por palavras-chave no título para os demais canais).
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js
@@ -317,6 +332,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - Endpoints:
   - `GET /api/dashboard?channel=&metric=&since=YYYY-MM-DD&until=YYYY-MM-DD&market=br|us`
   - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta + Google Ads. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
+  - `GET /api/products?market=br|us&since=&until=` — catálogo completo de produtos por canal (sem cache, direto do store). Usado pela tela de Produtos (`produtos.html`).
   - `POST /api/sync`
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
   - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente
@@ -357,6 +373,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 3. **ML Ads ROAS por campanha:** o campo `listingType === 'premium'` pode não estar capturando todos os pedidos Destaque — verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.
 4. Login/usuários se mais pessoas precisarem acessar.
 5. **Amazon US na produção:** após quotas se recuperarem do período de sobrecarga, confirmar que pedidos US aparecem na dashboard (o código está correto — era problema de quota penalizada).
+6. **Amazon — itens do pedido não são buscados:** `fetchOrders()` em `src/amazon.js` só lê `NumberOfItemsShipped/Unshipped` do pedido e cria itens com `title:''` (placeholder) — nunca chama o endpoint de item do pedido (`/orders/v0/orders/{id}/orderItems`). Por isso Amazon (BR e US) nunca aparece em Top Produtos, Segmentos ou na tela de Produtos (itens sem título são ignorados nessas telas). Corrigir exigiria uma chamada extra por pedido (mais lento, mais exposto a 429) — avaliar com cautela dado o histórico de penalização de cota (ver 4.7).
 
 ## 10. Convenções
 

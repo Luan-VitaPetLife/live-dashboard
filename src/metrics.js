@@ -346,9 +346,11 @@ export function computeProducts({ market = 'br', since, until } = {}) {
     c.orders += 1;
     o.items.forEach(it => {
       if (!it.title) return;
-      if (!c.products[it.title]) c.products[it.title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {} };
+      if (!c.products[it.title]) c.products[it.title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
       const p = c.products[it.title], qty = it.qty || 0;
       p.revenue += it.amount || 0;
+      if (!p.type) p.type = classifyType(it);
+      if (!p.image && it.image) p.image = it.image;
       if (it.bundle) {
         p.comboQty += qty;
         const size = comboSize(it.bundle);
@@ -371,6 +373,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
           title, qty, revenue: p.revenue,
           avgTicket: qty > 0 ? p.revenue / qty : 0,
           avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
+          type: p.type, image: p.image,
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
