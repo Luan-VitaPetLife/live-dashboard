@@ -305,6 +305,13 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   só com chaves de localStorage próprias (`coco_estoque_order`/`coco_estoque_expanded`). Ver 4.13
   pros detalhes de como o drag and drop e o colapso padrão funcionam. **Sem seletor de período**:
   a janela de venda é sempre fixa (ver abaixo), não depende de filtro na tela.
+- **Resumo geral no topo (implementado 06/07/2026), mesmo padrão visual do `.kpi-strip` de Revenue
+  (`index.html`):** 5 células — Vendas/mês, Estoque, Meses de Estoque, Tempo de Estoque Total,
+  Sugestão — somando **todos os canais do mercado atual** (marketplaces + Shopify). Calculado no
+  cliente (`renderSummary()` em `estoque.html`), somando os `totals` que já vêm por canal no payload
+  de `/api/stock` e reaplicando as mesmas fórmulas de `monthsOfStock`/`totalMonthsOfStock`/sugestão
+  em cima da soma — sem round-trip extra ao backend nem duplicar `stockSuggestion()` no front (só o
+  limiar replicado inline, já que é uma conta de uma linha).
 - **`computeStock({ market })` em `metrics.js`:**
   - `aggregateProductsByChannel(orders)` foi extraída de dentro de `computeProducts` pra ser
     reaproveitada aqui — mesma regra de agrupamento avulso/combo/tipo/imagem, sem duplicar lógica.

@@ -63,6 +63,20 @@
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
+  /* ── Resumo geral (soma de todos os canais do mercado — mesmo padrão do kpi-strip de Revenue) ── */
+  .kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .kpi-cell{padding:16px 20px;border-right:1px solid var(--border)}
+  .kpi-cell:last-child{border-right:none}
+  .kc-label{font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .kc-value{font-size:20px;font-weight:300;letter-spacing:-.5px;margin-bottom:5px}
+  .kc-delta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
+  @media(max-width:768px){
+    .kpi-strip{grid-template-columns:1fr 1fr}
+    .kpi-cell{border-right:none;border-bottom:1px solid var(--border)}
+    .kpi-cell:nth-child(odd){border-right:1px solid var(--border)}
+    .kpi-cell:last-child{grid-column:1/-1;border-right:none;border-bottom:none}
+  }
+
   /* ── Market visibility (mesmo padrão de produtos.html/campanhas.html) ── */
   body:not(.market-us) .ch-us{display:none!important}
   body.market-us .ch-br{display:none!important}
@@ -186,6 +200,14 @@
         <button class="layout-btn" data-layout="row" onclick="setLayout('row')" title="Linha — uma tabela abaixo da outra"><i class="bi bi-list-ul"></i></button>
         <button class="layout-btn" data-layout="col" onclick="setLayout('col')" title="Coluna — tabelas lado a lado"><i class="bi bi-layout-split"></i></button>
       </div>
+    </div>
+
+    <div class="kpi-strip">
+      <div class="kpi-cell"><div class="kc-label">Vendas/mês</div><div class="kc-value" id="kpiSalesMonth">—</div><div class="kc-delta">todos os canais</div></div>
+      <div class="kpi-cell"><div class="kc-label">Estoque</div><div class="kc-value" id="kpiStock">—</div><div class="kc-delta">todos os canais</div></div>
+      <div class="kpi-cell"><div class="kc-label">Meses de Estoque</div><div class="kc-value" id="kpiMonths">—</div><div class="kc-delta">estoque + recebendo</div></div>
+      <div class="kpi-cell"><div class="kc-label">Tempo de Estoque Total</div><div class="kc-value" id="kpiTotalMonths">—</div><div class="kc-delta">com produção/pedidos</div></div>
+      <div class="kpi-cell"><div class="kc-label">Sugestão</div><div class="kc-value" id="kpiSuggestion">—</div><div class="kc-delta">geral do mercado</div></div>
     </div>
 
     <div class="prod-grid" id="prodGrid"></div>
@@ -545,11 +567,38 @@ function rangeLabelShort(since, until) {
   return `${f(since)}–${f(until)}`;
 }
 
+// Resumo geral: soma de todos os canais do mercado atual (marketplaces + Shopify) —
+// recalculado no cliente a partir dos totais já vindos por canal, sem round-trip extra.
+function renderSummary() {
+  const d = current; if (!d) return;
+  const totals = Object.values(d.channels || {}).map(c => c.totals || {});
+  const sum = totals.reduce((a, t) => ({
+    salesMonth: a.salesMonth + (t.salesMonth || 0),
+    stock: a.stock + (t.stock || 0),
+    incoming: a.incoming + (t.incoming || 0),
+    projected: a.projected + (t.projected || 0),
+    orderNew: a.orderNew + (t.orderNew || 0),
+    orderInProgress: a.orderInProgress + (t.orderInProgress || 0),
+  }), { salesMonth: 0, stock: 0, incoming: 0, projected: 0, orderNew: 0, orderInProgress: 0 });
+  const monthsOfStock = sum.salesMonth > 0 ? (sum.stock + sum.incoming) / sum.salesMonth : null;
+  const totalMonthsOfStock = sum.salesMonth > 0
+    ? (sum.stock + sum.projected + sum.orderNew + sum.orderInProgress) / sum.salesMonth
+    : null;
+  const suggestion = totalMonthsOfStock == null ? null
+    : totalMonthsOfStock < 3 ? 'urgente' : totalMonthsOfStock < 7 ? 'atencao' : 'aguardar';
+  setText('kpiSalesMonth', fmtInt(sum.salesMonth));
+  setText('kpiStock', fmtInt(sum.stock));
+  setText('kpiMonths', fmtDec(monthsOfStock, 1));
+  setText('kpiTotalMonths', fmtDec(totalMonthsOfStock, 1));
+  document.getElementById('kpiSuggestion').innerHTML = suggestionHTML(suggestion);
+}
+
 function render() {
   const d = current; if (!d) return;
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   setText('lastUpdate', 'sync: ' + updated);
   setText('pageSub', `Coco and Luna · vendas reais dos últimos ${d.windowDays || 30} dias (${rangeLabelShort(d.since, d.until)})`);
+  renderSummary();
   const channels = getOrderedChannels(market);
   document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
   document.querySelectorAll('.prod-input').forEach(inp => inp.addEventListener('change', onStockEdit));
