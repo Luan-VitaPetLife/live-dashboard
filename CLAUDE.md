@@ -336,10 +336,16 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Ordem das colunas na tabela (alinhada ao board real do Monday, print conferido 06/07/2026):**
   Produto · Vendas/dia · Vendas/mês · Estoque · Recebendo · **Meses de Estoque** (`monthsOfStock`) ·
   **Ordem Projetada** · Ordem Nova · Ordem em Andamento · **Tempo de Estoque Total**
-  (`totalMonthsOfStock`, última coluna). Note que a ordem de Ordem Nova/Ordem em Andamento está
-  invertida em relação à primeira versão da tela (06/07/2026) — o board do Monday coloca Ordem em
-  Andamento por último, logo antes da coluna de tempo total, e a versão inicial daqui tinha o
-  inverso.
+  (`totalMonthsOfStock`) · **Sugestão** (última coluna). Note que a ordem de Ordem Nova/Ordem em
+  Andamento está invertida em relação à primeira versão da tela (06/07/2026) — o board do Monday
+  coloca Ordem em Andamento por último, logo antes da coluna de tempo total, e a versão inicial
+  daqui tinha o inverso.
+- **`suggestion` / coluna "Sugestão" (implementado 06/07/2026):** ajuda o Luan a decidir quando
+  fazer um novo pedido ao laboratório, calculada a partir de `totalMonthsOfStock` (`stockSuggestion()`
+  em `metrics.js`). Limites confirmados com o Luan: **< 3 meses → `urgente`** (badge vermelho,
+  "Pedir urgente"), **3 a <7 meses → `atencao`** (badge âmbar, "Atenção"), **>= 7 meses → `aguardar`**
+  (badge verde, "Aguardar"). `null` (sem venda no período) não mostra badge, só "—". Calculado também
+  para a linha de Total de cada canal (mesma fórmula, aplicada aos totais agregados).
 - **Amazon (BR/US) — placeholder "Produto TESTE" (confirmado com o Luan 06/07/2026):** hoje os
   pedidos da Amazon não trazem título de item (ver backlog item 6 — `fetchOrders()` em
   `src/amazon.js` só lê quantidade, nunca busca `/orders/v0/orders/{id}/orderItems`), então a

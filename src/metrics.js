@@ -472,6 +472,16 @@ export function computeProducts({ market = 'br', since, until } = {}) {
 // velocidade de venda (não depende de seletor de período na tela, ao contrário de Produtos).
 // Combina dado real (venda) com dado manual (estoque físico, a caminho, pedido ao laboratório).
 const STOCK_WINDOW_DAYS = 30;
+
+// Sugestão de reposição a partir do Tempo de Estoque com Produção (totalMonthsOfStock).
+// Limites definidos pelo Luan em 06/07/2026: <3 meses = urgente, 3–7 = atenção, >=7 = aguardar.
+function stockSuggestion(months) {
+  if (months == null) return null;
+  if (months < 3) return 'urgente';
+  if (months < 7) return 'atencao';
+  return 'aguardar';
+}
+
 export function computeStock({ market = 'br' } = {}) {
   const until = isoUTC(new Date());
   const since = isoUTC(addDays(parseISO(until), -(STOCK_WINDOW_DAYS - 1)));
@@ -510,7 +520,7 @@ export function computeStock({ market = 'br' } = {}) {
           title, type: p.type, image: p.image,
           avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
           salesDaily, salesMonth, stock, incoming, orderInProgress, orderNew, projected,
-          monthsOfStock, totalMonthsOfStock,
+          monthsOfStock, totalMonthsOfStock, suggestion: stockSuggestion(totalMonthsOfStock),
         };
       })
       .sort((a, b) => b.salesMonth - a.salesMonth);
@@ -528,6 +538,7 @@ export function computeStock({ market = 'br' } = {}) {
     totals.totalMonthsOfStock = totals.salesMonth > 0
       ? (totals.stock + totals.projected + totals.orderNew + totals.orderInProgress) / totals.salesMonth
       : null;
+    totals.suggestion = stockSuggestion(totals.totalMonthsOfStock);
 
     channels[ch] = { products, totals };
   }

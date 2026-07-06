@@ -131,6 +131,10 @@
   .prod-total-note{font-size:10px;font-weight:600;color:var(--muted);white-space:nowrap}
   .stk-low{color:var(--red)}
   .stk-ok{color:var(--green)}
+  .stk-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+  .stk-badge.sug-ok{background:rgba(61,122,82,.12);color:var(--green)}
+  .stk-badge.sug-warn{background:rgba(155,122,42,.14);color:var(--amber)}
+  .stk-badge.sug-urgent{background:rgba(155,58,58,.14);color:var(--red)}
 
   /* ── Edição em massa (aplicar valor a todos os produtos de um canal) ── */
   .th-label{display:inline-flex;align-items:center;gap:4px}
@@ -408,6 +412,16 @@ function monthsCellClass(v) {
   return 'stk-ok';
 }
 
+const SUGGESTION_META = {
+  urgente:  { label: 'Pedir urgente', cls: 'sug-urgent' },
+  atencao:  { label: 'Atenção',       cls: 'sug-warn' },
+  aguardar: { label: 'Aguardar',      cls: 'sug-ok' },
+};
+function suggestionHTML(s) {
+  const m = SUGGESTION_META[s];
+  return m ? `<span class="stk-badge ${m.cls}">${m.label}</span>` : '<span class="prod-muted">—</span>';
+}
+
 function rowHTML(p, ch) {
   const combo = comboBits(p);
   const thumb = p.image
@@ -434,6 +448,7 @@ function rowHTML(p, ch) {
     <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" ${dataAttrs} data-field="orderNew" title="Unidades de um novo pedido a ser feito ao laboratório."></td>
     <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" ${dataAttrs} data-field="orderInProgress" title="Unidades já pedidas ao laboratório, produção em andamento."></td>
     <td class="prod-num ${monthsCellClass(p.totalMonthsOfStock)}">${fmtDec(p.totalMonthsOfStock, 1)}</td>
+    <td class="prod-num">${suggestionHTML(p.suggestion)}</td>
   </tr>`;
 }
 
@@ -444,11 +459,11 @@ function cardHTML(ch) {
   const products = data?.products || [];
   const rows = products.length
     ? products.map(p => rowHTML(p, ch)).join('')
-    : '<tr><td colspan="10" class="prod-empty">Sem dados no período</td></tr>';
+    : '<tr><td colspan="11" class="prod-empty">Sem dados no período</td></tr>';
   const collapsed = collapsedState[ch] ? ' collapsed' : '';
   const expanded = expandedState[ch] ? ' expanded' : '';
   const expandIcon = expandedState[ch] ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand';
-  const t = data?.totals || { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0, monthsOfStock: null, totalMonthsOfStock: null };
+  const t = data?.totals || { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0, monthsOfStock: null, totalMonthsOfStock: null, suggestion: null };
   const footRow = products.length ? `<tfoot><tr class="prod-total-row">
     <td>Total</td>
     <td class="prod-num">${fmtDec(t.salesDaily, 1)}</td>
@@ -460,6 +475,7 @@ function cardHTML(ch) {
     <td class="prod-num">${fmtInt(t.orderNew)}</td>
     <td class="prod-num">${fmtInt(t.orderInProgress)}</td>
     <td class="prod-num ${monthsCellClass(t.totalMonthsOfStock)}">${fmtDec(t.totalMonthsOfStock, 1)}</td>
+    <td class="prod-num">${suggestionHTML(t.suggestion)}</td>
   </tr></tfoot>` : '';
   return `
     <div class="prod-card ${chClass}${collapsed}${expanded}" id="prod-card-${ch}" data-ch="${ch}" draggable="true">
@@ -496,6 +512,7 @@ function cardHTML(ch) {
             <th class="num"><span class="th-label">Ordem Nova<button class="th-bulk-btn" onclick="openBulkPop(event,'orderNew','${ch}','Ordem Nova')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
             <th class="num"><span class="th-label">Ordem em Andamento<button class="th-bulk-btn" onclick="openBulkPop(event,'orderInProgress','${ch}','Ordem em Andamento')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
             <th class="num">Tempo de Estoque Total</th>
+            <th class="num">Sugestão</th>
           </tr></thead>
           <tbody>${rows}</tbody>
           ${footRow}
