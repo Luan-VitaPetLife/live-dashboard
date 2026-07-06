@@ -152,8 +152,10 @@
   .prod-input-pct{width:52px}
   .prod-profit-pos{color:var(--green)}
   .prod-profit-neg{color:var(--red)}
-  .prod-total-row td{font-weight:600;background:var(--surface2);border-top:2px solid var(--border2);vertical-align:middle}
-  .prod-total-note{display:block;font-size:10px;font-weight:600;color:var(--muted);white-space:nowrap}
+  .prod-total-row td{font-weight:600;background:var(--surface2);border-top:2px solid var(--border2);vertical-align:middle;padding-top:10px;padding-bottom:10px}
+  .prod-total-row td:first-child{font-weight:700;color:var(--text)}
+  .prod-total-stack{display:flex;flex-direction:column;align-items:flex-end;gap:2px;line-height:1.3}
+  .prod-total-note{font-size:10px;font-weight:600;color:var(--muted);white-space:nowrap}
 
   /* ── Edição em massa (aplicar valor a todos os produtos de um canal) ── */
   .th-label{display:inline-flex;align-items:center;gap:4px}
@@ -543,17 +545,23 @@ function cardHTML(ch) {
   const expandIcon = expandedState[ch] ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand';
   const totalQty = products.reduce((a, p) => a + p.qty, 0);
   const totalShipping = products.reduce((a, p) => a + (p.shippingTotal || 0), 0);
+  const profitClass = data.totalProfit != null ? (data.totalProfit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg') : 'prod-muted';
   const footRow = products.length ? `<tfoot><tr class="prod-total-row">
     <td>Total</td>
     <td class="prod-num">${fmtInt(totalQty)}</td>
     <td class="prod-num">${fmtMoney(data.revenue)}</td>
     <td class="prod-num prod-muted">—</td>
-    <td class="prod-num"><span class="prod-total-note">${data.profitProductsCount || 0}/${products.length} c/ custo</span></td>
+    <td class="prod-num prod-muted">—</td>
     <td class="prod-num">${fmtMoney(totalShipping)}</td>
     <td class="prod-num prod-muted">—</td>
     <td class="prod-num prod-muted">—</td>
-    <td class="prod-num">${data.totalProfit != null ? fmtMoney(data.totalProfit) : '—'}</td>
-    <td class="prod-num">${data.profitPct != null ? fmtPct(data.profitPct) : '—'}</td>
+    <td class="prod-num ${profitClass}">
+      <div class="prod-total-stack">
+        <span>${data.totalProfit != null ? fmtMoney(data.totalProfit) : '—'}</span>
+        <span class="prod-total-note">${data.profitProductsCount || 0}/${products.length} c/ custo</span>
+      </div>
+    </td>
+    <td class="prod-num ${profitClass}">${data.profitPct != null ? fmtPct(data.profitPct) : '—'}</td>
   </tr></tfoot>` : '';
   return `
     <div class="prod-card ${chClass}${collapsed}${expanded}" id="prod-card-${ch}" data-ch="${ch}" draggable="true">
