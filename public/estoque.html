@@ -76,12 +76,17 @@
   /* ── Product cards (mesmo padrão visual de produtos.html) ── */
   .prod-grid{display:flex;flex-direction:column;gap:12px}
   .prod-grid.layout-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));align-items:start}
-  .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-  .prod-card.dragging{opacity:.4}
+  .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:box-shadow .18s ease,transform .18s ease,opacity .18s ease}
+  .prod-card.dragging{opacity:.5;transform:scale(1.02) rotate(-.6deg);box-shadow:0 0 0 3px var(--sage),0 18px 30px rgba(0,0,0,.2);cursor:grabbing;z-index:6}
+  .prod-card.drop-bounce{animation:prodDropBounce .32s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes prodDropBounce{0%{transform:scale(1.035)}60%{transform:scale(.985)}100%{transform:scale(1)}}
+  .prod-card-ghost{border:2px dashed var(--sage);border-radius:var(--radius);background:rgba(106,140,110,.08);animation:prodGhostPulse 1.1s ease-in-out infinite}
+  @keyframes prodGhostPulse{0%,100%{opacity:.5;background:rgba(106,140,110,.06)}50%{opacity:.95;background:rgba(106,140,110,.14)}}
   .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:relative}
-  .drag-handle{cursor:grab;color:var(--muted);font-size:15px;display:flex;align-items:center;flex-shrink:0;margin-right:-4px}
-  .drag-handle:hover{color:var(--sub)}
+  .drag-handle{cursor:grab;color:var(--muted);font-size:15px;display:flex;align-items:center;flex-shrink:0;margin-right:-4px;transition:color .15s ease,transform .15s ease}
+  .drag-handle:hover{color:var(--sage);transform:scale(1.2)}
   .drag-handle:active{cursor:grabbing}
+  .prod-card.dragging .drag-handle{color:var(--sage)}
   .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
   .camp-logo-img{background:#fff;border:1px solid var(--border);padding:5px}
   .camp-logo-img img{width:100%;height:100%;object-fit:contain;display:block}
@@ -255,14 +260,20 @@ function toggleCollapse(ch) {
 }
 
 // ── Drag and drop (reordenar cards de canal) ───────────────
-function getDragAfterElement(container, y) {
+let dragCard = null;
+let dragGhost = null;
+function getDragAfterElement(container, x, y) {
   const els = [...container.querySelectorAll('.prod-card:not(.dragging)')];
-  return els.reduce((closest, el) => {
+  let closest = null, closestDist = Infinity;
+  for (const el of els) {
     const box = el.getBoundingClientRect();
-    const offset = y - box.top - box.height / 2;
-    if (offset < 0 && offset > closest.offset) return { offset, element: el };
-    return closest;
-  }, { offset: -Infinity, element: null }).element;
+    const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+    const dist = Math.hypot(x - cx, y - cy);
+    if (dist < closestDist) closestDist = dist, closest = { el, box };
+  }
+  if (!closest) return null;
+  const cy = closest.box.top + closest.box.height / 2;
+  return (y > cy) ? closest.el.nextElementSibling : closest.el;
 }
 function persistOrder() {
   const grid = document.getElementById('prodGrid');
@@ -276,11 +287,25 @@ function attachDragHandlers() {
   grid.querySelectorAll('.prod-card').forEach(card => {
     card.addEventListener('dragstart', e => {
       if (!e.target.closest('.drag-handle')) { e.preventDefault(); return; }
-      card.classList.add('dragging');
+      dragCard = card;
       e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.ch || '');
+      dragGhost = document.createElement('div');
+      dragGhost.className = 'prod-card-ghost';
+      dragGhost.style.height = card.offsetHeight + 'px';
+      card.after(dragGhost);
+      card.classList.add('dragging');
     });
     card.addEventListener('dragend', () => {
       card.classList.remove('dragging');
+      if (dragGhost) {
+        grid.insertBefore(card, dragGhost);
+        dragGhost.remove();
+        dragGhost = null;
+      }
+      dragCard = null;
+      card.classList.add('drop-bounce');
+      setTimeout(() => card.classList.remove('drop-bounce'), 320);
       persistOrder();
     });
   });
@@ -288,11 +313,10 @@ function attachDragHandlers() {
   grid.dataset.dragBound = '1';
   grid.addEventListener('dragover', e => {
     e.preventDefault();
-    const dragging = grid.querySelector('.dragging');
-    if (!dragging) return;
-    const afterEl = getDragAfterElement(grid, e.clientY);
-    if (afterEl == null) grid.appendChild(dragging);
-    else grid.insertBefore(dragging, afterEl);
+    if (!dragGhost) return;
+    const afterEl = getDragAfterElement(grid, e.clientX, e.clientY);
+    if (afterEl == null) grid.appendChild(dragGhost);
+    else if (afterEl !== dragGhost) grid.insertBefore(dragGhost, afterEl);
   });
 }
 
