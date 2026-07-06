@@ -101,7 +101,11 @@
   .prod-grid{display:flex;flex-direction:column;gap:12px}
   .prod-grid.layout-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));align-items:start}
   .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .prod-card.dragging{opacity:.4}
   .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:relative}
+  .drag-handle{cursor:grab;color:var(--muted);font-size:15px;display:flex;align-items:center;flex-shrink:0;margin-right:-4px}
+  .drag-handle:hover{color:var(--sub)}
+  .drag-handle:active{cursor:grabbing}
   .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
   .camp-logo-img{background:#fff;border:1px solid var(--border);padding:5px}
   .camp-logo-img img{width:100%;height:100%;object-fit:contain;display:block}
@@ -268,9 +272,25 @@ function contrastText(hex) {
 // ── State ─────────────────────────────────────────────────
 let market = localStorage.getItem('coco_market') || 'br';
 let current = null;
-const collapsedState = JSON.parse(localStorage.getItem('coco_produtos_collapsed') || '{}');
+// Cards sempre abrem só com o primeiro expandido — não persiste entre recarregamentos (proposital).
+let collapsedState = {};
 const expandedState = JSON.parse(localStorage.getItem('coco_produtos_expanded') || '{}');
 let layout = localStorage.getItem('coco_produtos_layout') || 'row';
+
+// ── Ordem dos canais (drag and drop) ───────────────────────
+let channelOrder = JSON.parse(localStorage.getItem('coco_produtos_order') || '{}');
+function getOrderedChannels(m) {
+  const base = m === 'us' ? CHANNELS_US : CHANNELS_BR;
+  const saved = channelOrder[m];
+  if (!saved || !saved.length) return base.slice();
+  const ordered = saved.filter(ch => base.includes(ch));
+  base.forEach(ch => { if (!ordered.includes(ch)) ordered.push(ch); });
+  return ordered;
+}
+function applyDefaultCollapse(orderedChannels) {
+  collapsedState = {};
+  orderedChannels.forEach((ch, i) => { collapsedState[ch] = i !== 0; });
+}
 
 function setLayout(mode) {
   layout = mode;
@@ -284,8 +304,49 @@ function applyLayout() {
 
 function toggleCollapse(ch) {
   collapsedState[ch] = !collapsedState[ch];
-  localStorage.setItem('coco_produtos_collapsed', JSON.stringify(collapsedState));
   document.getElementById(`prod-card-${ch}`)?.classList.toggle('collapsed', collapsedState[ch]);
+}
+
+// ── Drag and drop (reordenar cards de canal) ───────────────
+function getDragAfterElement(container, y) {
+  const els = [...container.querySelectorAll('.prod-card:not(.dragging)')];
+  return els.reduce((closest, el) => {
+    const box = el.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) return { offset, element: el };
+    return closest;
+  }, { offset: -Infinity, element: null }).element;
+}
+function persistOrder() {
+  const grid = document.getElementById('prodGrid');
+  channelOrder[market] = [...grid.querySelectorAll('.prod-card')].map(c => c.dataset.ch);
+  localStorage.setItem('coco_produtos_order', JSON.stringify(channelOrder));
+  applyDefaultCollapse(channelOrder[market]);
+  document.querySelectorAll('.prod-card').forEach(c => c.classList.toggle('collapsed', collapsedState[c.dataset.ch]));
+}
+function attachDragHandlers() {
+  const grid = document.getElementById('prodGrid');
+  grid.querySelectorAll('.prod-card').forEach(card => {
+    card.addEventListener('dragstart', e => {
+      if (!e.target.closest('.drag-handle')) { e.preventDefault(); return; }
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      persistOrder();
+    });
+  });
+  if (grid.dataset.dragBound) return;
+  grid.dataset.dragBound = '1';
+  grid.addEventListener('dragover', e => {
+    e.preventDefault();
+    const dragging = grid.querySelector('.dragging');
+    if (!dragging) return;
+    const afterEl = getDragAfterElement(grid, e.clientY);
+    if (afterEl == null) grid.appendChild(dragging);
+    else grid.insertBefore(dragging, afterEl);
+  });
 }
 
 function toggleExpand(ch) {
@@ -352,6 +413,7 @@ function setMarket(m) {
   document.getElementById('mktBtnBr').classList.toggle('active', m === 'br');
   document.getElementById('mktBtnUs').classList.toggle('active', m === 'us');
   document.body.classList.toggle('market-us', m === 'us');
+  applyDefaultCollapse(getOrderedChannels(m));
   load();
 }
 
@@ -470,8 +532,9 @@ function cardHTML(ch) {
     <td class="prod-num">${data.profitPct != null ? fmtPct(data.profitPct) : '—'}</td>
   </tr></tfoot>` : '';
   return `
-    <div class="prod-card ${chClass}${collapsed}${expanded}" id="prod-card-${ch}">
+    <div class="prod-card ${chClass}${collapsed}${expanded}" id="prod-card-${ch}" data-ch="${ch}" draggable="true">
       <div class="prod-card-head">
+        <span class="drag-handle" title="Arrastar para reordenar"><i class="bi bi-grip-vertical"></i></span>
         <button class="prod-expand-btn" onclick="toggleExpand('${ch}')" title="Expandir/recolher altura da tabela"><i class="bi ${expandIcon}"></i></button>
         <button class="prod-collapse-btn" onclick="toggleCollapse('${ch}')" title="Minimizar/expandir"><i class="bi bi-chevron-down"></i></button>
         ${logoHTML(meta)}
@@ -530,9 +593,10 @@ function render() {
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   setText('lastUpdate', 'sync: ' + updated);
   setText('pageSub', 'Coco and Luna · ' + state.label);
-  const channels = market === 'us' ? CHANNELS_US : CHANNELS_BR;
+  const channels = getOrderedChannels(market);
   document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
   document.querySelectorAll('.prod-input').forEach(inp => inp.addEventListener('change', onFinanceEdit));
+  attachDragHandlers();
 }
 
 // ── Carregamento ──────────────────────────────────────────
@@ -550,6 +614,7 @@ async function load() {
   document.getElementById('mktBtnUs').classList.toggle('active', market === 'us');
   document.body.classList.toggle('market-us', market === 'us');
   applyLayout();
+  applyDefaultCollapse(getOrderedChannels(market));
   load();
 })();
 </script>

@@ -268,7 +268,9 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - Panorama do catálogo completo por canal (sem limite de top-N, ao contrário do card de Top Produtos do dashboard principal). Um card por canal, com toggle BR/EUA igual às outras telas (`ch-br`/`ch-us` + `body.market-us`).
 - Endpoint próprio: `GET /api/products?market=br|us&since=&until=` → `computeProducts()` em `metrics.js`. Sem cache (é agregação local sobre o store, não chamada a API externa — rápido o suficiente para calcular a cada request).
 - Cada card mostra: logo do canal, receita total, nº de pedidos, e uma tabela rolável (`max-height` com `overflow-y`) de todos os produtos vendidos no período, ordenada por receita: **Produto** (com miniatura da imagem, tag de tipo — Pó/Soft Chews/Tablets/Liquid — e a quebra avulso/combo quando aplicável), **Qtd**, **Receita**, **Ticket médio**.
-- **Botão de minimizar por card** (canto superior direito, chevron): colapsa/expande a tabela. Estado persistido em `localStorage('coco_produtos_collapsed')`, por canal.
+- **Botão de minimizar por card** (canto superior direito, chevron): colapsa/expande a tabela. Toggle manual só dura a sessão — **não é mais persistido em localStorage** (mudou em 06/07/2026, ver regra de colapso padrão abaixo).
+- **Cards sempre reabrem só com o primeiro expandido (implementado 06/07/2026):** `applyDefaultCollapse(orderedChannels)` zera `collapsedState` e marca `collapsedState[ch] = i !== 0` pra cada canal na ordem atual — chamada no carregamento inicial da página, ao trocar de mercado (`setMarket()`) e ao terminar de arrastar um card (`persistOrder()`). Entre essas chamadas, `collapsedState` é só mutado em memória pelo botão de minimizar (`toggleCollapse()`) — por isso editar um campo (que recarrega os dados via `load()`/`render()`) não fecha o card que você está editando; só os 3 gatilhos acima resetam pro padrão "só o primeiro aberto".
+- **Arrastar para reordenar os cards de canal (implementado 06/07/2026):** cada card tem um handle de 6 pontos (`bi-grip-vertical`) no canto superior esquerdo do cabeçalho. Drag and drop nativo (HTML5, sem biblioteca): `draggable="true"` no `.prod-card` inteiro, mas o `dragstart` só segue adiante se `e.target.closest('.drag-handle')` — do contrário `e.preventDefault()` (permite clicar/editar normalmente no resto do card). `dragover` no grid usa `getDragAfterElement()` (compara o Y do cursor com o meio de cada card) pra mover o nó arrastado ao vivo no DOM; no `dragend`, `persistOrder()` lê a ordem final direto do DOM (`data-ch` de cada `.prod-card`) e salva em `localStorage('coco_produtos_order')`, por mercado. `getOrderedChannels(market)` aplica essa ordem salva por cima da lista padrão (`CHANNELS_BR`/`CHANNELS_US`), preservando canais novos que ainda não estão na ordem salva. Mesmo mecanismo (handle, funções, chaves só com prefixo diferente) implementado igual em `estoque.html` — ver 4.14.
 - **Imagem do produto por canal:**
   - Shopify (BR/US): `LineItem.image.url` já vem na mesma query GraphQL de pedidos — sem custo extra.
   - Shopee: `item_list[].image_info.image_url` já vem no `get_order_detail` — sem custo extra.
@@ -297,9 +299,12 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
     laboratório fabricante — pedido feito quando o estoque/tempo está acabando, pra dar tempo da
     produção nova chegar antes de zerar (ponto de reposição / lead time).
 - **Mesma estrutura visual de Produtos** — um card por canal (`CH_META`/`CHANNELS_BR`/`CHANNELS_US`
-  idênticos), com collapse/expand, popover de edição em massa por coluna e toggle linha/coluna —
-  mas **sem seletor de período**: a janela de venda é sempre fixa (ver abaixo), não depende de
-  filtro na tela.
+  idênticos), com collapse/expand, popover de edição em massa por coluna, toggle linha/coluna,
+  arrastar para reordenar (handle de 6 pontos) e a regra de "sempre só o primeiro card aberto" —
+  mecanismo idêntico ao de Produtos (`applyDefaultCollapse`, `getOrderedChannels`, `persistOrder`),
+  só com chaves de localStorage próprias (`coco_estoque_order`/`coco_estoque_expanded`). Ver 4.13
+  pros detalhes de como o drag and drop e o colapso padrão funcionam. **Sem seletor de período**:
+  a janela de venda é sempre fixa (ver abaixo), não depende de filtro na tela.
 - **`computeStock({ market })` em `metrics.js`:**
   - `aggregateProductsByChannel(orders)` foi extraída de dentro de `computeProducts` pra ser
     reaproveitada aqui — mesma regra de agrupamento avulso/combo/tipo/imagem, sem duplicar lógica.
