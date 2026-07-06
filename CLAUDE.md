@@ -315,12 +315,31 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - `monthsOfStock = (stock + incoming) / salesMonth` — mesma fórmula usada no board do Monday
     (conferida manualmente batendo os números do print antes de implementar). `null` (não `0` nem
     `Infinity`) quando `salesMonth` é 0, mostrado como "—" na tela.
+  - **`totalMonthsOfStock` (implementado 06/07/2026, ordem de colunas alinhada ao board real do
+    Monday — print conferido com o Luan):** segunda coluna de tempo de estoque, **a última da
+    tabela**. Fórmula: `(stock + projected + orderNew + orderInProgress) / salesMonth` — soma tudo
+    que pode virar estoque futuro (não só o que já está a caminho, como `monthsOfStock`, mas também
+    os dois estágios de pedido ao laboratório e a simulação de `projected`). Mesma regra de `null`
+    quando `salesMonth` é 0.
 - **Persistência manual** (`productStock` em `store.js`, mesmo padrão de `productFinance`, chave
   `"canal|||título"`): `stock` (estoque físico/FBA), `incoming` (unidades a caminho/recebendo),
-  `orderInProgress`, `orderNew` (unidades pedidas ao laboratório, nos dois estágios acima). Todos
-  numéricos, **padrão 0** quando não preenchidos — nunca bloqueiam o cálculo (diferente do COG em
-  Produtos), e `0` explícito sempre é aceito e persiste. `POST /api/stock/finance` salva, mesmo
-  formato de validação de `/api/products/finance`.
+  `orderInProgress`, `orderNew` (unidades pedidas ao laboratório, nos dois estágios acima), `projected`
+  (ver abaixo). Todos numéricos, **padrão 0** quando não preenchidos — nunca bloqueiam o cálculo
+  (diferente do COG em Produtos), e `0` explícito sempre é aceito e persiste. `POST /api/stock/finance`
+  salva, mesmo formato de validação de `/api/products/finance`.
+- **`projected` ("Ordem Projetada", implementado 06/07/2026):** campo de **simulação**, não um
+  pedido real como `orderNew`/`orderInProgress` — o Luan digita uma quantidade que está cogitando
+  pedir ao laboratório só para ver o efeito em `totalMonthsOfStock` antes de decidir, e limpa depois
+  (por isso "temporário" na fala do Luan). Tecnicamente persiste igual aos outros campos (mesmo
+  mecanismo de override, sem estado client-only) — a natureza temporária é de uso, não de
+  implementação.
+- **Ordem das colunas na tabela (alinhada ao board real do Monday, print conferido 06/07/2026):**
+  Produto · Vendas/dia · Vendas/mês · Estoque · Recebendo · **Meses de Estoque** (`monthsOfStock`) ·
+  **Ordem Projetada** · Ordem Nova · Ordem em Andamento · **Tempo de Estoque Total**
+  (`totalMonthsOfStock`, última coluna). Note que a ordem de Ordem Nova/Ordem em Andamento está
+  invertida em relação à primeira versão da tela (06/07/2026) — o board do Monday coloca Ordem em
+  Andamento por último, logo antes da coluna de tempo total, e a versão inicial daqui tinha o
+  inverso.
 - **Amazon (BR/US) — placeholder "Produto TESTE" (confirmado com o Luan 06/07/2026):** hoje os
   pedidos da Amazon não trazem título de item (ver backlog item 6 — `fetchOrders()` em
   `src/amazon.js` só lê quantidade, nunca busca `/orders/v0/orders/{id}/orderItems`), então a
@@ -404,7 +423,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - `GET /api/products?market=br|us&since=&until=` — catálogo completo de produtos por canal (sem cache, direto do store). Usado pela tela de Produtos (`produtos.html`).
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `GET /api/stock?market=br|us` — estoque + produção por canal, janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
-  - `POST /api/stock/finance` — salva/edita estoque, recebendo, ordem em andamento ou ordem nova de um produto (`{ channel, title, stock?, incoming?, orderInProgress?, orderNew? }`), persistido em `kv.productStock`. Ver 4.14.
+  - `POST /api/stock/finance` — salva/edita estoque, recebendo, ordem projetada, ordem nova ou ordem em andamento de um produto (`{ channel, title, stock?, incoming?, projected?, orderInProgress?, orderNew? }`), persistido em `kv.productStock`. Ver 4.14.
   - `POST /api/sync`
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
   - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente

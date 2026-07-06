@@ -500,11 +500,17 @@ export function computeStock({ market = 'br' } = {}) {
         const incoming        = ov.incoming != null ? Number(ov.incoming) : 0;
         const orderInProgress = ov.orderInProgress != null ? Number(ov.orderInProgress) : 0;
         const orderNew        = ov.orderNew != null ? Number(ov.orderNew) : 0;
+        // Ordem projetada: campo de simulação (o Luan digita uma quantidade que está cogitando
+        // pedir, só pra ver o efeito no Tempo de Estoque Total antes de decidir) — não é um
+        // pedido real como orderInProgress/orderNew, mas persiste igual até ele limpar.
+        const projected        = ov.projected != null ? Number(ov.projected) : 0;
         const monthsOfStock = salesMonth > 0 ? (stock + incoming) / salesMonth : null;
+        const totalMonthsOfStock = salesMonth > 0 ? (stock + projected + orderNew + orderInProgress) / salesMonth : null;
         return {
           title, type: p.type, image: p.image,
           avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
-          salesDaily, salesMonth, stock, incoming, orderInProgress, orderNew, monthsOfStock,
+          salesDaily, salesMonth, stock, incoming, orderInProgress, orderNew, projected,
+          monthsOfStock, totalMonthsOfStock,
         };
       })
       .sort((a, b) => b.salesMonth - a.salesMonth);
@@ -516,8 +522,12 @@ export function computeStock({ market = 'br' } = {}) {
       incoming: a.incoming + p.incoming,
       orderInProgress: a.orderInProgress + p.orderInProgress,
       orderNew: a.orderNew + p.orderNew,
-    }), { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0 });
+      projected: a.projected + p.projected,
+    }), { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0 });
     totals.monthsOfStock = totals.salesMonth > 0 ? (totals.stock + totals.incoming) / totals.salesMonth : null;
+    totals.totalMonthsOfStock = totals.salesMonth > 0
+      ? (totals.stock + totals.projected + totals.orderNew + totals.orderInProgress) / totals.salesMonth
+      : null;
 
     channels[ch] = { products, totals };
   }
