@@ -54,7 +54,9 @@ public/geografia.html   Mapa geográfico por estado BR (Leaflet.js, Voyager tile
 public/geografia-us.html Mapa geográfico por estado US (Leaflet.js, Voyager tile, coropleto + calor)
 public/bandeira_brasil.webp  Imagem da bandeira BR usada nos botões de mercado
 public/bandeira_eua.svg      Imagem da bandeira EUA usada nos botões de mercado
-public/Logo.svg         Logotipo exibido no topo do menu lateral
+public/favicon.png      Favicon usado em todas as páginas (rel="icon") — antigo logo.png, renomeado
+public/Logo1.svg        Logotipo wordmark (horizontal) — antigo Logo.svg, renomeado. Não está em uso ativo hoje.
+public/Logo2.png        Logotipo em teste no topo do menu lateral (ícone quadrado 516x516, "CC") — ativo em sidebar.js/.brand-logo
 public/logo_mercadolivre.png  Logo ML usada na tela de campanhas
 public/logo_meta.png         Logo Meta usada na tela de campanhas
 public/logo_shopee.svg       Logo Shopee usada na tela de campanhas

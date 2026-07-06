@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Produtos — Coco and Luna</title>
-<link rel="icon" href="logo.png" type="image/png">
+<link rel="icon" href="favicon.png" type="image/png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
 <style>
   :root{ color-scheme:light;
@@ -18,7 +18,7 @@
   /* ── Sidebar ── */
   .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:transform .25s cubic-bezier(.4,0,.2,1)}
   .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
-  .brand-logo{width:148px;height:auto}
+  .brand-logo{width:72px;height:auto}
   .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
   .nav-group{margin-bottom:24px}
   .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
@@ -91,8 +91,15 @@
   body:not(.market-us) .ch-us{display:none!important}
   body.market-us .ch-br{display:none!important}
 
+  /* ── Layout toggle (linha x coluna) ── */
+  .layout-toggle{display:flex;align-items:center;gap:2px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px;flex-shrink:0}
+  .layout-btn{display:flex;align-items:center;justify-content:center;width:30px;height:26px;border-radius:16px;border:none;background:transparent;color:var(--sub);cursor:pointer;font-size:13px;transition:all .15s;font-family:inherit}
+  .layout-btn:hover{color:var(--text)}
+  .layout-btn.active{background:var(--ink);color:var(--side-text)}
+
   /* ── Product cards ── */
   .prod-grid{display:flex;flex-direction:column;gap:12px}
+  .prod-grid.layout-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));align-items:start}
   .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
   .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:relative}
   .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
@@ -102,7 +109,7 @@
   .camp-logo-fill img{object-fit:cover}
   .camp-ch-name{font-size:13px;font-weight:600;color:var(--text)}
   .camp-ch-type{font-size:10px;color:var(--muted);margin-top:2px}
-  .prod-head-stats{display:flex;gap:28px;margin-left:auto;margin-right:34px}
+  .prod-head-stats{display:flex;gap:28px;margin-left:auto;margin-right:88px}
   .prod-stat-lbl{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
   .prod-stat-val{font-size:17px;font-weight:300;letter-spacing:-.4px}
   .prod-collapse-btn{position:absolute;top:14px;right:16px;width:26px;height:26px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s}
@@ -204,9 +211,15 @@
   </div>
 
   <div class="content">
-    <div>
-      <div class="page-title">Produtos</div>
-      <div class="page-sub" id="pageSub">Coco and Luna · últimos 30 dias</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="page-title">Produtos</div>
+        <div class="page-sub" id="pageSub">Coco and Luna · últimos 30 dias</div>
+      </div>
+      <div class="layout-toggle" id="layoutToggle">
+        <button class="layout-btn" data-layout="row" onclick="setLayout('row')" title="Linha — uma tabela abaixo da outra"><i class="bi bi-list-ul"></i></button>
+        <button class="layout-btn" data-layout="col" onclick="setLayout('col')" title="Coluna — tabelas lado a lado"><i class="bi bi-layout-split"></i></button>
+      </div>
     </div>
 
     <div class="prod-grid" id="prodGrid"></div>
@@ -257,6 +270,17 @@ let market = localStorage.getItem('coco_market') || 'br';
 let current = null;
 const collapsedState = JSON.parse(localStorage.getItem('coco_produtos_collapsed') || '{}');
 const expandedState = JSON.parse(localStorage.getItem('coco_produtos_expanded') || '{}');
+let layout = localStorage.getItem('coco_produtos_layout') || 'row';
+
+function setLayout(mode) {
+  layout = mode;
+  localStorage.setItem('coco_produtos_layout', mode);
+  applyLayout();
+}
+function applyLayout() {
+  document.getElementById('prodGrid').classList.toggle('layout-col', layout === 'col');
+  document.querySelectorAll('.layout-btn').forEach(b => b.classList.toggle('active', b.dataset.layout === layout));
+}
 
 function toggleCollapse(ch) {
   collapsedState[ch] = !collapsedState[ch];
@@ -521,6 +545,7 @@ async function load() {
   document.getElementById('mktBtnBr').classList.toggle('active', market === 'br');
   document.getElementById('mktBtnUs').classList.toggle('active', market === 'us');
   document.body.classList.toggle('market-us', market === 'us');
+  applyLayout();
   load();
 })();
 </script>
