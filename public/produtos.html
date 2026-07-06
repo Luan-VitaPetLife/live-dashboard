@@ -545,7 +545,7 @@ function cardHTML(ch) {
   const expandIcon = expandedState[ch] ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand';
   const totalQty = products.reduce((a, p) => a + p.qty, 0);
   const totalShipping = products.reduce((a, p) => a + (p.shippingTotal || 0), 0);
-  const profitClass = data.totalProfit != null ? (data.totalProfit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg') : 'prod-muted';
+  const profitClass = data?.totalProfit != null ? (data.totalProfit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg') : 'prod-muted';
   const footRow = products.length ? `<tfoot><tr class="prod-total-row">
     <td>Total</td>
     <td class="prod-num">${fmtInt(totalQty)}</td>
