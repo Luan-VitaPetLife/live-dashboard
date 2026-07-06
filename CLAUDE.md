@@ -56,6 +56,7 @@ src/sync.js             Orquestra a busca de todos os canais BR e US e grava no 
 public/index.html       Dashboard principal (toggle de mercado, receita, tendência, canais, pedidos)
 public/campanhas.html   Tela de Campanhas: visão de gastos reais por canal + cards por campanha
 public/produtos.html    Tela de Produtos: catálogo completo por canal (tabela com foto, tipo, qtd, receita)
+public/estoque.html     Tela de Estoque: estoque + produção por canal, híbrido real (vendas) + manual (estoque/produção)
 public/sidebar.js       Componente de sidebar compartilhado (IIFE) — incluído em todos os HTMLs
 public/geografia.html   Mapa geográfico por estado BR (Leaflet.js, Voyager tile, coropleto + calor)
 public/geografia-us.html Mapa geográfico por estado US (Leaflet.js, Voyager tile, coropleto + calor)
@@ -286,6 +287,47 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Totais por canal:** `channels[ch].totalProfit`/`profitPct` somam só os produtos com COG preenchido (`profitProductsCount`) — a tabela mostra "X de Y produtos c/ custo" no rodapé pra deixar claro que o total pode estar parcial. O total de Frete no rodapé soma todos os produtos (sempre um número, nunca "—", já que frete nunca fica `null`).
 - **Produtos com tag "combo" somem da listagem (implementado 02/07/2026):** produtos Shopify vendidos como o combo em si (tag `combo`, case-insensitive, **não** via Shopify Bundles/`lineItemGroup`) não aparecem como linha própria — a venda é atribuída ao produto-base via `stripComboSuffix()` (remove o sufixo `" - Combo de N unidades"` do título) e contabilizada em `comboBySize`, exatamente como os combos vendidos via Bundles. O "produto-base" precisa ter esse título exato (sem o sufixo de combo) pra a mesclagem funcionar — se não existir, cria uma linha nova só com a quantidade do combo. A contagem aparece no textinho `.prod-combo` sob o nome do produto-base (mesmo lugar de sempre), não em resumo separado.
 
+### 4.14 Tela de Estoque — `public/estoque.html` (implementado 06/07/2026)
+- **Origem:** substitui progressivamente um board do Monday.com ("Stock + Produção") que o sócio do
+  Luan mantinha manualmente, misturando venda por canal com controle de estoque/produção. Luan
+  confirmou (06/07/2026) que a abordagem é **híbrida**: dado real onde já temos (venda), manual
+  onde só existe na cabeça de quem gerencia produção (estoque físico, a caminho, pedido ao
+  laboratório) — **sem integração com a API do Monday**.
+  - **"Ordem em Andamento" x "Ordem Nova"**: dois estágios do mesmo fluxo de reposição junto ao
+    laboratório fabricante — pedido feito quando o estoque/tempo está acabando, pra dar tempo da
+    produção nova chegar antes de zerar (ponto de reposição / lead time).
+- **Mesma estrutura visual de Produtos** — um card por canal (`CH_META`/`CHANNELS_BR`/`CHANNELS_US`
+  idênticos), com collapse/expand, popover de edição em massa por coluna e toggle linha/coluna —
+  mas **sem seletor de período**: a janela de venda é sempre fixa (ver abaixo), não depende de
+  filtro na tela.
+- **`computeStock({ market })` em `metrics.js`:**
+  - `aggregateProductsByChannel(orders)` foi extraída de dentro de `computeProducts` pra ser
+    reaproveitada aqui — mesma regra de agrupamento avulso/combo/tipo/imagem, sem duplicar lógica.
+  - **Janela fixa de 30 dias corridos** (hoje − 29 até hoje, `STOCK_WINDOW_DAYS`) pra calcular
+    velocidade de venda — ao contrário do Monday (que só multiplica venda diária × 30, um valor
+    extrapolado), aqui `salesMonth` é a **soma real** das unidades vendidas nos últimos 30 dias e
+    `salesDaily = salesMonth / 30` — mais preciso que o board original.
+  - `monthsOfStock = (stock + incoming) / salesMonth` — mesma fórmula usada no board do Monday
+    (conferida manualmente batendo os números do print antes de implementar). `null` (não `0` nem
+    `Infinity`) quando `salesMonth` é 0, mostrado como "—" na tela.
+- **Persistência manual** (`productStock` em `store.js`, mesmo padrão de `productFinance`, chave
+  `"canal|||título"`): `stock` (estoque físico/FBA), `incoming` (unidades a caminho/recebendo),
+  `orderInProgress`, `orderNew` (unidades pedidas ao laboratório, nos dois estágios acima). Todos
+  numéricos, **padrão 0** quando não preenchidos — nunca bloqueiam o cálculo (diferente do COG em
+  Produtos), e `0` explícito sempre é aceito e persiste. `POST /api/stock/finance` salva, mesmo
+  formato de validação de `/api/products/finance`.
+- **Amazon (BR/US) — placeholder "Produto TESTE" (confirmado com o Luan 06/07/2026):** hoje os
+  pedidos da Amazon não trazem título de item (ver backlog item 6 — `fetchOrders()` em
+  `src/amazon.js` só lê quantidade, nunca busca `/orders/v0/orders/{id}/orderItems`), então a
+  tabela de Amazon em Estoque ficaria vazia como já acontece em Produtos. Pra não bloquear o
+  controle manual de estoque enquanto isso não é resolvido (deliberadamente adiado pelo risco de
+  429 documentado em 4.7), `computeStock()` injeta uma linha sintética `"Produto TESTE"` (métricas
+  de venda zeradas) nos canais `amazon`/`amazon_us` sempre que não há nenhum produto real agregado
+  — editável manualmente como qualquer outro produto. Remover esse placeholder é consequência
+  natural de resolver o backlog item 6 (quando `byChannel[amazonCh].products` deixar de vir vazio).
+- Fora de escopo por ora (não pedido, evitar scope creep): canais que só existem no Monday e não no
+  nosso sistema (Chewy, Walmart, Website separado, Wholesale) e qualquer chamada à API do Monday.
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js
@@ -356,6 +398,8 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta + Google Ads. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
   - `GET /api/products?market=br|us&since=&until=` — catálogo completo de produtos por canal (sem cache, direto do store). Usado pela tela de Produtos (`produtos.html`).
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
+  - `GET /api/stock?market=br|us` — estoque + produção por canal, janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
+  - `POST /api/stock/finance` — salva/edita estoque, recebendo, ordem em andamento ou ordem nova de um produto (`{ channel, title, stock?, incoming?, orderInProgress?, orderNew? }`), persistido em `kv.productStock`. Ver 4.14.
   - `POST /api/sync`
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
   - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente
@@ -396,7 +440,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 3. **ML Ads ROAS por campanha:** o campo `listingType === 'premium'` pode não estar capturando todos os pedidos Destaque — verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.
 4. Login/usuários se mais pessoas precisarem acessar.
 5. **Amazon US na produção:** após quotas se recuperarem do período de sobrecarga, confirmar que pedidos US aparecem na dashboard (o código está correto — era problema de quota penalizada).
-6. **Amazon — itens do pedido não são buscados:** `fetchOrders()` em `src/amazon.js` só lê `NumberOfItemsShipped/Unshipped` do pedido e cria itens com `title:''` (placeholder) — nunca chama o endpoint de item do pedido (`/orders/v0/orders/{id}/orderItems`). Por isso Amazon (BR e US) nunca aparece em Top Produtos, Segmentos ou na tela de Produtos (itens sem título são ignorados nessas telas). Corrigir exigiria uma chamada extra por pedido (mais lento, mais exposto a 429) — avaliar com cautela dado o histórico de penalização de cota (ver 4.7).
+6. **Amazon — itens do pedido não são buscados:** `fetchOrders()` em `src/amazon.js` só lê `NumberOfItemsShipped/Unshipped` do pedido e cria itens com `title:''` (placeholder) — nunca chama o endpoint de item do pedido (`/orders/v0/orders/{id}/orderItems`). Por isso Amazon (BR e US) nunca aparece em Top Produtos, Segmentos ou na tela de Produtos (itens sem título são ignorados nessas telas), e por isso também a tela de Estoque usa o placeholder "Produto TESTE" pra Amazon (ver 4.14). Corrigir exigiria uma chamada extra por pedido (mais lento, mais exposto a 429) — avaliar com cautela dado o histórico de penalização de cota (ver 4.7).
 
 ## 10. Convenções
 

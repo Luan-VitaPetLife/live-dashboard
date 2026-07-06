@@ -30,6 +30,7 @@ const EMPTY = {
   mlAdCosts: null,
   googleAdsTokens: null,
   productFinance: {},
+  productStock: {},
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
@@ -59,6 +60,7 @@ export async function initStore() {
       if (r.key === 'mlAdCosts')            cache.mlAdCosts            = r.value;
       if (r.key === 'googleAdsTokens')      cache.googleAdsTokens      = r.value;
       if (r.key === 'productFinance')       cache.productFinance       = r.value;
+      if (r.key === 'productStock')         cache.productStock         = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -206,6 +208,17 @@ export function setProductFinance(key, patch) {
   if (USE_PG) pgKv('productFinance', db.productFinance);
 }
 export function getProductFinance() { return load().productFinance || {}; }
+
+// ── Dados de estoque/produção editáveis por produto (estoque, a caminho, pedido ao laboratório) ──
+// Mesma chave "canal|||título" da tela de Produtos/Top Produtos. Ver tela de Estoque.
+export function setProductStock(key, patch) {
+  const db = load();
+  if (!db.productStock) db.productStock = {};
+  db.productStock[key] = { ...(db.productStock[key] || {}), ...patch };
+  saveJson();
+  if (USE_PG) pgKv('productStock', db.productStock);
+}
+export function getProductStock() { return load().productStock || {}; }
 
 // ── Meta Insights ─────────────────────────────
 export function setMetaInsightsDaily(data) {

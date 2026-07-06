@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estoque — Coco and Luna</title>
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<style>
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* ── Sidebar ── */
+  .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+  .brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
+  .brand-logo{width:72px;height:auto}
+  .brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
+  .nav-group{margin-bottom:24px}
+  .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
+  .nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
+  .nav-item:hover{background:var(--side-hover);color:var(--side-text)}
+  .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
+  .nav-icon{font-size:15px;width:16px;text-align:center;flex-shrink:0;line-height:1;opacity:.75}
+
+  /* ── Main ── */
+  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Market toggle ── */
+  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px}
+  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
+  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+
+  /* ── Sidebar toggle ── */
+  .sidebar-header{display:flex;justify-content:flex-end;padding:6px 10px 0}
+  .sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(240,235,224,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
+  .sidebar-close-btn:hover{background:rgba(240,235,224,.12);color:rgba(240,235,224,.9)}
+  .sidebar-open-btn{display:none;position:fixed;left:12px;top:11px;z-index:300;width:36px;height:32px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(30,28,24,.1);transition:all .15s}
+  .sidebar-open-btn:hover{border-color:var(--ink);color:var(--text)}
+  body.sidebar-hidden .sidebar-open-btn{display:flex}
+  @media(max-width:768px){.sidebar-open-btn{display:flex}}
+  body.sidebar-mobile-open .sidebar-open-btn{display:none!important}
+  .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;opacity:0;pointer-events:none;transition:opacity .25s}
+  body.sidebar-mobile-open .sidebar-overlay{opacity:1;pointer-events:auto}
+  body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
+  body.sidebar-hidden .sidebar{transform:translateX(-100%)}
+  body.sidebar-hidden .main{margin-left:0}
+
+  /* ── Content ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  /* ── Market visibility (mesmo padrão de produtos.html/campanhas.html) ── */
+  body:not(.market-us) .ch-us{display:none!important}
+  body.market-us .ch-br{display:none!important}
+
+  /* ── Layout toggle (linha x coluna) ── */
+  .layout-toggle{display:flex;align-items:center;gap:2px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px;flex-shrink:0}
+  .layout-btn{display:flex;align-items:center;justify-content:center;width:30px;height:26px;border-radius:16px;border:none;background:transparent;color:var(--sub);cursor:pointer;font-size:13px;transition:all .15s;font-family:inherit}
+  .layout-btn:hover{color:var(--text)}
+  .layout-btn.active{background:var(--ink);color:var(--side-text)}
+
+  /* ── Product cards (mesmo padrão visual de produtos.html) ── */
+  .prod-grid{display:flex;flex-direction:column;gap:12px}
+  .prod-grid.layout-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));align-items:start}
+  .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:relative}
+  .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
+  .camp-logo-img{background:#fff;border:1px solid var(--border);padding:5px}
+  .camp-logo-img img{width:100%;height:100%;object-fit:contain;display:block}
+  .camp-logo-fill{background:transparent;border:none;padding:0;overflow:hidden}
+  .camp-logo-fill img{object-fit:cover}
+  .camp-ch-name{font-size:13px;font-weight:600;color:var(--text)}
+  .camp-ch-type{font-size:10px;color:var(--muted);margin-top:2px}
+  .prod-head-stats{display:flex;gap:28px;margin-left:auto;margin-right:88px}
+  .prod-stat-lbl{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .prod-stat-val{font-size:17px;font-weight:300;letter-spacing:-.4px}
+  .prod-collapse-btn{position:absolute;top:14px;right:16px;width:26px;height:26px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s}
+  .prod-collapse-btn:hover{border-color:var(--ink);color:var(--text)}
+  .prod-collapse-btn i{transition:transform .2s}
+  .prod-card.collapsed .prod-collapse-btn i{transform:rotate(-90deg)}
+  .prod-card.collapsed .prod-table-wrap{display:none}
+  .prod-expand-btn{position:absolute;top:14px;right:50px;width:26px;height:26px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s}
+  .prod-expand-btn:hover{border-color:var(--ink);color:var(--text)}
+  .prod-table-wrap{max-height:420px;overflow-y:auto;overflow-x:auto}
+  .prod-card.expanded .prod-table-wrap{max-height:none}
+  .prod-table{width:100%;border-collapse:collapse;font-size:12px}
+  .prod-table thead th{position:sticky;top:0;background:var(--surface2);text-align:left;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:9px 20px;border-bottom:1px solid var(--border);white-space:nowrap}
+  .prod-table thead th.num,.prod-table td.prod-num{text-align:right}
+  .prod-table tbody td{padding:9px 20px;border-bottom:1px solid var(--border)}
+  .prod-table tbody tr:last-child td{border-bottom:none}
+  .prod-name-wrap{display:flex;align-items:center;gap:10px}
+  .prod-thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--surface2);border:1px solid var(--border)}
+  .prod-thumb-ph{width:34px;height:34px;border-radius:6px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
+  .prod-name-col{min-width:0}
+  .prod-name-line{display:flex;align-items:center;gap:7px;min-width:0}
+  .prod-name{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prod-type-tag{font-size:9px;font-weight:700;letter-spacing:.3px;color:var(--sage);background:rgba(106,140,110,.12);border-radius:4px;padding:2px 6px;flex-shrink:0;white-space:nowrap}
+  .prod-combo{font-size:10px;color:var(--muted);margin-top:2px}
+  .prod-num{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .prod-empty{text-align:center;color:var(--muted);font-style:italic;padding:20px}
+  .prod-muted{color:var(--muted)}
+  .prod-input{width:64px;text-align:right;font-size:12px;font-family:inherit;color:var(--text);padding:4px 6px;border:1px solid var(--border2);border-radius:5px;background:var(--surface2);outline:none;transition:border-color .12s;font-variant-numeric:tabular-nums}
+  .prod-input:focus{border-color:var(--ink);background:#fff}
+  .prod-input::placeholder{color:var(--muted)}
+  .prod-total-row td{font-weight:600;background:var(--surface2);border-top:2px solid var(--border2);vertical-align:middle}
+  .prod-total-note{display:block;font-size:10px;font-weight:600;color:var(--muted);white-space:nowrap}
+  .stk-low{color:var(--red)}
+  .stk-ok{color:var(--green)}
+
+  /* ── Edição em massa (aplicar valor a todos os produtos de um canal) ── */
+  .th-label{display:inline-flex;align-items:center;gap:4px}
+  .th-bulk-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:10px;padding:2px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;transition:all .12s}
+  .th-bulk-btn:hover{color:var(--text);background:var(--border)}
+  .bulk-pop{position:fixed;display:none;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:12px;z-index:600;width:190px}
+  .bulk-pop.open{display:flex}
+  .bulk-pop-label{font-size:10px;font-weight:700;color:var(--sub);line-height:1.3}
+  .bulk-pop-hint{font-size:9px;color:var(--muted)}
+  .bulk-pop-input{width:100%;font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--surface2);outline:none}
+  .bulk-pop-input:focus{border-color:var(--ink);background:#fff}
+  .bulk-pop-actions{display:flex;gap:6px}
+  .bulk-pop-btn{flex:1;font-size:11px;font-weight:600;padding:7px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:5px;cursor:pointer;font-family:inherit}
+  .bulk-pop-btn:hover{opacity:.85}
+  .bulk-pop-btn.primary{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+
+  @media(max-width:768px){
+    .sidebar{transform:translateX(-100%)}
+    .main{margin-left:0}
+    .content{padding:16px}
+    .prod-head-stats{gap:16px;margin-left:0}
+  }
+</style>
+</head>
+<body>
+
+<script src="sidebar.js"></script>
+
+<div class="main">
+  <div class="topbar">
+    <div class="mkt-toggle-wrap">
+      <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
+        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
+      </button>
+      <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
+        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
+      </button>
+    </div>
+    <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">—</span></div>
+  </div>
+
+  <div class="content">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="page-title">Estoque</div>
+        <div class="page-sub" id="pageSub">Coco and Luna · janela fixa de 30 dias</div>
+      </div>
+      <div class="layout-toggle" id="layoutToggle">
+        <button class="layout-btn" data-layout="row" onclick="setLayout('row')" title="Linha — uma tabela abaixo da outra"><i class="bi bi-list-ul"></i></button>
+        <button class="layout-btn" data-layout="col" onclick="setLayout('col')" title="Coluna — tabelas lado a lado"><i class="bi bi-layout-split"></i></button>
+      </div>
+    </div>
+
+    <div class="prod-grid" id="prodGrid"></div>
+  </div>
+
+  <div class="bulk-pop" id="bulkPop">
+    <div class="bulk-pop-label" id="bulkPopLabel">Aplicar a todos</div>
+    <input type="number" step="1" class="bulk-pop-input" id="bulkPopInput" placeholder="Valor">
+    <div class="bulk-pop-hint">Vazio = volta a 0 · 0 é um valor válido</div>
+    <div class="bulk-pop-actions">
+      <button class="bulk-pop-btn primary" onclick="applyBulk()">Aplicar</button>
+      <button class="bulk-pop-btn" onclick="closeBulkPop()">Cancelar</button>
+    </div>
+  </div>
+
+  <footer style="padding:0 28px 20px;font-size:11px;color:var(--muted)">Vendas/dia e vendas/mês vêm dos pedidos reais dos últimos 30 dias. Estoque, recebendo e pedidos ao laboratório são preenchidos manualmente. Amazon (BR/US) ainda não traz nome de produto nos pedidos — use a linha "Produto TESTE" enquanto isso não é resolvido.</footer>
+</div>
+
+<script>
+const fmtInt = v => Math.round(v || 0).toLocaleString('pt-BR');
+const fmtDec = (v, d = 1) => v == null ? '—' : v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+// ── Metadados de canal (mesmas cores de produtos.html/index.html) ──
+const CH_META = {
+  shopify:      { name: 'Shopify BR',    color: '#95BF47', logo: 'logo_shopify.png' },
+  shopee:       { name: 'Shopee',        color: '#EE4D2D', logo: 'logo_shopee.svg' },
+  mercadolivre: { name: 'Mercado Livre', color: '#FFE600', logo: 'logo_mercadolivre.png', logoFill: true },
+  amazon:       { name: 'Amazon BR',     color: '#111111', logo: 'logo_amazon.webp' },
+  shopify_us:   { name: 'Shopify US',    color: '#7EAD3C', logo: 'logo_shopify.png' },
+  amazon_us:    { name: 'Amazon US',     color: '#FF9900', logo: 'logo_amazon.webp' },
+};
+const CHANNELS_BR = ['shopify', 'shopee', 'amazon', 'mercadolivre'];
+const CHANNELS_US = ['shopify_us', 'amazon_us'];
+
+function contrastText(hex) {
+  const h = (hex || '#000').replace('#', '');
+  if (h.length !== 6) return '#fff';
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return (0.299*r + 0.587*g + 0.114*b) / 255 > 0.55 ? '#333' : '#fff';
+}
+
+// ── State ─────────────────────────────────────────────────
+let market = localStorage.getItem('coco_market') || 'br';
+let current = null;
+const collapsedState = JSON.parse(localStorage.getItem('coco_estoque_collapsed') || '{}');
+const expandedState = JSON.parse(localStorage.getItem('coco_estoque_expanded') || '{}');
+let layout = localStorage.getItem('coco_estoque_layout') || 'row';
+
+function setLayout(mode) {
+  layout = mode;
+  localStorage.setItem('coco_estoque_layout', mode);
+  applyLayout();
+}
+function applyLayout() {
+  document.getElementById('prodGrid').classList.toggle('layout-col', layout === 'col');
+  document.querySelectorAll('.layout-btn').forEach(b => b.classList.toggle('active', b.dataset.layout === layout));
+}
+
+function toggleCollapse(ch) {
+  collapsedState[ch] = !collapsedState[ch];
+  localStorage.setItem('coco_estoque_collapsed', JSON.stringify(collapsedState));
+  document.getElementById(`prod-card-${ch}`)?.classList.toggle('collapsed', collapsedState[ch]);
+}
+
+function toggleExpand(ch) {
+  expandedState[ch] = !expandedState[ch];
+  localStorage.setItem('coco_estoque_expanded', JSON.stringify(expandedState));
+  const card = document.getElementById(`prod-card-${ch}`);
+  card?.classList.toggle('expanded', expandedState[ch]);
+  const icon = card?.querySelector('.prod-expand-btn i');
+  if (icon) icon.className = expandedState[ch] ? 'bi bi-arrows-angle-contract' : 'bi bi-arrows-angle-expand';
+}
+
+// ── Edição em massa (aplicar valor a todos os produtos de um canal) ──
+let bulkTarget = null;
+function openBulkPop(e, field, ch, label) {
+  e.stopPropagation();
+  bulkTarget = { field, ch };
+  const pop = document.getElementById('bulkPop');
+  document.getElementById('bulkPopLabel').textContent = `${label} — ${CH_META[ch]?.name || ch}`;
+  const input = document.getElementById('bulkPopInput');
+  input.value = '';
+  const rect = e.currentTarget.getBoundingClientRect();
+  pop.style.top = (rect.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 206)) + 'px';
+  pop.classList.add('open');
+  input.focus();
+}
+function closeBulkPop() {
+  document.getElementById('bulkPop').classList.remove('open');
+  bulkTarget = null;
+}
+async function applyBulk() {
+  if (!bulkTarget) return;
+  const { field, ch } = bulkTarget;
+  const input = document.getElementById('bulkPopInput');
+  const value = input.value === '' ? null : Number(input.value);
+  const products = current?.channels?.[ch]?.products || [];
+  closeBulkPop();
+  if (!products.length) return;
+  await Promise.all(products.map(p => fetch('/api/stock/finance', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: ch, title: p.title, [field]: value }),
+  })));
+  await load();
+}
+document.addEventListener('click', e => {
+  const pop = document.getElementById('bulkPop');
+  if (pop.classList.contains('open') && !pop.contains(e.target) && !e.target.closest('.th-bulk-btn')) closeBulkPop();
+});
+
+// ── Market ────────────────────────────────────────────────
+function setMarket(m) {
+  market = m;
+  localStorage.setItem('coco_market', m);
+  document.getElementById('mktBtnBr').classList.toggle('active', m === 'br');
+  document.getElementById('mktBtnUs').classList.toggle('active', m === 'us');
+  document.body.classList.toggle('market-us', m === 'us');
+  load();
+}
+
+const setText = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+
+// ── Render ────────────────────────────────────────────────
+function logoHTML(meta) {
+  if (meta.logo) {
+    const cls = meta.logoFill ? 'camp-logo camp-logo-img camp-logo-fill' : 'camp-logo camp-logo-img';
+    return `<div class="${cls}"><img src="${meta.logo}" alt="${meta.name}"></div>`;
+  }
+  return `<div class="camp-logo" style="background:${meta.color};color:${contrastText(meta.color)}">${meta.badge}</div>`;
+}
+
+function comboBits(p) {
+  if (!p.comboQty) return '';
+  const parts = Object.entries(p.comboBySize || {})
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([size, n]) => `${n} combo de ${size}`);
+  return `${p.avulsoQty || 0} avulso, ${parts.join(', ')}`;
+}
+
+const escAttr = s => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
+function monthsCellClass(v) {
+  if (v == null) return 'prod-muted';
+  if (v < 1) return 'stk-low';
+  return 'stk-ok';
+}
+
+function rowHTML(p, ch) {
+  const combo = comboBits(p);
+  const thumb = p.image
+    ? `<img class="prod-thumb" src="${p.image}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
+    : `<div class="prod-thumb-ph"><i class="bi bi-image"></i></div>`;
+  const typeTag = p.type ? `<span class="prod-type-tag">${p.type}</span>` : '';
+  const dataAttrs = `data-channel="${escAttr(ch)}" data-title="${escAttr(p.title)}"`;
+  return `<tr>
+    <td>
+      <div class="prod-name-wrap">
+        ${thumb}
+        <div class="prod-name-col">
+          <div class="prod-name-line"><span class="prod-name" title="${p.title}">${p.title}</span>${typeTag}</div>
+          ${combo ? `<div class="prod-combo">${combo}</div>` : ''}
+        </div>
+      </div>
+    </td>
+    <td class="prod-num prod-muted">${fmtDec(p.salesDaily, 1)}</td>
+    <td class="prod-num prod-muted">${fmtInt(p.salesMonth)}</td>
+    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.stock ?? ''}" ${dataAttrs} data-field="stock" title="Estoque físico/FBA atual, em unidades."></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.incoming ?? ''}" ${dataAttrs} data-field="incoming" title="Unidades a caminho (recebendo), em trânsito."></td>
+    <td class="prod-num ${monthsCellClass(p.monthsOfStock)}">${fmtDec(p.monthsOfStock, 1)}</td>
+    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" ${dataAttrs} data-field="orderInProgress" title="Unidades já pedidas ao laboratório, produção em andamento."></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" ${dataAttrs} data-field="orderNew" title="Unidades de um novo pedido a ser feito ao laboratório."></td>
+  </tr>`;
+}
+
+function cardHTML(ch) {
+  const meta = CH_META[ch];
+  const chClass = CHANNELS_US.includes(ch) ? 'ch-us' : 'ch-br';
+  const data = current?.channels?.[ch];
+  const products = data?.products || [];
+  const rows = products.length
+    ? products.map(p => rowHTML(p, ch)).join('')
+    : '<tr><td colspan="8" class="prod-empty">Sem dados no período</td></tr>';
+  const collapsed = collapsedState[ch] ? ' collapsed' : '';
+  const expanded = expandedState[ch] ? ' expanded' : '';
+  const expandIcon = expandedState[ch] ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand';
+  const t = data?.totals || { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, monthsOfStock: null };
+  const footRow = products.length ? `<tfoot><tr class="prod-total-row">
+    <td>Total</td>
+    <td class="prod-num">${fmtDec(t.salesDaily, 1)}</td>
+    <td class="prod-num">${fmtInt(t.salesMonth)}</td>
+    <td class="prod-num">${fmtInt(t.stock)}</td>
+    <td class="prod-num">${fmtInt(t.incoming)}</td>
+    <td class="prod-num ${monthsCellClass(t.monthsOfStock)}">${fmtDec(t.monthsOfStock, 1)}</td>
+    <td class="prod-num">${fmtInt(t.orderInProgress)}</td>
+    <td class="prod-num">${fmtInt(t.orderNew)}</td>
+  </tr></tfoot>` : '';
+  return `
+    <div class="prod-card ${chClass}${collapsed}${expanded}" id="prod-card-${ch}">
+      <div class="prod-card-head">
+        <button class="prod-expand-btn" onclick="toggleExpand('${ch}')" title="Expandir/recolher altura da tabela"><i class="bi ${expandIcon}"></i></button>
+        <button class="prod-collapse-btn" onclick="toggleCollapse('${ch}')" title="Minimizar/expandir"><i class="bi bi-chevron-down"></i></button>
+        ${logoHTML(meta)}
+        <div>
+          <div class="camp-ch-name">${meta.name}</div>
+          <div class="camp-ch-type">${products.length} produto${products.length === 1 ? '' : 's'}</div>
+        </div>
+        <div class="prod-head-stats">
+          <div>
+            <div class="prod-stat-lbl">Vendas/mês</div>
+            <div class="prod-stat-val">${fmtInt(t.salesMonth)}</div>
+          </div>
+          <div>
+            <div class="prod-stat-lbl">Estoque</div>
+            <div class="prod-stat-val">${fmtInt(t.stock)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="prod-table-wrap">
+        <table class="prod-table">
+          <thead><tr>
+            <th>Produto</th>
+            <th class="num">Vendas/dia</th>
+            <th class="num">Vendas/mês</th>
+            <th class="num"><span class="th-label">Estoque<button class="th-bulk-btn" onclick="openBulkPop(event,'stock','${ch}','Estoque')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
+            <th class="num"><span class="th-label">Recebendo<button class="th-bulk-btn" onclick="openBulkPop(event,'incoming','${ch}','Recebendo')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
+            <th class="num">Meses de Estoque</th>
+            <th class="num"><span class="th-label">Ordem em Andamento<button class="th-bulk-btn" onclick="openBulkPop(event,'orderInProgress','${ch}','Ordem em Andamento')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
+            <th class="num"><span class="th-label">Ordem Nova<button class="th-bulk-btn" onclick="openBulkPop(event,'orderNew','${ch}','Ordem Nova')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+          ${footRow}
+        </table>
+      </div>
+    </div>`;
+}
+
+async function onStockEdit(e) {
+  const inp = e.target;
+  const { channel, title, field } = inp.dataset;
+  const value = inp.value === '' ? null : Number(inp.value);
+  inp.disabled = true;
+  try {
+    await fetch('/api/stock/finance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel, title, [field]: value }),
+    });
+    await load();
+  } catch (err) {
+    console.warn('Estoque: falha ao salvar dado', err);
+    inp.disabled = false;
+  }
+}
+
+function rangeLabelShort(since, until) {
+  if (!since || !until) return '';
+  const f = iso => `${iso.slice(8,10)}/${iso.slice(5,7)}`;
+  return `${f(since)}–${f(until)}`;
+}
+
+function render() {
+  const d = current; if (!d) return;
+  const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
+  setText('lastUpdate', 'sync: ' + updated);
+  setText('pageSub', `Coco and Luna · vendas reais dos últimos ${d.windowDays || 30} dias (${rangeLabelShort(d.since, d.until)})`);
+  const channels = market === 'us' ? CHANNELS_US : CHANNELS_BR;
+  document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
+  document.querySelectorAll('.prod-input').forEach(inp => inp.addEventListener('change', onStockEdit));
+}
+
+// ── Carregamento ──────────────────────────────────────────
+async function load() {
+  try {
+    const r = await fetch(`/api/stock?market=${market}`);
+    current = await r.json();
+  } catch (e) { console.warn('Estoque: falha ao carregar', e); return; }
+  render();
+}
+
+// ── Init ─────────────────────────────────────────────────
+(function init(){
+  document.getElementById('mktBtnBr').classList.toggle('active', market === 'br');
+  document.getElementById('mktBtnUs').classList.toggle('active', market === 'us');
+  document.body.classList.toggle('market-us', market === 'us');
+  applyLayout();
+  load();
+})();
+</script>
+</body>
+</html>

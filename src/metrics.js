@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, load } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, load } from './store.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -376,10 +376,10 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   };
 }
 
-// Catálogo completo de produtos por canal (para a tela de Produtos) — sem limite de top-N,
-// com a mesma quebra avulso x combo (Shopify Bundles) usada no Top Produtos/Segmentos.
-export function computeProducts({ market = 'br', since, until } = {}) {
-  const orders = getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o));
+// Agrupa itens de uma lista de pedidos por canal → por título de produto (com quebra avulso x
+// combo, Shopify Bundles, tipo e imagem). Compartilhado por computeProducts e computeStock —
+// mesma regra de agrupamento usada em Top Produtos/Segmentos.
+function aggregateProductsByChannel(orders) {
   const seenBundleIds = new Set();
   const byChannel = {};
   orders.forEach(o => {
@@ -417,6 +417,14 @@ export function computeProducts({ market = 'br', since, until } = {}) {
       }
     });
   });
+  return byChannel;
+}
+
+// Catálogo completo de produtos por canal (para a tela de Produtos) — sem limite de top-N,
+// com a mesma quebra avulso x combo (Shopify Bundles) usada no Top Produtos/Segmentos.
+export function computeProducts({ market = 'br', since, until } = {}) {
+  const orders = getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o));
+  const byChannel = aggregateProductsByChannel(orders);
 
   const finance = getProductFinance();
   const channels = {};
@@ -458,4 +466,60 @@ export function computeProducts({ market = 'br', since, until } = {}) {
     };
   }
   return { market, since, until, channels, updatedAt: load().lastSync };
+}
+
+// Estoque + produção por canal (para a tela de Estoque) — janela FIXA de 30 dias corridos pra
+// velocidade de venda (não depende de seletor de período na tela, ao contrário de Produtos).
+// Combina dado real (venda) com dado manual (estoque físico, a caminho, pedido ao laboratório).
+const STOCK_WINDOW_DAYS = 30;
+export function computeStock({ market = 'br' } = {}) {
+  const until = isoUTC(new Date());
+  const since = isoUTC(addDays(parseISO(until), -(STOCK_WINDOW_DAYS - 1)));
+  const orders = getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o));
+  const byChannel = aggregateProductsByChannel(orders);
+
+  // Amazon (BR/US) não traz título de item nos pedidos hoje (ver backlog item 6 do CLAUDE.md) —
+  // sem isso a tabela ficaria vazia, então entra um produto placeholder editável manualmente
+  // até a busca de itens da Amazon ser resolvida à parte (evitar mexer nisso agora por causa do
+  // histórico de 429 da SP-API).
+  const amazonCh = market === 'us' ? 'amazon_us' : 'amazon';
+  if (!byChannel[amazonCh]) byChannel[amazonCh] = { revenue: 0, orders: 0, products: {} };
+  if (Object.keys(byChannel[amazonCh].products).length === 0) {
+    byChannel[amazonCh].products['Produto TESTE'] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
+  }
+
+  const stockData = getProductStock();
+  const channels = {};
+  for (const [ch, c] of Object.entries(byChannel)) {
+    const products = Object.entries(c.products)
+      .map(([title, p]) => {
+        const salesMonth = p.avulsoQty + p.comboQty;
+        const salesDaily = salesMonth / STOCK_WINDOW_DAYS;
+        const ov = stockData[`${ch}|||${title}`] || {};
+        const stock           = ov.stock != null ? Number(ov.stock) : 0;
+        const incoming        = ov.incoming != null ? Number(ov.incoming) : 0;
+        const orderInProgress = ov.orderInProgress != null ? Number(ov.orderInProgress) : 0;
+        const orderNew        = ov.orderNew != null ? Number(ov.orderNew) : 0;
+        const monthsOfStock = salesMonth > 0 ? (stock + incoming) / salesMonth : null;
+        return {
+          title, type: p.type, image: p.image,
+          avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
+          salesDaily, salesMonth, stock, incoming, orderInProgress, orderNew, monthsOfStock,
+        };
+      })
+      .sort((a, b) => b.salesMonth - a.salesMonth);
+
+    const totals = products.reduce((a, p) => ({
+      salesDaily: a.salesDaily + p.salesDaily,
+      salesMonth: a.salesMonth + p.salesMonth,
+      stock: a.stock + p.stock,
+      incoming: a.incoming + p.incoming,
+      orderInProgress: a.orderInProgress + p.orderInProgress,
+      orderNew: a.orderNew + p.orderNew,
+    }), { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0 });
+    totals.monthsOfStock = totals.salesMonth > 0 ? (totals.stock + totals.incoming) / totals.salesMonth : null;
+
+    channels[ch] = { products, totals };
+  }
+  return { market, windowDays: STOCK_WINDOW_DAYS, since, until, channels, updatedAt: load().lastSync };
 }
