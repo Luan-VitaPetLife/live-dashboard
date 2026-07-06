@@ -427,19 +427,21 @@ export function computeProducts({ market = 'br', since, until } = {}) {
         const revenue = p.revenue;
         const ov = finance[`${ch}|||${title}`] || {};
         const cog           = ov.cog != null ? Number(ov.cog) : defaultCog(title);
+        const shipping      = ov.shipping != null ? Number(ov.shipping) : 0;
         const taxPct        = ov.taxPct != null ? Number(ov.taxPct) : TAX_PCT_DEFAULT;
         const commissionPct = ov.commissionPct != null ? Number(ov.commissionPct) : (DEFAULT_COMMISSION_PCT[ch] ?? 0);
         const taxAmount        = taxPct != null ? revenue * taxPct / 100 : 0;
         const commissionAmount = commissionPct != null ? revenue * commissionPct / 100 : 0;
-        const cogTotal = cog != null ? cog * qty : null;
-        const profit   = cog != null ? revenue - cogTotal - taxAmount - commissionAmount : null;
+        const cogTotal      = cog != null ? cog * qty : null;
+        const shippingTotal = shipping * qty;
+        const profit   = cog != null ? revenue - cogTotal - taxAmount - commissionAmount - shippingTotal : null;
         return {
           title, qty, revenue,
           avgTicket: qty > 0 ? revenue / qty : 0,
           avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
           type: p.type, image: p.image,
-          cog, taxPct, commissionPct,
-          taxAmount, commissionAmount, cogTotal, profit,
+          cog, shipping, taxPct, commissionPct,
+          taxAmount, commissionAmount, cogTotal, shippingTotal, profit,
           profitPct: (profit != null && revenue > 0) ? profit / revenue : null,
         };
       })

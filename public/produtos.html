@@ -437,6 +437,7 @@ function rowHTML(p, ch) {
     <td class="prod-num">${fmtMoney(p.revenue)}</td>
     <td class="prod-num">${fmtMoney(p.avgTicket)}</td>
     <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.cog ?? ''}" ${dataAttrs} data-field="cog" title="Custo do produto (COG), por unidade. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.shipping ?? ''}" ${dataAttrs} data-field="shipping" title="Custo de frete, por unidade. Vazio = considera 0; 0 é um valor válido e fica salvo."></td>
     <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.taxPct ?? ''}" ${dataAttrs} data-field="taxPct" title="% de imposto sobre a venda. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
     <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.commissionPct ?? ''}" ${dataAttrs} data-field="commissionPct" title="% de comissão do marketplace. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
     ${profitCells}
@@ -450,17 +451,19 @@ function cardHTML(ch) {
   const products = data?.products || [];
   const rows = products.length
     ? products.map(p => rowHTML(p, ch)).join('')
-    : '<tr><td colspan="9" class="prod-empty">Sem vendas no período</td></tr>';
+    : '<tr><td colspan="10" class="prod-empty">Sem vendas no período</td></tr>';
   const collapsed = collapsedState[ch] ? ' collapsed' : '';
   const expanded = expandedState[ch] ? ' expanded' : '';
   const expandIcon = expandedState[ch] ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand';
   const totalQty = products.reduce((a, p) => a + p.qty, 0);
+  const totalShipping = products.reduce((a, p) => a + (p.shippingTotal || 0), 0);
   const footRow = products.length ? `<tfoot><tr class="prod-total-row">
     <td>Total</td>
     <td class="prod-num">${fmtInt(totalQty)}</td>
     <td class="prod-num">${fmtMoney(data.revenue)}</td>
     <td class="prod-num prod-muted">—</td>
     <td class="prod-num"><span class="prod-total-note">${data.profitProductsCount || 0}/${products.length} c/ custo</span></td>
+    <td class="prod-num">${fmtMoney(totalShipping)}</td>
     <td class="prod-num prod-muted">—</td>
     <td class="prod-num prod-muted">—</td>
     <td class="prod-num">${data.totalProfit != null ? fmtMoney(data.totalProfit) : '—'}</td>
@@ -492,6 +495,7 @@ function cardHTML(ch) {
           <thead><tr>
             <th>Produto</th><th class="num">Qtd</th><th class="num">Receita</th><th class="num">Ticket médio</th>
             <th class="num"><span class="th-label">COG (un.)<button class="th-bulk-btn" onclick="openBulkPop(event,'cog','${ch}','COG (un.)')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
+            <th class="num"><span class="th-label">Frete (un.)<button class="th-bulk-btn" onclick="openBulkPop(event,'shipping','${ch}','Frete (un.)')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
             <th class="num"><span class="th-label">Impostos %<button class="th-bulk-btn" onclick="openBulkPop(event,'taxPct','${ch}','Impostos %')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
             <th class="num"><span class="th-label">Comissão %<button class="th-bulk-btn" onclick="openBulkPop(event,'commissionPct','${ch}','Comissão %')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
             <th class="num">Lucro</th><th class="num">Lucro %</th>

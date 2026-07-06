@@ -43,12 +43,13 @@ app.get('/api/products', (req, res) => {
   }
 });
 
-// Salva/edita dados financeiros de um produto (COG, % imposto, % comissão) — usado pela tela de Produtos.
+// Salva/edita dados financeiros de um produto (COG, frete, % imposto, % comissão) — usado pela tela de Produtos.
 app.post('/api/products/finance', (req, res) => {
-  const { channel, title, cog, taxPct, commissionPct } = req.body || {};
+  const { channel, title, cog, shipping, taxPct, commissionPct } = req.body || {};
   if (!channel || !title) return res.status(400).json({ error: 'channel e title são obrigatórios.' });
   const patch = {};
   if (cog !== undefined)           patch.cog = cog === null || cog === '' ? null : Number(cog);
+  if (shipping !== undefined)      patch.shipping = shipping === null || shipping === '' ? null : Number(shipping);
   if (taxPct !== undefined)        patch.taxPct = taxPct === null || taxPct === '' ? null : Number(taxPct);
   if (commissionPct !== undefined) patch.commissionPct = commissionPct === null || commissionPct === '' ? null : Number(commissionPct);
   setProductFinance(`${channel}|||${title}`, patch);
