@@ -110,7 +110,10 @@
   .prod-collapse-btn i{transition:transform .2s}
   .prod-card.collapsed .prod-collapse-btn i{transform:rotate(-90deg)}
   .prod-card.collapsed .prod-table-wrap{display:none}
+  .prod-expand-btn{position:absolute;top:14px;right:50px;width:26px;height:26px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s}
+  .prod-expand-btn:hover{border-color:var(--ink);color:var(--text)}
   .prod-table-wrap{max-height:420px;overflow-y:auto;overflow-x:auto}
+  .prod-card.expanded .prod-table-wrap{max-height:none}
   .prod-table{width:100%;border-collapse:collapse;font-size:12px}
   .prod-table thead th{position:sticky;top:0;background:var(--surface2);text-align:left;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:9px 20px;border-bottom:1px solid var(--border);white-space:nowrap}
   .prod-table thead th.num,.prod-table td.prod-num{text-align:right}
@@ -133,8 +136,23 @@
   .prod-input-pct{width:52px}
   .prod-profit-pos{color:var(--green)}
   .prod-profit-neg{color:var(--red)}
-  .prod-total-row td{font-weight:600;background:var(--surface2);border-top:2px solid var(--border2)}
-  .prod-total-note{font-size:9px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0}
+  .prod-total-row td{font-weight:600;background:var(--surface2);border-top:2px solid var(--border2);vertical-align:middle}
+  .prod-total-note{display:block;font-size:10px;font-weight:600;color:var(--muted);white-space:nowrap}
+
+  /* ── Edição em massa (aplicar valor a todos os produtos de um canal) ── */
+  .th-label{display:inline-flex;align-items:center;gap:4px}
+  .th-bulk-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:10px;padding:2px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;transition:all .12s}
+  .th-bulk-btn:hover{color:var(--text);background:var(--border)}
+  .bulk-pop{position:fixed;display:none;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:12px;z-index:600;width:190px}
+  .bulk-pop.open{display:flex}
+  .bulk-pop-label{font-size:10px;font-weight:700;color:var(--sub);line-height:1.3}
+  .bulk-pop-hint{font-size:9px;color:var(--muted)}
+  .bulk-pop-input{width:100%;font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--surface2);outline:none}
+  .bulk-pop-input:focus{border-color:var(--ink);background:#fff}
+  .bulk-pop-actions{display:flex;gap:6px}
+  .bulk-pop-btn{flex:1;font-size:11px;font-weight:600;padding:7px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:5px;cursor:pointer;font-family:inherit}
+  .bulk-pop-btn:hover{opacity:.85}
+  .bulk-pop-btn.primary{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
 
   @media(max-width:768px){
     .sidebar{transform:translateX(-100%)}
@@ -194,6 +212,16 @@
     <div class="prod-grid" id="prodGrid"></div>
   </div>
 
+  <div class="bulk-pop" id="bulkPop">
+    <div class="bulk-pop-label" id="bulkPopLabel">Aplicar a todos</div>
+    <input type="number" step="0.01" class="bulk-pop-input" id="bulkPopInput" placeholder="Valor">
+    <div class="bulk-pop-hint">Vazio = volta ao padrão de cada produto · 0 é um valor válido</div>
+    <div class="bulk-pop-actions">
+      <button class="bulk-pop-btn primary" onclick="applyBulk()">Aplicar</button>
+      <button class="bulk-pop-btn" onclick="closeBulkPop()">Cancelar</button>
+    </div>
+  </div>
+
   <footer style="padding:0 28px 20px;font-size:11px;color:var(--muted)">Receita exclui pedidos cancelados. Combos do Shopify BR (Bundles) aparecem quebrados entre vendas avulsas e vendas via combo.</footer>
 </div>
 
@@ -228,12 +256,61 @@ function contrastText(hex) {
 let market = localStorage.getItem('coco_market') || 'br';
 let current = null;
 const collapsedState = JSON.parse(localStorage.getItem('coco_produtos_collapsed') || '{}');
+const expandedState = JSON.parse(localStorage.getItem('coco_produtos_expanded') || '{}');
 
 function toggleCollapse(ch) {
   collapsedState[ch] = !collapsedState[ch];
   localStorage.setItem('coco_produtos_collapsed', JSON.stringify(collapsedState));
   document.getElementById(`prod-card-${ch}`)?.classList.toggle('collapsed', collapsedState[ch]);
 }
+
+function toggleExpand(ch) {
+  expandedState[ch] = !expandedState[ch];
+  localStorage.setItem('coco_produtos_expanded', JSON.stringify(expandedState));
+  const card = document.getElementById(`prod-card-${ch}`);
+  card?.classList.toggle('expanded', expandedState[ch]);
+  const icon = card?.querySelector('.prod-expand-btn i');
+  if (icon) icon.className = expandedState[ch] ? 'bi bi-arrows-angle-contract' : 'bi bi-arrows-angle-expand';
+}
+
+// ── Edição em massa (aplicar valor a todos os produtos de um canal) ──
+let bulkTarget = null;
+function openBulkPop(e, field, ch, label) {
+  e.stopPropagation();
+  bulkTarget = { field, ch };
+  const pop = document.getElementById('bulkPop');
+  document.getElementById('bulkPopLabel').textContent = `${label} — ${CH_META[ch]?.name || ch}`;
+  const input = document.getElementById('bulkPopInput');
+  input.value = '';
+  const rect = e.currentTarget.getBoundingClientRect();
+  pop.style.top = (rect.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 206)) + 'px';
+  pop.classList.add('open');
+  input.focus();
+}
+function closeBulkPop() {
+  document.getElementById('bulkPop').classList.remove('open');
+  bulkTarget = null;
+}
+async function applyBulk() {
+  if (!bulkTarget) return;
+  const { field, ch } = bulkTarget;
+  const input = document.getElementById('bulkPopInput');
+  const value = input.value === '' ? null : Number(input.value);
+  const products = current?.channels?.[ch]?.products || [];
+  closeBulkPop();
+  if (!products.length) return;
+  await Promise.all(products.map(p => fetch('/api/products/finance', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: ch, title: p.title, [field]: value }),
+  })));
+  await load();
+}
+document.addEventListener('click', e => {
+  const pop = document.getElementById('bulkPop');
+  if (pop.classList.contains('open') && !pop.contains(e.target) && !e.target.closest('.th-bulk-btn')) closeBulkPop();
+});
 
 function rangeForPreset(p) {
   const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
@@ -335,9 +412,9 @@ function rowHTML(p, ch) {
     <td class="prod-num">${fmtInt(p.qty)}</td>
     <td class="prod-num">${fmtMoney(p.revenue)}</td>
     <td class="prod-num">${fmtMoney(p.avgTicket)}</td>
-    <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.cog ?? ''}" ${dataAttrs} data-field="cog" title="Custo do produto (COG), por unidade"></td>
-    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.taxPct ?? ''}" ${dataAttrs} data-field="taxPct" title="% de imposto sobre a venda"></td>
-    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.commissionPct ?? ''}" ${dataAttrs} data-field="commissionPct" title="% de comissão do marketplace"></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.cog ?? ''}" ${dataAttrs} data-field="cog" title="Custo do produto (COG), por unidade. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
+    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.taxPct ?? ''}" ${dataAttrs} data-field="taxPct" title="% de imposto sobre a venda. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
+    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.commissionPct ?? ''}" ${dataAttrs} data-field="commissionPct" title="% de comissão do marketplace. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
     ${profitCells}
   </tr>`;
 }
@@ -351,21 +428,24 @@ function cardHTML(ch) {
     ? products.map(p => rowHTML(p, ch)).join('')
     : '<tr><td colspan="9" class="prod-empty">Sem vendas no período</td></tr>';
   const collapsed = collapsedState[ch] ? ' collapsed' : '';
+  const expanded = expandedState[ch] ? ' expanded' : '';
+  const expandIcon = expandedState[ch] ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand';
   const totalQty = products.reduce((a, p) => a + p.qty, 0);
   const footRow = products.length ? `<tfoot><tr class="prod-total-row">
     <td>Total</td>
     <td class="prod-num">${fmtInt(totalQty)}</td>
     <td class="prod-num">${fmtMoney(data.revenue)}</td>
-    <td class="prod-num">—</td>
-    <td class="prod-num prod-total-note">${data.profitProductsCount || 0}/${products.length} c/ COG</td>
-    <td></td>
-    <td></td>
+    <td class="prod-num prod-muted">—</td>
+    <td class="prod-num"><span class="prod-total-note">${data.profitProductsCount || 0}/${products.length} c/ custo</span></td>
+    <td class="prod-num prod-muted">—</td>
+    <td class="prod-num prod-muted">—</td>
     <td class="prod-num">${data.totalProfit != null ? fmtMoney(data.totalProfit) : '—'}</td>
     <td class="prod-num">${data.profitPct != null ? fmtPct(data.profitPct) : '—'}</td>
   </tr></tfoot>` : '';
   return `
-    <div class="prod-card ${chClass}${collapsed}" id="prod-card-${ch}">
+    <div class="prod-card ${chClass}${collapsed}${expanded}" id="prod-card-${ch}">
       <div class="prod-card-head">
+        <button class="prod-expand-btn" onclick="toggleExpand('${ch}')" title="Expandir/recolher altura da tabela"><i class="bi ${expandIcon}"></i></button>
         <button class="prod-collapse-btn" onclick="toggleCollapse('${ch}')" title="Minimizar/expandir"><i class="bi bi-chevron-down"></i></button>
         ${logoHTML(meta)}
         <div>
@@ -387,7 +467,9 @@ function cardHTML(ch) {
         <table class="prod-table">
           <thead><tr>
             <th>Produto</th><th class="num">Qtd</th><th class="num">Receita</th><th class="num">Ticket médio</th>
-            <th class="num">COG (un.)</th><th class="num">Impostos %</th><th class="num">Comissão %</th>
+            <th class="num"><span class="th-label">COG (un.)<button class="th-bulk-btn" onclick="openBulkPop(event,'cog','${ch}','COG (un.)')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
+            <th class="num"><span class="th-label">Impostos %<button class="th-bulk-btn" onclick="openBulkPop(event,'taxPct','${ch}','Impostos %')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
+            <th class="num"><span class="th-label">Comissão %<button class="th-bulk-btn" onclick="openBulkPop(event,'commissionPct','${ch}','Comissão %')" title="Definir para todos os produtos deste canal"><i class="bi bi-pencil-fill"></i></button></span></th>
             <th class="num">Lucro</th><th class="num">Lucro %</th>
           </tr></thead>
           <tbody>${rows}</tbody>
