@@ -394,7 +394,7 @@
       </div></div>
 
       <div class="card" id="cardSalesSplit"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub">Por canal</div></div></div>
+        <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub" id="ssSub">Por canal</div></div></div>
         <div class="ss-grid" id="ssGrid"></div>
         <div class="card-note">Campanha = origem Meta (Instagram/Facebook) + Destaque do Mercado Livre. Canais sem esse tipo de atribuição (Shopee, Amazon) aparecem 100% orgânicos.</div>
       </div></div>
@@ -765,10 +765,15 @@ function render(d) {
     ? d.marketing.map(e=>{ const pc=mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%'; return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${MKT_COLORS[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(e.value)}</span></div></div>`; }).join('')
     : '<div class="muted-state">Sem receita atribuída.</div>';
 
-  // Sales split: orgânico x campanha — uma pizza por canal (canais sem atribuição, ex. Shopee/Amazon,
-  // ficam naturalmente 100% orgânicos, já que isCampaignOrder nunca é true pra eles).
+  // Sales split: orgânico x campanha — uma pizza por canal quando "Todos"; uma única pizza
+  // (só daquele canal) quando um canal específico está selecionado. Canais sem atribuição
+  // (ex. Shopee/Amazon) ficam naturalmente 100% orgânicos, já que isCampaignOrder nunca é true pra eles.
   const ssc = d.salesSplitByChannel || {};
-  const ssChannels = d.market === 'us' ? ['shopify_us', 'amazon_us'] : ['shopify', 'shopee', 'mercadolivre', 'amazon'];
+  const ssIsAll = d.channel === 'todos';
+  const ssChannels = ssIsAll
+    ? (d.market === 'us' ? ['shopify_us', 'amazon_us'] : ['shopify', 'shopee', 'mercadolivre', 'amazon'])
+    : [d.channel];
+  document.getElementById('ssSub').textContent = ssIsAll ? 'Por canal' : `Canal: ${CHAN[d.channel] || d.channel}`;
   document.getElementById('ssGrid').innerHTML = ssChannels.map(ch => `
     <div class="ss-cell">
       <div class="ss-cell-title">${CHAN[ch] || ch}</div>
@@ -873,14 +878,14 @@ function updateCardVisibility() {
 
   show('cardChannelSplit', isTodos);
   show('cardMarketing',    isTodos || isShopify);
-  show('cardSalesSplit',   isTodos || isShopify);
+  show('cardSalesSplit',   true);
   show('cardTraffic',      isTodos || isShopify);
   show('cardFunnel',       isTodos || isShopify);
   show('cardMlBreakdown',  channel === 'mercadolivre');
 
-  // Layout externo: Marketing visível = 3fr 1fr; oculto = só coluna esquerda
+  // Layout externo: cardSalesSplit sempre visível na coluna direita → sempre 3fr 1fr
   const outerLayout = document.getElementById('twoColLayout');
-  if (outerLayout) outerLayout.style.gridTemplateColumns = (isTodos || isShopify) ? '3fr 1fr' : '1fr';
+  if (outerLayout) outerLayout.style.gridTemplateColumns = '3fr 1fr';
 
   // Linha interna (tendência + channel split): channel split visível só em 'todos'
   const row1 = document.querySelector('.charts-row');
