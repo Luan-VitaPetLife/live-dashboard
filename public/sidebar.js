@@ -16,7 +16,7 @@
   </div>
   <div class="brand">
     <a href="index.html" style="display:block;line-height:0"><img src="Logo2.png" alt="Coco and Luna" class="brand-logo"></a>
-    <span class="brand-name">Dashboard<br>Vita Pet Life</span>
+    <span class="brand-name">Dashboard<br>Vita Pet Life · Coco and Luna</span>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
     <a class="nav-item" data-page="index.html" href="index.html"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>

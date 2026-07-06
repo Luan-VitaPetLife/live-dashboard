@@ -465,12 +465,12 @@
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">Gasto total</div>
             <div class="camp-kpi-val" id="meta_us-revenue">$ 3.394</div>
-            <div class="camp-kpi-sub">Vita Pet Life account</div>
+            <div class="camp-kpi-sub">último sync: hoje</div>
           </div>
           <div class="camp-kpi-col">
             <div class="camp-kpi-label">ROAS</div>
             <div class="camp-kpi-val" id="meta_us-roas">4,6×</div>
-            <div class="camp-kpi-sub">Conta US (Vita Pet Life)</div>
+            <div class="camp-kpi-sub">Conta EUA</div>
           </div>
           <div class="camp-chart-col">
             <div class="camp-chart-label">
@@ -706,7 +706,7 @@ async function render() {
   const labels = d.trend?.labels || [], tb = d.trend?.byChannel || [];
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   setText('lastUpdate', 'sync: ' + updated);
-  setText('pageSub', (market === 'us' ? 'Vita Pet Life' : 'Coco and Luna') + ' · ' + state.label);
+  setText('pageSub', 'Coco and Luna · ' + state.label);
 
   const metaSpend = k.adCost || 0, metaRev = k.metaRevenue || 0, metaRoas = k.roas || 0, metaClicks = k.adClicks || 0;
   const mlSpend = market === 'br' ? (ml.adCost || 0) : 0;

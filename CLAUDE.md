@@ -5,9 +5,16 @@
 
 ## 1. O que é
 
-Dashboard de vendas **multi-mercado e multicanal** das lojas de Luan (suplementos para pets).
+Dashboard de vendas **multi-mercado e multicanal** da marca **Coco and Luna** (suplementos para pets),
+que nasceu nos EUA e hoje também vende no Brasil. A empresa por trás da marca é a **Vita Pet Life**.
 - **Brasil 🇧🇷:** loja Shopify BR (`cocoandluna.com.br`) + Shopee + Mercado Livre + Amazon BR (SP-API)
 - **EUA 🇺🇸:** loja Shopify US (`vita-pet-life.myshopify.com`) + Amazon US (SP-API)
+
+**Importante (alinhado 06/07/2026):** "Vita Pet Life" é a **empresa**, não uma marca/loja separada da
+Coco and Luna — ela aparece no domínio da loja Shopify US e no nome da conta de anúncios Meta EUA por
+motivos administrativos/históricos, mas a marca vendida em ambos os mercados é sempre **Coco and Luna**.
+Textos de UI (títulos, subtítulos, rodapés) não devem tratar "Vita Pet Life" como o nome da loja do
+mercado EUA em paralelo a "Coco and Luna" da loja BR — ambas as lojas são Coco and Luna.
 
 Objetivo do dono (Luan, perfil de negócio, não-dev): uma tela única, ao vivo, com todos os canais.
 Idioma da interface: **pt-BR**. Valores BR em **BRL**, valores US em **USD**.

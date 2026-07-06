@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Geografia EUA — Vita Pet Life</title>
+<title>Geografia EUA — Coco and Luna</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -290,7 +290,7 @@
   <div class="content">
     <div>
       <div class="page-title">Distribuição geográfica · EUA</div>
-      <div class="page-sub" id="pageSub">Vita Pet Life · receita por estado · EUA</div>
+      <div class="page-sub" id="pageSub">Coco and Luna · receita por estado · EUA</div>
     </div>
 
     <div class="kpi-strip">
@@ -815,7 +815,7 @@ function render(d) {
   stateData=d.byState||{};
   const isMoney=metric==='receita';
   const label=rangeLabel(d.period.since,d.period.until);
-  document.getElementById('pageSub').textContent=`Vita Pet Life · ${CHAN[d.channel]||d.channel} · ${label}`;
+  document.getElementById('pageSub').textContent=`Coco and Luna · ${CHAN[d.channel]||d.channel} · ${label}`;
   document.getElementById('mapTitle').textContent=`${vizMode==='choropleth'?'Coropleto':'Mapa de calor'} · ${METRIC_LABEL[metric]} por estado`;
   document.getElementById('rankTitle').textContent=`Ranking de estados · ${METRIC_LABEL[metric]}`;
   const sorted=Object.entries(stateData).map(([code,s])=>({code,...s,val:isMoney?s.revenue:s.orders})).sort((a,b)=>b.val-a.val);
@@ -852,7 +852,7 @@ function render(d) {
   const now=new Date();
   setLive('ok',`Ao vivo · ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
   const up=d.updatedAt?new Date(d.updatedAt).toLocaleString('pt-BR'):'—';
-  document.getElementById('footerDate').textContent=`Dashboard - Vita Pet Life · EUA · ${CHAN[d.channel]||d.channel} · ${label} · última sincronização: ${up}`;
+  document.getElementById('footerDate').textContent=`Dashboard - Vita Pet Life · Coco and Luna · EUA · ${CHAN[d.channel]||d.channel} · ${label} · última sincronização: ${up}`;
   drawMap();
 }
 
