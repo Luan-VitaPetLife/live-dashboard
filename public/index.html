@@ -257,6 +257,23 @@
   .ec-remove:hover{color:var(--red);border-color:var(--red)}
   .edit-card-ghost{border:2px dashed var(--border2);border-radius:var(--radius);background:rgba(30,28,24,.03);min-height:80px}
   .sync-btn.period-pill-active{color:var(--side-text)!important}
+  body.edit-mode .edit-card[data-card-id="kpiStrip"]>.card{outline:none}
+
+  /* ── Faixa de indicadores (card fixo, blocos internos editáveis) ── */
+  .kpi-strip-pad{padding:0}
+  .kpi-strip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  .kpi-mini{position:relative;padding:16px 20px;border-right:1px solid var(--border)}
+  .kpi-mini:last-child{border-right:none}
+  .kpi-mini.dragging{opacity:.35}
+  .kpi-mini-tools{position:absolute;top:6px;right:6px;display:none;gap:4px;z-index:20}
+  body.edit-mode .kpi-mini-tools{display:flex}
+  body.edit-mode .kpi-mini{outline:1.5px dashed var(--border2);outline-offset:-3px}
+  .kpi-mini-ghost{border:2px dashed var(--border2);border-radius:var(--radius-sm);background:rgba(30,28,24,.03);min-height:60px}
+  @media(max-width:768px){
+    .kpi-strip-grid{grid-template-columns:1fr 1fr}
+    .kpi-mini{border-bottom:1px solid var(--border)}
+    .kpi-mini:nth-child(even){border-right:none}
+  }
 </style>
 </head>
 <body>
@@ -352,6 +369,7 @@
     <div class="edit-toolbar" id="editToolbar">
       <div class="et-label"><i class="bi bi-pencil-square"></i> Modo de edição — arraste os cards pela alça, use ✕ para remover.</div>
       <button class="et-btn" id="cardBankToggle">Banco de cards (<span id="cardBankBadge">0</span>)</button>
+      <button class="et-btn" id="layoutResetBtn" title="Volta pro layout padrão"><i class="bi bi-arrow-counterclockwise"></i> Redefinir</button>
       <button class="et-btn et-done" id="editModeDone">Concluir</button>
     </div>
 
@@ -361,34 +379,30 @@
     </div>
 
     <div class="edit-grid" id="editGrid">
-      <div class="edit-card" data-card-id="kpi-revenue" data-title="Receita Total" style="grid-column:span 3">
-        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
-        <div class="card"><div class="card-pad">
-          <div class="kc-label">Receita Total</div><div class="kc-value" id="kpiRevenue">—</div><div class="kc-delta" id="kpiRevenueDelta"></div>
-        </div></div>
-      </div>
-      <div class="edit-card" data-card-id="kpi-orders" data-title="Pedidos" style="grid-column:span 3">
-        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
-        <div class="card"><div class="card-pad">
-          <div class="kc-label">Pedidos</div><div class="kc-value" id="kpiOrders">—</div><div class="kc-delta" id="kpiOrdersDelta"></div>
-        </div></div>
-      </div>
-      <div class="edit-card" data-card-id="kpi-aov" data-title="Ticket Médio" style="grid-column:span 3">
-        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
-        <div class="card"><div class="card-pad">
-          <div class="kc-label">Ticket Médio</div><div class="kc-value" id="kpiAov">—</div><div class="kc-delta" id="kpiAovDelta"></div>
-        </div></div>
-      </div>
-      <div class="edit-card" data-card-id="kpi-roas" data-title="ROAS" style="grid-column:span 3">
-        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
-        <div class="card"><div class="card-pad">
-          <div class="kc-label">ROAS</div><div class="kc-value" id="kpiRoas">—</div><div class="kc-delta" id="kpiRoasSub">retorno sobre gasto (Meta Ads)</div>
-        </div></div>
-      </div>
-      <div class="edit-card" data-card-id="kpi-acos" data-title="ACOS" style="grid-column:span 3">
-        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
-        <div class="card"><div class="card-pad">
-          <div class="kc-label">ACOS</div><div class="kc-value" id="kpiAcos">—</div><div class="kc-delta" id="kpiAcosSub">gasto ÷ vendas atribuídas</div>
+      <div class="edit-card" data-card-id="kpiStrip" data-title="Indicadores" style="grid-column:span 12">
+        <div class="card"><div class="kpi-strip-pad">
+          <div class="kpi-strip-grid" id="kpiStripGrid">
+            <div class="kpi-mini" data-kpi-id="revenue" data-title="Receita Total">
+              <div class="kpi-mini-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+              <div class="kc-label">Receita Total</div><div class="kc-value" id="kpiRevenue">—</div><div class="kc-delta" id="kpiRevenueDelta"></div>
+            </div>
+            <div class="kpi-mini" data-kpi-id="orders" data-title="Pedidos">
+              <div class="kpi-mini-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+              <div class="kc-label">Pedidos</div><div class="kc-value" id="kpiOrders">—</div><div class="kc-delta" id="kpiOrdersDelta"></div>
+            </div>
+            <div class="kpi-mini" data-kpi-id="aov" data-title="Ticket Médio">
+              <div class="kpi-mini-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+              <div class="kc-label">Ticket Médio</div><div class="kc-value" id="kpiAov">—</div><div class="kc-delta" id="kpiAovDelta"></div>
+            </div>
+            <div class="kpi-mini" data-kpi-id="roas" data-title="ROAS">
+              <div class="kpi-mini-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+              <div class="kc-label">ROAS</div><div class="kc-value" id="kpiRoas">—</div><div class="kc-delta" id="kpiRoasSub">retorno sobre gasto (Meta Ads)</div>
+            </div>
+            <div class="kpi-mini" data-kpi-id="acos" data-title="ACOS">
+              <div class="kpi-mini-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+              <div class="kc-label">ACOS</div><div class="kc-value" id="kpiAcos">—</div><div class="kc-delta" id="kpiAcosSub">gasto ÷ vendas atribuídas</div>
+            </div>
+          </div>
         </div></div>
       </div>
 
@@ -860,7 +874,7 @@ function statusTag(o) {
 }
 
 // Cards sem regra de visibilidade por canal (sempre visíveis, exceto se removidos no modo de edição)
-const ALWAYS_VISIBLE_CARD_IDS = ['kpi-revenue','kpi-orders','kpi-aov','kpi-roas','kpi-acos','trend','topProducts','recentOrders'];
+const ALWAYS_VISIBLE_CARD_IDS = ['kpiStrip','trend','topProducts','recentOrders'];
 
 function updateCardVisibility() {
   const isTodos = channel === 'todos';
@@ -888,114 +902,184 @@ function updateCardVisibility() {
 }
 
 // ── Modo de edição: reordenar / remover / banco de cards ──
+// Dois níveis de grid editável: o grid principal (#editGrid, cards inteiros) e, dentro do
+// card fixo "Indicadores" (kpiStrip, nunca arrastável nem removível), a faixa interna de KPIs
+// (#kpiStripGrid) — mesmos mecanismos de drag/remoção, containers diferentes.
 const editGrid = document.getElementById('editGrid');
+const kpiStripGrid = document.getElementById('kpiStripGrid');
 let hiddenByUser = new Set();
-let dragGhost = null;
+let hiddenKpis = new Set();
+
+// Ordem padrão de fábrica (capturada antes de qualquer reordenação salva ser aplicada) — usada
+// pelo botão "Redefinir".
+const DEFAULT_ORDER = [...editGrid.querySelectorAll('.edit-card')].map(c => c.dataset.cardId);
+const DEFAULT_KPI_ORDER = [...kpiStripGrid.querySelectorAll('.kpi-mini')].map(c => c.dataset.kpiId);
 
 function layoutKey() { return `coco_layout_${market}`; }
 function loadLayout() {
-  try { return JSON.parse(localStorage.getItem(layoutKey()) || 'null') || { order: [], hidden: [] }; }
-  catch { return { order: [], hidden: [] }; }
+  try { return JSON.parse(localStorage.getItem(layoutKey()) || 'null') || { order: [], hidden: [], kpiOrder: [], kpiHidden: [] }; }
+  catch { return { order: [], hidden: [], kpiOrder: [], kpiHidden: [] }; }
 }
 function persistLayout() {
   const order = [...editGrid.querySelectorAll('.edit-card')].map(c => c.dataset.cardId);
-  localStorage.setItem(layoutKey(), JSON.stringify({ order, hidden: [...hiddenByUser] }));
+  const kpiOrder = [...kpiStripGrid.querySelectorAll('.kpi-mini')].map(c => c.dataset.kpiId);
+  localStorage.setItem(layoutKey(), JSON.stringify({ order, hidden: [...hiddenByUser], kpiOrder, kpiHidden: [...hiddenKpis] }));
 }
 function applyLayout() {
   const saved = loadLayout();
   hiddenByUser = new Set(saved.hidden || []);
+  hiddenKpis = new Set(saved.kpiHidden || []);
   (saved.order || []).forEach(id => {
     const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
     if (card) editGrid.appendChild(card);
   });
+  (saved.kpiOrder || []).forEach(id => {
+    const mini = kpiStripGrid.querySelector(`.kpi-mini[data-kpi-id="${id}"]`);
+    if (mini) kpiStripGrid.appendChild(mini);
+  });
   editGrid.querySelectorAll('.edit-card').forEach(card => {
     if (hiddenByUser.has(card.dataset.cardId)) card.style.display = 'none';
   });
+  kpiStripGrid.querySelectorAll('.kpi-mini').forEach(mini => {
+    if (hiddenKpis.has(mini.dataset.kpiId)) mini.style.display = 'none';
+  });
   renderCardBank();
+}
+function resetLayout() {
+  localStorage.removeItem(layoutKey());
+  hiddenByUser = new Set();
+  hiddenKpis = new Set();
+  DEFAULT_ORDER.forEach(id => {
+    const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
+    if (card) { editGrid.appendChild(card); card.style.display = ''; }
+  });
+  DEFAULT_KPI_ORDER.forEach(id => {
+    const mini = kpiStripGrid.querySelector(`.kpi-mini[data-kpi-id="${id}"]`);
+    if (mini) { kpiStripGrid.appendChild(mini); mini.style.display = ''; }
+  });
+  renderCardBank();
+  updateCardVisibility();
 }
 
 function renderCardBank() {
   const list = document.getElementById('cardBankList');
   const badge = document.getElementById('cardBankBadge');
-  const ids = [...hiddenByUser];
-  badge.textContent = ids.length;
-  if (!ids.length) { list.innerHTML = '<div class="cb-empty">Nenhum card oculto.</div>'; return; }
-  list.innerHTML = ids.map(id => {
-    const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
-    const title = card ? card.dataset.title : id;
-    return `<button type="button" class="cb-item" data-card-id="${id}"><i class="bi bi-plus-lg"></i> ${title}</button>`;
+  const items = [
+    ...[...hiddenByUser].map(id => ({ id, kind: 'card' })),
+    ...[...hiddenKpis].map(id => ({ id, kind: 'kpi' })),
+  ];
+  badge.textContent = items.length;
+  if (!items.length) { list.innerHTML = '<div class="cb-empty">Nenhum card oculto.</div>'; return; }
+  list.innerHTML = items.map(({ id, kind }) => {
+    const el = kind === 'card'
+      ? editGrid.querySelector(`.edit-card[data-card-id="${id}"]`)
+      : kpiStripGrid.querySelector(`.kpi-mini[data-kpi-id="${id}"]`);
+    const title = el ? el.dataset.title : id;
+    return `<button type="button" class="cb-item" data-kind="${kind}" data-id="${id}"><i class="bi bi-plus-lg"></i> ${title}</button>`;
   }).join('');
 }
 document.getElementById('cardBankList').addEventListener('click', e => {
   const btn = e.target.closest('.cb-item');
   if (!btn) return;
-  const id = btn.dataset.cardId;
-  hiddenByUser.delete(id);
-  const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
-  if (card) { editGrid.appendChild(card); }
+  const { kind, id } = btn.dataset;
+  if (kind === 'card') {
+    hiddenByUser.delete(id);
+    const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
+    if (card) editGrid.appendChild(card);
+  } else {
+    hiddenKpis.delete(id);
+    const mini = kpiStripGrid.querySelector(`.kpi-mini[data-kpi-id="${id}"]`);
+    if (mini) kpiStripGrid.appendChild(mini);
+  }
   persistLayout();
   renderCardBank();
   updateCardVisibility();
 });
 editGrid.addEventListener('click', e => {
   const removeBtn = e.target.closest('.ec-remove');
-  if (!removeBtn) return;
+  if (!removeBtn || kpiStripGrid.contains(removeBtn)) return;
   const card = removeBtn.closest('.edit-card');
+  if (!card) return;
   hiddenByUser.add(card.dataset.cardId);
   card.style.display = 'none';
   persistLayout();
   renderCardBank();
 });
-
-// Toggle draggable só via a alça (mousedown), nunca no card inteiro — mesmo mecanismo
-// já validado em produtos.html/estoque.html pros cards de canal.
-editGrid.addEventListener('mousedown', e => {
-  const handle = e.target.closest('.ec-handle');
-  if (!handle) return;
-  handle.closest('.edit-card').draggable = true;
-});
-document.addEventListener('mouseup', () => {
-  editGrid.querySelectorAll('.edit-card[draggable="true"]:not(.dragging)').forEach(c => { c.draggable = false; });
-});
-
-function getDragAfterElement(container, x, y) {
-  const els = [...container.querySelectorAll('.edit-card:not(.dragging)')];
-  for (const el of els) {
-    const r = el.getBoundingClientRect();
-    const midY = r.top + r.height / 2;
-    const midX = r.left + r.width / 2;
-    if (y < midY - 4) return el;
-    if (y < r.bottom && x < midX) return el;
-  }
-  return null;
-}
-
-editGrid.addEventListener('dragstart', e => {
-  const card = e.target.closest('.edit-card');
-  if (!card) return;
-  card.classList.add('dragging');
-  dragGhost = document.createElement('div');
-  dragGhost.className = 'edit-card-ghost';
-  dragGhost.style.gridColumn = card.style.gridColumn;
-  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-});
-editGrid.addEventListener('dragover', e => {
-  const dragging = editGrid.querySelector('.edit-card.dragging');
-  if (!dragging || !dragGhost) return;
-  e.preventDefault();
-  const afterEl = getDragAfterElement(editGrid, e.clientX, e.clientY);
-  if (afterEl == null) editGrid.appendChild(dragGhost);
-  else if (afterEl !== dragGhost) editGrid.insertBefore(dragGhost, afterEl);
-});
-editGrid.addEventListener('dragend', () => {
-  const card = editGrid.querySelector('.edit-card.dragging');
-  if (card) {
-    card.classList.remove('dragging');
-    card.draggable = false;
-    if (dragGhost && dragGhost.parentNode) editGrid.insertBefore(card, dragGhost);
-  }
-  if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+kpiStripGrid.addEventListener('click', e => {
+  const removeBtn = e.target.closest('.ec-remove');
+  if (!removeBtn) return;
+  e.stopPropagation();
+  const mini = removeBtn.closest('.kpi-mini');
+  if (!mini) return;
+  hiddenKpis.add(mini.dataset.kpiId);
+  mini.style.display = 'none';
   persistLayout();
+  renderCardBank();
+});
+
+// Drag-and-drop genérico (reutilizado pro grid principal e pra faixa interna de KPIs) — alça
+// dispara draggable no mousedown, nunca no card/bloco inteiro, mesmo mecanismo já validado em
+// produtos.html/estoque.html pros cards de canal. excludeSelector impede que outros itens sejam
+// inseridos antes do card fixo "Indicadores".
+function makeDragController(container, itemClass, excludeSelector) {
+  let ghost = null;
+  function candidates() {
+    let els = [...container.querySelectorAll(`.${itemClass}:not(.dragging)`)];
+    if (excludeSelector) els = els.filter(el => !el.matches(excludeSelector));
+    return els;
+  }
+  function getAfter(x, y) {
+    for (const el of candidates()) {
+      const r = el.getBoundingClientRect();
+      const midY = r.top + r.height / 2, midX = r.left + r.width / 2;
+      if (y < midY - 4) return el;
+      if (y < r.bottom && x < midX) return el;
+    }
+    return null;
+  }
+  container.addEventListener('mousedown', e => {
+    const handle = e.target.closest('.ec-handle');
+    if (!handle) return;
+    const item = handle.closest(`.${itemClass}`);
+    if (!item || (excludeSelector && item.matches(excludeSelector))) return;
+    item.draggable = true;
+    e.stopPropagation();
+  });
+  container.addEventListener('dragstart', e => {
+    const item = e.target.closest(`.${itemClass}`);
+    if (!item || item.draggable !== true) return;
+    item.classList.add('dragging');
+    ghost = document.createElement('div');
+    ghost.className = itemClass + '-ghost';
+    if (itemClass === 'edit-card') ghost.style.gridColumn = item.style.gridColumn;
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    e.stopPropagation();
+  });
+  container.addEventListener('dragover', e => {
+    const dragging = container.querySelector(`.${itemClass}.dragging`);
+    if (!dragging || !ghost) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const after = getAfter(e.clientX, e.clientY);
+    if (after == null) container.appendChild(ghost);
+    else if (after !== ghost) container.insertBefore(ghost, after);
+  });
+  container.addEventListener('dragend', e => {
+    const item = container.querySelector(`.${itemClass}.dragging`);
+    if (!item) return;
+    item.classList.remove('dragging');
+    item.draggable = false;
+    if (ghost && ghost.parentNode) container.insertBefore(item, ghost);
+    if (ghost) { ghost.remove(); ghost = null; }
+    persistLayout();
+    e.stopPropagation();
+  });
+}
+makeDragController(editGrid, 'edit-card', '[data-card-id="kpiStrip"]');
+makeDragController(kpiStripGrid, 'kpi-mini');
+document.addEventListener('mouseup', () => {
+  document.querySelectorAll('.edit-card[draggable="true"]:not(.dragging), .kpi-mini[draggable="true"]:not(.dragging)')
+    .forEach(c => { c.draggable = false; });
 });
 
 function setEditMode(on) {
@@ -1007,6 +1091,7 @@ function setEditMode(on) {
 document.getElementById('editModeBtn').addEventListener('click', () => setEditMode(!document.body.classList.contains('edit-mode')));
 document.getElementById('editModeDone').addEventListener('click', () => setEditMode(false));
 document.getElementById('cardBankToggle').addEventListener('click', () => document.getElementById('cardBank').classList.toggle('open'));
+document.getElementById('layoutResetBtn').addEventListener('click', resetLayout);
 
 // ── Refresh interval ──
 let refreshTimer = null;
