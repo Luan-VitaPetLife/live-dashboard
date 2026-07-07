@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock } from './src/metrics.js';
 import { runSync } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, load } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -66,17 +66,28 @@ app.get('/api/stock', (req, res) => {
   }
 });
 
-// Salva/edita dados de estoque de um produto (estoque, a caminho, pedido ao laboratório) — usado pela tela de Estoque.
+// Salva/edita dados de estoque físico/recebendo de um produto POR CANAL — usado pela tela de Estoque.
+// Ordem Projetada/Nova/Em Andamento não são mais por canal, ver /api/stock/agg-finance abaixo.
 app.post('/api/stock/finance', (req, res) => {
-  const { channel, title, stock, incoming, orderInProgress, orderNew, projected } = req.body || {};
+  const { channel, title, stock, incoming } = req.body || {};
   if (!channel || !title) return res.status(400).json({ error: 'channel e title são obrigatórios.' });
   const patch = {};
-  if (stock !== undefined)           patch.stock = stock === null || stock === '' ? null : Number(stock);
-  if (incoming !== undefined)        patch.incoming = incoming === null || incoming === '' ? null : Number(incoming);
+  if (stock !== undefined)    patch.stock = stock === null || stock === '' ? null : Number(stock);
+  if (incoming !== undefined) patch.incoming = incoming === null || incoming === '' ? null : Number(incoming);
+  setProductStock(`${channel}|||${title}`, patch);
+  res.json({ ok: true });
+});
+
+// Salva/edita ordem projetada/nova/em andamento de uma FAMÍLIA de produto (soma de todos os
+// canais) — usado pelo card "Estoque" (panorama geral) da tela de Estoque.
+app.post('/api/stock/agg-finance', (req, res) => {
+  const { market, title, orderInProgress, orderNew, projected } = req.body || {};
+  if (!market || !title) return res.status(400).json({ error: 'market e title são obrigatórios.' });
+  const patch = {};
   if (orderInProgress !== undefined) patch.orderInProgress = orderInProgress === null || orderInProgress === '' ? null : Number(orderInProgress);
   if (orderNew !== undefined)        patch.orderNew = orderNew === null || orderNew === '' ? null : Number(orderNew);
   if (projected !== undefined)       patch.projected = projected === null || projected === '' ? null : Number(projected);
-  setProductStock(`${channel}|||${title}`, patch);
+  setProductStockAgg(`${market}|||${title}`, patch);
   res.json({ ok: true });
 });
 

@@ -31,6 +31,7 @@ const EMPTY = {
   googleAdsTokens: null,
   productFinance: {},
   productStock: {},
+  productStockAgg: {},
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
@@ -61,6 +62,7 @@ export async function initStore() {
       if (r.key === 'googleAdsTokens')      cache.googleAdsTokens      = r.value;
       if (r.key === 'productFinance')       cache.productFinance       = r.value;
       if (r.key === 'productStock')         cache.productStock         = r.value;
+      if (r.key === 'productStockAgg')      cache.productStockAgg      = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -219,6 +221,19 @@ export function setProductStock(key, patch) {
   if (USE_PG) pgKv('productStock', db.productStock);
 }
 export function getProductStock() { return load().productStock || {}; }
+
+// ── Dados de estoque/produção agregados por família de produto (todos os canais) ──
+// Chave: "market|||família" (ex: "br|||Lysine"). Usado pelo card "Estoque" (panorama geral) da
+// tela de Estoque — Ordem Projetada/Nova/Em Andamento não são mais por canal (o pedido ao
+// laboratório abastece todos os canais de uma vez). Ver metrics.js computeStock / CLAUDE.md 4.14.
+export function setProductStockAgg(key, patch) {
+  const db = load();
+  if (!db.productStockAgg) db.productStockAgg = {};
+  db.productStockAgg[key] = { ...(db.productStockAgg[key] || {}), ...patch };
+  saveJson();
+  if (USE_PG) pgKv('productStockAgg', db.productStockAgg);
+}
+export function getProductStockAgg() { return load().productStockAgg || {}; }
 
 // ── Meta Insights ─────────────────────────────
 export function setMetaInsightsDaily(data) {

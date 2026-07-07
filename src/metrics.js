@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, load } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, load } from './store.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -110,10 +110,18 @@ const TAX_PCT_DEFAULT = 2.64;
 // COG (custo do produto) de referência por linha de produto — informado pelo Luan em 02/07/2026.
 // Vale para o SKU principal citado; variações de tamanho/combo herdam o mesmo valor até serem ajustadas
 // manualmente (o custo real por grama pode diferir). Sem correspondência conhecida, fica null (editável).
-function defaultCog(title) {
+// Família do produto físico (independe de canal/tamanho/combo) — usada tanto pro COG de
+// referência quanto pro panorama agregado de Estoque (ver computeStock/agg).
+function classifyFamily(title) {
   const t = (title || '').toLowerCase();
-  if (t.includes('daily')) return 17.32;
-  if (t.includes('lisina') || t.includes('lysine')) return 15.21;
+  if (t.includes('daily')) return 'Daily';
+  if (t.includes('lisina') || t.includes('lysine')) return 'Lysine';
+  return null;
+}
+function defaultCog(title) {
+  const fam = classifyFamily(title);
+  if (fam === 'Daily') return 17.32;
+  if (fam === 'Lysine') return 15.21;
   return null;
 }
 
@@ -506,21 +514,13 @@ export function computeStock({ market = 'br' } = {}) {
         const salesMonth = p.avulsoQty + p.comboQty;
         const salesDaily = salesMonth / STOCK_WINDOW_DAYS;
         const ov = stockData[`${ch}|||${title}`] || {};
-        const stock           = ov.stock != null ? Number(ov.stock) : 0;
-        const incoming        = ov.incoming != null ? Number(ov.incoming) : 0;
-        const orderInProgress = ov.orderInProgress != null ? Number(ov.orderInProgress) : 0;
-        const orderNew        = ov.orderNew != null ? Number(ov.orderNew) : 0;
-        // Ordem projetada: campo de simulação (o Luan digita uma quantidade que está cogitando
-        // pedir, só pra ver o efeito no Tempo de Estoque Total antes de decidir) — não é um
-        // pedido real como orderInProgress/orderNew, mas persiste igual até ele limpar.
-        const projected        = ov.projected != null ? Number(ov.projected) : 0;
+        const stock    = ov.stock != null ? Number(ov.stock) : 0;
+        const incoming = ov.incoming != null ? Number(ov.incoming) : 0;
         const monthsOfStock = salesMonth > 0 ? (stock + incoming) / salesMonth : null;
-        const totalMonthsOfStock = salesMonth > 0 ? (stock + projected + orderNew + orderInProgress) / salesMonth : null;
         return {
           title, type: p.type, image: p.image,
           avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
-          salesDaily, salesMonth, stock, incoming, orderInProgress, orderNew, projected,
-          monthsOfStock, totalMonthsOfStock, suggestion: stockSuggestion(totalMonthsOfStock),
+          salesDaily, salesMonth, stock, incoming, monthsOfStock,
         };
       })
       .sort((a, b) => b.salesMonth - a.salesMonth);
@@ -530,17 +530,67 @@ export function computeStock({ market = 'br' } = {}) {
       salesMonth: a.salesMonth + p.salesMonth,
       stock: a.stock + p.stock,
       incoming: a.incoming + p.incoming,
-      orderInProgress: a.orderInProgress + p.orderInProgress,
-      orderNew: a.orderNew + p.orderNew,
-      projected: a.projected + p.projected,
-    }), { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0 });
+    }), { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0 });
     totals.monthsOfStock = totals.salesMonth > 0 ? (totals.stock + totals.incoming) / totals.salesMonth : null;
-    totals.totalMonthsOfStock = totals.salesMonth > 0
-      ? (totals.stock + totals.projected + totals.orderNew + totals.orderInProgress) / totals.salesMonth
-      : null;
-    totals.suggestion = stockSuggestion(totals.totalMonthsOfStock);
 
     channels[ch] = { products, totals };
   }
-  return { market, windowDays: STOCK_WINDOW_DAYS, since, until, channels, updatedAt: load().lastSync };
+
+  // Panorama geral do produto (soma de todos os canais do mercado) — agrupado por família física
+  // do produto (ex: BR = Lysine/Daily), já que o pedido de reposição ao laboratório não é por
+  // canal (o mesmo lote de produção abastece todos eles). Ordem Projetada/Nova/Em Andamento e as
+  // colunas derivadas delas (Tempo de Estoque Total, Sugestão) vivem só aqui agora.
+  const aggMap = {};
+  for (const [ch, c] of Object.entries(byChannel)) {
+    for (const [title, p] of Object.entries(c.products)) {
+      if (title === 'Produto TESTE') continue; // placeholder sintético da Amazon, não é produto real
+      const family = classifyFamily(title) || title;
+      if (!aggMap[family]) aggMap[family] = { avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null, stock: 0, incoming: 0 };
+      const a = aggMap[family];
+      a.avulsoQty += p.avulsoQty;
+      a.comboQty += p.comboQty;
+      for (const [size, n] of Object.entries(p.comboBySize || {})) a.comboBySize[size] = (a.comboBySize[size] || 0) + n;
+      if (!a.type) a.type = p.type;
+      if (!a.image && p.image) a.image = p.image;
+      const ov = stockData[`${ch}|||${title}`] || {};
+      a.stock += ov.stock != null ? Number(ov.stock) : 0;
+      a.incoming += ov.incoming != null ? Number(ov.incoming) : 0;
+    }
+  }
+
+  const stockAggData = getProductStockAgg();
+  const aggProducts = Object.entries(aggMap).map(([family, a]) => {
+    const salesMonth = a.avulsoQty + a.comboQty;
+    const salesDaily = salesMonth / STOCK_WINDOW_DAYS;
+    const ov = stockAggData[`${market}|||${family}`] || {};
+    const orderInProgress = ov.orderInProgress != null ? Number(ov.orderInProgress) : 0;
+    const orderNew        = ov.orderNew != null ? Number(ov.orderNew) : 0;
+    const projected       = ov.projected != null ? Number(ov.projected) : 0;
+    const monthsOfStock = salesMonth > 0 ? (a.stock + a.incoming) / salesMonth : null;
+    const totalMonthsOfStock = salesMonth > 0 ? (a.stock + projected + orderNew + orderInProgress) / salesMonth : null;
+    return {
+      title: family, type: a.type, image: a.image,
+      avulsoQty: a.avulsoQty, comboQty: a.comboQty, comboBySize: a.comboBySize,
+      salesDaily, salesMonth, stock: a.stock, incoming: a.incoming,
+      orderInProgress, orderNew, projected,
+      monthsOfStock, totalMonthsOfStock, suggestion: stockSuggestion(totalMonthsOfStock),
+    };
+  }).sort((a, b) => b.salesMonth - a.salesMonth);
+
+  const aggTotals = aggProducts.reduce((acc, p) => ({
+    salesDaily: acc.salesDaily + p.salesDaily,
+    salesMonth: acc.salesMonth + p.salesMonth,
+    stock: acc.stock + p.stock,
+    incoming: acc.incoming + p.incoming,
+    orderInProgress: acc.orderInProgress + p.orderInProgress,
+    orderNew: acc.orderNew + p.orderNew,
+    projected: acc.projected + p.projected,
+  }), { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0 });
+  aggTotals.monthsOfStock = aggTotals.salesMonth > 0 ? (aggTotals.stock + aggTotals.incoming) / aggTotals.salesMonth : null;
+  aggTotals.totalMonthsOfStock = aggTotals.salesMonth > 0
+    ? (aggTotals.stock + aggTotals.projected + aggTotals.orderNew + aggTotals.orderInProgress) / aggTotals.salesMonth
+    : null;
+  aggTotals.suggestion = stockSuggestion(aggTotals.totalMonthsOfStock);
+
+  return { market, windowDays: STOCK_WINDOW_DAYS, since, until, channels, agg: { products: aggProducts, totals: aggTotals }, updatedAt: load().lastSync };
 }

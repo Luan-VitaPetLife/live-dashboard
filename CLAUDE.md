@@ -317,63 +317,81 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   só com chaves de localStorage próprias (`coco_estoque_order`/`coco_estoque_expanded`). Ver 4.13
   pros detalhes de como o drag and drop e o colapso padrão funcionam. **Sem seletor de período**:
   a janela de venda é sempre fixa (ver abaixo), não depende de filtro na tela.
-- **Resumo geral no topo (implementado 06/07/2026), mesmo padrão visual do `.kpi-strip` de Revenue
-  (`index.html`):** 5 células — Vendas/mês, Estoque, Meses de Estoque, Tempo de Estoque Total,
-  Sugestão — somando **todos os canais do mercado atual** (marketplaces + Shopify). Calculado no
-  cliente (`renderSummary()` em `estoque.html`), somando os `totals` que já vêm por canal no payload
-  de `/api/stock` e reaplicando as mesmas fórmulas de `monthsOfStock`/`totalMonthsOfStock`/sugestão
-  em cima da soma — sem round-trip extra ao backend nem duplicar `stockSuggestion()` no front (só o
-  limiar replicado inline, já que é uma conta de uma linha).
-- **`computeStock({ market })` em `metrics.js`:**
-  - `aggregateProductsByChannel(orders)` foi extraída de dentro de `computeProducts` pra ser
-    reaproveitada aqui — mesma regra de agrupamento avulso/combo/tipo/imagem, sem duplicar lógica.
+- **Card "Estoque" agregado no topo (substituiu o resumo de 5 KPIs em 07/07/2026):** o resumo geral
+  deixou de ser uma faixa de KPIs somada e virou um card colapsável igual aos de canal (mesmo
+  componente `.prod-card`, header com logo/nome/2 stats + botão de colapsar), rotulado só "Estoque",
+  fixo no topo (não entra no grid arrastável dos canais — sem drag handle, sem persistir ordem).
+  Ao expandir mostra uma tabela agrupada **por família física do produto** (não por canal) — no
+  Brasil hoje só existem 2: **"Lysine"** (título com "lisina"/"lysine") e **"Daily"** (título com
+  "daily") — com TODAS as 11 colunas da tabela original (as 6 que ficaram nos cards de canal +
+  as 5 que saíram de lá, ver abaixo). Motivo da mudança: o pedido de reposição ao laboratório
+  fabricante não é por canal — é um lote só de produção que abastece Shopify, Shopee, Mercado
+  Livre e Amazon ao mesmo tempo — então não fazia sentido editar "Ordem Nova"/"Ordem em
+  Andamento" separadamente em cada card de canal.
+- **`classifyFamily(title)` em `metrics.js`:** classificação por palavra-chave no título (mesma
+  regra que já existia dentro de `defaultCog`, agora extraída pra função própria e reaproveitada
+  nos dois lugares) — contém "daily" → família `'Daily'`; contém "lisina" ou "lysine" → família
+  `'Lysine'`; caso contrário `null` (nesse caso o agrupamento usa o próprio título como família,
+  não existe uma família genérica "Outro"). `defaultCog()` chama `classifyFamily()` internamente
+  em vez de duplicar a checagem de palavra-chave.
+- **`computeStock({ market })` em `metrics.js` — dois níveis de dado agora:**
+  - `aggregateProductsByChannel(orders)` continua igual (extraída de `computeProducts`, reaproveitada
+    aqui — mesma regra de agrupamento avulso/combo/tipo/imagem).
   - **Janela fixa de 30 dias corridos** (hoje − 29 até hoje, `STOCK_WINDOW_DAYS`) pra calcular
-    velocidade de venda — ao contrário do Monday (que só multiplica venda diária × 30, um valor
-    extrapolado), aqui `salesMonth` é a **soma real** das unidades vendidas nos últimos 30 dias e
-    `salesDaily = salesMonth / 30` — mais preciso que o board original.
-  - `monthsOfStock = (stock + incoming) / salesMonth` — mesma fórmula usada no board do Monday
-    (conferida manualmente batendo os números do print antes de implementar). `null` (não `0` nem
-    `Infinity`) quando `salesMonth` é 0, mostrado como "—" na tela.
-  - **`totalMonthsOfStock` (implementado 06/07/2026, ordem de colunas alinhada ao board real do
-    Monday — print conferido com o Luan):** segunda coluna de tempo de estoque, **a última da
-    tabela**. Fórmula: `(stock + projected + orderNew + orderInProgress) / salesMonth` — soma tudo
-    que pode virar estoque futuro (não só o que já está a caminho, como `monthsOfStock`, mas também
-    os dois estágios de pedido ao laboratório e a simulação de `projected`). Mesma regra de `null`
-    quando `salesMonth` é 0.
-- **Persistência manual** (`productStock` em `store.js`, mesmo padrão de `productFinance`, chave
-  `"canal|||título"`): `stock` (estoque físico/FBA), `incoming` (unidades a caminho/recebendo),
-  `orderInProgress`, `orderNew` (unidades pedidas ao laboratório, nos dois estágios acima), `projected`
-  (ver abaixo). Todos numéricos, **padrão 0** quando não preenchidos — nunca bloqueiam o cálculo
-  (diferente do COG em Produtos), e `0` explícito sempre é aceito e persiste. `POST /api/stock/finance`
-  salva, mesmo formato de validação de `/api/products/finance`.
-- **`projected` ("Ordem Projetada", implementado 06/07/2026):** campo de **simulação**, não um
-  pedido real como `orderNew`/`orderInProgress` — o Luan digita uma quantidade que está cogitando
-  pedir ao laboratório só para ver o efeito em `totalMonthsOfStock` antes de decidir, e limpa depois
-  (por isso "temporário" na fala do Luan). Tecnicamente persiste igual aos outros campos (mesmo
-  mecanismo de override, sem estado client-only) — a natureza temporária é de uso, não de
-  implementação.
-- **Ordem das colunas na tabela (alinhada ao board real do Monday, print conferido 06/07/2026):**
-  Produto · Vendas/dia · Vendas/mês · Estoque · Recebendo · **Meses de Estoque** (`monthsOfStock`) ·
-  **Ordem Projetada** · Ordem Nova · Ordem em Andamento · **Tempo de Estoque Total**
-  (`totalMonthsOfStock`) · **Sugestão** (última coluna). Note que a ordem de Ordem Nova/Ordem em
-  Andamento está invertida em relação à primeira versão da tela (06/07/2026) — o board do Monday
-  coloca Ordem em Andamento por último, logo antes da coluna de tempo total, e a versão inicial
-  daqui tinha o inverso.
-- **`suggestion` / coluna "Sugestão" (implementado 06/07/2026):** ajuda o Luan a decidir quando
-  fazer um novo pedido ao laboratório, calculada a partir de `totalMonthsOfStock` (`stockSuggestion()`
-  em `metrics.js`). Limites confirmados com o Luan: **< 3 meses → `urgente`** (badge vermelho,
-  "Pedir urgente"), **3 a <7 meses → `atencao`** (badge âmbar, "Atenção"), **>= 7 meses → `aguardar`**
-  (badge verde, "Aguardar"). `null` (sem venda no período) não mostra badge, só "—". Calculado também
-  para a linha de Total de cada canal (mesma fórmula, aplicada aos totais agregados).
-- **Amazon (BR/US) — placeholder "Produto TESTE" (confirmado com o Luan 06/07/2026):** hoje os
-  pedidos da Amazon não trazem título de item (ver backlog item 6 — `fetchOrders()` em
-  `src/amazon.js` só lê quantidade, nunca busca `/orders/v0/orders/{id}/orderItems`), então a
-  tabela de Amazon em Estoque ficaria vazia como já acontece em Produtos. Pra não bloquear o
-  controle manual de estoque enquanto isso não é resolvido (deliberadamente adiado pelo risco de
-  429 documentado em 4.7), `computeStock()` injeta uma linha sintética `"Produto TESTE"` (métricas
-  de venda zeradas) nos canais `amazon`/`amazon_us` sempre que não há nenhum produto real agregado
-  — editável manualmente como qualquer outro produto. Remover esse placeholder é consequência
-  natural de resolver o backlog item 6 (quando `byChannel[amazonCh].products` deixar de vir vazio).
+    velocidade de venda — `salesMonth` é a **soma real** das unidades vendidas nos últimos 30 dias e
+    `salesDaily = salesMonth / 30`.
+  - `channels[canal].products`/`totals`: agora só tem `salesDaily, salesMonth, stock, incoming,
+    monthsOfStock` — **perdeu** `orderInProgress`, `orderNew`, `projected`, `totalMonthsOfStock`,
+    `suggestion` (mudaram pro nível agregado, ver abaixo). `monthsOfStock = (stock + incoming) /
+    salesMonth` (`null` quando `salesMonth` é 0, mostrado como "—").
+  - **`agg.products`/`agg.totals` (novo em 07/07/2026):** agrupa produtos de **todos os canais do
+    mercado** por `classifyFamily()`. `stock`/`incoming`/`salesDaily`/`salesMonth` são a **soma**
+    dos valores por canal já calculados acima (derivados, só leitura nesse nível). `orderInProgress`,
+    `orderNew`, `projected` são um dado **novo**, independente de canal, lido de
+    `getProductStockAgg()` (chave `"market|||família"`) — não somam nada de canal, são editados
+    direto aqui. `totalMonthsOfStock = (stock + projected + orderNew + orderInProgress) /
+    salesMonth` e `suggestion = stockSuggestion(totalMonthsOfStock)` — mesmas fórmulas de antes,
+    só que agora calculadas em cima da família agregada em vez do canal.
+  - O placeholder sintético `"Produto TESTE"` (Amazon, ver abaixo) é **excluído** do agrupamento
+    `agg` — ele não é um produto real, não faz sentido aparecer misturado com Lysine/Daily.
+- **Persistência em dois níveis agora:**
+  - **Por canal** (`productStock` em `store.js`, chave `"canal|||título"`): só `stock` (estoque
+    físico/FBA) e `incoming` (recebendo). `POST /api/stock/finance` (`{ channel, title, stock?,
+    incoming? }`) — perdeu `orderInProgress`/`orderNew`/`projected` (não são mais por canal).
+  - **Por família de produto** (`productStockAgg` em `store.js`, chave `"market|||família"`, novo
+    em 07/07/2026, mesmo padrão de `productStock`): `orderInProgress`, `orderNew`, `projected`.
+    `POST /api/stock/agg-finance` (`{ market, title, orderInProgress?, orderNew?, projected? }`) —
+    editado só no card "Estoque" agregado, não nos cards de canal.
+  - Ambos: todos os campos numéricos, **padrão 0** quando não preenchidos, `0` explícito sempre
+    aceito e persiste, `null`/`''` limpa o campo.
+- **`projected` ("Ordem Projetada"):** campo de **simulação**, não um pedido real como
+  `orderNew`/`orderInProgress` — o Luan digita uma quantidade que está cogitando pedir ao
+  laboratório só para ver o efeito em `totalMonthsOfStock` antes de decidir, e limpa depois. Vive
+  no nível agregado (card "Estoque") desde 07/07/2026, junto com `orderNew`/`orderInProgress`.
+- **Ordem das colunas:**
+  - **Cards de canal individual (6 colunas, reduzido em 07/07/2026):** Produto · Vendas/dia ·
+    Vendas/mês · Estoque · Recebendo · **Meses de Estoque** (`monthsOfStock`) — Estoque/Recebendo
+    ainda editáveis por canal, com popover de edição em massa.
+  - **Card "Estoque" agregado (11 colunas — as 6 acima, com Estoque/Recebendo agora só leitura,
+    somados, + as 5 que saíram dos cards de canal):** Produto · Vendas/dia · Vendas/mês · Estoque ·
+    Recebendo · Meses de Estoque · **Ordem Projetada** · Ordem Nova · Ordem em Andamento ·
+    **Tempo de Estoque Total** (`totalMonthsOfStock`) · **Sugestão** (última coluna) — essas 3
+    últimas colunas de pedido são as únicas editáveis aqui.
+- **`suggestion` / coluna "Sugestão":** ajuda o Luan a decidir quando fazer um novo pedido ao
+  laboratório, calculada a partir de `totalMonthsOfStock` (`stockSuggestion()` em `metrics.js`,
+  agora só chamada no nível agregado). Limites: **< 3 meses → `urgente`** (badge vermelho, "Pedir
+  urgente"), **3 a <7 meses → `atencao`** (badge âmbar, "Atenção"), **>= 7 meses → `aguardar`**
+  (badge verde, "Aguardar"). `null` (sem venda no período) não mostra badge, só "—". Calculado
+  também para a linha de Total do card agregado.
+- **Amazon (BR/US) — placeholder "Produto TESTE":** hoje os pedidos da Amazon não trazem título de
+  item (ver backlog item 6 — `fetchOrders()` em `src/amazon.js` só lê quantidade, nunca busca
+  `/orders/v0/orders/{id}/orderItems`), então a tabela de Amazon em Estoque ficaria vazia como já
+  acontece em Produtos. Pra não bloquear o controle manual de estoque enquanto isso não é resolvido
+  (deliberadamente adiado pelo risco de 429 documentado em 4.7), `computeStock()` injeta uma linha
+  sintética `"Produto TESTE"` (métricas de venda zeradas) nos canais `amazon`/`amazon_us` sempre que
+  não há nenhum produto real agregado — editável manualmente como qualquer outro produto, mas
+  excluída do card agregado (ver acima). Remover esse placeholder é consequência natural de
+  resolver o backlog item 6 (quando `byChannel[amazonCh].products` deixar de vir vazio).
 - Fora de escopo por ora (não pedido, evitar scope creep): canais que só existem no Monday e não no
   nosso sistema (Chewy, Walmart, Website separado, Wholesale) e qualquer chamada à API do Monday.
 
@@ -447,8 +465,9 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta + Google Ads. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
   - `GET /api/products?market=br|us&since=&until=` — catálogo completo de produtos por canal (sem cache, direto do store). Usado pela tela de Produtos (`produtos.html`).
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
-  - `GET /api/stock?market=br|us` — estoque + produção por canal, janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
-  - `POST /api/stock/finance` — salva/edita estoque, recebendo, ordem projetada, ordem nova ou ordem em andamento de um produto (`{ channel, title, stock?, incoming?, projected?, orderInProgress?, orderNew? }`), persistido em `kv.productStock`. Ver 4.14.
+  - `GET /api/stock?market=br|us` — estoque + produção por canal (`channels`) e por família de produto somando todos os canais (`agg`), janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
+  - `POST /api/stock/finance` — salva/edita estoque ou recebendo de um produto, por canal (`{ channel, title, stock?, incoming? }`), persistido em `kv.productStock`. Ver 4.14.
+  - `POST /api/stock/agg-finance` — salva/edita ordem projetada, ordem nova ou ordem em andamento de uma família de produto, somando todos os canais (`{ market, title, orderInProgress?, orderNew?, projected? }`), persistido em `kv.productStockAgg`. Ver 4.14.
   - `POST /api/sync`
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
   - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente
