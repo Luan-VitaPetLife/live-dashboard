@@ -123,9 +123,6 @@
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
   /* ── KPIs ── */
-  .kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-  .kpi-cell{padding:16px 20px;border-right:1px solid var(--border)}
-  .kpi-cell:last-child{border-right:none}
   .kc-label{font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
   .kc-value{font-size:20px;font-weight:300;letter-spacing:-.5px;margin-bottom:5px}
   .kc-value.zero{color:var(--muted)}
@@ -134,9 +131,6 @@
   .delta-val.up{background:rgba(61,122,82,.1);color:var(--green)} .delta-val.down{background:rgba(155,58,58,.09);color:var(--red)} .delta-val.flat{background:rgba(30,28,24,.06);color:var(--muted)}
 
   /* ── Cards ── */
-  .two-col-layout{display:grid;grid-template-columns:3fr 1fr;gap:12px;align-items:start}
-  .left-cards{display:flex;flex-direction:column;gap:12px;min-width:0}
-  .charts-row{display:grid;grid-template-columns:1fr 240px;gap:12px;align-items:start}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative}
   .card-pad{padding:18px 20px}
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
@@ -157,7 +151,6 @@
   .ss-leg-item{display:flex;align-items:center;gap:5px;justify-content:center}
   .ss-leg-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
   .ss-cell-total{font-size:11px;font-weight:500;color:var(--muted);margin-top:4px}
-  .charts-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
   .metric-cell{padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)}
   .mc-type{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
@@ -202,13 +195,7 @@
     .main{margin-left:0}
     .content{padding:16px}
     .topbar{padding:0 14px;gap:6px}
-    .kpi-strip{grid-template-columns:1fr 1fr}
-    .kpi-cell{border-right:none;border-bottom:1px solid var(--border)}
-    .kpi-cell:nth-child(odd){border-right:1px solid var(--border)}
-    .kpi-cell:last-child{grid-column:1/-1;border-right:none;border-bottom:none}
-    .two-col-layout{grid-template-columns:1fr!important}
-    .charts-row{grid-template-columns:1fr!important}
-    .charts-row-2{grid-template-columns:1fr!important}
+    .edit-grid>.edit-card{grid-column:1/-1!important}
     .metric-row{grid-template-columns:1fr 1fr}
     .tbl th:nth-child(3),.tbl td:nth-child(3),
     .tbl th:nth-child(7),.tbl td:nth-child(7){display:none}
@@ -241,6 +228,35 @@
   .sp-switch-slider::before{content:'';position:absolute;height:14px;width:14px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s}
   input:checked+.sp-switch-slider{background:var(--ink)}
   input:checked+.sp-switch-slider::before{transform:translateX(14px)}
+
+  /* ── Modo de edição / grid reordenável ── */
+  .edit-toolbar{display:none;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--sub)}
+  body.edit-mode .edit-toolbar{display:flex}
+  .et-label{flex:1;display:flex;align-items:center;gap:6px}
+  .et-btn{height:28px;padding:0 12px;border-radius:16px;border:1px solid var(--border2);background:var(--surface);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .12s}
+  .et-btn:hover{border-color:var(--ink);color:var(--text)}
+  .et-done{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .card-bank{display:none;background:var(--surface2);border:1px dashed var(--border2);border-radius:var(--radius);padding:12px 16px}
+  body.edit-mode .card-bank.open{display:block}
+  .card-bank-title{font-size:11px;font-weight:600;color:var(--sub);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .cb-hint{font-weight:400;color:var(--muted);font-size:10px}
+  .card-bank-list{display:flex;flex-wrap:wrap;gap:8px}
+  .cb-item{display:flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:16px;border:1px solid var(--border2);background:var(--surface);font-size:11px;color:var(--sub);cursor:pointer;transition:all .12s;font-family:inherit}
+  .cb-item:hover{border-color:var(--green);color:var(--green)}
+  .cb-empty{font-size:11px;color:var(--muted)}
+  .edit-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
+  .edit-card{position:relative;min-width:0}
+  .edit-card.dragging{opacity:.35}
+  .edit-card-tools{position:absolute;top:8px;right:8px;display:none;gap:4px;z-index:20}
+  body.edit-mode .edit-card-tools{display:flex}
+  body.edit-mode .edit-card>.card{outline:1.5px dashed var(--border2);outline-offset:2px}
+  .ec-handle,.ec-remove{width:26px;height:26px;border-radius:6px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;transition:all .12s;padding:0}
+  .ec-handle{cursor:grab}
+  .ec-handle:active{cursor:grabbing}
+  .ec-handle:hover,.ec-remove:hover{border-color:var(--ink);color:var(--text)}
+  .ec-remove:hover{color:var(--red);border-color:var(--red)}
+  .edit-card-ghost{border:2px dashed var(--border2);border-radius:var(--radius);background:rgba(30,28,24,.03);min-height:80px}
+  .sync-btn.period-pill-active{color:var(--side-text)!important}
 </style>
 </head>
 <body>
@@ -264,6 +280,7 @@
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
 
     <button class="sync-btn" id="syncBtn" title="Buscar dados novos agora"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
+    <button class="sync-btn" id="editModeBtn" title="Reorganizar ou remover cards"><i class="bi bi-grip-horizontal"></i> Editar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações de cores"><i class="bi bi-gear-fill"></i></button>
 
     <!-- Refresh rate -->
@@ -332,81 +349,134 @@
       <div class="page-sub" id="pageSub">Coco and Luna · multicanal</div>
     </div>
 
-    <div class="kpi-strip">
-      <div class="kpi-cell"><div class="kc-label">Receita Total</div><div class="kc-value" id="kpiRevenue">—</div><div class="kc-delta" id="kpiRevenueDelta"></div></div>
-      <div class="kpi-cell"><div class="kc-label">Pedidos</div><div class="kc-value" id="kpiOrders">—</div><div class="kc-delta" id="kpiOrdersDelta"></div></div>
-      <div class="kpi-cell"><div class="kc-label">Ticket Médio</div><div class="kc-value" id="kpiAov">—</div><div class="kc-delta" id="kpiAovDelta"></div></div>
-      <div class="kpi-cell"><div class="kc-label">ROAS</div><div class="kc-value" id="kpiRoas">—</div><div class="kc-delta" id="kpiRoasSub">retorno sobre gasto (Meta Ads)</div></div>
-      <div class="kpi-cell"><div class="kc-label">ACOS</div><div class="kc-value" id="kpiAcos">—</div><div class="kc-delta" id="kpiAcosSub">gasto ÷ vendas atribuídas</div></div>
+    <div class="edit-toolbar" id="editToolbar">
+      <div class="et-label"><i class="bi bi-pencil-square"></i> Modo de edição — arraste os cards pela alça, use ✕ para remover.</div>
+      <button class="et-btn" id="cardBankToggle">Banco de cards (<span id="cardBankBadge">0</span>)</button>
+      <button class="et-btn et-done" id="editModeDone">Concluir</button>
     </div>
 
-    <div class="two-col-layout" id="twoColLayout">
-      <div class="left-cards">
-        <div class="charts-row">
-          <div class="card"><div class="card-pad">
-            <div class="card-top"><div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div><div class="ct-val" id="trendVal">—</div></div>
-            <div class="ch220"><canvas id="trendChart"></canvas></div>
-            <div class="legend-row" id="trendLegend"></div>
-            <div id="trendDrilldown" class="trend-drilldown" style="display:none"></div>
-          </div></div>
+    <div class="card-bank" id="cardBank">
+      <div class="card-bank-title">Banco de cards <span class="cb-hint">clique pra adicionar de volta</span></div>
+      <div class="card-bank-list" id="cardBankList"></div>
+    </div>
 
-          <div class="card" id="cardChannelSplit"><div class="card-pad">
-            <div class="card-top"><div><div class="ct-title">Channel split</div><div class="ct-sub">Receita por canal</div></div></div>
-            <div class="donut-center-wrap"><canvas id="channelChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="chCenter">—</div><div class="dcl-sub">Total</div></div></div>
-            <div class="donut-rows" id="channelRows"></div>
-          </div></div>
-        </div>
+    <div class="edit-grid" id="editGrid">
+      <div class="edit-card" data-card-id="kpi-revenue" data-title="Receita Total" style="grid-column:span 3">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card"><div class="card-pad">
+          <div class="kc-label">Receita Total</div><div class="kc-value" id="kpiRevenue">—</div><div class="kc-delta" id="kpiRevenueDelta"></div>
+        </div></div>
+      </div>
+      <div class="edit-card" data-card-id="kpi-orders" data-title="Pedidos" style="grid-column:span 3">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card"><div class="card-pad">
+          <div class="kc-label">Pedidos</div><div class="kc-value" id="kpiOrders">—</div><div class="kc-delta" id="kpiOrdersDelta"></div>
+        </div></div>
+      </div>
+      <div class="edit-card" data-card-id="kpi-aov" data-title="Ticket Médio" style="grid-column:span 3">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card"><div class="card-pad">
+          <div class="kc-label">Ticket Médio</div><div class="kc-value" id="kpiAov">—</div><div class="kc-delta" id="kpiAovDelta"></div>
+        </div></div>
+      </div>
+      <div class="edit-card" data-card-id="kpi-roas" data-title="ROAS" style="grid-column:span 3">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card"><div class="card-pad">
+          <div class="kc-label">ROAS</div><div class="kc-value" id="kpiRoas">—</div><div class="kc-delta" id="kpiRoasSub">retorno sobre gasto (Meta Ads)</div>
+        </div></div>
+      </div>
+      <div class="edit-card" data-card-id="kpi-acos" data-title="ACOS" style="grid-column:span 3">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card"><div class="card-pad">
+          <div class="kc-label">ACOS</div><div class="kc-value" id="kpiAcos">—</div><div class="kc-delta" id="kpiAcosSub">gasto ÷ vendas atribuídas</div>
+        </div></div>
+      </div>
 
-        <div class="charts-row-2">
-          <div class="card" id="cardTraffic"><div class="card-pad">
-            <div class="card-top"><div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div><div class="ct-val" id="trafficVal">—</div></div>
-            <div class="metric-row">
-              <div class="metric-cell"><div class="mc-type">Sessões</div><div class="mc-val" id="mSessions">—</div><div class="mc-meta" id="mSessionsMeta">&nbsp;</div></div>
-              <div class="metric-cell"><div class="mc-type">Visitantes</div><div class="mc-val" id="mVisitors">—</div><div class="mc-meta">únicos</div></div>
-              <div class="metric-cell"><div class="mc-type">Add. carrinho</div><div class="mc-val" id="mCart">—</div><div class="mc-meta" id="mCartMeta">&nbsp;</div></div>
-              <div class="metric-cell"><div class="mc-type">Conversão</div><div class="mc-val" id="mConv" style="color:var(--green)">—</div><div class="mc-meta">sessão → compra</div></div>
-            </div>
-            <div class="ch180"><canvas id="trafficChart"></canvas></div>
-            <div class="legend-row"><div class="legend-item"><div class="legend-sq" style="background:rgba(176,168,152,.55)"></div>Sessões</div><div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Conversão (%)</div></div>
-          </div></div>
+      <div class="edit-card" data-card-id="trend" data-title="Tendência" style="grid-column:span 7">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div><div class="ct-val" id="trendVal">—</div></div>
+          <div class="ch220"><canvas id="trendChart"></canvas></div>
+          <div class="legend-row" id="trendLegend"></div>
+          <div id="trendDrilldown" class="trend-drilldown" style="display:none"></div>
+        </div></div>
+      </div>
 
-          <div id="rightColCards" style="display:flex;flex-direction:column;gap:12px">
-            <div class="card" id="cardFunnel"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
-            <div class="card" id="cardMlBreakdown" style="display:none;grid-column:1/-1"><div class="card-pad">
-              <div class="card-top"><div><div class="ct-title">Mercado Livre · Detalhe</div><div class="ct-sub">Tipo de listagem (Clássico = grátis · Destaque = pago)</div></div></div>
-              <div class="metric-row" style="margin-top:12px">
-                <div class="metric-cell"><div class="mc-type">Clássico</div><div class="mc-val" id="mlOrganic">—</div><div class="mc-meta">listagem grátis</div></div>
-                <div class="metric-cell"><div class="mc-type">Destaque</div><div class="mc-val" id="mlPremium">—</div><div class="mc-meta">listagem paga (Bronze/Gold)</div></div>
-                <div class="metric-cell"><div class="mc-type">Custo ML Ads</div><div class="mc-val" id="mlAdCost">—</div><div class="mc-meta">Product Ads</div></div>
-                <div class="metric-cell"><div class="mc-type">ROAS ML Ads</div><div class="mc-val" id="mlRoas" style="color:var(--green)">—</div><div class="mc-meta">receita / gasto</div></div>
-              </div>
-            </div></div>
-            <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Top produtos</div><div class="ct-sub">Por receita</div></div></div><div id="topProducts"></div></div></div>
+      <div class="edit-card" data-card-id="channelSplit" data-title="Channel split" style="grid-column:span 5">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card" id="cardChannelSplit"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title">Channel split</div><div class="ct-sub">Receita por canal</div></div></div>
+          <div class="donut-center-wrap"><canvas id="channelChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="chCenter">—</div><div class="dcl-sub">Total</div></div></div>
+          <div class="donut-rows" id="channelRows"></div>
+        </div></div>
+      </div>
+
+      <div class="edit-card" data-card-id="traffic" data-title="Tráfego &amp; conversão" style="grid-column:span 7">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card" id="cardTraffic"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div><div class="ct-val" id="trafficVal">—</div></div>
+          <div class="metric-row">
+            <div class="metric-cell"><div class="mc-type">Sessões</div><div class="mc-val" id="mSessions">—</div><div class="mc-meta" id="mSessionsMeta">&nbsp;</div></div>
+            <div class="metric-cell"><div class="mc-type">Visitantes</div><div class="mc-val" id="mVisitors">—</div><div class="mc-meta">únicos</div></div>
+            <div class="metric-cell"><div class="mc-type">Add. carrinho</div><div class="mc-val" id="mCart">—</div><div class="mc-meta" id="mCartMeta">&nbsp;</div></div>
+            <div class="metric-cell"><div class="mc-type">Conversão</div><div class="mc-val" id="mConv" style="color:var(--green)">—</div><div class="mc-meta">sessão → compra</div></div>
           </div>
-        </div>
+          <div class="ch180"><canvas id="trafficChart"></canvas></div>
+          <div class="legend-row"><div class="legend-item"><div class="legend-sq" style="background:rgba(176,168,152,.55)"></div>Sessões</div><div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Conversão (%)</div></div>
+        </div></div>
       </div>
 
-      <div class="right-col-stack" style="display:flex;flex-direction:column;gap:12px;min-width:0">
-      <div class="card" id="cardMarketing"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
-        <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
-        <div class="donut-rows" id="mktRows"></div>
-        <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
-      </div></div>
+      <div class="edit-card" data-card-id="funnel" data-title="Funil de conversão" style="grid-column:span 5">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card" id="cardFunnel"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Funil de conversão</div><div class="ct-sub">Sessões → compra</div></div></div><div class="funnel-list" id="funnelList"></div></div></div>
+      </div>
 
-      <div class="card" id="cardSalesSplit"><div class="card-pad">
-        <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub" id="ssSub">Por canal</div></div></div>
-        <div class="ss-grid" id="ssGrid"></div>
-        <div class="card-note">Campanha = origem Meta (Instagram/Facebook) + Destaque do Mercado Livre. Canais sem esse tipo de atribuição (Shopee, Amazon) aparecem 100% orgânicos.</div>
-      </div></div>
+      <div class="edit-card" data-card-id="mlBreakdown" data-title="Mercado Livre · Detalhe" style="grid-column:span 12">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card" id="cardMlBreakdown"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title">Mercado Livre · Detalhe</div><div class="ct-sub">Tipo de listagem (Clássico = grátis · Destaque = pago)</div></div></div>
+          <div class="metric-row" style="margin-top:12px">
+            <div class="metric-cell"><div class="mc-type">Clássico</div><div class="mc-val" id="mlOrganic">—</div><div class="mc-meta">listagem grátis</div></div>
+            <div class="metric-cell"><div class="mc-type">Destaque</div><div class="mc-val" id="mlPremium">—</div><div class="mc-meta">listagem paga (Bronze/Gold)</div></div>
+            <div class="metric-cell"><div class="mc-type">Custo ML Ads</div><div class="mc-val" id="mlAdCost">—</div><div class="mc-meta">Product Ads</div></div>
+            <div class="metric-cell"><div class="mc-type">ROAS ML Ads</div><div class="mc-val" id="mlRoas" style="color:var(--green)">—</div><div class="mc-meta">receita / gasto</div></div>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="edit-card" data-card-id="topProducts" data-title="Top produtos" style="grid-column:span 5">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Top produtos</div><div class="ct-sub">Por receita</div></div></div><div id="topProducts"></div></div></div>
+      </div>
+
+      <div class="edit-card" data-card-id="marketing" data-title="Marketing por origem" style="grid-column:span 4">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card" id="cardMarketing"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
+          <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
+          <div class="donut-rows" id="mktRows"></div>
+          <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
+        </div></div>
+      </div>
+
+      <div class="edit-card" data-card-id="salesSplit" data-title="Orgânico x Campanha" style="grid-column:span 8">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card" id="cardSalesSplit"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub" id="ssSub">Por canal</div></div></div>
+          <div class="ss-grid" id="ssGrid"></div>
+          <div class="card-note">Campanha = origem Meta (Instagram/Facebook) + Destaque do Mercado Livre. Canais sem esse tipo de atribuição (Shopee, Amazon) aparecem 100% orgânicos.</div>
+        </div></div>
+      </div>
+
+      <div class="edit-card" data-card-id="recentOrders" data-title="Pedidos recentes" style="grid-column:span 12">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card"><div class="card-pad">
+          <div class="card-top"><div><div class="ct-title">Pedidos recentes</div><div class="ct-sub">Mais recentes primeiro</div></div><span style="font-size:11px;color:var(--muted)" id="ordersMeta">—</span></div>
+          <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Itens</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
+          <tbody id="ordersBody"></tbody></table>
+        </div></div>
       </div>
     </div>
-
-    <div class="card"><div class="card-pad">
-      <div class="card-top"><div><div class="ct-title">Pedidos recentes</div><div class="ct-sub">Mais recentes primeiro</div></div><span style="font-size:11px;color:var(--muted)" id="ordersMeta">—</span></div>
-      <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Itens</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
-      <tbody id="ordersBody"></tbody></table>
-    </div></div>
   </div>
   <footer id="footerDate"></footer>
 </div>
@@ -789,11 +859,21 @@ function statusTag(o) {
   return { cls:'pend', label:'Pendente' };
 }
 
+// Cards sem regra de visibilidade por canal (sempre visíveis, exceto se removidos no modo de edição)
+const ALWAYS_VISIBLE_CARD_IDS = ['kpi-revenue','kpi-orders','kpi-aov','kpi-roas','kpi-acos','trend','topProducts','recentOrders'];
+
 function updateCardVisibility() {
   const isTodos = channel === 'todos';
   const isShopify = channel === 'shopify' || channel === 'shopify_us';
-  const isMarketplace = ['shopee', 'mercadolivre', 'amazon', 'amazon_us'].includes(channel);
-  const show = (id, visible) => { const el = document.getElementById(id); if (el) el.style.display = visible ? '' : 'none'; };
+  const setWrap = (wrap, visible) => {
+    if (!wrap) return;
+    const userHidden = hiddenByUser.has(wrap.dataset.cardId);
+    wrap.style.display = (visible && !userHidden) ? '' : 'none';
+  };
+  const show = (innerId, visible) => {
+    const inner = document.getElementById(innerId);
+    setWrap(inner ? inner.closest('.edit-card') : null, visible);
+  };
 
   show('cardChannelSplit', isTodos);
   show('cardMarketing',    isTodos || isShopify);
@@ -802,33 +882,131 @@ function updateCardVisibility() {
   show('cardFunnel',       isTodos || isShopify);
   show('cardMlBreakdown',  channel === 'mercadolivre');
 
-  // Layout externo: cardSalesSplit sempre visível na coluna direita → sempre 3fr 1fr
-  const outerLayout = document.getElementById('twoColLayout');
-  if (outerLayout) outerLayout.style.gridTemplateColumns = '3fr 1fr';
-
-  // Linha interna (tendência + channel split): channel split visível só em 'todos'
-  const row1 = document.querySelector('.charts-row');
-  if (row1) row1.style.gridTemplateColumns = isTodos ? '1fr 240px' : '1fr';
-
-  // Linha inferior (tráfego + coluna direita): coluna direita ocupa tudo se tráfego oculto
-  const row2 = document.querySelector('.charts-row-2');
-  if (row2) row2.style.gridTemplateColumns = (isTodos || isShopify) ? '1fr 1fr' : '1fr';
-
-  // Coluna direita: quando ocupa full width, exibe cards em grid 2 colunas
-  const rightCol = document.getElementById('rightColCards');
-  if (rightCol) {
-    if (isMarketplace) {
-      rightCol.style.display = 'grid';
-      rightCol.style.gridTemplateColumns = '1fr 1fr';
-      rightCol.style.gap = '12px';
-      rightCol.style.flexDirection = '';
-    } else {
-      rightCol.style.display = 'flex';
-      rightCol.style.flexDirection = 'column';
-      rightCol.style.gridTemplateColumns = '';
-    }
-  }
+  ALWAYS_VISIBLE_CARD_IDS.forEach(id => {
+    setWrap(document.querySelector(`.edit-card[data-card-id="${id}"]`), true);
+  });
 }
+
+// ── Modo de edição: reordenar / remover / banco de cards ──
+const editGrid = document.getElementById('editGrid');
+let hiddenByUser = new Set();
+let dragGhost = null;
+
+function layoutKey() { return `coco_layout_${market}`; }
+function loadLayout() {
+  try { return JSON.parse(localStorage.getItem(layoutKey()) || 'null') || { order: [], hidden: [] }; }
+  catch { return { order: [], hidden: [] }; }
+}
+function persistLayout() {
+  const order = [...editGrid.querySelectorAll('.edit-card')].map(c => c.dataset.cardId);
+  localStorage.setItem(layoutKey(), JSON.stringify({ order, hidden: [...hiddenByUser] }));
+}
+function applyLayout() {
+  const saved = loadLayout();
+  hiddenByUser = new Set(saved.hidden || []);
+  (saved.order || []).forEach(id => {
+    const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
+    if (card) editGrid.appendChild(card);
+  });
+  editGrid.querySelectorAll('.edit-card').forEach(card => {
+    if (hiddenByUser.has(card.dataset.cardId)) card.style.display = 'none';
+  });
+  renderCardBank();
+}
+
+function renderCardBank() {
+  const list = document.getElementById('cardBankList');
+  const badge = document.getElementById('cardBankBadge');
+  const ids = [...hiddenByUser];
+  badge.textContent = ids.length;
+  if (!ids.length) { list.innerHTML = '<div class="cb-empty">Nenhum card oculto.</div>'; return; }
+  list.innerHTML = ids.map(id => {
+    const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
+    const title = card ? card.dataset.title : id;
+    return `<button type="button" class="cb-item" data-card-id="${id}"><i class="bi bi-plus-lg"></i> ${title}</button>`;
+  }).join('');
+}
+document.getElementById('cardBankList').addEventListener('click', e => {
+  const btn = e.target.closest('.cb-item');
+  if (!btn) return;
+  const id = btn.dataset.cardId;
+  hiddenByUser.delete(id);
+  const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
+  if (card) { editGrid.appendChild(card); }
+  persistLayout();
+  renderCardBank();
+  updateCardVisibility();
+});
+editGrid.addEventListener('click', e => {
+  const removeBtn = e.target.closest('.ec-remove');
+  if (!removeBtn) return;
+  const card = removeBtn.closest('.edit-card');
+  hiddenByUser.add(card.dataset.cardId);
+  card.style.display = 'none';
+  persistLayout();
+  renderCardBank();
+});
+
+// Toggle draggable só via a alça (mousedown), nunca no card inteiro — mesmo mecanismo
+// já validado em produtos.html/estoque.html pros cards de canal.
+editGrid.addEventListener('mousedown', e => {
+  const handle = e.target.closest('.ec-handle');
+  if (!handle) return;
+  handle.closest('.edit-card').draggable = true;
+});
+document.addEventListener('mouseup', () => {
+  editGrid.querySelectorAll('.edit-card[draggable="true"]:not(.dragging)').forEach(c => { c.draggable = false; });
+});
+
+function getDragAfterElement(container, x, y) {
+  const els = [...container.querySelectorAll('.edit-card:not(.dragging)')];
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    const midY = r.top + r.height / 2;
+    const midX = r.left + r.width / 2;
+    if (y < midY - 4) return el;
+    if (y < r.bottom && x < midX) return el;
+  }
+  return null;
+}
+
+editGrid.addEventListener('dragstart', e => {
+  const card = e.target.closest('.edit-card');
+  if (!card) return;
+  card.classList.add('dragging');
+  dragGhost = document.createElement('div');
+  dragGhost.className = 'edit-card-ghost';
+  dragGhost.style.gridColumn = card.style.gridColumn;
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+});
+editGrid.addEventListener('dragover', e => {
+  const dragging = editGrid.querySelector('.edit-card.dragging');
+  if (!dragging || !dragGhost) return;
+  e.preventDefault();
+  const afterEl = getDragAfterElement(editGrid, e.clientX, e.clientY);
+  if (afterEl == null) editGrid.appendChild(dragGhost);
+  else if (afterEl !== dragGhost) editGrid.insertBefore(dragGhost, afterEl);
+});
+editGrid.addEventListener('dragend', () => {
+  const card = editGrid.querySelector('.edit-card.dragging');
+  if (card) {
+    card.classList.remove('dragging');
+    card.draggable = false;
+    if (dragGhost && dragGhost.parentNode) editGrid.insertBefore(card, dragGhost);
+  }
+  if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+  persistLayout();
+});
+
+function setEditMode(on) {
+  document.body.classList.toggle('edit-mode', on);
+  document.getElementById('editModeBtn').classList.toggle('period-pill-active', on);
+  document.getElementById('cardBank').classList.remove('open');
+  if (on) renderCardBank();
+}
+document.getElementById('editModeBtn').addEventListener('click', () => setEditMode(!document.body.classList.contains('edit-mode')));
+document.getElementById('editModeDone').addEventListener('click', () => setEditMode(false));
+document.getElementById('cardBankToggle').addEventListener('click', () => document.getElementById('cardBank').classList.toggle('open'));
 
 // ── Refresh interval ──
 let refreshTimer = null;
@@ -967,7 +1145,9 @@ document.getElementById('mktToggleWrap').addEventListener('click', e => {
   localStorage.setItem('coco_market', market);
   channel = 'todos';
   localStorage.setItem('coco_channel', channel);
+  applyLayout();
   syncControls();
+  updateCardVisibility();
   loadData();
 });
 
@@ -980,6 +1160,7 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
 // ── Init ──
 document.querySelectorAll('.csel').forEach(setupCsel);
 CocoColors.load();
+applyLayout();
 syncControls();
 updateCardVisibility();
 applyRefresh();
