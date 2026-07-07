@@ -178,11 +178,46 @@
     .content{padding:16px}
     .prod-head-stats{gap:16px;margin-left:0}
   }
+
+  /* ── Sync / Settings / Refresh (mesmo padrão de index.html) ── */
+  .sync-btn,.settings-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s}
+  .sync-btn:hover,.settings-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+  .settings-btn{padding:0 12px;font-size:14px;line-height:1}
+  .csel{position:relative}
+  .csel.open .arr{transform:rotate(180deg)}
+  .csel.open{border-color:var(--ink)}
+  .csel-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+  .csel.open .csel-pop{display:flex}
+  .csel-opt{padding:9px 14px;font-size:12px;color:var(--sub);cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:8px}
+  .csel-opt:hover{background:var(--surface2);color:var(--text)}
+  .csel-opt.active{color:var(--text);font-weight:600}
+  .csel-opt.active::before{content:'✓';color:var(--ink);font-size:11px;font-weight:700}
+  .csel-opt:not(.active)::before{content:'';display:inline-block;width:11px}
+  .sp-overlay{position:fixed;inset:0;background:rgba(30,28,24,.35);z-index:600;display:none;backdrop-filter:blur(2px)}
+  .sp-overlay.open{display:block}
+  .sp-panel{position:fixed;top:0;right:0;width:300px;height:100vh;background:var(--surface);border-left:1px solid var(--border2);z-index:700;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1)}
+  .sp-panel.open{transform:translateX(0)}
+  .sp-head{display:flex;align-items:center;justify-content:space-between;padding:20px 20px 16px;border-bottom:1px solid var(--border)}
+  .sp-head-title{font-size:14px;font-weight:600;letter-spacing:-.2px}
+  .sp-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px;line-height:1;transition:color .12s}
+  .sp-close:hover{color:var(--text)}
+  .sp-body{flex:1;overflow-y:auto;padding:20px}
+  .sp-section{margin-bottom:24px}
+  .sp-section-title{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  .sp-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)}
+  .sp-row:last-child{border-bottom:none}
+  .sp-row-left{display:flex;align-items:center;gap:10px}
+  .sp-swatch{width:20px;height:20px;border-radius:4px;border:1px solid rgba(30,28,24,.12);flex-shrink:0}
+  .sp-row-label{font-size:12px;color:var(--sub)}
+  .sp-foot{padding:16px 20px;border-top:1px solid var(--border)}
+  .sp-reset{width:100%;padding:10px;font-size:12px;font-weight:600;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .sp-reset:hover{border-color:var(--ink);color:var(--text)}
 </style>
 </head>
 <body>
 
 <script src="sidebar.js"></script>
+<script src="colors.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -195,6 +230,22 @@
       </button>
     </div>
     <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">—</span></div>
+    <button class="sync-btn" id="syncBtn" title="Buscar dados novos agora"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
+    <button class="settings-btn" id="settingsBtn" title="Configurações de cores"><i class="bi bi-gear-fill"></i></button>
+
+    <!-- Refresh rate -->
+    <div class="filter-pill csel" id="cselRefresh">
+      <span class="lbl">Atualizar</span>
+      <span class="val" id="refreshVal">5 min</span>
+      <span class="arr">▾</span>
+      <div class="csel-pop">
+        <div class="csel-opt" data-value="1">1 min</div>
+        <div class="csel-opt active" data-value="5">5 min</div>
+        <div class="csel-opt" data-value="15">15 min</div>
+        <div class="csel-opt" data-value="30">30 min</div>
+        <div class="csel-opt" data-value="0">Desligar</div>
+      </div>
+    </div>
     <!-- Period -->
     <div style="position:relative" id="periodWrap">
       <div class="filter-pill" id="periodPill" onclick="togglePeriodPop()">
@@ -246,7 +297,28 @@
     </div>
   </div>
 
-  <footer style="padding:0 28px 20px;font-size:11px;color:var(--muted)">Receita exclui pedidos cancelados. Combos do Shopify BR (Bundles) aparecem quebrados entre vendas avulsas e vendas via combo.</footer>
+  <div class="sp-overlay" id="spOverlay"></div>
+  <div class="sp-panel" id="spPanel">
+    <div class="sp-head">
+      <span class="sp-head-title">Configurações</span>
+      <button class="sp-close" id="spClose">✕</button>
+    </div>
+    <div class="sp-body">
+      <div class="sp-section">
+        <div class="sp-section-title">Cores dos canais</div>
+        <div id="sp-ch-colors"></div>
+      </div>
+      <div class="sp-section">
+        <div class="sp-section-title">Cores de marketing</div>
+        <div id="sp-mkt-colors"></div>
+      </div>
+    </div>
+    <div class="sp-foot">
+      <button class="sp-reset" id="spReset">↺ Redefinir para os padrões</button>
+    </div>
+  </div>
+
+  <footer id="footerDate" style="padding:0 28px 20px;font-size:11px;color:var(--muted)"></footer>
 </div>
 
 <script>
@@ -283,6 +355,14 @@ let current = null;
 let collapsedState = {};
 const expandedState = JSON.parse(localStorage.getItem('coco_produtos_expanded') || '{}');
 let layout = localStorage.getItem('coco_produtos_layout') || 'row';
+
+// ── Refresh automático (mesmo padrão de index.html) ────────
+let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
+let refreshTimer = null;
+function applyRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (refreshMin > 0) refreshTimer = setInterval(load, refreshMin * 60 * 1000);
+}
 
 // ── Ordem dos canais (drag and drop) ───────────────────────
 let channelOrder = JSON.parse(localStorage.getItem('coco_produtos_order') || '{}');
@@ -495,6 +575,58 @@ document.addEventListener('click', e => {
   }
 });
 
+// ── Refresh rate dropdown ───────────────────────────────────
+document.getElementById('cselRefresh').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('cselRefresh').classList.toggle('open');
+});
+document.querySelectorAll('#cselRefresh .csel-opt').forEach(opt => {
+  opt.addEventListener('click', e => {
+    e.stopPropagation();
+    refreshMin = Number(opt.dataset.value);
+    localStorage.setItem('coco_refresh', refreshMin);
+    document.getElementById('refreshVal').textContent = refreshMin === 0 ? 'Desligar' : `${refreshMin} min`;
+    document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => o.classList.toggle('active', Number(o.dataset.value) === refreshMin));
+    document.getElementById('cselRefresh').classList.remove('open');
+    applyRefresh();
+  });
+});
+document.addEventListener('click', () => document.getElementById('cselRefresh')?.classList.remove('open'));
+
+// ── Sincronizar agora ────────────────────────────────────────
+document.getElementById('syncBtn').addEventListener('click', async () => {
+  try { await fetch('/api/sync', { method: 'POST' }); } catch (e) {}
+  load();
+});
+
+// ── Painel de Configurações (cores, via colors.js) ──────────
+function buildSettingsPanel() {
+  CocoColors.buildSection('sp-ch-colors', CocoColors.DEFAULT_CH, 'ch', k => CocoColors.ch[k].bg, (k, v) => {
+    CocoColors.ch[k] = { bg: v, text: CocoColors.contrastText(v), label: CocoColors.DEFAULT_CH[k].label };
+    CocoColors.save(`ch.${k}`, v);
+  });
+  CocoColors.buildSection('sp-mkt-colors', CocoColors.DEFAULT_MKT, 'mkt', k => CocoColors.mkt[k], (k, v) => {
+    CocoColors.mkt[k] = v;
+    CocoColors.save(`mkt.${k}`, v);
+  });
+}
+function openSettings() {
+  buildSettingsPanel();
+  document.getElementById('spOverlay').classList.add('open');
+  document.getElementById('spPanel').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('spOverlay').classList.remove('open');
+  document.getElementById('spPanel').classList.remove('open');
+}
+document.getElementById('settingsBtn').addEventListener('click', e => { e.stopPropagation(); openSettings(); });
+document.getElementById('spClose').addEventListener('click', closeSettings);
+document.getElementById('spOverlay').addEventListener('click', closeSettings);
+document.getElementById('spReset').addEventListener('click', () => {
+  CocoColors.resetAll();
+  buildSettingsPanel();
+});
+
 const setText = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
 
 // ── Render ────────────────────────────────────────────────
@@ -642,6 +774,7 @@ function render() {
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   setText('lastUpdate', 'sync: ' + updated);
   setText('pageSub', 'Coco and Luna · ' + state.label);
+  setText('footerDate', `Coco and Luna · período ${state.label} · última sincronização: ${updated}`);
   const channels = getOrderedChannels(market);
   document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
   document.querySelectorAll('.prod-input').forEach(inp => inp.addEventListener('change', onFinanceEdit));
@@ -664,6 +797,9 @@ async function load() {
   document.body.classList.toggle('market-us', market === 'us');
   applyLayout();
   applyDefaultCollapse(getOrderedChannels(market));
+  document.getElementById('refreshVal').textContent = refreshMin === 0 ? 'Desligar' : `${refreshMin} min`;
+  document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => o.classList.toggle('active', Number(o.dataset.value) === refreshMin));
+  applyRefresh();
   load();
 })();
 </script>

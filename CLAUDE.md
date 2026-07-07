@@ -58,6 +58,7 @@ public/campanhas.html   Tela de Campanhas: visão de gastos reais por canal + ca
 public/produtos.html    Tela de Produtos: catálogo completo por canal (tabela com foto, tipo, qtd, receita)
 public/estoque.html     Tela de Estoque: estoque + produção por canal, híbrido real (vendas) + manual (estoque/produção)
 public/sidebar.js       Componente de sidebar compartilhado (IIFE) — incluído em todos os HTMLs
+public/colors.js        Sistema de cores compartilhado (IIFE) — cores de canal/marketing + novo color picker (ver 4.9c)
 public/geografia.html   Mapa geográfico por estado BR (Leaflet.js, Voyager tile, coropleto + calor)
 public/geografia-us.html Mapa geográfico por estado US (Leaflet.js, Voyager tile, coropleto + calor)
 public/bandeira_brasil.webp  Imagem da bandeira BR usada nos botões de mercado
@@ -217,13 +218,8 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - Outros canais (shopee, mercadolivre, amazon_us): oculta também `#cardTraffic` e `#cardFunnel`.
   - `channel === 'mercadolivre'`: exibe `#cardMlBreakdown` (Clássico, Destaque, Custo ML Ads, ROAS ML Ads).
   - `#cardSalesSplit` visível apenas quando `channel === 'todos'` ou canal Shopify.
-- **Cores customizáveis pelo usuário** via painel de configurações (ícone ⚙ no topbar):
-  - Padrão canal: Shopify `#95BF47`, Shopify US `#7EAD3C`, Shopee `#EE4D2D`, ML `#FFE600`, Amazon `#111111`
-  - Padrão marketing: Instagram `#E1306C`, Facebook `#1877F2`, Google `#6a8c6e`, etc.
-  - Cores salvas em `localStorage('coco_colors')`. Reset restaura os padrões.
-  - `DEFAULT_CH` e `DEFAULT_MKT` são as fontes de verdade. `CH` e `MKT_COLORS` são os objetos vivos mutados por `loadColors()`.
-  - `contrastText(hex)` calcula texto branco/escuro por luminância automática.
-  - `chBadgeHTML(chKey)` gera o badge colorido de canal.
+- **Cores customizáveis pelo usuário** via painel de configurações (ícone ⚙ no topbar) — mecanismo
+  agora vive em `public/colors.js` (compartilhado entre páginas), ver 4.9c.
 - **Seletores** (Métrica, Canal, Período, Atualizar) são **custom dropdowns** (`.csel`) — não são `<select>` nativos.
 - O canal é o único dropdown com handler via delegação (`#channelPop`) — os outros usam `setupCsel`.
 - Frequência de atualização persistida em `localStorage('coco_refresh')`, padrão 5 min.
@@ -233,6 +229,69 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Card Orgânico x Campanha (`#cardSalesSplit`, alterado 02/07/2026):** uma **pizza por canal** (não é mais um único donut agregado nem gráfico de linha) — grid `.ss-grid` com uma célula por canal do mercado atual (BR: Shopify/Shopee/ML/Amazon; US: Shopify US/Amazon US). Dados vêm de `salesSplitByChannel` (`{ [channel]: { campaign, organic, campaignOrders, organicOrders } }`) calculado em `computeDashboard()` a partir de **todos** os pedidos do mercado (independente do filtro de canal selecionado na tela — por isso sempre mostra as 4/2 pizzas). Canais sem tracking de origem/listing type (Shopee, Amazon) sempre caem 100% em orgânico, naturalmente (não é caso especial no código — `isCampaignOrder()` nunca retorna `true` pra esses canais). Canal sem nenhum pedido no período mostra o anel cinza "sem dados" do `drawDonut()` (não confundir com "100% orgânico"). Agrupado em `.right-col-stack` com `#cardMarketing`.
 - **KPI strip principal (alterado 02/07/2026):** 5 células — Receita Total, Pedidos, Ticket Médio, **ROAS**, **ACOS** (`#kpiRoas`/`#kpiAcos`). O KPI "Conversão" foi removido daqui (a métrica de conversão de sessão→compra continua existindo no card de Tráfego, `#mConv`, que é outro contexto). ROAS = `kpis.roas` (metaRevenue ÷ adCost, já calculado no backend). ACOS = `100/roas` (gasto ÷ vendas atribuídas, em %) — a grade CSS do `.kpi-strip` já era `repeat(5,1fr)` antes dessa mudança (pensada pra isso).
 - Paleta/design: tema "earthy" com variáveis CSS no `:root`. Manter visual.
+
+### 4.9c Header/footer padronizados + `public/colors.js` (implementado 07/07/2026)
+- **Motivação:** cada tela era construída isoladamente e foi divergindo — `campanhas.html`,
+  `produtos.html` e `estoque.html` não tinham dropdown de "Atualizar" (refresh automático), botão
+  "Sincronizar agora" nem o painel de Configurações; os footers tinham textos explicativos longos
+  e desatualizados; e o motor de seleção de cor (`<input type="color">` nativo do navegador) foi
+  considerado lento/feio/inconsistente entre SOs pelo Luan. Implementado com 5 agentes em paralelo
+  (um por página + um pro módulo compartilhado), cada um só editando seu próprio arquivo.
+- **`public/colors.js` (novo arquivo, IIFE, mesmo padrão de `sidebar.js` — incluir via
+  `<script src="colors.js">` logo depois de `sidebar.js`, antes do `<script>` principal da
+  página):** expõe `window.CocoColors` com:
+  - `DEFAULT_CH`/`DEFAULT_MKT` — as fontes de verdade dos padrões de cor (canal e marketing;
+    mesmos valores de sempre, só que centralizados aqui em vez de duplicados por página).
+  - `.ch`/`.mkt` — objetos **vivos** com as cores atuais (populados por `.load()`, que já roda
+    uma vez sozinho ao carregar o script).
+  - `.load()` / `.save(key, value)` / `.resetAll()` — persistência em `localStorage('coco_colors')`
+    (mesma chave/formato de sempre: `ch.<canal>`, `mkt.<nome>`).
+  - `.contrastText(hex)` / `.chBadgeHTML(chKey)` — mesmos helpers de sempre.
+  - `.buildSection(container, defaults, prefix, getCurrent, onChange)` — monta as linhas `.sp-row`
+    do painel de Configurações (usado por `index.html`, `campanhas.html`, `produtos.html`,
+    `estoque.html` pras seções "Cores dos canais"/"Cores de marketing").
+  - `.openPicker(anchorEl, currentHex, onPick)` — abre o **novo seletor de cor** (ver abaixo) perto
+    de qualquer elemento; usado tanto pelo `.buildSection()` quanto diretamente pelas páginas de
+    Geografia (que têm seu próprio painel de cores de mapa, plugado no mesmo picker).
+- **Novo motor de seleção de cor (substitui `<input type="color">` nativo em todo o app):** popover
+  leve (classe `.ccp-pop`, CSS injetado sozinho pelo `colors.js` via `<style id="ccp-style">`, não
+  precisa declarar CSS nenhum na página) com um grid de ~28 swatches curados (`SWATCHES` em
+  `colors.js`) + um campo de hex com preview ao lado, pra ajuste fino. Clique num swatch aplica e
+  fecha; digitar um hex válido (`#RRGGBB`) aplica ao vivo sem fechar. O elemento clicável (antes o
+  `<input type="color">`, classe `.sp-color-inp`) virou um `<button class="ccp-trigger">` — mesmo
+  footprint visual (40×28px), só troca o widget por trás.
+  - **`index.html`, `campanhas.html`, `produtos.html`, `estoque.html`:** o trigger é gerado
+    automaticamente por `CocoColors.buildSection(...)` — nada a mexer manualmente.
+  - **`geografia.html`/`geografia-us.html`:** o painel de cores do MAPA (coroplético/calor) é
+    **hardcoded** no HTML de cada página (não usa `buildSection`, que é só pras cores de
+    canal/marketing) — por isso lá cada `<button class="ccp-trigger" id="...">` foi escrito à mão
+    (mesmos ids de sempre: `chCold`, `chMid`, `chHigh`, `chBorder`, `hcCold`, `hcMid`, `hcHot`,
+    `hcPill`, `hcText`, `hcBorder`), com um `setColorBtn(id, hex)` local pra sincronizar
+    `dataset.hex`/`style.background`, e um listener de clique que chama `CocoColors.openPicker(...)`
+    diretamente. **Decisão deliberada (confirmada com o Luan):** as páginas de Geografia **não**
+    ganharam a seção "Cores dos canais" — o painel delas continua só sobre a paleta visual do mapa,
+    os dois sistemas de configuração ficam separados.
+  - Produtos/Estoque têm seu próprio `CH_META` hardcoded (cores só usadas como fallback quando não
+    há logo — na prática todo canal tem logo, então o fallback quase nunca aparece) — **não foi
+    ligado** ao `CocoColors.ch`: o painel de Configurações fica disponível/consistente em toda
+    página por causa da experiência única de navegação, mesmo nas telas onde ele ainda não repinta
+    nada visualmente hoje.
+- **Header padronizado** — `campanhas.html`, `produtos.html` e `estoque.html` ganharam, copiado de
+  `index.html`: botão `#syncBtn` ("Sincronizar", `POST /api/sync` + recarrega), botão `#settingsBtn`
+  (abre o painel de Configurações com as seções de cor) e o dropdown `#cselRefresh` ("Atualizar":
+  1/5/15/30 min ou Desligar, mesma chave `localStorage('coco_refresh')` compartilhada entre TODAS as
+  páginas — mudar em uma reflete nas outras na próxima visita). Cada página reaproveita sua própria
+  função de carregamento já existente (`load()`) como alvo do `setInterval`, não criou nada novo.
+  `estoque.html` é a única sem seletor de Período (correto, continua fixo em 30 dias) — as outras
+  duas têm.
+- **Footer padronizado** — trocado o texto explicativo fixo de cada página por uma linha dinâmica
+  de status, mesma ideia de `index.html` (`<footer id="footerDate">`, preenchido dentro do
+  `render()` de cada página): `Coco and Luna · [contexto] · última sincronização: {timestamp}`.
+  `[contexto]` varia por página (canal+período em `index.html`; período em `campanhas.html`/
+  `produtos.html`; "últimos 30 dias" em `estoque.html`, que não tem seletor de período; mercado+
+  período nas páginas de Geografia). Também removido o prefixo **"Dashboard - Vita Pet Life · "**
+  que existia em `index.html`/`geografia*.html` — "Vita Pet Life" é a empresa, não deve aparecer em
+  texto de UI genérico como se fosse o nome de uma loja (ver seção 1).
 
 ### 4.11 Tela de Campanhas — `public/campanhas.html`
 - Usa dados reais de dois endpoints: `/api/dashboard` (KPIs, tendência, gasto diário Meta) e `/api/campaigns` (campanha a campanha).

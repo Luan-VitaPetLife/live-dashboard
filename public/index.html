@@ -246,6 +246,7 @@
 <body>
 
 <script src="sidebar.js"></script>
+<script src="colors.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -440,105 +441,24 @@
 </div>
 
 <script>
-// ── Default colors (source of truth) ──
-const DEFAULT_CH = {
-  shopify:      { bg:'#95BF47', label:'Shopify' },
-  shopify_us:   { bg:'#7EAD3C', label:'Shopify US' },
-  shopee:       { bg:'#EE4D2D', label:'Shopee' },
-  mercadolivre: { bg:'#FFE600', label:'Mercado Livre' },
-  amazon:       { bg:'#111111', label:'Amazon' },
-  amazon_us:    { bg:'#FF9900', label:'Amazon US' },
-};
-const DEFAULT_MKT = {
-  Instagram:      '#E1306C',
-  Facebook:       '#1877F2',
-  Google:         '#6a8c6e',
-  Shopee:         '#EE4D2D',
-  'Mercado Livre':'#FFE600',
-  Amazon:         '#4a90c4',
-  Clássico:       '#4a9e6e',
-  Destaque:       '#e8a225',
-  Direto:         '#c4b49a',
-  Outros:         '#b0a898',
-};
-
-// ── Live color objects (mutated by loadColors) ──
-const CH = {};
-const MKT_COLORS = {};
-
-function contrastText(hex) {
-  const h = (hex || '#000').replace('#','');
-  if (h.length !== 6) return '#fff';
-  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
-  return (0.299*r + 0.587*g + 0.114*b) / 255 > 0.55 ? '#333' : '#fff';
-}
-
-function loadColors() {
-  const saved = JSON.parse(localStorage.getItem('coco_colors') || '{}');
-  for (const k in DEFAULT_CH) {
-    const bg = saved[`ch.${k}`] || DEFAULT_CH[k].bg;
-    CH[k] = { bg, text: contrastText(bg), label: DEFAULT_CH[k].label };
-  }
-  for (const k in DEFAULT_MKT) {
-    MKT_COLORS[k] = saved[`mkt.${k}`] || DEFAULT_MKT[k];
-  }
-}
-
-function saveColor(colorKey, value) {
-  const saved = JSON.parse(localStorage.getItem('coco_colors') || '{}');
-  saved[colorKey] = value;
-  localStorage.setItem('coco_colors', JSON.stringify(saved));
-}
-
 function chBadgeHTML(chKey) {
-  const c = CH[chKey] || { bg:'#999', text:'#fff', label: chKey || '?' };
+  const c = CocoColors.ch[chKey] || { bg:'#999', text:'#fff', label: chKey || '?' };
   return `<span style="background:${c.bg};color:${c.text};font-size:10px;padding:2px 7px;border-radius:3px;font-weight:600;white-space:nowrap">${c.label}</span>`;
 }
 
 // ── Settings panel ──
 function buildSettingsPanel() {
-  buildColorSection('sp-ch-colors', DEFAULT_CH, 'ch', k => CH[k].bg, (k, v) => {
+  CocoColors.buildSection('sp-ch-colors', CocoColors.DEFAULT_CH, 'ch', k => CocoColors.ch[k].bg, (k, v) => {
     const bg = v;
-    CH[k] = { bg, text: contrastText(bg), label: DEFAULT_CH[k].label };
-    saveColor(`ch.${k}`, bg);
+    CocoColors.ch[k] = { bg, text: CocoColors.contrastText(bg), label: CocoColors.DEFAULT_CH[k].label };
+    CocoColors.save(`ch.${k}`, bg);
+    if (lastData) render(lastData);
   });
-  buildColorSection('sp-mkt-colors', DEFAULT_MKT, 'mkt', k => MKT_COLORS[k], (k, v) => {
-    MKT_COLORS[k] = v;
-    saveColor(`mkt.${k}`, v);
+  CocoColors.buildSection('sp-mkt-colors', CocoColors.DEFAULT_MKT, 'mkt', k => CocoColors.mkt[k], (k, v) => {
+    CocoColors.mkt[k] = v;
+    CocoColors.save(`mkt.${k}`, v);
+    if (lastData) render(lastData);
   });
-}
-
-function buildColorSection(containerId, defaults, prefix, getCurrent, onchange) {
-  const container = document.getElementById(containerId);
-  container.innerHTML = '';
-  for (const k in defaults) {
-    const label = typeof defaults[k] === 'object' ? defaults[k].label : k;
-    const currentColor = getCurrent(k);
-    const row = document.createElement('div');
-    row.className = 'sp-row';
-    const left = document.createElement('div');
-    left.className = 'sp-row-left';
-    const swatch = document.createElement('div');
-    swatch.className = 'sp-swatch';
-    swatch.style.background = currentColor;
-    const lbl = document.createElement('span');
-    lbl.className = 'sp-row-label';
-    lbl.textContent = label;
-    left.appendChild(swatch);
-    left.appendChild(lbl);
-    const inp = document.createElement('input');
-    inp.type = 'color';
-    inp.className = 'sp-color-inp';
-    inp.value = currentColor;
-    inp.addEventListener('input', e => {
-      onchange(k, e.target.value);
-      swatch.style.background = e.target.value;
-      if (lastData) render(lastData);
-    });
-    row.appendChild(left);
-    row.appendChild(inp);
-    container.appendChild(row);
-  }
 }
 
 function openSettings() {
@@ -555,8 +475,7 @@ document.getElementById('settingsBtn').addEventListener('click', e => { e.stopPr
 document.getElementById('spClose').addEventListener('click', closeSettings);
 document.getElementById('spOverlay').addEventListener('click', closeSettings);
 document.getElementById('spReset').addEventListener('click', () => {
-  localStorage.removeItem('coco_colors');
-  loadColors();
+  CocoColors.resetAll();
   buildSettingsPanel();
   if (lastData) render(lastData);
 });
@@ -581,8 +500,8 @@ function showTrendDrilldown(label, val, byChannel, money, metric) {
   const metricLbl = METRIC_LABEL?.[metric]||'';
   const rows = entries.map(([ch,v])=>{
     const pct=Math.round(v/total*100);
-    const color=CH[ch]?.bg||'#888';
-    const lbl=CH[ch]?.label||ch;
+    const color=CocoColors.ch[ch]?.bg||'#888';
+    const lbl=CocoColors.ch[ch]?.label||ch;
     const txtC=ch==='mercadolivre'?'#1a1a1a':'#fff';
     return `<div class="drill-row">
       <span class="drill-dot" style="background:${color}"></span>
@@ -749,20 +668,20 @@ function render(d) {
     ? [['shopify_us','Shopify US'],['amazon_us','Amazon US']]
     : [['shopify','Shopify'],['shopee','Shopee'],['mercadolivre','Mercado Livre'],['amazon','Amazon']];
   const cTotal = chOrder.reduce((a,[k]) => a+(cs[k]||0), 0);
-  drawDonut('channelChart', chOrder.map(([k])=>cs[k]||0), chOrder.map(([k])=>CH[k]?.bg||'#999'));
+  drawDonut('channelChart', chOrder.map(([k])=>cs[k]||0), chOrder.map(([k])=>CocoColors.ch[k]?.bg||'#999'));
   document.getElementById('chCenter').textContent = fmtMoneyShort(cTotal);
   document.getElementById('channelRows').innerHTML = chOrder.map(([k,nm]) => {
     const v = cs[k]||0;
     const pc = cTotal>0?(v/cTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%';
-    return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${CH[k]?.bg||'#999'}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(v)}</span></div></div>`;
+    return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${CocoColors.ch[k]?.bg||'#999'}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(v)}</span></div></div>`;
   }).join('');
 
   // Marketing
   const mTotal = d.marketing.reduce((a,e)=>a+e.value, 0);
-  drawDonut('mktChart', d.marketing.map(e=>e.value), d.marketing.map(e=>MKT_COLORS[e.name]||'#b0a898'));
+  drawDonut('mktChart', d.marketing.map(e=>e.value), d.marketing.map(e=>CocoColors.mkt[e.name]||'#b0a898'));
   document.getElementById('mktCenter').textContent = fmtMoneyShort(mTotal);
   document.getElementById('mktRows').innerHTML = d.marketing.length
-    ? d.marketing.map(e=>{ const pc=mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%'; return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${MKT_COLORS[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(e.value)}</span></div></div>`; }).join('')
+    ? d.marketing.map(e=>{ const pc=mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%'; return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${CocoColors.mkt[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(e.value)}</span></div></div>`; }).join('')
     : '<div class="muted-state">Sem receita atribuída.</div>';
 
   // Sales split: orgânico x campanha — uma pizza por canal quando "Todos"; uma única pizza
@@ -849,7 +768,7 @@ function render(d) {
   const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
   document.getElementById('ordersMeta').textContent = ro.length?`${ro.length} pedidos`:'0 pedidos';
   if (ro.length) {
-    const orderRows = ro.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=isAllCh?chBadgeHTML(o.channel):`<span style="font-size:10px;color:var(--muted)">${CH[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+    const orderRows = ro.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=isAllCh?chBadgeHTML(o.channel):`<span style="font-size:10px;color:var(--muted)">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
     const summaryRow = `<tr style="background:var(--surface2)"><td colspan="4" style="padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">Total (${ro.filter(o=>!o.cancelled).length} válidos)</td><td></td><td style="padding:10px 16px;font-weight:600;font-size:13px">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
     document.getElementById('ordersBody').innerHTML = orderRows + summaryRow;
   } else {
@@ -859,7 +778,7 @@ function render(d) {
   const now=new Date(), hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
   setLive('ok',`Ao vivo · ${hh}:${mm}`);
   const up = d.updatedAt?new Date(d.updatedAt).toLocaleString('pt-BR'):'—';
-  document.getElementById('footerDate').textContent = `Dashboard - Vita Pet Life · Coco and Luna · ${CHAN[d.channel]} · período ${label} · última sincronização: ${up}`;
+  document.getElementById('footerDate').textContent = `Coco and Luna · ${CHAN[d.channel]} · período ${label} · última sincronização: ${up}`;
   updateCardVisibility();
 }
 
@@ -1060,7 +979,7 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
 
 // ── Init ──
 document.querySelectorAll('.csel').forEach(setupCsel);
-loadColors();
+CocoColors.load();
 syncControls();
 updateCardVisibility();
 applyRefresh();

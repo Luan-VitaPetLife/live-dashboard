@@ -250,6 +250,7 @@
 <body>
 
 <script src="sidebar.js"></script>
+<script src="colors.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -405,19 +406,19 @@
       <div class="sp-section-title">Mapa coropleto — cores</div>
       <div class="sp-row">
         <span class="sp-row-label">Baixa intensidade</span>
-        <input type="color" class="sp-color-inp" id="chCold" value="#e8e3d8">
+        <button class="ccp-trigger" id="chCold" style="background:#e8e3d8"></button>
       </div>
       <div class="sp-row">
         <span class="sp-row-label">Média intensidade</span>
-        <input type="color" class="sp-color-inp" id="chMid" value="#c49568">
+        <button class="ccp-trigger" id="chMid" style="background:#c49568"></button>
       </div>
       <div class="sp-row">
         <span class="sp-row-label">Alta intensidade</span>
-        <input type="color" class="sp-color-inp" id="chHigh" value="#8c3a20">
+        <button class="ccp-trigger" id="chHigh" style="background:#8c3a20"></button>
       </div>
       <div class="sp-row">
         <span class="sp-row-label">Cor das bordas</span>
-        <input type="color" class="sp-color-inp" id="chBorder" value="#bbb5aa">
+        <button class="ccp-trigger" id="chBorder" style="background:#bbb5aa"></button>
       </div>
       <div class="sp-range-row">
         <span class="sp-row-label">Espessura bordas</span>
@@ -434,33 +435,33 @@
       <div class="sp-section-title">Mapa de calor — manchas</div>
       <div class="sp-row">
         <span class="sp-row-label">Baixa intensidade</span>
-        <input type="color" class="sp-color-inp" id="hcCold" value="#22c55e">
+        <button class="ccp-trigger" id="hcCold" style="background:#22c55e"></button>
       </div>
       <div class="sp-row">
         <span class="sp-row-label">Média intensidade</span>
-        <input type="color" class="sp-color-inp" id="hcMid" value="#eab308">
+        <button class="ccp-trigger" id="hcMid" style="background:#eab308"></button>
       </div>
       <div class="sp-row">
         <span class="sp-row-label">Alta intensidade</span>
-        <input type="color" class="sp-color-inp" id="hcHot" value="#ef4444">
+        <button class="ccp-trigger" id="hcHot" style="background:#ef4444"></button>
       </div>
     </div>
     <div class="sp-section">
       <div class="sp-section-title">Pill de label</div>
       <div class="sp-row">
         <span class="sp-row-label">Cor da pill</span>
-        <input type="color" class="sp-color-inp" id="hcPill" value="#f97316">
+        <button class="ccp-trigger" id="hcPill" style="background:#f97316"></button>
       </div>
       <div class="sp-row">
         <span class="sp-row-label">Cor do texto</span>
-        <input type="color" class="sp-color-inp" id="hcText" value="#ffffff">
+        <button class="ccp-trigger" id="hcText" style="background:#ffffff"></button>
       </div>
     </div>
     <div class="sp-section">
       <div class="sp-section-title">Bordas dos estados</div>
       <div class="sp-row">
         <span class="sp-row-label">Cor da borda</span>
-        <input type="color" class="sp-color-inp" id="hcBorder" value="#555544">
+        <button class="ccp-trigger" id="hcBorder" style="background:#555544"></button>
       </div>
       <div class="sp-range-row">
         <span class="sp-row-label">Espessura</span>
@@ -1008,7 +1009,7 @@ function render(d) {
   setLive('ok', `Ao vivo · ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   document.getElementById('footerDate').textContent =
-    `Dashboard - Vita Pet Life · Coco and Luna · ${CHAN[d.channel]} · ${label} · última sincronização: ${up}`;
+    `Coco and Luna · ${CHAN[d.channel]} · ${label} · última sincronização: ${up}`;
 
   drawMap();
 }
@@ -1038,13 +1039,21 @@ document.getElementById('btnChoropleth').addEventListener('click', () => { vizMo
 document.getElementById('btnHeat').addEventListener('click', () => { vizMode = 'heat'; syncVizMode(); drawMap(); });
 
 // ── Settings panel (padrão Revenue) ──
+// Botões .ccp-trigger (colors.js) guardam a cor atual em data-hex — substitui
+// o antigo <input type="color">.value.
+function setColorBtn(id, hex) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.dataset.hex = hex;
+  btn.style.background = hex;
+}
 function syncHeatCfgUI() {
-  document.getElementById('hcCold').value      = heatConfig.coldColor;
-  document.getElementById('hcMid').value       = heatConfig.midColor;
-  document.getElementById('hcHot').value       = heatConfig.hotColor;
-  document.getElementById('hcPill').value      = heatConfig.pillColor;
-  document.getElementById('hcText').value      = heatConfig.textColor;
-  document.getElementById('hcBorder').value    = heatConfig.borderColor;
+  setColorBtn('hcCold',   heatConfig.coldColor);
+  setColorBtn('hcMid',    heatConfig.midColor);
+  setColorBtn('hcHot',    heatConfig.hotColor);
+  setColorBtn('hcPill',   heatConfig.pillColor);
+  setColorBtn('hcText',   heatConfig.textColor);
+  setColorBtn('hcBorder', heatConfig.borderColor);
   document.getElementById('hcBorderW').value   = heatConfig.borderWeight;
   document.getElementById('hcRadius').value    = heatConfig.radius;
   document.getElementById('hcBlur').value      = heatConfig.blur;
@@ -1057,16 +1066,30 @@ function syncHeatCfgUI() {
 syncHeatCfgUI();
 
 function syncChoroUI() {
-  document.getElementById('chCold').value       = choroConfig.lowColor;
-  document.getElementById('chMid').value        = choroConfig.midColor;
-  document.getElementById('chHigh').value       = choroConfig.highColor;
-  document.getElementById('chBorder').value     = choroConfig.borderColor;
+  setColorBtn('chCold',   choroConfig.lowColor);
+  setColorBtn('chMid',    choroConfig.midColor);
+  setColorBtn('chHigh',   choroConfig.highColor);
+  setColorBtn('chBorder', choroConfig.borderColor);
   document.getElementById('chBorderW').value    = choroConfig.borderWeight;
   document.getElementById('chOpacity').value    = choroConfig.fillOpacity;
   document.getElementById('chBorderWVal').textContent = choroConfig.borderWeight;
   document.getElementById('chOpacityVal').textContent = choroConfig.fillOpacity + '%';
 }
 syncChoroUI();
+
+// Troca os <input type="color"> do painel de mapa pelo novo picker (colors.js) —
+// mantém o mesmo id/valor, só muda o widget de seleção.
+['chCold','chMid','chHigh','chBorder','hcCold','hcMid','hcHot','hcPill','hcText','hcBorder'].forEach(id => {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    CocoColors.openPicker(btn, btn.dataset.hex, hex => {
+      btn.dataset.hex = hex;
+      btn.style.background = hex;
+    });
+  });
+});
 
 document.getElementById('chBorderW').addEventListener('input', e => { document.getElementById('chBorderWVal').textContent = e.target.value; });
 document.getElementById('chOpacity').addEventListener('input', e => { document.getElementById('chOpacityVal').textContent = e.target.value + '%'; });
@@ -1085,22 +1108,22 @@ document.getElementById('hcMinOp').addEventListener('input', e => { document.get
 
 document.getElementById('hcApply').addEventListener('click', () => {
   heatConfig = {
-    coldColor:    document.getElementById('hcCold').value,
-    midColor:     document.getElementById('hcMid').value,
-    hotColor:     document.getElementById('hcHot').value,
-    pillColor:    document.getElementById('hcPill').value,
-    textColor:    document.getElementById('hcText').value,
-    borderColor:  document.getElementById('hcBorder').value,
+    coldColor:    document.getElementById('hcCold').dataset.hex,
+    midColor:     document.getElementById('hcMid').dataset.hex,
+    hotColor:     document.getElementById('hcHot').dataset.hex,
+    pillColor:    document.getElementById('hcPill').dataset.hex,
+    textColor:    document.getElementById('hcText').dataset.hex,
+    borderColor:  document.getElementById('hcBorder').dataset.hex,
     borderWeight: Number(document.getElementById('hcBorderW').value),
     radius:       Number(document.getElementById('hcRadius').value),
     blur:         Number(document.getElementById('hcBlur').value),
     minOpacity:   Number(document.getElementById('hcMinOp').value),
   };
   choroConfig = {
-    lowColor:     document.getElementById('chCold').value,
-    midColor:     document.getElementById('chMid').value,
-    highColor:    document.getElementById('chHigh').value,
-    borderColor:  document.getElementById('chBorder').value,
+    lowColor:     document.getElementById('chCold').dataset.hex,
+    midColor:     document.getElementById('chMid').dataset.hex,
+    highColor:    document.getElementById('chHigh').dataset.hex,
+    borderColor:  document.getElementById('chBorder').dataset.hex,
     borderWeight: Number(document.getElementById('chBorderW').value),
     fillOpacity:  Number(document.getElementById('chOpacity').value),
   };
