@@ -119,9 +119,6 @@ export async function fetchOrders(sinceISO, untilISO) {
     const results = data.results || [];
     for (const o of results) {
       const cancelled = ['cancelled', 'invalid'].includes(o.status);
-      // listing_type_id: 'free' → orgânico; qualquer outro (bronze/silver/gold_*) → premium
-      const ltid = (o.order_items || [])[0]?.item?.listing_type_id || null;
-      const listingType = ltid ? (ltid === 'free' ? 'organic' : 'premium') : null;
       out.push({
         id:          'mercadolivre:' + o.id,
         channel:     'mercadolivre',
@@ -134,7 +131,7 @@ export async function fetchOrders(sinceISO, untilISO) {
         source:      'Mercado Livre',
         customer:    o.buyer?.nickname || '',
         state:       null,              // preenchido abaixo via /shipments
-        listingType,
+        listingType: null,              // resolvido abaixo via /items — não vem em /orders/search
         _sid:        o.shipping?.id || null,
         items: (o.order_items || []).map(it => ({
           title:  it.item?.title || '',
@@ -169,22 +166,34 @@ export async function fetchOrders(sinceISO, untilISO) {
     out.forEach(o => { delete o._sid; });
   }
 
-  // Busca thumbnail dos produtos em lotes (multiget, até 20 ids por chamada) — usada na tela de Produtos.
-  // Falha graciosamente: sem thumbnail, os itens ficam sem imagem, nada quebra.
+  // Busca thumbnail + listing_type_id dos produtos em lotes (multiget, até 20 ids por chamada).
+  // listing_type_id não vem em /orders/search (só existe no recurso do item) — por isso o
+  // breakdown Clássico/Destaque (mlBreakdown em metrics.js) precisa dessa chamada extra, que já
+  // existia para a thumbnail da tela de Produtos (reaproveitada, sem custo extra de requisição).
+  // Falha graciosamente: sem esses dados, os itens ficam sem imagem e o pedido conta como orgânico.
   const itemIds = [...new Set(out.flatMap(o => o.items.map(it => it._itemId).filter(Boolean)))];
   if (itemIds.length > 0) {
     const thumbMap = {};
+    const typeMap = {};
     const BATCH = 20;
     for (let i = 0; i < itemIds.length; i += BATCH) {
       const batch = itemIds.slice(i, i + BATCH);
       try {
         const res = await apiGet('/items', { ids: batch.join(',') });
         for (const r of (Array.isArray(res) ? res : [])) {
-          if (r.code === 200 && r.body?.id) thumbMap[r.body.id] = r.body.thumbnail || null;
+          if (r.code === 200 && r.body?.id) {
+            thumbMap[r.body.id] = r.body.thumbnail || null;
+            typeMap[r.body.id] = r.body.listing_type_id || null;
+          }
         }
-      } catch { /* sem thumbnail — segue sem imagem */ }
+      } catch { /* sem thumbnail/tipo — segue sem imagem e orgânico por padrão */ }
     }
-    out.forEach(o => o.items.forEach(it => { it.image = thumbMap[it._itemId] || null; delete it._itemId; }));
+    out.forEach(o => {
+      const firstItemId = o.items[0]?._itemId || null;
+      const ltid = firstItemId ? typeMap[firstItemId] : null;
+      o.listingType = ltid ? (ltid === 'free' ? 'organic' : 'premium') : null;
+      o.items.forEach(it => { it.image = thumbMap[it._itemId] || null; delete it._itemId; });
+    });
   } else {
     out.forEach(o => o.items.forEach(it => { delete it._itemId; }));
   }

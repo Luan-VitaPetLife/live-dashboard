@@ -127,6 +127,17 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Breakdown de listagem:** cada pedido tem campo `listingType: 'organic' | 'premium' | null`.
   - `free` → `'organic'` (Clássico — listagem grátis).
   - `bronze/silver/gold_*` → `'premium'` (Destaque — listagem paga).
+  - **Bug corrigido (07/07/2026):** o código lia `listing_type_id` de dentro de `order_items[].item`
+    na resposta de `/orders/search` — mas esse campo **não existe** nessa resposta (confirmado
+    contra a doc oficial e exemplos reais de JSON da API; `order_items[].item` só tem `id, title,
+    category_id, variation_id, seller_custom_field, variation_attributes, seller_sku, condition`).
+    Resultado: `ltid` era sempre `null`, todo pedido ML caía em `'organic'`, `mlBreakdown.premium`
+    ficava sempre 0, e por isso "Vendas Atribuídas Geral" em Campanhas nunca somava Mercado Livre
+    (só Meta), mesmo com gasto real de Mercado Ads > 0. **Corrigido:** `listing_type_id` agora é
+    lido do recurso do item de verdade, via a mesma chamada em lote `/items?ids=...` (multiget) que
+    já existia pra buscar a thumbnail (ver 4.13) — sem custo extra de requisição. `fetchOrders()`
+    monta `typeMap` junto com `thumbMap` nesse lote e só resolve `o.listingType` depois, usando o
+    `_itemId` do primeiro item do pedido.
 - **ML Product Ads — fluxo correto (Mercado Ads API, exige header `Api-Version: 1`):**
   1. Resolver advertiser: `GET /advertising/advertisers?product_id=PADS` → `advertiser_id` + `site_id` (helper `getPadsAdvertiser()`).
   2. Métricas agregadas: `GET /marketplace/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search`
@@ -274,7 +285,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - **Imagem do produto por canal:**
   - Shopify (BR/US): `LineItem.image.url` já vem na mesma query GraphQL de pedidos — sem custo extra.
   - Shopee: `item_list[].image_info.image_url` já vem no `get_order_detail` — sem custo extra.
-  - Mercado Livre: **não** vem no pedido. `fetchOrders()` faz uma chamada em lote extra (`GET /items?ids=...`, multiget de até 20 ids) para resolver `thumbnail` por `item.id`, mesmo padrão já usado para resolver `state` via `/shipments/{id}`. Falha graciosamente (sem imagem) se o item não for encontrado.
+  - Mercado Livre: **não** vem no pedido. `fetchOrders()` faz uma chamada em lote extra (`GET /items?ids=...`, multiget de até 20 ids) para resolver `thumbnail` por `item.id`, mesmo padrão já usado para resolver `state` via `/shipments/{id}`. Falha graciosamente (sem imagem) se o item não for encontrado. **Esse mesmo lote também resolve `o.listingType`** (Clássico/Destaque, ver 4.6) a partir de `listing_type_id` do recurso do item — campo que não existe na resposta de `/orders/search`.
   - Amazon (BR/US): **sem imagem, tipo ou nome real do produto** — ver item 6 do backlog (seção 9): itens do pedido nunca são buscados.
 - **Tipo de produto:** reaproveita `classifyType()` já usada em Segmentos (productType do Shopify como fonte autoritativa, fallback por palavras-chave no título para os demais canais).
 
@@ -474,7 +485,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 
 1. Decidir tratamento de **PENDING** (contar só pagos?) — ver 4.1.
 2. **Google Ads:** falta o Luan configurar o projeto no Google Cloud + Developer Token e autorizar via `/googleads/connect` — ver 4.12. Código já implementado.
-3. **ML Ads ROAS por campanha:** o campo `listingType === 'premium'` pode não estar capturando todos os pedidos Destaque — verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.
+3. ~~**ML Ads ROAS por campanha:** verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.~~ **Resolvido 07/07/2026** — ver 4.6: o campo nunca vinha de `/orders/search` mesmo, foi movido pra ler do recurso `/items`.
 4. Login/usuários se mais pessoas precisarem acessar.
 5. **Amazon US na produção:** após quotas se recuperarem do período de sobrecarga, confirmar que pedidos US aparecem na dashboard (o código está correto — era problema de quota penalizada).
 6. **Amazon — itens do pedido não são buscados:** `fetchOrders()` em `src/amazon.js` só lê `NumberOfItemsShipped/Unshipped` do pedido e cria itens com `title:''` (placeholder) — nunca chama o endpoint de item do pedido (`/orders/v0/orders/{id}/orderItems`). Por isso Amazon (BR e US) nunca aparece em Top Produtos, Segmentos ou na tela de Produtos (itens sem título são ignorados nessas telas), e por isso também a tela de Estoque usa o placeholder "Produto TESTE" pra Amazon (ver 4.14). Corrigir exigiria uma chamada extra por pedido (mais lento, mais exposto a 429) — avaliar com cautela dado o histórico de penalização de cota (ver 4.7).
