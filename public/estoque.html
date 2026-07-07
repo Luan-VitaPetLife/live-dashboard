@@ -313,8 +313,14 @@ function persistOrder() {
 function attachDragHandlers() {
   const grid = document.getElementById('prodGrid');
   grid.querySelectorAll('.prod-card').forEach(card => {
+    // O card só vira draggable no mousedown da alça (nunca por padrão). Checar
+    // e.target.closest('.drag-handle') dentro do dragstart não é confiável: quando
+    // draggable=true está no ancestral e o gesto começa num filho, o navegador pode
+    // resolver o alvo do dragstart como o próprio ancestral, não o filho — a checagem
+    // nunca bate e todo arraste é cancelado. Ativar/desativar draggable dinamicamente
+    // evita essa ambiguidade por completo: só a alça pode iniciar o gesto.
+    card.querySelector('.drag-handle')?.addEventListener('mousedown', () => { card.draggable = true; });
     card.addEventListener('dragstart', e => {
-      if (!e.target.closest('.drag-handle')) { e.preventDefault(); return; }
       dragCard = card;
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', card.dataset.ch || '');
@@ -329,6 +335,7 @@ function attachDragHandlers() {
       setTimeout(() => card.classList.add('dragging'), 0);
     });
     card.addEventListener('dragend', () => {
+      card.draggable = false;
       card.classList.remove('dragging');
       if (dragGhost) {
         grid.insertBefore(card, dragGhost);
@@ -343,6 +350,11 @@ function attachDragHandlers() {
   });
   if (grid.dataset.dragBound) return;
   grid.dataset.dragBound = '1';
+  // Se o usuário só clicou na alça sem chegar a arrastar, desfaz o draggable=true
+  // pra não deixar o card "preso" arrastável até o próximo render.
+  document.addEventListener('mouseup', () => {
+    grid.querySelectorAll('.prod-card[draggable="true"]').forEach(c => { c.draggable = false; });
+  });
   grid.addEventListener('dragenter', e => e.preventDefault());
   grid.addEventListener('dragover', e => {
     e.preventDefault();
@@ -505,7 +517,7 @@ function cardHTML(ch) {
     <td class="prod-num">${suggestionHTML(t.suggestion)}</td>
   </tr></tfoot>` : '';
   return `
-    <div class="prod-card ${chClass}${collapsed}${expanded}" id="prod-card-${ch}" data-ch="${ch}" draggable="true">
+    <div class="prod-card ${chClass}${collapsed}${expanded}" id="prod-card-${ch}" data-ch="${ch}">
       <div class="prod-card-head">
         <span class="drag-handle" title="Arrastar para reordenar"><i class="bi bi-grip-vertical"></i></span>
         <button class="prod-expand-btn" onclick="toggleExpand('${ch}')" title="Expandir/recolher altura da tabela"><i class="bi ${expandIcon}"></i></button>
