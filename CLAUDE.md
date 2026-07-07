@@ -330,10 +330,22 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   Andamento" separadamente em cada card de canal.
 - **`classifyFamily(title)` em `metrics.js`:** classificação por palavra-chave no título (mesma
   regra que já existia dentro de `defaultCog`, agora extraída pra função própria e reaproveitada
-  nos dois lugares) — contém "daily" → família `'Daily'`; contém "lisina" ou "lysine" → família
-  `'Lysine'`; caso contrário `null` (nesse caso o agrupamento usa o próprio título como família,
-  não existe uma família genérica "Outro"). `defaultCog()` chama `classifyFamily()` internamente
-  em vez de duplicar a checagem de palavra-chave.
+  nos dois lugares) — contém "daily" → família `'Daily'`; contém "taurina", "espirulina" ou
+  "spirulina" → família `'Daily'`; contém "lisina" ou "lysine" → família `'Lysine'`; caso contrário
+  `null` (nesse caso o agrupamento usa o próprio título como família, não existe uma família
+  genérica "Outro"). `defaultCog()` chama `classifyFamily()` internamente em vez de duplicar a
+  checagem de palavra-chave.
+  - **Bug corrigido (07/07/2026) — "Daily" não somava as vendas de ML/Shopee:** o produto que o
+    Luan chama de "Daily" só se chama assim literalmente no Shopify. No Mercado Livre e na Shopee
+    ele é listado pelo nome dos ingredientes: **"Suplemento Para Gatos Com Taurina, Espirulina E
+    L-Lisina"** — que não contém "daily", mas contém "lisina" (é um dos ingredientes da fórmula) e
+    por isso caía errado na checagem de `lisina`/`lysine`, sendo contado como "Lysine" em vez de
+    "Daily" (confirmado direto contra `/api/products` de produção: ML tinha 8 unidades e Shopee 12
+    unidades desse produto indo pro balde errado — por isso o card agregado só mostrava as 2
+    unidades do Shopify). A checagem de taurina/espirulina precisa vir **antes** da de lisina para
+    não ser mascarada. Efeito colateral esperado e correto: como `defaultCog()` reaproveita
+    `classifyFamily()`, o COG de referência desses produtos em ML/Shopee também passou de R$ 15,21
+    (Lysine) pra R$ 17,32 (Daily) — mais preciso, já que são o mesmo produto físico.
 - **`computeStock({ market })` em `metrics.js` — dois níveis de dado agora:**
   - `aggregateProductsByChannel(orders)` continua igual (extraída de `computeProducts`, reaproveitada
     aqui — mesma regra de agrupamento avulso/combo/tipo/imagem).

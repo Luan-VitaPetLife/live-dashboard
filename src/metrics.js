@@ -115,6 +115,12 @@ const TAX_PCT_DEFAULT = 2.64;
 function classifyFamily(title) {
   const t = (title || '').toLowerCase();
   if (t.includes('daily')) return 'Daily';
+  // A fórmula "Daily" é multivitamínico (taurina + espirulina + L-lisina) — no Mercado Livre e na
+  // Shopee o título descreve os ingredientes em vez de usar o nome "Daily" (ex: "Suplemento Para
+  // Gatos Com Taurina, Espirulina E L-Lisina") e por isso também contém "lisina" — a checagem de
+  // taurina/espirulina precisa vir ANTES da de lisina/lysine pura, senão cai errado em "Lysine"
+  // (bug real, confirmado 07/07/2026: 20 unidades de ML/Shopee ficavam fora do total de "Daily").
+  if (t.includes('taurina') || t.includes('espirulina') || t.includes('spirulina')) return 'Daily';
   if (t.includes('lisina') || t.includes('lysine')) return 'Lysine';
   return null;
 }
