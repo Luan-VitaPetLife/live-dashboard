@@ -97,7 +97,7 @@
   .prod-card-ghost{border:2px dashed var(--sage);border-radius:var(--radius);background:rgba(106,140,110,.08);animation:prodGhostPulse 1.1s ease-in-out infinite}
   @keyframes prodGhostPulse{0%,100%{opacity:.5;background:rgba(106,140,110,.06)}50%{opacity:.95;background:rgba(106,140,110,.14)}}
   .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:relative}
-  .drag-handle{cursor:grab;color:var(--muted);font-size:15px;display:flex;align-items:center;flex-shrink:0;margin-right:-4px;transition:color .15s ease,transform .15s ease}
+  .drag-handle{cursor:grab;color:var(--muted);font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;width:26px;height:26px;margin:-5px -4px -5px -6px;transition:color .15s ease,transform .15s ease}
   .drag-handle:hover{color:var(--sage);transform:scale(1.2)}
   .drag-handle:active{cursor:grabbing}
   .prod-card.dragging .drag-handle{color:var(--sage)}
@@ -322,7 +322,11 @@ function attachDragHandlers() {
       dragGhost.className = 'prod-card-ghost';
       dragGhost.style.height = card.offsetHeight + 'px';
       card.after(dragGhost);
-      card.classList.add('dragging');
+      // Adiar a classe "dragging" pro próximo tick: se aplicada agora (síncrono),
+      // o Chrome/Edge captura a imagem fantasma que segue o cursor já com a opacidade
+      // reduzida, deixando o card arrastado e o que fica pra trás visualmente
+      // idênticos — parece que nada está acontecendo.
+      setTimeout(() => card.classList.add('dragging'), 0);
     });
     card.addEventListener('dragend', () => {
       card.classList.remove('dragging');
@@ -339,6 +343,7 @@ function attachDragHandlers() {
   });
   if (grid.dataset.dragBound) return;
   grid.dataset.dragBound = '1';
+  grid.addEventListener('dragenter', e => e.preventDefault());
   grid.addEventListener('dragover', e => {
     e.preventDefault();
     if (!dragGhost) return;
@@ -413,7 +418,7 @@ const setText = (id, t) => { const e = document.getElementById(id); if (e) e.tex
 function logoHTML(meta) {
   if (meta.logo) {
     const cls = meta.logoFill ? 'camp-logo camp-logo-img camp-logo-fill' : 'camp-logo camp-logo-img';
-    return `<div class="${cls}"><img src="${meta.logo}" alt="${meta.name}"></div>`;
+    return `<div class="${cls}"><img src="${meta.logo}" alt="${meta.name}" draggable="false"></div>`;
   }
   return `<div class="camp-logo" style="background:${meta.color};color:${contrastText(meta.color)}">${meta.badge}</div>`;
 }
@@ -447,7 +452,7 @@ function suggestionHTML(s) {
 function rowHTML(p, ch) {
   const combo = comboBits(p);
   const thumb = p.image
-    ? `<img class="prod-thumb" src="${p.image}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
+    ? `<img class="prod-thumb" src="${p.image}" alt="" loading="lazy" draggable="false" onerror="this.outerHTML='<div class=&quot;prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
     : `<div class="prod-thumb-ph"><i class="bi bi-image"></i></div>`;
   const typeTag = p.type ? `<span class="prod-type-tag">${p.type}</span>` : '';
   const dataAttrs = `data-channel="${escAttr(ch)}" data-title="${escAttr(p.title)}"`;
