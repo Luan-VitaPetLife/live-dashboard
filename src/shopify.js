@@ -44,7 +44,8 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
             customerJourneySummary { lastVisit { source } }
             customer { displayName }
             shippingAddress { provinceCode }
-            lineItems(first: 20) { edges { node { title quantity discountedTotalSet { shopMoney { amount } } product { tags productType } lineItemGroup { id title quantity } image { url } } } }
+            lineItems(first: 20) { edges { node { id title currentQuantity discountedTotalSet { shopMoney { amount } } product { tags productType } lineItemGroup { id title quantity } image { url } } } }
+            refunds { refundLineItems(first: 20) { edges { node { lineItem { id } subtotalSet { shopMoney { amount } } } } } }
           } }
           pageInfo { hasNextPage endCursor }
         }
@@ -52,6 +53,16 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
     const conn = data.orders;
     for (const e of conn.edges) {
       const n = e.node, status = n.displayFinancialStatus;
+      // Mapa lineItemId -> valor total devolvido nesse item (pode haver mais de um
+      // reembolso por pedido/item; somamos todos antes de descontar do amount bruto).
+      const refundByLineItemId = {};
+      for (const r of n.refunds || []) {
+        for (const rli of r.refundLineItems?.edges || []) {
+          const liId = rli.node.lineItem?.id;
+          if (!liId) continue;
+          refundByLineItemId[liId] = (refundByLineItemId[liId] || 0) + parseFloat(rli.node.subtotalSet?.shopMoney?.amount || '0');
+        }
+      }
       out.push({
         id:        n.id,
         channel,
@@ -66,8 +77,8 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
         state:     n.shippingAddress?.provinceCode || null,
         items:     (n.lineItems?.edges || []).map(x => ({
           title:       x.node.title,
-          qty:         x.node.quantity,
-          amount:      parseFloat(x.node.discountedTotalSet?.shopMoney?.amount || '0'),
+          qty:         x.node.currentQuantity,
+          amount:      parseFloat(x.node.discountedTotalSet?.shopMoney?.amount || '0') - (refundByLineItemId[x.node.id] || 0),
           tags:        x.node.product?.tags || [],
           productType: x.node.product?.productType || null,
           // Presente quando o item foi vendido através de um combo (Shopify Bundles):

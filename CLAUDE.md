@@ -466,6 +466,48 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - Fora de escopo por ora (não pedido, evitar scope creep): canais que só existem no Monday e não no
   nosso sistema (Chewy, Walmart, Website separado, Wholesale) e qualquer chamada à API do Monday.
 
+### 4.15 Quantidade e receita por produto precisam EXCLUIR unidades devolvidas (implementado 08/07/2026)
+- **Bug descoberto:** o Luan desconfiou da quantidade de Lysine vendida em junho depois de notar que
+  o Shopify trocou o modo de venda dos combos no meio do mês (produto separado → app de bundles).
+  Investigando isso, confirmamos via introspecção do schema GraphQL real do Shopify (não documentação
+  — teste ao vivo contra a loja) que **dois campos usados em `fetchOrders()` (`src/shopify.js`)
+  incluíam unidades/valor já devolvidos**:
+  - `LineItem.quantity` inclui unidades devolvidas/removidas. `LineItem.currentQuantity` **exclui**
+    — trocado diretamente (mesmo tipo `Int`, drop-in, único uso no arquivo).
+  - `LineItem.discountedTotalSet` (usado pra `amount`, receita por item — Top Produtos/Produtos)
+    também inclui valor devolvido. Corrigido buscando `order.refunds { refundLineItems { lineItem { id }
+    subtotalSet } }` e subtraindo do `discountedTotalSet` de cada item, casado por `lineItem.id`
+    (mapa `refundByLineItemId` montado por pedido dentro de `fetchOrders`). **Não** persistimos os
+    campos crus de refund no pedido salvo — só o `amount` já líquido, mantendo o formato normalizado
+    da seção 5 sem mudança de forma.
+  - `Order.currentTotalPriceSet` (usado pro `total` a nível de pedido, receita da KPI principal) **já
+    era** refund-adjusted ("after returns") — não precisou de mudança. Confirmado ao vivo: pedido
+    totalmente devolvido mostra `currentTotalPriceSet: 0.0` mesmo com `discountedTotalSet` do item
+    ainda cheio — por isso a receita total (KPI "Receita") sempre esteve correta; só a quebra **por
+    produto** (Top Produtos/Produtos) tinha o problema.
+  - Validado ao vivo (25/06/2026, pedidos #19591 e #19621, "Lisina para gatos - 120g"): ambos
+    `REFUNDED`, `currentQuantity: 0`, `discountedTotalSet: 119.0` igual ao `refundLineItems.subtotalSet`
+    → `amount` líquido calculado corretamente em `0`.
+- **`aggregateProductsByChannel()` (`metrics.js`) não precisou de nenhuma mudança de código** — as três
+  lógicas de contagem (avulso, combo legado via tag, Shopify Bundle) já tratavam `qty`/`amount` como "o
+  que importa" e se autocorrigem com os novos valores líquidos.
+- **Limitação cosmética conhecida (não corrigida, não vale código extra por ora):** `comboBySize` (a
+  legenda "N combos de tamanho X") usa `lineItemGroup.quantity`, campo diferente de `LineItem.currentQuantity`
+  cujo comportamento com devolução parcial não foi confirmado. Se alguém devolver 1 unidade de dentro
+  de um "combo de 3", o total de unidades (`comboQty`) fica certo, mas a legenda por tamanho pode não
+  bater exatamente com o total. Não corrompe totais de venda/estoque, só a legenda de detalhe.
+- **ShopifyQL (`FROM sales`) não tem filtro de status disponível** — testado ao vivo: `financial_status`
+  e `order_status` não existem como dimensão em `sales`, e `FROM orders` retorna erro "Invalid dataset
+  in FROM clause". Ou seja, pedidos cancelados/expirados continuam inflando `quantity_ordered`/`net_sales`
+  em qualquer relatório nativo do Shopify (Exploração/Notebooks) — **não é bug nosso, é limitação da
+  plataforma**, sem solução via query. Existe uma métrica real `quantity_returned` ("Quantidade
+  devolvida") que pode ser somada à query pra pelo menos mostrar devolução, mas não resolve cancelados.
+- **Autocorreção via sync, sem backfill:** `sync.js` re-busca e sobrescreve (upsert completo) todos os
+  pedidos com `created_at` nos últimos 60 dias a cada ciclo — então pedidos recentes se autocorrigem no
+  próximo sync após o deploy, sem rodar nada manual. Pedidos com mais de 60 dias que forem devolvidos
+  depois **não** se autocorrigem sozinhos (o filtro do sync é por `created_at`, não `updated_at`) — Luan
+  decidiu (08/07/2026) que não vale a pena um script de backfill agora; revisitar se aparecer um caso real.
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js
