@@ -100,8 +100,52 @@ function comboSize(bundle) { return Number((/combo de (\d+)/i.exec(bundle?.title
 
 // Remove o sufixo "- Combo de N unidades" de um título, revelando o título do produto-base
 // (ex: "Lisina ... - Combo de 3 unidades - Ajuda ..." → "Lisina ... - Ajuda ...").
-function stripComboSuffix(title) { return (title || '').replace(/\s*-\s*combo de \d+ unidades?/i, '').trim(); }
+// Também normaliza o tamanho "Ng" pro pote-base de 120g (ver legacyComboSize) e remove o
+// sufixo "- N Pack" (EUA), pra convergir no mesmo título do produto-base.
+function stripComboSuffix(title) {
+  return (title || '')
+    .replace(/\s*-\s*combo de \d+ unidades?/i, '')
+    .replace(/\s*-\s*\d+\s*pack\s*$/i, '')
+    .replace(/(-\s*)\d+g(\s*-)/i, `$1${POWDER_BASE_GRAMS}g$2`)
+    .trim();
+}
 const hasComboTag = it => (it.tags || []).some(t => (t || '').trim().toLowerCase() === 'combo');
+
+// Tamanho-base dos potes de pó (BR/EUA) — todos os produtos em pó do catálogo usam 120g como
+// unidade avulsa (confirmado nas tags "120g" de Lisina, Daily, Hip & Joint, Probiotics no catálogo).
+const POWDER_BASE_GRAMS = 120;
+
+// Detecta o tamanho de combos "legados": produtos cadastrados como SKU próprio no Shopify
+// (não via Shopify Bundles) que representam N unidades do produto-base. Três formatos observados:
+//   1) "Combo de N unidades" no título (BR) — ex: "Lisina ... - Combo de 3 unidades - ..."
+//   2) sufixo "- N Pack" no título (EUA) — ex: "SAMe LO 225 - 3 Pack" (sem tag "combo")
+//   3) tamanho "Ng" múltiplo do pote-base de 120g, com tag "combo" — ex: "Lisina ... - 360g - ..."
+//      = 3 pacotes de 120g. Exige a tag pra não confundir com um produto-base de tamanho real distinto.
+function legacyComboSize(it) {
+  const title = it.title || '';
+  const explicit = comboSize({ title });
+  if (explicit) return explicit;
+  const pack = /-\s*(\d+)\s*pack\s*$/i.exec(title.trim());
+  if (pack) return Number(pack[1]);
+  if (hasComboTag(it)) {
+    const grams = /-\s*(\d+)g\s*-/i.exec(title);
+    if (grams) {
+      const n = Number(grams[1]);
+      if (n > POWDER_BASE_GRAMS && n % POWDER_BASE_GRAMS === 0) return n / POWDER_BASE_GRAMS;
+    }
+  }
+  return null;
+}
+
+// Alias de título pra produto com nome cadastrado incompleto no Shopify (confirmado por Luan em
+// 08/07/2026): o avulso "SAMe LO" e o combo "SAMe LO 225 - 3 Pack" são o mesmo produto — o nome
+// completo e correto é "SAMe LO 225". Mapeamento pontual (não fundir por aproximação de nome:
+// produtos com o mesmo nome-base podem ser tipos diferentes, ex: Hip & Joint em pó/tablet/soft chews).
+const TITLE_ALIASES = { 'same lo': 'SAMe LO 225' };
+function canonicalTitle(title) {
+  const key = (title || '').trim().toLowerCase();
+  return TITLE_ALIASES[key] || title;
+}
 
 // Alíquota efetiva de Simples Nacional (DAS sobre o faturamento) — informada pelo Luan em 02/07/2026.
 // É um valor único da empresa (não varia por produto); editável por linha se um produto tiver regra diferente.
@@ -209,39 +253,18 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   let mktEntries = Object.entries(mkt).sort((a, b) => b[1] - a[1]);
   if (mktEntries.length > 5) { const top = mktEntries.slice(0, 4); const rest = mktEntries.slice(4).reduce((a, e) => a + e[1], 0); top.push(['Outros', rest]); mktEntries = top; }
 
-  // top produtos (agrupado por título + canal para diferenciar o mesmo produto em marketplaces diferentes)
-  // Combos Shopify (Bundles) vendem o produto como item individual, com qty/preço do combo —
-  // por isso a receita/qty são sempre corretos, mas separamos avulso x combo (por tamanho) para visibilidade.
-  // it.bundle.id é único por combo comprado; um mesmo combo pode aparecer partido em 2+ itens de linha
-  // (mesmo id repetido) — por isso deduplicamos por id antes de contar "pacotes" de cada tamanho.
-  const pmap = {};
-  const seenBundleIds = new Set();
-  valid.forEach(o => o.items.forEach(it => {
-    if (!it.title) return;
-    const key = `${it.title}|||${o.channel}`;
-    if (!pmap[key]) pmap[key] = { revenue: 0, avulsoQty: 0, avulsoRevenue: 0, comboQty: 0, comboRevenue: 0, comboBySize: {} };
-    const p = pmap[key], qty = it.qty || 0;
-    p.revenue += it.amount;
-    if (it.bundle) {
-      p.comboQty += qty;
-      p.comboRevenue += it.amount;
-      const size = comboSize(it.bundle);
-      if (size && !seenBundleIds.has(it.bundle.id)) {
-        seenBundleIds.add(it.bundle.id);
-        p.comboBySize[size] = (p.comboBySize[size] || 0) + (it.bundle.qty || 1);
-      }
-    } else {
-      p.avulsoQty += qty;
-      p.avulsoRevenue += it.amount;
-    }
-  }));
-  const topProducts = Object.entries(pmap)
-    .sort((a, b) => b[1].revenue - a[1].revenue)
-    .slice(0, 5)
-    .map(([key, p]) => {
-      const [title, ch] = key.split('|||');
-      return { title, channel: ch, revenue: p.revenue, avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize };
-    });
+  // top produtos (agrupado por título + canal para diferenciar o mesmo produto em marketplaces
+  // diferentes) — mesma agregação usada em Produtos/Estoque (aggregateProductsByChannel), incluindo
+  // a quebra avulso x combo (Shopify Bundles e combos legados, ver legacyComboSize). Retornamos o
+  // top 5 (topProducts) e a lista completa (topProductsAll) pra permitir expandir o card na revenue.
+  const productsByChannel = aggregateProductsByChannel(valid);
+  const allProducts = Object.entries(productsByChannel)
+    .flatMap(([ch, c]) => Object.entries(c.products).map(([title, p]) => ({
+      title, channel: ch, revenue: p.revenue, avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
+    })))
+    .filter(p => p.revenue > 0)
+    .sort((a, b) => b.revenue - a.revenue);
+  const topProducts = allProducts.slice(0, 5);
 
   // por estado (endereço de entrega dos pedidos válidos)
   const byState = {};
@@ -382,6 +405,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series },
     funnel: { sessions: sess.sessions, cart: sess.cart, checkout: sess.checkout, completed: sess.completed },
     topProducts,
+    topProductsAll: allProducts,
     segments,
     byState,
     recentOrders: recent,
@@ -403,11 +427,12 @@ function aggregateProductsByChannel(orders) {
     c.orders += 1;
     o.items.forEach(it => {
       if (!it.title) return;
-      // Produtos com tag "combo" vendidos como si mesmos (não via Shopify Bundles) somem da
-      // listagem — a venda é atribuída ao produto-base (título sem o sufixo "Combo de N unidades"),
-      // contando como pacotes de combo do mesmo tamanho (mesma lógica do combo via Bundles).
-      const taggedSize = hasComboTag(it) ? comboSize({ title: it.title }) : null;
-      const title = taggedSize ? stripComboSuffix(it.title) : it.title;
+      // Produtos legados (combo de N unidades, "- N Pack" ou "Ng" múltiplo de 120g) vendidos
+      // como SKU próprio (não via Shopify Bundles) somem da listagem — a venda é atribuída ao
+      // produto-base (título normalizado, ver stripComboSuffix), contando como pacotes de combo
+      // do mesmo tamanho (mesma lógica do combo via Bundles). Ver legacyComboSize.
+      const taggedSize = legacyComboSize(it);
+      const title = canonicalTitle(taggedSize ? stripComboSuffix(it.title) : it.title);
 
       if (!c.products[title]) c.products[title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
       const p = c.products[title], qty = it.qty || 0;

@@ -622,6 +622,8 @@ const MARKET_CHANNELS = {
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos', sessoes:'Sessões' };
 const charts = {};
 let lastData = null;
+let topProductsExpanded = false;
+function toggleTopProducts() { topProductsExpanded = !topProductsExpanded; if (lastData) render(lastData); }
 
 function setChart(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
 
@@ -825,10 +827,11 @@ function render(d) {
 
   // Top products
   const isAllCh = d.channel === 'todos';
-  if (d.topProducts.length) {
-    const prodRows = d.topProducts.map((p,i) => {
-      const {title:nm, channel:ch, revenue:v, avulsoQty:avQty, comboBySize} = p;
-      const name = nm.length>36?nm.slice(0,36)+'…':nm;
+  const allProds = d.topProductsAll || d.topProducts;
+  const prodList = topProductsExpanded ? allProds : d.topProducts;
+  if (prodList.length) {
+    const prodRows = prodList.map((p,i) => {
+      const {title:name, channel:ch, revenue:v, avulsoQty:avQty, comboBySize} = p;
       const badge = isAllCh ? ' '+chBadgeHTML(ch) : '';
       const comboParts = Object.entries(comboBySize||{})
         .sort((a,b)=>Number(a[0])-Number(b[0]))
@@ -838,11 +841,15 @@ function render(d) {
       bits.push(...comboParts);
       const total = avQty + (p.comboQty || 0);
       const qtyLine = bits.length ? `${fmtInt(total)} un total · ${bits.join(', ')}` : '0 un';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="min-width:0"><div style="color:var(--sub);display:flex;align-items:center;gap:6px">${i+1} · ${name}${badge}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${qtyLine}</div></div><span style="font-weight:500;white-space:nowrap">${fmtMoney(v)}</span></div>`;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="min-width:0"><div style="color:var(--sub);display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span>${i+1} · ${name}</span>${badge}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${qtyLine}</div></div><span style="font-weight:500;white-space:nowrap">${fmtMoney(v)}</span></div>`;
     }).join('');
-    const prodTotal = d.topProducts.reduce((a,p)=>a+p.revenue, 0);
-    const totalRow = `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px"><span style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">Total top ${d.topProducts.length}</span><span style="font-weight:600">${fmtMoney(prodTotal)}</span></div>`;
-    document.getElementById('topProducts').innerHTML = prodRows + totalRow;
+    const prodTotal = prodList.reduce((a,p)=>a+p.revenue, 0);
+    const totalLabel = topProductsExpanded ? `Total geral (${prodList.length})` : `Total top ${prodList.length}`;
+    const toggleLabel = topProductsExpanded ? 'Mostrar top 5' : `Ver todos (${allProds.length})`;
+    const showToggle = allProds.length > d.topProducts.length;
+    const totalRow = `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px"><span style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">${totalLabel}</span><span style="font-weight:600">${fmtMoney(prodTotal)}</span></div>${showToggle?`<div style="text-align:center;padding-top:8px"><button onclick="toggleTopProducts()" style="background:none;border:none;color:var(--sub);font-size:11px;cursor:pointer;text-decoration:underline;padding:2px">${toggleLabel}</button></div>`:''}`;
+    const listWrap = topProductsExpanded ? `<div style="max-height:420px;overflow-y:auto">${prodRows}</div>` : prodRows;
+    document.getElementById('topProducts').innerHTML = listWrap + totalRow;
   } else {
     document.getElementById('topProducts').innerHTML = '<div class="muted-state">Sem vendas no período.</div>';
   }
