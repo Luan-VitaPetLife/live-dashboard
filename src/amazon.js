@@ -321,10 +321,11 @@ export async function fetchOrders(sinceISO, untilISO) {
       getBackoff: getAmazonBackoff, setBackoff: setAmazonBackoff,
       getBackoffCount: getAmazonBackoffCount, setBackoffCount: setAmazonBackoffCount,
       label: '(combinado US+BR)',
-    }).catch(e => { console.error('Amazon (combinado):', e.message); return []; });
+    });
   }
 
   const results = [];
+  const failures = [];
 
   if (isConfigured()) {
     const us = await fetchMarketplaceOrders({
@@ -332,10 +333,10 @@ export async function fetchOrders(sinceISO, untilISO) {
       getBackoff: getAmazonBackoff, setBackoff: setAmazonBackoff,
       getBackoffCount: getAmazonBackoffCount, setBackoffCount: setAmazonBackoffCount,
       label: 'US',
-    }).catch(e => { console.error('Amazon US:', e.message); return []; });
+    }).catch(e => { failures.push('US: ' + e.message); return []; });
     results.push(...us);
   } else {
-    console.warn('Amazon US: AMAZON_REFRESH_TOKEN não configurado — autorize o app no NA Seller Central.');
+    failures.push('US: AMAZON_REFRESH_TOKEN não configurado');
   }
 
   // Pausa entre chamadas: tokens diferentes = contas realmente separadas, cada uma
@@ -348,11 +349,16 @@ export async function fetchOrders(sinceISO, untilISO) {
       getBackoff: getAmazonBRBackoff, setBackoff: setAmazonBRBackoff,
       getBackoffCount: getAmazonBRBackoffCount, setBackoffCount: setAmazonBRBackoffCount,
       label: 'BR',
-    }).catch(e => { console.error('Amazon BR:', e.message); return []; });
+    }).catch(e => { failures.push('BR: ' + e.message); return []; });
     results.push(...br);
   } else {
-    console.warn('Amazon BR: AMAZON_BR_REFRESH_TOKEN não configurado — autorize o app no BR Seller Central.');
+    failures.push('BR: AMAZON_BR_REFRESH_TOKEN não configurado');
   }
+
+  // Um mercado que falha não pode apagar o outro que deu certo, mas a falha
+  // precisa chegar ao relatório de sync em vez de virar uma lista vazia silenciosa.
+  if (failures.length && !results.length) throw new Error(failures.join(' | '));
+  if (failures.length) console.error('Amazon (parcial):', failures.join(' | '));
 
   return results;
 }
