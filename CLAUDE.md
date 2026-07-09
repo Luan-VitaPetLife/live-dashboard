@@ -30,14 +30,15 @@ do repositório `https://github.com/Luan-VitaPetLife/live-dashboard.git`).
 - Volume ~73 pedidos/30 dias. Paginação simples já dá conta.
 - Produto principal: **"Lisina para gatos - 120g"** (e combos); também "Daily".
 - Versão da Admin API: **2026-04** (`SHOPIFY_API_VERSION`). Não usar versões anteriores a 2025-10.
-- Amazon BR: Marketplace ID `A2Q3Y263D00KWC`. **Usa o mesmo app/token que a US** (`AMAZON_CLIENT_ID/SECRET/REFRESH_TOKEN`). Endpoint: `sellingpartnerapi-na.amazon.com` (região NA — não SA). Verificado via `marketplaceParticipations`.
+- Amazon BR: Marketplace ID `A2Q3Y263D00KWC`. Conta de vendedor **CocoandLuna** — token próprio (`AMAZON_BR_REFRESH_TOKEN`), mesmo app/Client ID da US. Endpoint: `sellingpartnerapi-na.amazon.com` (região NA — não SA). Ver 4.7.1.
 
 ### EUA
 - Shopify US: **vita-pet-life.myshopify.com** · ~99 pedidos/30 dias confirmados.
-- Amazon US: SP-API configurado com LWA + AWS SigV4 via IAM AssumeRole.
+- Amazon US: SP-API configurado com LWA + AWS SigV4 via IAM AssumeRole. Conta de vendedor **VITA PET LIFE**.
   - IAM User: `arn:aws:iam::354674816862:user/usdashboard`
   - IAM Role: `arn:aws:iam::354674816862:role/SellingPartnerAPIRole`
   - Marketplace ID: `ATVPDKIKX0DER` (Amazon.com US)
+  - Volume: **~1.000 pedidos/dia** — muito acima dos demais canais. Ver 4.7.3 (sync incremental).
 - Meta Ads EUA: conta `826249215807271` (Vita Pet Life) — separada da BR (Coco and Luna).
 
 ## 3. Arquitetura
@@ -148,46 +149,86 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - **Pré-requisito:** o app ML precisa ter permissão **Mercado Ads** e token gerado via `/mercadolivre/connect`. Sem isso, `/advertising/advertisers` retorna 403 e as funções devolvem zeros/vazio graciosamente.
 - `mlBreakdown` exposto em `metrics.js`: `{ organic, premium, adCost, adClicks, roas }`.
 
-### 4.7 Amazon SP-API (EUA + BR) — pendente reautorizar US; combinação automática enquanto isso
+### 4.7 Amazon SP-API (EUA + BR) — ativo ✅ (US destravada em 09/07/2026)
 - Implementado em `src/amazon.js`. Sem dependências externas (SigV4 e HMAC via `crypto` nativo do Node).
-- **FATO CRÍTICO ATUAL (descoberto 01/07/2026):** o app **só foi autorizado no Brazil Seller Central**.
-  `AMAZON_REFRESH_TOKEN` (US) e `AMAZON_BR_REFRESH_TOKEN` no Railway são **o mesmo valor** — ou seja, a US
-  **nunca foi de fato autorizada** em `sellercentral.amazon.com` (NA Seller Central, conta Vita Pet Life).
-  Uma afirmação anterior deste arquivo ("mesmo token cobre US e BR, verificado via `marketplaceParticipations`")
-  estava **errada** ou descrevia um estado que não se sustentou — não confiar nela. `amazon_us` no payload do
-  dashboard fica em 0 até a reautorização acontecer.
-  - **Ação pendente (só o Luan pode fazer):** logar em `sellercentral.amazon.com` (conta US, Vita Pet Life — não a BR)
-    e autorizar o app SP-API lá, gerando um `AMAZON_REFRESH_TOKEN` novo e **diferente** do `AMAZON_BR_REFRESH_TOKEN`.
-    Atualizar só essa variável no Railway. Sem isso nenhuma mudança de código traz dado dos EUA.
 - **Endpoint único:** `sellingpartnerapi-na.amazon.com` (região NA) serve os dois marketplaces (BR é região NA, não SA).
-- **Combinação automática (`SAME_TOKEN` em `amazon.js`):** como os dois tokens hoje são idênticos (mesma conta, mesma
-  cota real na Amazon), `fetchOrders()` detecta isso e faz **uma única chamada** a `/orders/v0/orders` com
-  `MarketplaceIds=ATVPDKIKX0DER,A2Q3Y263D00KWC` (metade das requisições reais) em vez de duas chamadas separadas
-  contra o mesmo balde. Cada pedido retornado traz seu próprio `MarketplaceId` → separado por `MARKET_BY_MP` em
-  US (`channel: 'amazon_us'`, `market: 'us'`) e BR (`channel: 'amazon'`, `market: 'br'`).
-  - **Por que isso importa:** entre 30/06 e 01/07 o código fazia sempre DUAS chamadas (US e BR) tratando-as como
-    cotas independentes (`kv.amazonBackoff` e `kv.amazonBRBackoff` separados) — mas por serem o mesmo token, as duas
-    batiam na MESMA cota real, dobrando as requisições por sync e um 429 de um lado não freava o outro. Isso é o
-    suspeito nº 1 para a penalização sustentada de 429 que persistiu por dias.
-  - **Quando a US for reautorizada com token próprio:** `SAME_TOKEN` vira `false` automaticamente e o código volta
-    sozinho a fazer duas chamadas separadas com backoff independente (`getLwaTokenUS`/`getLwaTokenBR`,
-    `kv.amazonBackoff`/`kv.amazonBRBackoff`) — não precisa mexer no código de novo, só trocar a variável no Railway.
 - **Fluxo de autenticação:** 1) LWA token (getter próprio por token) · 2) STS AssumeRole (IAM User, compartilhado) · 3) SigV4 + `x-amz-access-token`.
+
+#### 4.7.1 Duas contas de vendedor distintas (descoberto 09/07/2026)
+No Solution Provider Portal (`solutionproviderportal.amazon.com`, app "Dashboard Amazon"), a aba
+**Manage Authorizations → Revoke Authorizations → Self Authorizations** lista DUAS contas:
+- **`CocoandLuna (Seller)`** → marketplace **Brazil** → é a loja Amazon BR de verdade.
+- **`VITA PET LIFE (Seller)`** → **Mexico, Canada, Brazil, United States** → é a loja Amazon US.
+
+Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (Amazon.com.br) em
+`marketplaceParticipations`, ela **não tem pedidos lá** — confirmado ao vivo: `/orders/v0/orders` com
+`MarketplaceIds=A2Q3Y263D00KWC` e o token dela devolve `0 pedidos`, enquanto o mesmo token no
+`ATVPDKIKX0DER` devolve centenas. Ou seja:
+- `AMAZON_REFRESH_TOKEN` = token da conta **VITA PET LIFE** (US).
+- `AMAZON_BR_REFRESH_TOKEN` = token da conta **CocoandLuna** (BR).
+- **Nunca colar o mesmo token nas duas.** Isso ativa `SAME_TOKEN` (chamada combinada) e o BR para de
+  receber pedidos silenciosamente — aconteceu em 09/07/2026. Tokens diferentes → `SAME_TOKEN === false`
+  → duas chamadas separadas, com backoff independente (`kv.amazonBackoff` / `kv.amazonBRBackoff`).
+- Gerar/renovar token: portal → Edit App → Manage Authorizations → **Authorize app** na linha da conta.
+  Gerar um novo **não invalida** os anteriores. Para a conta CocoandLuna use o link "sign in to that account".
+
+#### 4.7.2 O bug do 429: era a paginação, não a cota (corrigido 09/07/2026)
+- **Sintoma que durou semanas:** `amazon_us` sempre 0 no dashboard; Amazon BR sempre funcionando.
+  Mesmo app, mesmo token, mesma cota. Suspeitas anteriores (token não autorizado, cota penalizada,
+  chamada dupla) estavam **todas erradas** — a US sempre esteve autorizada.
+- **Causa real:** a cota de `/orders/v0/orders` é `0.0167 req/s` = **1 requisição por minuto** (burst 20).
+  O código pedia a página seguinte **2 segundos** depois (`await sleep(2000)`). Como a US passa de 100
+  pedidos por janela (`MaxResultsPerPage: 100`), sempre havia `NextToken` → sempre 429 na página 2 → o
+  429 era lançado como exceção → **os 100 pedidos da página 1 iam junto para o lixo**. O BR cabia numa
+  página só, nunca paginava, nunca dava 429. Determinístico, não intermitente: esperar jamais resolveria.
+- **Por que demorou tanto para achar:** `fetchOrders()` tinha `.catch(e => { console.error(...); return []; })`
+  em cada chamada. O erro só ia para o log do container; `/api/sync` e `/api/amazon/force-sync` sempre
+  respondiam `errors: []`. **Nunca engolir erro de integração** — a primeira correção foi propagar a falha
+  para o relatório do sync, e o `429 QuotaExceeded` apareceu na tentativa seguinte.
+- **Correções aplicadas:**
+  - Paginação aproveita o burst (dispara as páginas em sequência) e só espera `RATE_WAIT_MS` (61s) quando
+    de fato leva 429, com até `PAGE_MAX_TRIES` (3) tentativas por página.
+  - `RateLimitError` (`e.isRateLimit`) distingue 429 de erro real. Páginas já lidas viram **upsert parcial**
+    em vez de serem perdidas; o cursor **não** avança nesse caso, então o próximo sync completa o resto.
+  - Trava `syncInFlight` em `sync.js`: o timer de `SYNC_INTERVAL_MINUTES` não dispara um segundo sync por
+    cima de um em andamento (a Amazon pode paginar por minutos), o que dobrava requisições no mesmo balde.
+- **Verificado ao vivo (09/07/2026):** 1638 pedidos US em 10s (17 páginas, zero 429) no teste local;
+  em produção o sync das 18:30 gravou **2.353 pedidos / US$ 34.390** no `channelSplit.amazon_us`.
+
+#### 4.7.3 Sync incremental por cursor (implementado 09/07/2026)
+- **Motivo:** a conta US faz **~1.000 pedidos/dia**. A janela antiga de 7 dias significava rebaixar ~7.000
+  pedidos (~70 páginas ≈ 70 min) **a cada 15 minutos**, sendo que 99% já estavam no banco.
+- `kv.amazonCursors` (`store.js`: `getAmazonCursor(key)` / `setAmazonCursor(key, iso)`) guarda o ISO do
+  último sync **completo** por balde: `'us'`, `'br'` ou `'combined'`.
+- Com cursor → `LastUpdatedAfter` / `LastUpdatedBefore` (traz **mudança de status** — cancelamento, reembolso,
+  captura de pagamento de um `Pending` — que `CreatedAfter` nunca pegava). Sem cursor (1ª execução) →
+  `CreatedAfter` / `CreatedBefore`. Sobreposição de 10 min (`CURSOR_OVERLAP_MS`) ao retomar; upsert é por id.
+- Sync típico depois da 1ª carga: ~10 pedidos, **1 requisição, ~1s**.
+- **`AMAZON_BACKFILL_DAYS`** (padrão `2`) — janela só da primeira carga, dimensionada para caber no burst.
+  Por isso o dashboard nasce com ~2 dias de histórico da Amazon US. **Backfill histórico maior não deve ser
+  feito paginando `/orders`** (horas de espera): usar a **Reports API** (`GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL`),
+  que é feita para carga em massa. Ainda não implementado — ver backlog.
+
+#### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
+- **Pedidos `Pending` vêm com `total: 0`** — a SP-API omite `OrderTotal` enquanto o pagamento não é capturado.
+  Não é bug nosso. O valor entra sozinho num sync incremental posterior, via `LastUpdatedAfter`.
 - **RDT (nome do comprador):** desativado por padrão — o app não tem o papel PII (retornava 403 e gastava requisição).
-  Reative com `AMAZON_FETCH_PII=1` só se o papel for aprovado.
+  Reative com `AMAZON_FETCH_PII=1` só se o papel for aprovado. Na tela de roles do app, a opção "delegate access
+  to PII to another developer's application" **não** é isso — é para delegar a apps de terceiros; manter em "No".
 - **Restrição SP-API:** `CreatedBefore` ≥ 2 min antes de agora — código aplica margem de 3 min.
-- **Backoff:** só dispara em 429; degraus 15→30→60→120 min; contador zera após sucesso. Enquanto `SAME_TOKEN`, usa o
-  balde único `kv.amazonBackoff` (o `kv.amazonBRBackoff` fica sem uso até haver token BR de verdade distinto).
+- **Backoff:** só dispara em 429 que esgotou as tentativas; degraus 15→30→60→120 min; contador zera após sucesso.
   Reset/force via `POST /api/amazon/{reset-backoff,force-sync}`.
-  - **⚠️ Se levar 429 mesmo combinado:** a cota da conta pode estar penalizada por excesso sustentado de chamadas. A cura é
-    PARAR de martelar (deixar o backoff agir, não usar force-sync em loop) e esperar a cota se restaurar — NÃO remover o backoff.
-    **NÃO rodar `/api/sync` ou `/api/amazon/force-sync` só para "testar" enquanto a cota estiver se recuperando.**
+  - **⚠️ A cota é da CONTA, não do processo.** Um teste local paginando muitas páginas drena o mesmo balde que a
+    produção usa. Em 09/07/2026 um teste local às 20:55 fez o primeiro sync do deploy (21:00) levar 429 e recuar
+    30 min. **Não rodar teste local e sync de produção colados**, e não usar force-sync em loop — deixar o backoff agir.
 - Sem `AMAZON_AWS_ACCESS_KEY` / `SECRET_KEY` → retorna `[]` com aviso, nada quebra.
 - **IDs de pedido:** `amazon-us:` (EUA) e `amazon-br:` (BR) — evita colisão.
 - **Variável fantasma:** `AMAZON_RESET_BACKOFF` já existiu como variável no Railway mas **nunca foi lida por nenhum
   código** (nem hoje, nem no histórico do git) — não faz nada, pode remover. O reset real é o endpoint
   `POST /api/amazon/reset-backoff`.
+- **`byState` da Amazon US traz grafias inconsistentes** (`"UT"` e `"Ut"` como chaves distintas), porque
+  `ShippingAddress.StateOrRegion` não é normalizado pela Amazon. Ainda não tratado — ver backlog.
 
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
@@ -548,9 +589,12 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 | `META_ACCESS_TOKEN` | Token de acesso de longa duração (System User) — único token para BR e EUA |
 | `META_AD_ACCOUNT_ID` | Conta de anúncios BR — Coco and Luna (sem prefixo `act_`) |
 | `META_US_AD_ACCOUNT_ID` | Conta de anúncios EUA — Vita Pet Life (`826249215807271`, sem prefixo `act_`) |
-| `AMAZON_CLIENT_ID` | LWA Client ID do app SP-API — cobre **US e BR** (mesmo app/token) |
+| `AMAZON_CLIENT_ID` | LWA Client ID do app SP-API "Dashboard Amazon" — mesmo app para US e BR |
 | `AMAZON_CLIENT_SECRET` | LWA Client Secret |
-| `AMAZON_REFRESH_TOKEN` | LWA Refresh Token (autorizado para US + BR via `marketplaceParticipations`) |
+| `AMAZON_REFRESH_TOKEN` | LWA Refresh Token da conta **VITA PET LIFE** (US). Ver 4.7.1 |
+| `AMAZON_BR_REFRESH_TOKEN` | LWA Refresh Token da conta **CocoandLuna** (BR). **Nunca igual ao de cima** — ver 4.7.1 |
+| `AMAZON_BACKFILL_DAYS` | Janela só da 1ª carga, antes de existir cursor (padrão `2`). Ver 4.7.3 |
+| `AMAZON_FETCH_PII` | `1` liga a busca do nome do comprador via RDT — só se o papel PII for aprovado pela Amazon |
 | `AMAZON_ROLE_ARN` | ARN do IAM Role com permissões SP-API — compartilhado entre EUA e BR |
 | `AMAZON_AWS_ACCESS_KEY` | Access Key do IAM User com permissão `sts:AssumeRole` no role acima |
 | `AMAZON_AWS_SECRET_KEY` | Secret Key do mesmo IAM User |
@@ -590,14 +634,16 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   - `GET /googleads/connect` e `GET /googleads/callback`
   - `GET /health`
 
-## 8. Status das integrações (30/06/2026)
+## 8. Status das integrações (09/07/2026)
 
-### Amazon US + BR SP-API — ativo ✅ (chamada combinada)
-- **Um único app/token** (`AMAZON_CLIENT_ID/SECRET/REFRESH_TOKEN`) cobre US (`ATVPDKIKX0DER`) e BR (`A2Q3Y263D00KWC`). Confirmado via `marketplaceParticipations`.
+### Amazon US + BR SP-API — ativo ✅ (US destravada em 09/07/2026)
+- **Um app** ("Dashboard Amazon", `AMAZON_CLIENT_ID/SECRET`), **dois tokens** — um por conta de vendedor:
+  VITA PET LIFE (US, `ATVPDKIKX0DER`) e CocoandLuna (BR, `A2Q3Y263D00KWC`). Ver 4.7.1.
 - **Endpoint:** `sellingpartnerapi-na.amazon.com` (região NA) serve os dois marketplaces.
-- **Chamada combinada:** `fetchOrders()` faz uma única requisição com `MarketplaceIds=US,BR`. Cada pedido separado por `MarketplaceId` → `channel: 'amazon_us' / market: 'us'` ou `channel: 'amazon' / market: 'br'`.
 - **IAM Role `SellingPartnerAPIRole`**: política `SPAPIInvokePolicy` com `execute-api:Invoke` em `*`. Trust policy inclui `usdashboard` user. ✅
-- **Rate limit:** 0.0167 req/s (burst 20), balde compartilhado. Backoff único (`kv.amazonBackoff`). Se levar 429 sustentados, **não** usar force-sync em loop — aguardar a cota se restaurar naturalmente.
+- **Rate limit:** 0.0167 req/s = 1 req/min (burst 20). O bug histórico de `amazon_us` sempre 0 era a paginação
+  pedindo a página seguinte 2s depois — ver 4.7.2. Corrigido; produção gravou 2.353 pedidos US em 09/07/2026.
+- **Sync incremental por cursor** (`kv.amazonCursors`) — ver 4.7.3. Sync típico: 1 requisição, ~1s.
 - **Endpoint `POST /api/amazon/reset-backoff?delay=N`:** aceita `delay` em minutos para backoff customizado.
 
 ### Shopee — ativa ✅
@@ -610,18 +656,28 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - 140 pedidos no banco.
 - **ML Ads:** dados de gasto por campanha confirmados (~R$ 1.937 no período testado). `fetchCampaigns()` e `fetchAdCosts()` operacionais. Escopo `write:product_ads` já habilitado no token atual.
 
-### Google Ads (EUA) — código pronto ⏳, aguardando credenciais
-- Implementado em `src/googleads.js` (ver 4.12). Código não quebra nada sem credenciais — só falta o Luan criar o projeto no Google Cloud, gerar Developer Token com Basic access, e rodar `/googleads/connect` uma vez.
+### Google Ads (EUA) — ativo ✅ (autorizado em 09/07/2026)
+- Implementado em `src/googleads.js` (ver 4.12). OAuth autorizado via `/googleads/connect`. Token persistido no Postgres (`kv.googleAdsTokens`).
 - Só EUA (conta "Coco and Luna", Customer ID `1344114329`, roda campanhas apenas nos EUA hoje).
+- Dados aparecem na tela de Campanhas → mercado US → card Google Ads.
 
 ## 9. Próximos passos (backlog priorizado)
 
 1. Decidir tratamento de **PENDING** (contar só pagos?) — ver 4.1.
-2. **Google Ads:** falta o Luan configurar o projeto no Google Cloud + Developer Token e autorizar via `/googleads/connect` — ver 4.12. Código já implementado.
+2. ~~**Google Ads:** falta configurar credenciais e autorizar via `/googleads/connect`.~~ **Resolvido 09/07/2026** — ativo ✅.
 3. ~~**ML Ads ROAS por campanha:** verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.~~ **Resolvido 07/07/2026** — ver 4.6: o campo nunca vinha de `/orders/search` mesmo, foi movido pra ler do recurso `/items`.
 4. Login/usuários se mais pessoas precisarem acessar.
-5. **Amazon US na produção:** após quotas se recuperarem do período de sobrecarga, confirmar que pedidos US aparecem na dashboard (o código está correto — era problema de quota penalizada).
-6. **Amazon — itens do pedido não são buscados:** `fetchOrders()` em `src/amazon.js` só lê `NumberOfItemsShipped/Unshipped` do pedido e cria itens com `title:''` (placeholder) — nunca chama o endpoint de item do pedido (`/orders/v0/orders/{id}/orderItems`). Por isso Amazon (BR e US) nunca aparece em Top Produtos, Segmentos ou na tela de Produtos (itens sem título são ignorados nessas telas), e por isso também a tela de Estoque usa o placeholder "Produto TESTE" pra Amazon (ver 4.14). Corrigir exigiria uma chamada extra por pedido (mais lento, mais exposto a 429) — avaliar com cautela dado o histórico de penalização de cota (ver 4.7).
+5. ~~**Amazon US na produção.**~~ **Resolvido 09/07/2026** — ver 4.7.2. Era paginação, não cota/autorização.
+6. **Amazon — backfill histórico dos EUA:** hoje o dashboard só tem `AMAZON_BACKFILL_DAYS` (2 dias) de histórico
+   da Amazon US; do dia 09/07/2026 em diante o cursor incremental mantém em dia. Puxar meses paginando `/orders`
+   a 1 req/min levaria horas — usar a **Reports API** (`GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL`),
+   feita para carga em massa: cria relatório → poll do status → baixa o arquivo. Ver 4.7.3.
+7. **Amazon — `byState` com grafia inconsistente:** `ShippingAddress.StateOrRegion` vem `"UT"` e `"Ut"` como chaves
+   distintas no `byState` do payload (quebra a contagem por estado no mapa de Geografia US). Normalizar para
+   maiúsculas em `metrics.js`/`amazon.js`. Barato, ainda não feito.
+8. **Amazon — nome do comprador (PII):** hoje `customer` vem vazio. Exige o papel PII aprovado pela Amazon no
+   Solution Provider Portal; depois é só ligar `AMAZON_FETCH_PII=1` no Railway (código já pronto). Ver 4.7.4.
+9. **Amazon — itens do pedido não são buscados:** `fetchOrders()` em `src/amazon.js` só lê `NumberOfItemsShipped/Unshipped` do pedido e cria itens com `title:''` (placeholder) — nunca chama o endpoint de item do pedido (`/orders/v0/orders/{id}/orderItems`). Por isso Amazon (BR e US) nunca aparece em Top Produtos, Segmentos ou na tela de Produtos (itens sem título são ignorados nessas telas), e por isso também a tela de Estoque usa o placeholder "Produto TESTE" pra Amazon (ver 4.14). Corrigir exigiria uma chamada extra por pedido (mais lento, mais exposto a 429) — avaliar com cautela dado o histórico de penalização de cota (ver 4.7).
 
 ## 10. Convenções
 
