@@ -72,6 +72,7 @@ export async function initStore() {
       if (r.key === 'amazonBackoffCount')    cache.amazonBackoffCount    = Number(r.value);
       if (r.key === 'amazonBRBackoffCount')  cache.amazonBRBackoffCount  = Number(r.value);
       if (r.key === 'amazonCursors')         cache.amazonCursors         = r.value;
+      if (r.key === 'amazonBackfill')        cache.amazonBackfill        = r.value;
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -293,3 +294,11 @@ export function setAmazonCursor(key, iso) {
   if (USE_PG) pgKv('amazonCursors', db.amazonCursors);
 }
 export function getAmazonCursor(key) { return (load().amazonCursors || {})[key] || null; }
+
+// ── Estado do backfill histórico da Amazon (Reports API) ──
+// Roda em background no servidor; o progresso é consultável via GET /api/status.
+export function setAmazonBackfill(state) {
+  const db = load(); db.amazonBackfill = state; saveJson();
+  if (USE_PG) pgKv('amazonBackfill', state);
+}
+export function getAmazonBackfill() { return load().amazonBackfill || null; }

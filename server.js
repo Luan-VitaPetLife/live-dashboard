@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock } from './src/metrics.js';
 import { runSync } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, load } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, upsertOrders, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -169,6 +169,43 @@ app.post('/api/amazon-br/force-sync', async (_req, res) => {
   res.json(report);
 });
 
+// Backfill histórico da Amazon via Reports API. Roda em background (leva minutos:
+// cada janela de 30 dias é um relatório que a Amazon monta e nós baixamos) e responde
+// na hora. Progresso em GET /api/status → amazon.backfill. Ver CLAUDE.md 4.7.3.
+let backfillRunning = false;
+app.post('/api/amazon/backfill', (req, res) => {
+  if (backfillRunning) return res.status(409).json({ error: 'Backfill já em andamento.' });
+
+  const days   = Math.min(Number(req.query.days || 90), 730);
+  const market = req.query.market === 'br' ? 'br' : 'us';
+
+  backfillRunning = true;
+  setAmazonBackfill({ status: 'running', market, days, orders: 0, message: 'iniciando', startedAt: new Date().toISOString() });
+
+  (async () => {
+    let orders = 0;
+    try {
+      await amazon.backfillOrders({
+        market, days,
+        onProgress: message => setAmazonBackfill({ status: 'running', market, days, orders, message, startedAt: new Date().toISOString() }),
+        onChunk: chunk => {
+          upsertOrders(chunk);           // grava lote a lote: uma falha adiante não perde o que já veio
+          orders += chunk.length;
+          setAmazonBackfill({ status: 'running', market, days, orders, message: `${orders} pedidos gravados`, startedAt: new Date().toISOString() });
+        },
+      });
+      setAmazonBackfill({ status: 'done', market, days, orders, message: `concluído — ${orders} pedidos`, finishedAt: new Date().toISOString() });
+    } catch (e) {
+      setAmazonBackfill({ status: 'error', market, days, orders, message: e.message, finishedAt: new Date().toISOString() });
+      console.error('Backfill Amazon falhou:', e.message);
+    } finally {
+      backfillRunning = false;
+    }
+  })();
+
+  res.json({ ok: true, message: `Backfill de ${days} dias (${market.toUpperCase()}) iniciado. Acompanhe em GET /api/status.` });
+});
+
 // Forçar uma sincronização manual (protegido por token)
 app.post('/api/sync', async (req, res) => {
   const secret = process.env.SYNC_SECRET;
@@ -253,6 +290,7 @@ app.get('/api/status', (_req, res) => {
       backoffActive,
       backoffUntil:  backoffActive ? new Date(backoffUntil).toISOString() : null,
       nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
+      backfill:      getAmazonBackfill(),
     },
     amazon_br: {
       // US e BR usam o mesmo app/token e o mesmo balde de cota (chamada combinada).

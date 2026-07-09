@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────
 import 'dotenv/config';
 import crypto from 'crypto';
+import zlib from 'zlib';
 import {
   getAmazonBackoff,      setAmazonBackoff,
   getAmazonBackoffCount, setAmazonBackoffCount,
@@ -215,6 +216,32 @@ async function spGet(getLwa, path, params = {}, lwaOverride = null) {
   return json;
 }
 
+// ── SP-API POST ────────────────────────────────────────────────────────────────
+async function spPost(getLwa, path, body) {
+  const url     = `https://${SP_HOST}${path}`;
+  const payload = JSON.stringify(body);
+  const lwa     = await getLwa();
+  const creds   = await assumeRole();
+  const hdrs    = sigV4Headers({
+    method: 'POST', url, body: payload,
+    accessKey: creds.accessKey, secretKey: creds.secretKey, sessionToken: creds.sessionToken,
+    region: 'us-east-1', service: 'execute-api',
+    extraHeaders: { 'x-amz-access-token': lwa, 'content-type': 'application/json' },
+  });
+  const res = await safeFetch(url, { method: 'POST', headers: hdrs, body: payload });
+
+  if (res.status === 429) {
+    const errBody = await res.text().catch(() => '');
+    throw new RateLimitError(`SP-API ${path} [HTTP 429 QuotaExceeded]: ${errBody.slice(0, 200)}`);
+  }
+
+  const json = await safeJson(res);
+  if (json.errors) {
+    throw new Error(`SP-API ${path} [HTTP ${res.status}]: ${json.errors.map(e => e.message).join('; ')}`);
+  }
+  return json;
+}
+
 // ── fetchMarketplaceOrders — busca pedidos de um ou mais marketplaces com UM token ──
 // marketplaceId aceita um ID único ("US") ou vários separados por vírgula (chamada
 // combinada). Cada pedido retornado traz seu próprio MarketplaceId — usado para
@@ -307,7 +334,8 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
           total:     Number(o.OrderTotal?.Amount || 0),
           source:    'Amazon',
           customer:  o.BuyerInfo?.BuyerName || '',
-          state:     o.ShippingAddress?.StateOrRegion || null,
+          // A Amazon não normaliza a grafia: vem "UT" e "Ut" para o mesmo estado.
+          state:     (o.ShippingAddress?.StateOrRegion || '').trim().toUpperCase() || null,
           items:     Array.from(
             { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
             () => ({ title: '', qty: 1, amount: 0 })
@@ -404,4 +432,152 @@ export async function fetchOrders(sinceISO, untilISO) {
 
 export async function fetchOrdersBR() {
   return []; // BR já vem incluído em fetchOrders
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Reports API — backfill histórico
+//
+//  Paginar /orders/v0/orders para trás é inviável: 100 pedidos por página a 1 req/min.
+//  A Reports API monta um arquivo com TUDO de uma vez — 3 ou 4 requisições cobrem meses.
+//  Bônus: o relatório traz uma linha POR ITEM, com o nome do produto, que a API de
+//  pedidos não devolve (ver backlog "itens do pedido não são buscados").
+//
+//  Fluxo: createReport → poll até DONE → getReportDocument → baixa (gzip) → parse TSV.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const REPORT_TYPE      = 'GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL';
+const REPORT_CHUNK_DAYS = 30;        // a Amazon limita o intervalo por relatório
+const REPORT_POLL_MS    = 30 * 1000; // getReport permite 2 req/s; 30s é folgado
+const REPORT_MAX_POLLS  = 40;        // até ~20 min por relatório
+
+// Uma linha do relatório é um ITEM. O valor do pedido é a soma dos itens + frete +
+// impostos − descontos, replicando o que `OrderTotal` traria na API de pedidos.
+function rowAmount(r) {
+  const n = k => Number(r[k] || 0);
+  return n('item-price') + n('item-tax') + n('shipping-price') + n('shipping-tax')
+       + n('gift-wrap-price') + n('gift-wrap-tax')
+       - n('item-promotion-discount') - n('ship-promotion-discount');
+}
+
+function parseTsv(text) {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (!lines.length) return [];
+  const cols = lines[0].split('\t').map(c => c.trim());
+  return lines.slice(1).map(line => {
+    const cells = line.split('\t');
+    return Object.fromEntries(cols.map((c, i) => [c, (cells[i] ?? '').trim()]));
+  });
+}
+
+// Agrupa as linhas-item em pedidos, no mesmo formato normalizado de fetchOrders().
+function ordersFromRows(rows, marketplaceId) {
+  const { market, channel } = MARKET_BY_MP[marketplaceId];
+  const byOrder = new Map();
+
+  for (const r of rows) {
+    const orderId = r['amazon-order-id'];
+    if (!orderId) continue;
+
+    if (!byOrder.has(orderId)) {
+      const status = r['order-status'] || '';
+      byOrder.set(orderId, {
+        id:        `amazon-${market}:` + orderId,
+        channel,
+        market,
+        name:      '#' + orderId,
+        createdAt: new Date(r['purchase-date']).toISOString(),
+        status,
+        cancelled: ['Cancelled', 'Canceled'].includes(status),
+        total:     0,
+        source:    'Amazon',
+        customer:  '',
+        // A Amazon não normaliza a grafia: vem "UT" e "Ut" para o mesmo estado.
+        state:     (r['ship-state'] || '').trim().toUpperCase() || null,
+        items:     [],
+      });
+    }
+
+    const o   = byOrder.get(orderId);
+    const qty = Number(r['quantity'] || 0);
+    const amt = rowAmount(r);
+
+    // Item cancelado não soma receita nem unidade — mesma regra do resto do projeto.
+    if (r['item-status'] === 'Cancelled' || o.cancelled) continue;
+
+    o.total += amt;
+    if (r['product-name']) o.items.push({ title: r['product-name'], qty, amount: amt });
+  }
+
+  for (const o of byOrder.values()) o.total = Math.round(o.total * 100) / 100;
+  return [...byOrder.values()];
+}
+
+async function runOneReport({ getLwa, marketplaceId, startISO, endISO, label, onProgress }) {
+  onProgress?.(`${label}: criando relatório ${startISO.slice(0, 10)} → ${endISO.slice(0, 10)}`);
+
+  const created = await spPost(getLwa, '/reports/2021-06-30/reports', {
+    reportType:    REPORT_TYPE,
+    marketplaceIds: [marketplaceId],
+    dataStartTime: startISO,
+    dataEndTime:   endISO,
+  });
+  const reportId = created.reportId;
+  if (!reportId) throw new Error(`${label}: createReport não devolveu reportId`);
+
+  let documentId = null;
+  for (let i = 0; i < REPORT_MAX_POLLS; i++) {
+    await sleep(REPORT_POLL_MS);
+    const rep = await spGet(getLwa, `/reports/2021-06-30/reports/${reportId}`);
+    const st  = rep.processingStatus;
+    if (st === 'DONE')   { documentId = rep.reportDocumentId; break; }
+    if (st === 'FATAL' || st === 'CANCELLED') throw new Error(`${label}: relatório ${st}`);
+    onProgress?.(`${label}: ${st} (${i + 1}/${REPORT_MAX_POLLS})`);
+  }
+  if (!documentId) throw new Error(`${label}: relatório não ficou pronto a tempo`);
+
+  const doc = await spGet(getLwa, `/reports/2021-06-30/documents/${documentId}`);
+  const res = await safeFetch(doc.url);
+  const buf = Buffer.from(await res.arrayBuffer());
+  const text = doc.compressionAlgorithm === 'GZIP'
+    ? zlib.gunzipSync(buf).toString('utf8')
+    : buf.toString('utf8');
+
+  const rows   = parseTsv(text);
+  const orders = ordersFromRows(rows, marketplaceId);
+  onProgress?.(`${label}: ${rows.length} linhas → ${orders.length} pedidos`);
+  return orders;
+}
+
+// Backfill histórico de um mercado. Quebra o período em janelas de REPORT_CHUNK_DAYS
+// e entrega cada lote via onChunk() — o chamador grava de imediato, então uma falha
+// no meio do caminho não desfaz o que já veio.
+export async function backfillOrders({ market = 'us', days = 90, onProgress, onChunk } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+
+  const isUs = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  const label         = isUs ? 'Backfill US' : 'Backfill BR';
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`${label}: refresh token não configurado.`);
+
+  const end   = new Date(Date.now() - 3 * 60 * 1000); // margem de 2 min exigida pela SP-API
+  const start = new Date(end.getTime() - days * 864e5);
+
+  let total  = 0;
+  let cursor = start;
+
+  while (cursor < end) {
+    const chunkEnd = new Date(Math.min(cursor.getTime() + REPORT_CHUNK_DAYS * 864e5, end.getTime()));
+    const orders   = await runOneReport({
+      getLwa, marketplaceId, label,
+      startISO: cursor.toISOString(), endISO: chunkEnd.toISOString(),
+      onProgress,
+    });
+    total += orders.length;
+    await onChunk?.(orders);
+    cursor = chunkEnd;
+  }
+
+  onProgress?.(`${label}: concluído — ${total} pedidos`);
+  return total;
 }
