@@ -205,9 +205,36 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   `CreatedAfter` / `CreatedBefore`. Sobreposição de 10 min (`CURSOR_OVERLAP_MS`) ao retomar; upsert é por id.
 - Sync típico depois da 1ª carga: ~10 pedidos, **1 requisição, ~1s**.
 - **`AMAZON_BACKFILL_DAYS`** (padrão `2`) — janela só da primeira carga, dimensionada para caber no burst.
-  Por isso o dashboard nasce com ~2 dias de histórico da Amazon US. **Backfill histórico maior não deve ser
-  feito paginando `/orders`** (horas de espera): usar a **Reports API** (`GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL`),
-  que é feita para carga em massa. Ainda não implementado — ver backlog.
+
+#### 4.7.5 Backfill histórico via Reports API (implementado 09/07/2026)
+- **Por que não paginar `/orders` para trás:** 100 pedidos/página a 1 req/min. Com ~890 pedidos/dia na conta US,
+  90 dias seriam ~840 requisições ≈ 14 h, disputando a cota com o sync. Inviável.
+- **`backfillOrders({ market, days, onProgress, onChunk })`** em `amazon.js`: quebra o período em janelas de
+  `REPORT_CHUNK_DAYS` (30, limite da Amazon) e para cada uma faz
+  `createReport` → poll `processingStatus` até `DONE` → `getReportDocument` → baixa → `gunzip` → parse TSV.
+  Cada lote vai para `onChunk()` e é gravado na hora: falha adiante não desfaz o que já veio.
+  Report type: `GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL`.
+- **`POST /api/amazon/backfill?days=90&market=us`** dispara em background e responde na hora.
+  Progresso em `GET /api/status` → `amazon.backfill` (`{ status, orders, message }`).
+- **A Reports API usa balde de cota próprio** — não concorre com `/orders/v0/orders`. Rodar backfill não provoca
+  429 no sync (ao contrário de paginar pedidos, ver 4.7.4).
+- **O relatório traz uma linha POR ITEM, com `product-name`** — é a única forma de obter o título do produto da
+  Amazon (a API de pedidos nunca devolve). `ordersFromRows()` agrupa por `amazon-order-id`, soma
+  `item-price + item-tax + shipping-* + gift-wrap-* − promotion-discounts` para o `total`, e monta `items[]`.
+  Item com `item-status: Cancelled` (ou pedido cancelado) não soma receita nem unidade.
+- **Executado em produção 09/07/2026:** 90 dias US → **83.897 pedidos em 4min40s** (3 relatórios).
+  `channelSplit.amazon_us` = US$ 2.014.895 em 90 dias. Amazon passou a aparecer em Produtos com nome real.
+- **`ship-state` normalizado para maiúsculas** aqui e em `fetchOrders()`: a Amazon devolve `"UT"` e `"Ut"` para o
+  mesmo estado, criando duas chaves distintas em `byState` e quebrando a contagem no mapa de Geografia US.
+
+#### 4.7.6 ⚠️ Divergência conhecida: sync contínuo não traz nome de produto
+- O backfill (Reports API) preenche `items[{ title, qty, amount }]`. O **sync contínuo** (`fetchOrders`, Orders API)
+  cria `items` com `title: ''` — a Orders API nunca devolve o título do item.
+- **Consequência:** pedidos da Amazon posteriores ao backfill entram sem nome de produto. Top Produtos, Produtos e
+  Estoque vão refletindo cada vez menos a realidade conforme o tempo passa desde o último backfill.
+- **Correção natural (não feita):** o sync da Amazon passar a usar a Reports API também — um relatório dos últimos
+  ~2 dias por ciclo (ou 1×/dia), que é barato, usa balde de cota próprio e já traz os itens. Ver backlog.
+- **Paliativo hoje:** rodar `POST /api/amazon/backfill?days=2` periodicamente reconcilia os títulos (upsert por id).
 
 #### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
@@ -629,6 +656,8 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
   - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente
   - `POST /api/amazon/force-sync` — zera backoff + executa sync atomicamente
+  - `POST /api/amazon/backfill?days=90&market=us` — backfill histórico via Reports API, em background.
+    Responde na hora; progresso em `GET /api/status` → `amazon.backfill`. Ver 4.7.5.
   - `GET /shopee/connect` e `GET /shopee/callback`
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /googleads/connect` e `GET /googleads/callback`
@@ -668,16 +697,22 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 3. ~~**ML Ads ROAS por campanha:** verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.~~ **Resolvido 07/07/2026** — ver 4.6: o campo nunca vinha de `/orders/search` mesmo, foi movido pra ler do recurso `/items`.
 4. Login/usuários se mais pessoas precisarem acessar.
 5. ~~**Amazon US na produção.**~~ **Resolvido 09/07/2026** — ver 4.7.2. Era paginação, não cota/autorização.
-6. **Amazon — backfill histórico dos EUA:** hoje o dashboard só tem `AMAZON_BACKFILL_DAYS` (2 dias) de histórico
-   da Amazon US; do dia 09/07/2026 em diante o cursor incremental mantém em dia. Puxar meses paginando `/orders`
-   a 1 req/min levaria horas — usar a **Reports API** (`GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL`),
-   feita para carga em massa: cria relatório → poll do status → baixa o arquivo. Ver 4.7.3.
-7. **Amazon — `byState` com grafia inconsistente:** `ShippingAddress.StateOrRegion` vem `"UT"` e `"Ut"` como chaves
-   distintas no `byState` do payload (quebra a contagem por estado no mapa de Geografia US). Normalizar para
-   maiúsculas em `metrics.js`/`amazon.js`. Barato, ainda não feito.
-8. **Amazon — nome do comprador (PII):** hoje `customer` vem vazio. Exige o papel PII aprovado pela Amazon no
+6. ~~**Amazon — backfill histórico dos EUA.**~~ **Resolvido 09/07/2026** — ver 4.7.5. 83.897 pedidos (90 dias) em 4min40s.
+7. ~~**Amazon — `byState` com grafia inconsistente.**~~ **Resolvido 09/07/2026** — `ship-state`/`StateOrRegion` normalizados para maiúsculas.
+8. **⚠️ Amazon — sync contínuo não traz nome de produto (ver 4.7.6).** O backfill via Reports API preenche `items[].title`,
+   mas o `fetchOrders()` do sync (Orders API) não — pedidos novos entram com `title: ''` e as telas de Produtos/Estoque
+   vão desatualizando. **Prioridade alta**, já que o backfill acabou de tornar essas telas úteis para a Amazon.
+   Correção: usar a Reports API também no sync (relatório dos últimos ~2 dias, 1×/dia — balde de cota próprio).
+9. **Performance do `store.js` com volume alto:** o backfill levou o banco de ~1 mil para ~85 mil pedidos.
+   `store.js` carrega todos em memória no start e `getOrders()` faz `Object.values()` + filtros a cada request.
+   `/api/dashboard` de 90 dias saiu de ~200ms para **~2,1s** (medido em produção 09/07/2026). Ainda usável, mas
+   piora linearmente. Corrigir com índice por mercado/canal em memória, ou empurrar o filtro para o Postgres.
+10. **Amazon — nome do comprador (PII):** hoje `customer` vem vazio. Exige o papel PII aprovado pela Amazon no
    Solution Provider Portal; depois é só ligar `AMAZON_FETCH_PII=1` no Railway (código já pronto). Ver 4.7.4.
-9. **Amazon — itens do pedido não são buscados:** `fetchOrders()` em `src/amazon.js` só lê `NumberOfItemsShipped/Unshipped` do pedido e cria itens com `title:''` (placeholder) — nunca chama o endpoint de item do pedido (`/orders/v0/orders/{id}/orderItems`). Por isso Amazon (BR e US) nunca aparece em Top Produtos, Segmentos ou na tela de Produtos (itens sem título são ignorados nessas telas), e por isso também a tela de Estoque usa o placeholder "Produto TESTE" pra Amazon (ver 4.14). Corrigir exigiria uma chamada extra por pedido (mais lento, mais exposto a 429) — avaliar com cautela dado o histórico de penalização de cota (ver 4.7).
+   (O relatório de backfill também não traz o nome — é dado restrito nos dois caminhos.)
+11. **Amazon BR — sem itens:** o backfill/Reports foi rodado só para `market=us`. A Amazon BR continua sem
+   `items[].title`, e por isso a tela de Estoque ainda injeta o placeholder "Produto TESTE" nela (ver 4.14).
+   Rodar `POST /api/amazon/backfill?days=90&market=br` resolve — não foi feito por ora (volume BR é baixo).
 
 ## 10. Convenções
 
