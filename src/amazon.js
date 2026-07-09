@@ -22,6 +22,7 @@ import {
   getAmazonBackoffCount, setAmazonBackoffCount,
   getAmazonBRBackoff,      setAmazonBRBackoff,
   getAmazonBRBackoffCount, setAmazonBRBackoffCount,
+  getAmazonCursor,         setAmazonCursor,
 } from './store.js';
 
 const FETCH_TIMEOUT_MS = 20000;
@@ -172,8 +173,22 @@ async function assumeRole() {
   return roleCache;
 }
 
+// A cota de /orders/v0/orders é 0.0167 req/s (uma requisição por minuto) com burst de 20.
+// Não vale esperar 61s entre TODAS as páginas: as ~20 primeiras cabem no burst e saem
+// na hora. Só quando o balde esvazia (429) é que esperamos a reposição e tentamos de novo.
+const RATE_WAIT_MS   = 61 * 1000;
+const PAGE_MAX_TRIES = 3;
+
+// Sobreposição ao retomar do cursor: um pedido atualizado nos segundos finais do último
+// sync pode não ter aparecido naquela consulta. Reler 10 min é barato (upsert por id).
+const CURSOR_OVERLAP_MS = 10 * 60 * 1000;
+
+class RateLimitError extends Error {
+  constructor(message) { super(message); this.isRateLimit = true; }
+}
+
 // ── SP-API GET ─────────────────────────────────────────────────────────────────
-async function spGet(getLwa, path, params = {}, onRateLimit, lwaOverride = null) {
+async function spGet(getLwa, path, params = {}, lwaOverride = null) {
   const url = new URL(`https://${SP_HOST}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   url.searchParams.sort();
@@ -188,9 +203,8 @@ async function spGet(getLwa, path, params = {}, onRateLimit, lwaOverride = null)
   const res = await safeFetch(url.toString(), { headers: hdrs });
 
   if (res.status === 429) {
-    if (onRateLimit) onRateLimit();
     const errBody = await res.text().catch(() => '');
-    throw new Error(`SP-API ${path} [HTTP 429 QuotaExceeded]: ${errBody.slice(0, 200)}`);
+    throw new RateLimitError(`SP-API ${path} [HTTP 429 QuotaExceeded]: ${errBody.slice(0, 200)}`);
   }
 
   const json = await safeJson(res);
@@ -206,7 +220,7 @@ async function spGet(getLwa, path, params = {}, onRateLimit, lwaOverride = null)
 // combinada). Cada pedido retornado traz seu próprio MarketplaceId — usado para
 // separar US/BR no resultado, independente de quantos IDs foram pedidos de uma vez.
 async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilISO,
-    getBackoff, setBackoff, getBackoffCount, setBackoffCount, label }) {
+    getBackoff, setBackoff, getBackoffCount, setBackoffCount, label, cursorKey }) {
 
   const backoffUntil = getBackoff();
   if (backoffUntil > Date.now()) {
@@ -220,7 +234,15 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
     Date.now() - 3 * 60 * 1000,
   )).toISOString();
 
-  console.log(`Amazon ${label}: buscando ${sinceISO} → ${safeUntil.slice(0, 16)}`);
+  // Sync incremental: com cursor, pede só o que mudou desde o último sync completo
+  // (LastUpdatedAfter também traz mudança de status, não só pedido novo). Sem cursor
+  // — primeira execução — cai na janela por data de criação.
+  const cursor = cursorKey ? getAmazonCursor(cursorKey) : null;
+  const window = cursor
+    ? { LastUpdatedAfter: new Date(Date.parse(cursor) - CURSOR_OVERLAP_MS).toISOString(), LastUpdatedBefore: safeUntil }
+    : { CreatedAfter: `${sinceISO}T00:00:00Z`, CreatedBefore: safeUntil };
+
+  console.log(`Amazon ${label}: ${cursor ? `incremental desde ${window.LastUpdatedAfter.slice(0, 16)}` : `janela completa ${sinceISO}`} → ${safeUntil.slice(0, 16)}`);
 
   const onRateLimit = () => {
     const count = getBackoffCount();
@@ -246,51 +268,68 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
       })()
     : null;
 
+  // Um 429 numa página não pode derrubar a busca inteira: espera o balde repor e tenta
+  // de novo. Só desiste depois de PAGE_MAX_TRIES.
+  const getPage = async params => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await spGet(getLwa, '/orders/v0/orders', params, rdt);
+      } catch (e) {
+        if (!e.isRateLimit || attempt >= PAGE_MAX_TRIES) throw e;
+        console.warn(`Amazon ${label}: 429 na página — aguardando ${RATE_WAIT_MS / 1000}s (tentativa ${attempt}/${PAGE_MAX_TRIES})`);
+        await sleep(RATE_WAIT_MS);
+      }
+    }
+  };
+
   const out = [];
   let nextToken = null;
 
-  do {
-    const params = {
-      MarketplaceIds:    marketplaceId,
-      CreatedAfter:      `${sinceISO}T00:00:00Z`,
-      CreatedBefore:     safeUntil,
-      MaxResultsPerPage: 100,
-    };
-    if (nextToken) {
-      params.NextToken = nextToken;
-      delete params.CreatedAfter;
-      delete params.CreatedBefore;
-    }
+  try {
+    do {
+      const params = nextToken
+        ? { MarketplaceIds: marketplaceId, MaxResultsPerPage: 100, NextToken: nextToken }
+        : { MarketplaceIds: marketplaceId, MaxResultsPerPage: 100, ...window };
 
-    const data   = await spGet(getLwa, '/orders/v0/orders', params, onRateLimit, rdt);
-    const orders = data.payload?.Orders || [];
+      const data   = await getPage(params);
+      const orders = data.payload?.Orders || [];
 
-    for (const o of orders) {
-      const { market, channel } = MARKET_BY_MP[o.MarketplaceId] || MARKET_BY_MP[MARKETPLACE_ID];
-      out.push({
-        id:        `amazon-${market}:` + o.AmazonOrderId,
-        channel,
-        market,
-        name:      '#' + o.AmazonOrderId,
-        createdAt: o.PurchaseDate,
-        status:    o.OrderStatus,
-        cancelled: ['Canceled', 'PendingAvailability'].includes(o.OrderStatus),
-        total:     Number(o.OrderTotal?.Amount || 0),
-        source:    'Amazon',
-        customer:  o.BuyerInfo?.BuyerName || '',
-        state:     o.ShippingAddress?.StateOrRegion || null,
-        items:     Array.from(
-          { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
-          () => ({ title: '', qty: 1, amount: 0 })
-        ),
-      });
-    }
+      for (const o of orders) {
+        const { market, channel } = MARKET_BY_MP[o.MarketplaceId] || MARKET_BY_MP[MARKETPLACE_ID];
+        out.push({
+          id:        `amazon-${market}:` + o.AmazonOrderId,
+          channel,
+          market,
+          name:      '#' + o.AmazonOrderId,
+          createdAt: o.PurchaseDate,
+          status:    o.OrderStatus,
+          cancelled: ['Canceled', 'PendingAvailability'].includes(o.OrderStatus),
+          total:     Number(o.OrderTotal?.Amount || 0),
+          source:    'Amazon',
+          customer:  o.BuyerInfo?.BuyerName || '',
+          state:     o.ShippingAddress?.StateOrRegion || null,
+          items:     Array.from(
+            { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
+            () => ({ title: '', qty: 1, amount: 0 })
+          ),
+        });
+      }
 
-    nextToken = data.payload?.NextToken || null;
-    if (nextToken) await sleep(2000);
-  } while (nextToken);
+      nextToken = data.payload?.NextToken || null;
+    } while (nextToken);
+  } catch (e) {
+    if (e.isRateLimit) onRateLimit();
+    // Páginas já lidas são pedidos reais — gravar o parcial vale mais que perder tudo.
+    // O upsert é por id, então o próximo sync completa o resto sem duplicar. O cursor
+    // NÃO avança: a busca ficou incompleta e precisa ser refeita do mesmo ponto.
+    if (!out.length) throw e;
+    console.error(`Amazon ${label}: parcial (${out.length} pedidos) — ${e.message}`);
+    return out;
+  }
 
-  setBackoffCount(0); // reset após sucesso
+  setBackoffCount(0);                              // reset após sucesso
+  if (cursorKey) setAmazonCursor(cursorKey, safeUntil); // só avança em sync completo
+  console.log(`Amazon ${label}: ${out.length} pedidos`);
   return out;
 }
 
@@ -320,7 +359,7 @@ export async function fetchOrders(sinceISO, untilISO) {
       getLwa: getLwaTokenUS, marketplaceId: ALL_MARKETPLACE_IDS, sinceISO, untilISO,
       getBackoff: getAmazonBackoff, setBackoff: setAmazonBackoff,
       getBackoffCount: getAmazonBackoffCount, setBackoffCount: setAmazonBackoffCount,
-      label: '(combinado US+BR)',
+      label: '(combinado US+BR)', cursorKey: 'combined',
     });
   }
 
@@ -332,7 +371,7 @@ export async function fetchOrders(sinceISO, untilISO) {
       getLwa: getLwaTokenUS, marketplaceId: MARKETPLACE_ID, sinceISO, untilISO,
       getBackoff: getAmazonBackoff, setBackoff: setAmazonBackoff,
       getBackoffCount: getAmazonBackoffCount, setBackoffCount: setAmazonBackoffCount,
-      label: 'US',
+      label: 'US', cursorKey: 'us',
     }).catch(e => { failures.push('US: ' + e.message); return []; });
     results.push(...us);
   } else {
@@ -348,7 +387,7 @@ export async function fetchOrders(sinceISO, untilISO) {
       getLwa: getLwaTokenBR, marketplaceId: MARKETPLACE_ID_BR, sinceISO, untilISO,
       getBackoff: getAmazonBRBackoff, setBackoff: setAmazonBRBackoff,
       getBackoffCount: getAmazonBRBackoffCount, setBackoffCount: setAmazonBRBackoffCount,
-      label: 'BR',
+      label: 'BR', cursorKey: 'br',
     }).catch(e => { failures.push('BR: ' + e.message); return []; });
     results.push(...br);
   } else {

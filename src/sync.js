@@ -20,9 +20,30 @@ function defaultWindow(days = 60) {
   return { since: iso(since), until: iso(today) };
 }
 
+let syncInFlight = false;
+
 export async function runSync() {
+  // O sync da Amazon pode paginar por minutos (cota de 1 req/min). Sem essa trava, o
+  // timer de SYNC_INTERVAL_MINUTES dispararia um segundo sync por cima, dobrando as
+  // requisições contra o mesmo balde de cota e provocando o 429 que queremos evitar.
+  if (syncInFlight) {
+    console.log('Sync já em andamento — ignorando disparo.');
+    return { skipped: true, reason: 'sync já em andamento', errors: [] };
+  }
+  syncInFlight = true;
+  try {
+    return await doSync();
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+async function doSync() {
   const { since, until } = defaultWindow();
-  const { since: since7 } = defaultWindow(7); // Amazon: janela curta reduz chamadas paginadas
+  // Só usada no primeiro sync (sem cursor). Depois amazon.js passa a buscar apenas o que
+  // mudou desde o último sync completo, então uma janela inicial curta basta e mantém a
+  // primeira execução dentro do burst de 20 requisições da SP-API.
+  const { since: sinceAmazon } = defaultWindow(Number(process.env.AMAZON_BACKFILL_DAYS || 2));
   const report = { shopify: 0, shopify_us: 0, shopee: 0, mercadolivre: 0, amazon: 0, amazon_br: 0, meta: 0, sessions: 0, errors: [] };
 
   // Shopify — pedidos
@@ -112,7 +133,7 @@ export async function runSync() {
     } else if (!amazon.hasAwsCreds()) {
       report.errors.push('amazon: credenciais AWS ausentes (AMAZON_AWS_ACCESS_KEY / AMAZON_AWS_SECRET_KEY)');
     } else {
-      const orders = await amazon.fetchOrders(since7, until);
+      const orders = await amazon.fetchOrders(sinceAmazon, until);
       upsertOrders(orders);
       report.amazon    = orders.filter(o => o.market === 'us').length;
       report.amazon_br = orders.filter(o => o.market === 'br').length;

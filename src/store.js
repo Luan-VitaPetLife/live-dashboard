@@ -35,6 +35,7 @@ const EMPTY = {
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
+  amazonCursors: {},
 };
 
 let cache = null;
@@ -70,6 +71,7 @@ export async function initStore() {
       if (r.key === 'amazonBRBackoff')       cache.amazonBRBackoff       = Number(r.value);
       if (r.key === 'amazonBackoffCount')    cache.amazonBackoffCount    = Number(r.value);
       if (r.key === 'amazonBRBackoffCount')  cache.amazonBRBackoffCount  = Number(r.value);
+      if (r.key === 'amazonCursors')         cache.amazonCursors         = r.value;
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -278,3 +280,16 @@ export function setAmazonBRBackoffCount(count) {
   if (USE_PG) pgKv('amazonBRBackoffCount', count);
 }
 export function getAmazonBRBackoffCount() { return load().amazonBRBackoffCount || 0; }
+
+// ── Cursor de sync incremental da Amazon ──────
+// Guarda o instante (ISO) do último sync completo por balde ('us', 'br', 'combined').
+// A partir dele o sync busca só pedidos atualizados desde então (LastUpdatedAfter),
+// em vez de rebaixar a janela inteira toda vez. Ver amazon.js / CLAUDE.md 4.7.
+export function setAmazonCursor(key, iso) {
+  const db = load();
+  if (!db.amazonCursors) db.amazonCursors = {};
+  db.amazonCursors[key] = iso;
+  saveJson();
+  if (USE_PG) pgKv('amazonCursors', db.amazonCursors);
+}
+export function getAmazonCursor(key) { return (load().amazonCursors || {})[key] || null; }
