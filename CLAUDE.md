@@ -83,7 +83,8 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - `initStore()` é async e DEVE ser chamado com `await` antes de `app.listen()`.
 - Tabelas Postgres: `orders` (id TEXT PK, data JSONB), `sessions_daily` (date TEXT PK, data JSONB), `kv` (key TEXT PK, value JSONB).
 - `kv` guarda: `shopeeTokens`, `mlTokens`, `metaInsightsDaily`, `metaUSInsightsDaily`, `mlAdCosts`, `amazonBackoff`, `amazonBRBackoff`, `lastSync`.
-- `getOrders({ channel, since, until, market })` — filtra por mercado. Pedidos legados sem campo `market` são inferidos como `'br'` (exceto `channel === 'shopify_us'` → `'us'`).
+- `getOrders({ channel, since, until, market })` — filtra por mercado. Pedidos legados sem campo `market` são inferidos como `'br'` (exceto `channel === 'shopify_us'` → `'us'`, e `channel === 'amazon'` com id `amazon-us:` → `'us'`).
+- **Índice em memória do `getOrders` (10/07/2026):** para aguentar centenas de milhares de pedidos (backfills grandes), o `getOrders` não faz mais `Object.values()` + `.filter()` encadeado a cada chamada. Mantém, por mercado (`ordersByMarket`), um array de pedidos ordenado por timestamp + um array paralelo dos timestamps parseados (`tsByMarket`), e recorta a janela de datas por **busca binária** (`lowerBound`/`upperBound`), filtrando o canal numa única passada. O índice é reconstruído **preguiçosamente** — `upsertOrders` só marca `indexDirty = true`; a reconstrução (`rebuildOrdersIndex`) roda na próxima leitura, então um backfill que faz muitos upserts em lote paga uma reconstrução só. A inferência de mercado (`inferMarket`) é a mesma de antes. Interface pública **inalterada** (continua síncrona). Ver seção 9, item 9.
 
 ## 4. Decisões e conhecimento de domínio (IMPORTANTE — não reinventar)
 
@@ -703,10 +704,12 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
    mas o `fetchOrders()` do sync (Orders API) não — pedidos novos entram com `title: ''` e as telas de Produtos/Estoque
    vão desatualizando. **Prioridade alta**, já que o backfill acabou de tornar essas telas úteis para a Amazon.
    Correção: usar a Reports API também no sync (relatório dos últimos ~2 dias, 1×/dia — balde de cota próprio).
-9. **Performance do `store.js` com volume alto:** o backfill levou o banco de ~1 mil para ~85 mil pedidos.
-   `store.js` carrega todos em memória no start e `getOrders()` faz `Object.values()` + filtros a cada request.
-   `/api/dashboard` de 90 dias saiu de ~200ms para **~2,1s** (medido em produção 09/07/2026). Ainda usável, mas
-   piora linearmente. Corrigir com índice por mercado/canal em memória, ou empurrar o filtro para o Postgres.
+9. ~~**Performance do `store.js` com volume alto.**~~ **Resolvido 10/07/2026** — ver 3 (índice em memória do
+   `getOrders`). Era `Object.values()` + várias passadas de `.filter()` reparsando `Date.parse()` a cada request
+   (~6×/dashboard). Trocado por índice por mercado ordenado por timestamp + busca binária na janela de datas.
+   Benchmark local (300 mil pedidos, dataset sintético maior que o alvo de 365 dias): ~288ms → ~4,7ms por request
+   (~60×), com os 9 cenários de filtro batendo exatamente contra a lógica antiga. Pré-requisito do backfill de
+   365 dias da Amazon US (ver 4.7.5).
 10. **Amazon — nome do comprador (PII):** hoje `customer` vem vazio. Exige o papel PII aprovado pela Amazon no
    Solution Provider Portal; depois é só ligar `AMAZON_FETCH_PII=1` no Railway (código já pronto). Ver 4.7.4.
    (O relatório de backfill também não traz o nome — é dado restrito nos dois caminhos.)
