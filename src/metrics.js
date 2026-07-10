@@ -4,6 +4,7 @@
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
 import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, load } from './store.js';
+import { normalizeUsState } from './us-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -267,9 +268,11 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const topProducts = allProducts.slice(0, 5);
 
   // por estado (endereço de entrega dos pedidos válidos)
+  // US: normaliza a grafia do estado ("California"/"CALIFORNIA"/"CA."/"N.Y." → "CA"/"NY"),
+  // senão cada variante da Amazon vira uma linha no ranking e o mapa subconta. Ver 4.10/4.7.5.
   const byState = {};
   valid.forEach(o => {
-    const s = o.state;
+    const s = market === 'us' ? normalizeUsState(o.state) : o.state;
     if (s && o.total > 0) {
       if (!byState[s]) byState[s] = { revenue: 0, orders: 0, byChannel: {} };
       byState[s].revenue += o.total;

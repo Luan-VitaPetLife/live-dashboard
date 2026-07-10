@@ -10,7 +10,7 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor, pruneOrders } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -139,6 +139,21 @@ async function doSync() {
       report.amazon_br = orders.filter(o => o.market === 'br').length;
     }
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
+
+  // Poda de retenção da Amazon: mantém só os últimos AMAZON_RETENTION_DAYS dias do
+  // canal de maior volume (~1000 pedidos/dia US), para o banco não crescer sem limite.
+  // **Opt-in: padrão 0 (DESLIGADA)** — de propósito, para um deploy nunca apagar dados
+  // sozinho (a poda com padrão agressivo quase apagou 9 meses recém-recuperados em
+  // 10/07/2026). Defina AMAZON_RETENTION_DAYS no Railway para ativar (ex.: 365 = janela
+  // móvel de 1 ano). Só Amazon; Shopify/Shopee/ML ficam completos. Ver CLAUDE.md 4.7.7.
+  try {
+    const retentionDays = Number(process.env.AMAZON_RETENTION_DAYS || 0);
+    if (retentionDays > 0) {
+      const cutoff = new Date(Date.now() - retentionDays * 864e5).toISOString();
+      const pruned = pruneOrders({ channels: ['amazon', 'amazon_us'], olderThanIso: cutoff });
+      if (pruned) report.amazonPruned = pruned;
+    }
+  } catch (e) { report.errors.push('amazon.prune: ' + e.message); }
 
   setLastSync(new Date().toISOString());
   return report;

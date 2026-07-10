@@ -53,6 +53,7 @@ src/amazon.js           Amazon SP-API (EUA + BR): chamada combinada, LWA + SigV4
 src/meta.js             Meta Marketing API: gasto diário + fetchCampaigns (nível campanha, BR e US)
 src/googleads.js        Google Ads API: OAuth + fetchCampaigns (nível campanha, só EUA por enquanto)
 src/metrics.js          Calcula o payload da dashboard por mercado; inclui salesSplit
+src/us-states.js        normalizeUsState(): reduz grafias de estado dos EUA ao código de 2 letras (Geografia US)
 src/sync.js             Orquestra a busca de todos os canais BR e US e grava no store
 public/index.html       Dashboard principal (toggle de mercado, receita, tendência, canais, pedidos)
 public/campanhas.html   Tela de Campanhas: visão de gastos reais por canal + cards por campanha
@@ -258,6 +259,29 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog item 10).
 
+#### 4.7.7 ⚠️ INCIDENTE 10/07/2026 — disco do Postgres cheio (recuperado via resize)
+- **O que aconteceu:** o backfill de **365 dias** trouxe **359.626 pedidos** US. O `upsertOrders` fazia **um `INSERT`
+  autocommit por pedido** — ~30 mil por chunk despejados de uma vez geraram um **pico de WAL** que **encheu o volume
+  do Postgres**, que estava em **apenas 500 MB**. O banco caiu com `No space left on device` no `pg_wal` e entrou em
+  **loop de recuperação** (o health check reiniciava antes de o replay concluir; sem espaço, o checkpoint não fechava).
+- **Como foi recuperado (SEM perda de dados):** o volume do Railway tem um botão **"Live resize"** e o plano **Hobby
+  permite até 5 GB** de storage (estava em 500 MB por padrão — não é limite do plano). Aumentar para **5 GB** deu espaço
+  para a recuperação concluir; o banco voltou com **todos os 359.626 pedidos, tokens e dados manuais intactos**. Não
+  houve reset. Custo: o Railway cobra só pelo uso real, então subir o teto do volume é barato.
+- **Lição:** o `pg_wal` bloat de um bulk insert autocommit derruba um volume pequeno; **o padrão de 500 MB era o gargalo
+  invisível**. Se o disco encher de novo, o primeiro reflexo é **Live resize** (até 5 GB no Hobby), não reset.
+- **Correção 1 — gravação em lote (`store.js`):** `pgUpsertOrders` faz `INSERT` multi-linha (lotes de `PG_BATCH`=500,
+  `ON CONFLICT DO UPDATE SET data=EXCLUDED.data`) em vez de uma query por pedido. ~60 statements por chunk em vez de
+  30 mil → uma fração do WAL. `upsertOrders` e `patchOrderItems` passam por ele. **É o que impede o pico de WAL repetir.**
+- **Correção 2 — poda de retenção (`store.js` `pruneOrders` + `sync.js`):** a cada sync, remove pedidos **só da Amazon**
+  (`amazon`/`amazon_us`) mais antigos que `AMAZON_RETENTION_DAYS`. **Opt-in: padrão `0` = DESLIGADA** — de propósito,
+  para um deploy nunca apagar dados sozinho (com padrão 90 teria apagado 9 meses recém-recuperados). Defina a env var
+  para ativar: **`AMAZON_RETENTION_DAYS=365`** = janela móvel de 1 ano (o que rodamos hoje — cabe nos 5 GB com o batch
+  insert). Shopify/Shopee/ML ficam completos. `DELETE ... WHERE data->>'channel' = ANY($1) AND data->>'createdAt' < $2`.
+  Autovacuum reaproveita o espaço; para devolver disco ao SO de fato, rodar `VACUUM FULL orders` uma vez após uma poda.
+- **Estado (10/07/2026):** 365 dias de Amazon US mantidos no Hobby com volume de 5 GB. `AMAZON_RETENTION_DAYS=365` no
+  Railway mantém a janela móvel; o sync diário adiciona ~30 mil/mês e a poda tira o que passa de 1 ano → tamanho estável.
+
 #### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
 - **Pedidos `Pending` vêm com `total: 0`** — a SP-API omite `OrderTotal` enquanto o pagamento não é capturado.
@@ -276,8 +300,12 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Variável fantasma:** `AMAZON_RESET_BACKOFF` já existiu como variável no Railway mas **nunca foi lida por nenhum
   código** (nem hoje, nem no histórico do git) — não faz nada, pode remover. O reset real é o endpoint
   `POST /api/amazon/reset-backoff`.
-- **`byState` da Amazon US traz grafias inconsistentes** (`"UT"` e `"Ut"` como chaves distintas), porque
-  `ShippingAddress.StateOrRegion` não é normalizado pela Amazon. Ainda não tratado — ver backlog.
+- **`byState` da Amazon US traz grafias inconsistentes** (`"California"`, `"CALIFORNIA"`, `"CA"`, `"CA."`, `"N.Y."`,
+  `"PUERTO RICO"`... como chaves distintas), porque `ShippingAddress.StateOrRegion` / `ship-state` não são
+  normalizados pela Amazon. **Resolvido 10/07/2026** — `src/us-states.js` (`normalizeUsState`) reduz qualquer variante
+  ao código de 2 letras. Aplicado (a) na agregação, em `metrics.js` ao montar `byState` quando `market==='us'` (conserta
+  os 359 mil pedidos já gravados sem re-gravar nada) e (b) na gravação, em `amazon.js` (`fetchOrders`/`ordersFromRows`),
+  para dado novo já entrar limpo. Ver 4.10.
 
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
@@ -409,6 +437,10 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Popup ao clicar:** receita, pedidos, ticket médio, % do total.
 - **Modal de estado:** clique em card de ranking abre modal com 4 KPIs + gráfico de barras comparativo.
 - **Dados:** campo `byState` do `/api/dashboard` → `{ [UF]: { revenue, orders } }`. `byState` filtra `o.total > 0`.
+- **Normalização de estado US:** as chaves de `byState` no mercado US passam por `normalizeUsState` (`src/us-states.js`),
+  que reduz as várias grafias da Amazon (`"California"`/`"CALIFORNIA"`/`"CA"`/`"CA."`/`"N.Y."`) ao código de 2 letras —
+  senão cada variante virava uma linha no ranking e o mapa (que casa por código `_uf`) subcontava. Grafias que não
+  batem com um código conhecido (província canadense, typo) ficam como texto limpo, sem virar código. Ver 4.7.5.
 
 ### 4.12 Google Ads — EUA apenas (implementado 01/07/2026)
 - Implementado em `src/googleads.js`. OAuth 2.0 (authorization_code) + refresh_token de longa duração, seguindo o mesmo padrão de `mercadolivre.js` (`/googleads/connect` → autoriza → `/googleads/callback` troca `code` por tokens, salvos no store via `kv.googleAdsTokens`).
@@ -646,6 +678,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 | `AMAZON_FETCH_PII` | `1` liga a busca do nome do comprador via RDT — só se o papel PII for aprovado pela Amazon |
 | `AMAZON_NAMES_EVERY_HOURS` | Intervalo mínimo entre reconciliações de nome de produto da Amazon, por mercado (padrão `12`). Ver 4.7.6 |
 | `AMAZON_NAMES_DAYS` | Janela (dias) do relatório de reconciliação de nomes (padrão `2`). Ver 4.7.6 |
+| `AMAZON_RETENTION_DAYS` | Só Amazon: poda pedidos mais antigos que N dias a cada sync. **Opt-in, padrão `0` (desligada)**. `365` = janela móvel de 1 ano (em uso). Ver 4.7.7 |
 | `AMAZON_ROLE_ARN` | ARN do IAM Role com permissões SP-API — compartilhado entre EUA e BR |
 | `AMAZON_AWS_ACCESS_KEY` | Access Key do IAM User com permissão `sts:AssumeRole` no role acima |
 | `AMAZON_AWS_SECRET_KEY` | Secret Key do mesmo IAM User |

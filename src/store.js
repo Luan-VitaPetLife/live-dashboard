@@ -159,19 +159,60 @@ function pgKv(key, value) {
 }
 
 // ── Pedidos ──────────────────────────────────
+// Grava em LOTE (INSERT multi-linha), não uma query por pedido. Um backfill que
+// despejava ~30 mil INSERTs autocommit por chunk gerava um pico de WAL que encheu
+// o disco do Postgres e derrubou o banco (incidente 10/07/2026 — Hobby, sem como
+// aumentar o volume). Em lotes de PG_BATCH linhas, são ~60 statements em vez de
+// 30 mil, com uma fração do WAL. Limite de params do pg é 65535 (2 por linha).
+const PG_BATCH = 500;
+
+function pgUpsertOrders(orders) {
+  for (let i = 0; i < orders.length; i += PG_BATCH) {
+    const batch  = orders.slice(i, i + PG_BATCH);
+    const values = batch.map((_, j) => `($${j * 2 + 1},$${j * 2 + 2})`).join(',');
+    const params = [];
+    for (const o of batch) params.push(o.id, o);
+    pool.query(
+      `INSERT INTO orders(id,data) VALUES ${values} ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data`,
+      params
+    ).catch(e => console.error('PG orders batch error:', e.message));
+  }
+}
+
 export function upsertOrders(orders) {
   const db = load();
   for (const o of orders) db.orders[o.id] = o;
   indexDirty = true;
   saveJson();
-  if (USE_PG) {
-    for (const o of orders) {
-      pool.query(
-        'INSERT INTO orders(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=$2',
-        [o.id, o]
-      ).catch(e => console.error('PG orders error:', e.message));
+  if (USE_PG) pgUpsertOrders(orders);
+}
+
+// Poda de retenção: remove pedidos dos canais informados mais antigos que olderThanIso.
+// Usada só para a Amazon (canal de maior volume, ~1000 pedidos/dia US) — sem isso o
+// banco cresce ~30 mil/mês e volta a encher o disco do Hobby. Os outros canais são de
+// baixo volume e ficam completos. Autovacuum reaproveita o espaço liberado, então o
+// tamanho da tabela estabiliza na janela de retenção. Ver CLAUDE.md 4.7.7.
+export function pruneOrders({ channels, olderThanIso }) {
+  const db = load();
+  const chSet = new Set(channels);
+  let removed = 0;
+  for (const [id, o] of Object.entries(db.orders)) {
+    if (chSet.has(o.channel) && o.createdAt && o.createdAt < olderThanIso) {
+      delete db.orders[id];
+      removed++;
     }
   }
+  if (removed) {
+    indexDirty = true;
+    saveJson();
+    if (USE_PG) {
+      pool.query(
+        `DELETE FROM orders WHERE data->>'channel' = ANY($1) AND data->>'createdAt' < $2`,
+        [channels, olderThanIso]
+      ).catch(e => console.error('PG prune error:', e.message));
+    }
+  }
+  return removed;
 }
 
 // Preenche items[] (títulos de produto) em pedidos JÁ existentes, sem tocar em
@@ -201,14 +242,7 @@ export function patchOrderItems(orders) {
   if (!toPersist.length) return { patched, inserted };
   indexDirty = true;
   saveJson();
-  if (USE_PG) {
-    for (const o of toPersist) {
-      pool.query(
-        'INSERT INTO orders(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=$2',
-        [o.id, o]
-      ).catch(e => console.error('PG orders error:', e.message));
-    }
-  }
+  if (USE_PG) pgUpsertOrders(toPersist);
   return { patched, inserted };
 }
 
