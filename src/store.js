@@ -40,6 +40,58 @@ const EMPTY = {
 
 let cache = null;
 
+// ── Índice em memória para getOrders() ────────
+// Com ~85 mil+ pedidos (e potencialmente centenas de milhares após backfills
+// grandes), o padrão antigo — Object.values(db.orders) + várias passadas de
+// .filter() reparsando Date.parse() a cada request, ~6× por /api/dashboard —
+// ficava lento (item 9 do backlog). Aqui mantemos, por mercado, um array de
+// pedidos ordenado por timestamp (asc) + um array paralelo dos timestamps já
+// parseados, permitindo recortar a janela de datas por busca binária em vez de
+// varrer tudo. O índice é reconstruído preguiçosamente (só na próxima leitura
+// após uma escrita), então backfills que fazem muitos upserts em lote só pagam
+// uma reconstrução. Ver CLAUDE.md 4.8 / seção 9.
+let ordersByMarket = {};   // { br: [pedido,...], us: [...] } ordenado por _ts asc
+let tsByMarket     = {};   // { br: [ts,...],    us: [...] } alinhado a ordersByMarket
+let indexDirty     = true;
+
+// Mesma inferência de mercado do getOrders antigo: campo market, senão
+// shopify_us → us, senão amazon com id 'amazon-us:' → us, senão br (legado).
+function inferMarket(o) {
+  return o.market ||
+    (o.channel === 'shopify_us' ? 'us'
+      : (o.channel === 'amazon' && o.id.startsWith('amazon-us:') ? 'us' : 'br'));
+}
+
+function rebuildOrdersIndex() {
+  const byM = {}; // mercado → [[ts, pedido], ...]
+  for (const o of Object.values(cache.orders)) {
+    const m = inferMarket(o);
+    (byM[m] || (byM[m] = [])).push([Date.parse(o.createdAt), o]);
+  }
+  ordersByMarket = {};
+  tsByMarket = {};
+  for (const m of Object.keys(byM)) {
+    const pairs = byM[m];
+    pairs.sort((a, b) => a[0] - b[0]);
+    ordersByMarket[m] = pairs.map(p => p[1]);
+    tsByMarket[m]     = pairs.map(p => p[0]);
+  }
+  indexDirty = false;
+}
+
+// Primeiro índice i em ts[] tal que ts[i] >= alvo (início da janela).
+function lowerBound(ts, target) {
+  let lo = 0, hi = ts.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (ts[mid] < target) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+// Primeiro índice i em ts[] tal que ts[i] > alvo (fim exclusivo da janela).
+function upperBound(ts, target) {
+  let lo = 0, hi = ts.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (ts[mid] <= target) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
 // ── Inicialização (chamar uma vez no startup) ──
 export async function initStore() {
   if (USE_PG) {
@@ -110,6 +162,7 @@ function pgKv(key, value) {
 export function upsertOrders(orders) {
   const db = load();
   for (const o of orders) db.orders[o.id] = o;
+  indexDirty = true;
   saveJson();
   if (USE_PG) {
     for (const o of orders) {
@@ -122,24 +175,33 @@ export function upsertOrders(orders) {
 }
 
 export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {
-  const db = load();
-  let arr = Object.values(db.orders);
-  // Market filter: pedidos sem campo market são legados e pertencem ao BR.
-  // No src/store.js, altere a linha do filtro para:
-if (market) {
-  arr = arr.filter(o => {
-    // Fallback: se o canal for 'amazon' e o ID do pedido começar com 'amazon-us:', força 'us'
-    const inferredMarket = o.market || 
-                           (o.channel === 'shopify_us' ? 'us' : 
-                           (o.channel === 'amazon' && o.id.startsWith('amazon-us:') ? 'us' : 'br'));
-    return inferredMarket === market;
-  });
-}
-  if (channel && channel !== 'todos') arr = arr.filter(o => o.channel === channel);
+  load();
+  if (indexDirty) rebuildOrdersIndex();
+
+  // Sem market → considera todos (raro; o dashboard sempre passa um mercado).
+  // Pedidos sem campo market são legados e são inferidos por inferMarket().
+  const markets = market ? [market] : Object.keys(ordersByMarket);
+  // Fuso da loja para converter a data (YYYY-MM-DD) da janela em instante absoluto.
   const tz = market === 'us' ? 'Z' : '-03:00';
-  if (since) { const t = Date.parse(since + 'T00:00:00' + tz); arr = arr.filter(o => Date.parse(o.createdAt) >= t); }
-  if (until) { const t = Date.parse(until + 'T23:59:59' + tz); arr = arr.filter(o => Date.parse(o.createdAt) <= t); }
-  return arr;
+  const lo = since ? Date.parse(since + 'T00:00:00' + tz) : -Infinity;
+  const hi = until ? Date.parse(until + 'T23:59:59' + tz) :  Infinity;
+  const byChannel = channel && channel !== 'todos';
+
+  const out = [];
+  for (const m of markets) {
+    const list = ordersByMarket[m];
+    if (!list || !list.length) continue;
+    const ts = tsByMarket[m];
+    // Recorta a janela por busca binária (arrays ordenados por _ts asc).
+    const start = since ? lowerBound(ts, lo) : 0;
+    const end   = until ? upperBound(ts, hi) : list.length;
+    for (let i = start; i < end; i++) {
+      const o = list[i];
+      if (byChannel && o.channel !== channel) continue;
+      out.push(o);
+    }
+  }
+  return out;
 }
 
 // ── Sessões diárias ───────────────────────────
