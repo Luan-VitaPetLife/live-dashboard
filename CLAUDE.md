@@ -259,28 +259,28 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog item 10).
 
-#### 4.7.7 ⚠️ INCIDENTE 10/07/2026 — disco do Postgres cheio + retenção da Amazon
+#### 4.7.7 ⚠️ INCIDENTE 10/07/2026 — disco do Postgres cheio (recuperado via resize)
 - **O que aconteceu:** o backfill de **365 dias** trouxe **359.626 pedidos** US. O `upsertOrders` fazia **um `INSERT`
   autocommit por pedido** — ~30 mil por chunk despejados de uma vez geraram um **pico de WAL** que **encheu o volume
-  do Postgres** (Railway, plano **Hobby**, sem como aumentar o disco). O banco caiu com `No space left on device` no
-  `pg_wal` e entrou em **loop de recuperação** (o health check reiniciava antes de o replay concluir, e sem espaço o
-  checkpoint não fechava). **Sem backup** (Hobby não tinha), **sem upgrade** possível → **o banco teve que ser zerado**.
-- **Aprendizado de dimensionamento:** o Hobby aguentou tranquilo os **~85 mil** pedidos do backfill de 90 dias (09/07),
-  mas **não** os 359 mil dos 365 dias. Além disso o sync diário adiciona ~30 mil pedidos/mês, então **guardar 1 ano
-  de Amazon granular no Hobby é inviável** — enche em poucos meses mesmo sem backfill. Alvo sustentável: **~90 dias**.
+  do Postgres**, que estava em **apenas 500 MB**. O banco caiu com `No space left on device` no `pg_wal` e entrou em
+  **loop de recuperação** (o health check reiniciava antes de o replay concluir; sem espaço, o checkpoint não fechava).
+- **Como foi recuperado (SEM perda de dados):** o volume do Railway tem um botão **"Live resize"** e o plano **Hobby
+  permite até 5 GB** de storage (estava em 500 MB por padrão — não é limite do plano). Aumentar para **5 GB** deu espaço
+  para a recuperação concluir; o banco voltou com **todos os 359.626 pedidos, tokens e dados manuais intactos**. Não
+  houve reset. Custo: o Railway cobra só pelo uso real, então subir o teto do volume é barato.
+- **Lição:** o `pg_wal` bloat de um bulk insert autocommit derruba um volume pequeno; **o padrão de 500 MB era o gargalo
+  invisível**. Se o disco encher de novo, o primeiro reflexo é **Live resize** (até 5 GB no Hobby), não reset.
 - **Correção 1 — gravação em lote (`store.js`):** `pgUpsertOrders` faz `INSERT` multi-linha (lotes de `PG_BATCH`=500,
   `ON CONFLICT DO UPDATE SET data=EXCLUDED.data`) em vez de uma query por pedido. ~60 statements por chunk em vez de
-  30 mil → uma fração do WAL. `upsertOrders` e `patchOrderItems` passam por ele.
+  30 mil → uma fração do WAL. `upsertOrders` e `patchOrderItems` passam por ele. **É o que impede o pico de WAL repetir.**
 - **Correção 2 — poda de retenção (`store.js` `pruneOrders` + `sync.js`):** a cada sync, remove pedidos **só da Amazon**
-  (`amazon`/`amazon_us`) mais antigos que `AMAZON_RETENTION_DAYS` (padrão **90**, `0` desliga). Shopify/Shopee/ML são de
-  baixo volume e ficam completos. Autovacuum reaproveita o espaço, então a tabela **estabiliza** na janela — não cresce
-  pra sempre. `DELETE ... WHERE data->>'channel' = ANY($1) AND data->>'createdAt' < $2`.
-- **Consequência de produto:** na Amazon, Geografia/Produtos/Estoque passam a refletir só os últimos ~90 dias. A visão
-  de 1 ano de Amazon **não é suportada no Hobby** — exigiria plano Pro (volume maior) e aí subir `AMAZON_RETENTION_DAYS`.
-- **Recuperação pós-reset:** re-autorizar ML/Shopee/Google (`/connect` — tokens ficavam no `kv`); re-inserir Estoque
-  manual (`productStock`/`productStockAgg`, sem padrão no código) e COGs personalizados (os **padrões** voltam sozinhos);
-  o sync repovoa 60 dias dos outros canais e a Amazon volta com `POST /api/amazon/backfill?days=90&market=us` (seguro:
-  85 mil cabe, e agora com batch insert). Shopify/Amazon/Meta seguem — seus tokens vêm do ENV, não do banco.
+  (`amazon`/`amazon_us`) mais antigos que `AMAZON_RETENTION_DAYS`. **Opt-in: padrão `0` = DESLIGADA** — de propósito,
+  para um deploy nunca apagar dados sozinho (com padrão 90 teria apagado 9 meses recém-recuperados). Defina a env var
+  para ativar: **`AMAZON_RETENTION_DAYS=365`** = janela móvel de 1 ano (o que rodamos hoje — cabe nos 5 GB com o batch
+  insert). Shopify/Shopee/ML ficam completos. `DELETE ... WHERE data->>'channel' = ANY($1) AND data->>'createdAt' < $2`.
+  Autovacuum reaproveita o espaço; para devolver disco ao SO de fato, rodar `VACUUM FULL orders` uma vez após uma poda.
+- **Estado (10/07/2026):** 365 dias de Amazon US mantidos no Hobby com volume de 5 GB. `AMAZON_RETENTION_DAYS=365` no
+  Railway mantém a janela móvel; o sync diário adiciona ~30 mil/mês e a poda tira o que passa de 1 ano → tamanho estável.
 
 #### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
@@ -678,7 +678,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 | `AMAZON_FETCH_PII` | `1` liga a busca do nome do comprador via RDT — só se o papel PII for aprovado pela Amazon |
 | `AMAZON_NAMES_EVERY_HOURS` | Intervalo mínimo entre reconciliações de nome de produto da Amazon, por mercado (padrão `12`). Ver 4.7.6 |
 | `AMAZON_NAMES_DAYS` | Janela (dias) do relatório de reconciliação de nomes (padrão `2`). Ver 4.7.6 |
-| `AMAZON_RETENTION_DAYS` | Só Amazon: poda pedidos mais antigos que N dias a cada sync (padrão `90`, `0` desliga). Mantém o banco pequeno no Hobby. Ver 4.7.7 |
+| `AMAZON_RETENTION_DAYS` | Só Amazon: poda pedidos mais antigos que N dias a cada sync. **Opt-in, padrão `0` (desligada)**. `365` = janela móvel de 1 ano (em uso). Ver 4.7.7 |
 | `AMAZON_ROLE_ARN` | ARN do IAM Role com permissões SP-API — compartilhado entre EUA e BR |
 | `AMAZON_AWS_ACCESS_KEY` | Access Key do IAM User com permissão `sts:AssumeRole` no role acima |
 | `AMAZON_AWS_SECRET_KEY` | Secret Key do mesmo IAM User |
