@@ -18,6 +18,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import zlib from 'zlib';
+import { normalizeUsState } from './us-states.js';
 import {
   getAmazonBackoff,      setAmazonBackoff,
   getAmazonBackoffCount, setAmazonBackoffCount,
@@ -334,8 +335,11 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
           total:     Number(o.OrderTotal?.Amount || 0),
           source:    'Amazon',
           customer:  o.BuyerInfo?.BuyerName || '',
-          // A Amazon não normaliza a grafia: vem "UT" e "Ut" para o mesmo estado.
-          state:     (o.ShippingAddress?.StateOrRegion || '').trim().toUpperCase() || null,
+          // A Amazon não normaliza a grafia: vem "UT"/"Ut"/"Utah"/"CA."/"N.Y." para o
+          // mesmo estado. Nos EUA, reduz ao código de 2 letras (ver us-states.js / 4.7.5).
+          state:     market === 'us'
+                       ? (normalizeUsState(o.ShippingAddress?.StateOrRegion) || null)
+                       : ((o.ShippingAddress?.StateOrRegion || '').trim().toUpperCase() || null),
           items:     Array.from(
             { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
             () => ({ title: '', qty: 1, amount: 0 })
@@ -491,8 +495,11 @@ function ordersFromRows(rows, marketplaceId) {
         total:     0,
         source:    'Amazon',
         customer:  '',
-        // A Amazon não normaliza a grafia: vem "UT" e "Ut" para o mesmo estado.
-        state:     (r['ship-state'] || '').trim().toUpperCase() || null,
+        // A Amazon não normaliza a grafia: vem "UT"/"Ut"/"Utah"/"CA."/"N.Y." para o
+        // mesmo estado. Nos EUA, reduz ao código de 2 letras (ver us-states.js / 4.7.5).
+        state:     market === 'us'
+                     ? (normalizeUsState(r['ship-state']) || null)
+                     : ((r['ship-state'] || '').trim().toUpperCase() || null),
         items:     [],
       });
     }
