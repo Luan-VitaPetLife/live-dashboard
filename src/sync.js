@@ -10,7 +10,7 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor, pruneOrders } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -139,6 +139,19 @@ async function doSync() {
       report.amazon_br = orders.filter(o => o.market === 'br').length;
     }
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
+
+  // Poda de retenção da Amazon: mantém só os últimos AMAZON_RETENTION_DAYS dias do
+  // canal de maior volume (~1000 pedidos/dia US). Sem isso o banco cresce ~30 mil/mês
+  // e enche o disco do Hobby — foi o que derrubou o Postgres em 10/07/2026. Só Amazon;
+  // Shopify/Shopee/ML são baixos e ficam completos. 0 desliga. Ver CLAUDE.md 4.7.7.
+  try {
+    const retentionDays = Number(process.env.AMAZON_RETENTION_DAYS || 90);
+    if (retentionDays > 0) {
+      const cutoff = new Date(Date.now() - retentionDays * 864e5).toISOString();
+      const pruned = pruneOrders({ channels: ['amazon', 'amazon_us'], olderThanIso: cutoff });
+      if (pruned) report.amazonPruned = pruned;
+    }
+  } catch (e) { report.errors.push('amazon.prune: ' + e.message); }
 
   setLastSync(new Date().toISOString());
   return report;
