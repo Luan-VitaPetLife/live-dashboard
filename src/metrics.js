@@ -288,20 +288,21 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const segAcc = {};
   const seenBundleIdsSeg = new Set();
   valid.forEach(o => {
+    const rf = amazonRevFactor(o); // escala receita ao total capturado (Amazon); ver 4.7.6
     o.items.forEach(it => {
       if (!it.title) return;
       const seg  = classifySeg(it);
       const type = classifyType(it);
       const qty  = it.qty || 1;
       if (!segAcc[seg]) segAcc[seg] = { revenue: 0, units: 0, orderIds: new Set(), products: {}, byType: {} };
-      segAcc[seg].revenue += it.amount || 0;
+      segAcc[seg].revenue += (it.amount || 0) * rf;
       segAcc[seg].units  += qty;
       segAcc[seg].orderIds.add(o.id);
       if (type) segAcc[seg].byType[type] = (segAcc[seg].byType[type] || 0) + qty;
       const p = segAcc[seg].products;
       if (!p[it.title]) p[it.title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {} };
       p[it.title].qty     += qty;
-      p[it.title].revenue += it.amount || 0;
+      p[it.title].revenue += (it.amount || 0) * rf;
       if (it.bundle) {
         p[it.title].comboQty += qty;
         const size = comboSize(it.bundle);
@@ -323,9 +324,9 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       orders:  v.orderIds.size,
       pct:     totalSegUnits > 0 ? v.units / totalSegUnits : 0,
       byType:  v.byType,
+      // Lista completa ordenada por unidades — a tela mostra 5 e expande com "ver mais".
       topProducts: Object.entries(v.products)
         .sort((a, b) => b[1].qty - a[1].qty)
-        .slice(0, 5)
         .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue, avulsoQty: d.avulsoQty, comboQty: d.comboQty, comboBySize: d.comboBySize })),
     };
   }
@@ -423,6 +424,20 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 // Agrupa itens de uma lista de pedidos por canal → por título de produto (com quebra avulso x
 // combo, Shopify Bundles, tipo e imagem). Compartilhado por computeProducts e computeStock —
 // mesma regra de agrupamento usada em Top Produtos/Segmentos.
+// Escala a receita dos ITENS ao total CAPTURADO do pedido, só para a Amazon. Os itens da
+// Amazon vêm do relatório com preço BRUTO, e pedidos Pending têm total 0 até a captura no
+// envio — sem escalar, a receita por produto soma pedidos não capturados a preço cheio e
+// estoura (num dia de US$ 5k capturado, Segmentos/Produtos mostravam US$ 17k). O total do
+// pedido (`o.total`) é a fonte de verdade da receita em todo o app; aqui distribuímos ele
+// entre os itens na proporção do preço deles. Pending (total 0) → fator 0. Outros canais
+// retornam 1 (item.amount já é a receita líquida do produto). Ver CLAUDE.md 4.7.6.
+function amazonRevFactor(o) {
+  if (o.channel !== 'amazon' && o.channel !== 'amazon_us') return 1;
+  let itemsSum = 0;
+  for (const it of o.items) if (it.title) itemsSum += it.amount || 0;
+  return itemsSum > 0 ? (o.total || 0) / itemsSum : 0;
+}
+
 function aggregateProductsByChannel(orders) {
   const seenBundleIds = new Set();
   const byChannel = {};
@@ -431,6 +446,7 @@ function aggregateProductsByChannel(orders) {
     const c = byChannel[o.channel];
     c.revenue += o.total;
     c.orders += 1;
+    const rf = amazonRevFactor(o);
     o.items.forEach(it => {
       if (!it.title) return;
       // Produtos legados (combo de N unidades, "- N Pack" ou "Ng" múltiplo de 120g) vendidos
@@ -442,7 +458,7 @@ function aggregateProductsByChannel(orders) {
 
       if (!c.products[title]) c.products[title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
       const p = c.products[title], qty = it.qty || 0;
-      p.revenue += it.amount || 0;
+      p.revenue += (it.amount || 0) * rf;
       if (!p.type) p.type = classifyType(it);
       if (!p.image && it.image) p.image = it.image;
 

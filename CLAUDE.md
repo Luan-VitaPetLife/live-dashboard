@@ -265,6 +265,17 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   `status` do pedido novo (Orders API é a fonte deles), só não deixa apagar os nomes. Para outros canais o item sempre
   tem título, então a guarda nunca dispara. **Depois de deployar, rodar `POST /api/amazon/sync-names?market=us` uma vez**
   para re-preencher os títulos já apagados — a partir daí eles **grudam**.
+- **⚠️ Receita por item escalada ao total capturado (`amazonRevFactor`, corrigido 10/07/2026):** os itens da Amazon
+  vêm do relatório com **preço bruto**, e pedidos **Pending** têm `total: 0` até a captura no envio. Como Segmentos/
+  Produtos/Top Produtos somavam `item.amount` (bruto), num dia de **US$ 5k capturado** a tela de Segmentos mostrava
+  **US$ 17k** (contava pedidos ainda não capturados a preço cheio). `amazonRevFactor(o)` em `metrics.js` escala a
+  receita dos itens para o `o.total` do pedido (fonte de verdade em todo o app): captado → itens somam o total;
+  Pending → 0. Só afeta a Amazon (outros canais retornam fator 1). **Unidades continuam contando todas** (unidades
+  pedidas), só a receita respeita a captura. Aplicado em `aggregateProductsByChannel` (Produtos/Estoque/Top Produtos)
+  e na agregação de Segmentos.
+- **Tela de Segmentos (`segmentos.html`, 10/07/2026):** ganhou **seletor de canal** (dropdown por mercado — o backend
+  já filtra os segmentos pelo `channel` do `/api/dashboard`) e **"ver mais/ver menos"** nos top produtos (o backend
+  passou a devolver a lista completa em `segments[k].topProducts`, a tela mostra 5 e expande).
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog item 10).
 
