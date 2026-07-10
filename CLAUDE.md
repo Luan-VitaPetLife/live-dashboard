@@ -256,6 +256,15 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   verificar logo após deploy sem esperar o job automático. Sem `market` → US e BR.
 - **Cobertura:** com janela de 2 dias e cadência de 12h, todo pedido novo é visto várias vezes na sua primeira
   janela, então o título entra em até ~12h após a criação (o pedido e o valor aparecem na hora, via Orders API).
+- **⚠️ Preservação de título no `upsertOrders` (corrigido 10/07/2026 — bug que esvaziava Segmentos/Produtos):** o sync
+  de pedidos (Orders API) roda a cada 15 min re-baixando pedidos **recém-atualizados** (pending→shipped, captura de
+  pagamento) — e regravava esses pedidos com `items` de **título vazio**, apagando os nomes que o backfill/reconciliação
+  tinham preenchido. Resultado: num dia de US$ 4k, a tela de Segmentos mostrava só ~3 unidades (só os poucos pedidos que
+  não foram re-sincronizados depois de nomeados). **Correção:** `upsertOrders` agora **preserva `items` já titulados**
+  quando o pedido que chega vem 100% sem título (`o.items.every(!title)` e o existente tem título) — mantém `total`/
+  `status` do pedido novo (Orders API é a fonte deles), só não deixa apagar os nomes. Para outros canais o item sempre
+  tem título, então a guarda nunca dispara. **Depois de deployar, rodar `POST /api/amazon/sync-names?market=us` uma vez**
+  para re-preencher os títulos já apagados — a partir daí eles **grudam**.
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog item 10).
 

@@ -181,7 +181,22 @@ function pgUpsertOrders(orders) {
 
 export function upsertOrders(orders) {
   const db = load();
-  for (const o of orders) db.orders[o.id] = o;
+  for (const o of orders) {
+    const existing = db.orders[o.id];
+    // Preserva os títulos de item já preenchidos (backfill / Reports API) quando o
+    // pedido chega SEM título. A Orders API da Amazon nunca traz o nome do item, e o
+    // sync roda a cada 15 min re-baixando pedidos recém-atualizados — sem esta guarda,
+    // ele apagava a cada ciclo os nomes que a Reports API preencheu, deixando
+    // Segmentos/Produtos/Estoque vazios para a Amazon apesar da receita certa. O
+    // total/status continuam vindo do pedido novo (Orders API é a fonte deles).
+    // Ver CLAUDE.md 4.7.6. Para outros canais o item sempre tem título → não dispara.
+    if (existing && Array.isArray(o.items) && o.items.length
+        && o.items.every(it => !it.title)
+        && Array.isArray(existing.items) && existing.items.some(it => it.title)) {
+      o.items = existing.items;
+    }
+    db.orders[o.id] = o;
+  }
   indexDirty = true;
   saveJson();
   if (USE_PG) pgUpsertOrders(orders);
