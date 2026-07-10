@@ -10,7 +10,7 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor } from './store.js';
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -142,6 +142,47 @@ async function doSync() {
 
   setLastSync(new Date().toISOString());
   return report;
+}
+
+// ── Reconciliação de nomes de produto da Amazon (Reports API) ──────────────────
+//  O sync de pedidos (Orders API) não traz o título do item, então pedidos novos da
+//  Amazon entram com items[].title vazio e as telas de Produtos/Estoque vão
+//  desatualizando (ver CLAUDE.md 4.7.6 / backlog item 8). Aqui buscamos um relatório
+//  curto dos últimos dias (balde de cota próprio, não concorre com o sync de pedidos)
+//  e preenchemos os títulos por id, sem tocar em total/status.
+//
+//  Roda como job separado (server.js), não dentro do runSync, para não deixar o
+//  "Sincronizar agora" travado enquanto a Amazon monta o relatório (leva ~1-2 min).
+//  Throttle por mercado via cursor 'names-<market>': dispara no máximo a cada
+//  AMAZON_NAMES_EVERY_HOURS (padrão 12h), então pode ser chamado com folga sem custo.
+const NAMES_EVERY_MS = Number(process.env.AMAZON_NAMES_EVERY_HOURS || 12) * 3600 * 1000;
+const NAMES_DAYS     = Number(process.env.AMAZON_NAMES_DAYS || 2);
+
+function namesDue(market) {
+  const last = getAmazonCursor(`names-${market}`);
+  return !last || (Date.now() - Date.parse(last)) >= NAMES_EVERY_MS;
+}
+
+export async function reconcileAmazonNames({ markets = ['us', 'br'], force = false } = {}) {
+  const out = { patched: 0, inserted: 0, byMarket: {}, skipped: [], errors: [] };
+  if (!amazon.hasAwsCreds()) { out.errors.push('amazon.names: credenciais AWS ausentes'); return out; }
+
+  for (const market of markets) {
+    const configured = market === 'us' ? amazon.isConfigured() : amazon.isConfiguredBR();
+    if (!configured) { out.skipped.push(`${market}: sem token`); continue; }
+    if (!force && !namesDue(market)) { out.skipped.push(`${market}: throttle`); continue; }
+    try {
+      const named = await amazon.fetchRecentNamedOrders({ market, days: NAMES_DAYS });
+      const r = patchOrderItems(named);
+      setAmazonCursor(`names-${market}`, new Date().toISOString());
+      out.patched  += r.patched;
+      out.inserted += r.inserted;
+      out.byMarket[market] = r;
+    } catch (e) {
+      out.errors.push(`amazon.names.${market}: ${e.message}`);
+    }
+  }
+  return out;
 }
 
 // Execução direta: node src/sync.js

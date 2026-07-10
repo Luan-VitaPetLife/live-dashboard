@@ -6,7 +6,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock } from './src/metrics.js';
-import { runSync } from './src/sync.js';
+import { runSync, reconcileAmazonNames } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, upsertOrders, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
@@ -206,6 +206,18 @@ app.post('/api/amazon/backfill', (req, res) => {
   res.json({ ok: true, message: `Backfill de ${days} dias (${market.toUpperCase()}) iniciado. Acompanhe em GET /api/status.` });
 });
 
+// Forçar a reconciliação de nomes de produto da Amazon (Reports API). Ignora o
+// throttle (force) e roda em background — o relatório leva ~1-2 min. Resultado no
+// log do servidor; confirme na tela de Produtos. Ver CLAUDE.md 4.7.6 / backlog item 8.
+app.post('/api/amazon/sync-names', (req, res) => {
+  if (backfillRunning) return res.status(409).json({ error: 'Backfill em andamento — tente depois que terminar.' });
+  const markets = req.query.market === 'br' ? ['br'] : req.query.market === 'us' ? ['us'] : ['us', 'br'];
+  reconcileAmazonNames({ markets, force: true })
+    .then(r => console.log('Amazon nomes (manual):', r))
+    .catch(e => console.error('Amazon nomes (manual) falhou:', e.message));
+  res.json({ ok: true, message: `Reconciliação de nomes (${markets.join(', ')}) iniciada. Acompanhe no log; confirme em Produtos.` });
+});
+
 // Forçar uma sincronização manual (protegido por token)
 app.post('/api/sync', async (req, res) => {
   const secret = process.env.SYNC_SECRET;
@@ -327,4 +339,18 @@ app.listen(PORT, () => {
   runSync().then(r => console.log('Sync inicial:', r)).catch(e => console.error('Sync inicial falhou:', e.message));
   const minutes = Number(process.env.SYNC_INTERVAL_MINUTES || 15);
   setInterval(() => runSync().then(r => console.log('Sync:', r)).catch(e => console.error('Sync falhou:', e.message)), minutes * 60 * 1000);
+
+  // Reconciliação de nomes de produto da Amazon (Reports API, balde de cota próprio —
+  // ver CLAUDE.md 4.7.6 / backlog item 8). Job separado do sync de pedidos para não
+  // travar o "Sincronizar agora". A própria função só dispara um relatório se já
+  // passou AMAZON_NAMES_EVERY_HOURS desde o último, por mercado. Pulamos enquanto um
+  // backfill roda, para não disputar a cota da Reports API.
+  const runAmazonNames = () => {
+    if (backfillRunning) return;
+    reconcileAmazonNames()
+      .then(r => { if (r.patched || r.inserted || r.errors.length) console.log('Amazon nomes:', r); })
+      .catch(e => console.error('Amazon nomes falhou:', e.message));
+  };
+  setTimeout(runAmazonNames, 3 * 60 * 1000);        // 3 min após subir
+  setInterval(runAmazonNames, 6 * 60 * 60 * 1000);  // a cada 6h (throttle interno limita a 12h)
 });

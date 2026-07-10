@@ -174,6 +174,44 @@ export function upsertOrders(orders) {
   }
 }
 
+// Preenche items[] (títulos de produto) em pedidos JÁ existentes, sem tocar em
+// total/status — usado pela reconciliação de nomes da Amazon (Reports API), já que
+// o sync de pedidos (Orders API) não traz o título do item. Ver CLAUDE.md 4.7.6 /
+// backlog item 8. Pedido que ainda não existe no store é inserido inteiro (não se
+// perde), mas o comum é só corrigir os títulos dos que o sync de pedidos já gravou.
+export function patchOrderItems(orders) {
+  const db = load();
+  let patched = 0, inserted = 0;
+  const toPersist = [];
+  for (const o of orders) {
+    const existing = db.orders[o.id];
+    if (existing) {
+      // Só sobrescreve se o relatório trouxe itens com título (não apagar por engano).
+      if (o.items && o.items.length && o.items.some(it => it.title)) {
+        existing.items = o.items;
+        patched++;
+        toPersist.push(existing);
+      }
+    } else {
+      db.orders[o.id] = o;
+      inserted++;
+      toPersist.push(o);
+    }
+  }
+  if (!toPersist.length) return { patched, inserted };
+  indexDirty = true;
+  saveJson();
+  if (USE_PG) {
+    for (const o of toPersist) {
+      pool.query(
+        'INSERT INTO orders(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=$2',
+        [o.id, o]
+      ).catch(e => console.error('PG orders error:', e.message));
+    }
+  }
+  return { patched, inserted };
+}
+
 export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {
   load();
   if (indexDirty) rebuildOrdersIndex();
