@@ -581,3 +581,29 @@ export async function backfillOrders({ market = 'us', days = 90, onProgress, onC
   onProgress?.(`${label}: concluído — ${total} pedidos`);
   return total;
 }
+
+// Reconciliação de nomes de produto (ver CLAUDE.md 4.7.6 / backlog item 8).
+// O sync contínuo (Orders API, fetchOrders) nunca traz o título do item — pedidos
+// novos entram com items[].title vazio e Produtos/Estoque vão desatualizando. Aqui
+// buscamos um relatório curto dos últimos `days` dias (uma única janela, days ≤ 30) —
+// a Reports API tem balde de cota próprio, então isso não concorre com o sync de
+// pedidos nem provoca 429. Devolve pedidos já no formato normalizado, com items[] +
+// title preenchido; quem chama casa por id e preenche os títulos (patchOrderItems).
+export async function fetchRecentNamedOrders({ market = 'us', days = 2, onProgress } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+
+  const isUs          = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  const label         = isUs ? 'Nomes US' : 'Nomes BR';
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`${label}: refresh token não configurado.`);
+
+  const end   = new Date(Date.now() - 3 * 60 * 1000); // margem exigida pela SP-API
+  const start = new Date(end.getTime() - days * 864e5);
+
+  return runOneReport({
+    getLwa, marketplaceId, label,
+    startISO: start.toISOString(), endISO: end.toISOString(),
+    onProgress,
+  });
+}

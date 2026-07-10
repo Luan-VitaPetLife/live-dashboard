@@ -227,15 +227,36 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   `channelSplit.amazon_us` = US$ 2.014.895 em 90 dias. Amazon passou a aparecer em Produtos com nome real.
 - **`ship-state` normalizado para maiúsculas** aqui e em `fetchOrders()`: a Amazon devolve `"UT"` e `"Ut"` para o
   mesmo estado, criando duas chaves distintas em `byState` e quebrando a contagem no mapa de Geografia US.
+- **⚠️ O backfill roda no processo do servidor** (`backfillOrders` em background, não é um worker separado). Um
+  **deploy/restart do Railway no meio mata a execução** — o estado em `kv.amazonBackfill` congela no último
+  `running` e `backfillRunning` (flag em memória) volta a `false` no restart. Aconteceu em 10/07/2026: um backfill
+  de 365 dias começou às 17:17 e foi morto pelo deploy da otimização do `store.js` minutos depois, deixando o status
+  preso em "criando relatório ... → 0 pedidos". **Regra:** só disparar backfill quando não houver deploy pendente,
+  e não mergear/deployar nada até ele terminar (~15-20 min p/ 365 dias). Se morrer, é só re-disparar (upsert por id,
+  idempotente).
 
-#### 4.7.6 ⚠️ Divergência conhecida: sync contínuo não traz nome de produto
-- O backfill (Reports API) preenche `items[{ title, qty, amount }]`. O **sync contínuo** (`fetchOrders`, Orders API)
-  cria `items` com `title: ''` — a Orders API nunca devolve o título do item.
-- **Consequência:** pedidos da Amazon posteriores ao backfill entram sem nome de produto. Top Produtos, Produtos e
-  Estoque vão refletindo cada vez menos a realidade conforme o tempo passa desde o último backfill.
-- **Correção natural (não feita):** o sync da Amazon passar a usar a Reports API também — um relatório dos últimos
-  ~2 dias por ciclo (ou 1×/dia), que é barato, usa balde de cota próprio e já traz os itens. Ver backlog.
-- **Paliativo hoje:** rodar `POST /api/amazon/backfill?days=2` periodicamente reconcilia os títulos (upsert por id).
+#### 4.7.6 Reconciliação de nomes de produto (resolvido 10/07/2026)
+- **O problema (era):** o backfill (Reports API) preenche `items[{ title, qty, amount }]`, mas o **sync contínuo**
+  (`fetchOrders`, Orders API) cria `items` com `title: ''` — a Orders API nunca devolve o título do item. Pedidos da
+  Amazon posteriores ao backfill entravam sem nome, e Top Produtos/Produtos/Estoque desatualizavam com o tempo.
+- **Correção (backlog item 8):** um **job separado** (`reconcileAmazonNames` em `sync.js`, agendado em `server.js`)
+  busca um relatório curto dos últimos `AMAZON_NAMES_DAYS` dias (padrão 2) via `amazon.fetchRecentNamedOrders()` —
+  a Reports API tem **balde de cota próprio**, então não concorre com o sync de pedidos nem provoca 429 — e preenche
+  os títulos por id com `store.patchOrderItems()`.
+- **`patchOrderItems(orders)` (`store.js`):** casa por id e **só sobrescreve `items[]`** (quando o relatório trouxe
+  título), **sem tocar em `total`/`status`/`state`** — que continuam vindo da Orders API. Isso evita flip-flop do
+  valor entre as duas fontes (o `total` do relatório é somado dos itens e pode divergir do `OrderTotal`). Pedido que
+  ainda não existe no store é inserido inteiro (não se perde). Marca o índice em memória como sujo.
+- **Agendamento:** job próprio, **fora do `runSync`** (para não travar o "Sincronizar agora", já que o relatório leva
+  ~1-2 min). Roda 3 min após subir e a cada 6h; a função só dispara um relatório se já passou
+  `AMAZON_NAMES_EVERY_HOURS` (padrão 12h) desde o último, **por mercado** (throttle via cursor `names-<market>` em
+  `kv.amazonCursors`). Pulado enquanto um backfill roda (não disputar a cota da Reports API).
+- **Disparo manual:** `POST /api/amazon/sync-names?market=us|br` (ignora o throttle, roda em background). Útil para
+  verificar logo após deploy sem esperar o job automático. Sem `market` → US e BR.
+- **Cobertura:** com janela de 2 dias e cadência de 12h, todo pedido novo é visto várias vezes na sua primeira
+  janela, então o título entra em até ~12h após a criação (o pedido e o valor aparecem na hora, via Orders API).
+- **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
+  é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog item 10).
 
 #### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
@@ -623,6 +644,8 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 | `AMAZON_BR_REFRESH_TOKEN` | LWA Refresh Token da conta **CocoandLuna** (BR). **Nunca igual ao de cima** — ver 4.7.1 |
 | `AMAZON_BACKFILL_DAYS` | Janela só da 1ª carga, antes de existir cursor (padrão `2`). Ver 4.7.3 |
 | `AMAZON_FETCH_PII` | `1` liga a busca do nome do comprador via RDT — só se o papel PII for aprovado pela Amazon |
+| `AMAZON_NAMES_EVERY_HOURS` | Intervalo mínimo entre reconciliações de nome de produto da Amazon, por mercado (padrão `12`). Ver 4.7.6 |
+| `AMAZON_NAMES_DAYS` | Janela (dias) do relatório de reconciliação de nomes (padrão `2`). Ver 4.7.6 |
 | `AMAZON_ROLE_ARN` | ARN do IAM Role com permissões SP-API — compartilhado entre EUA e BR |
 | `AMAZON_AWS_ACCESS_KEY` | Access Key do IAM User com permissão `sts:AssumeRole` no role acima |
 | `AMAZON_AWS_SECRET_KEY` | Secret Key do mesmo IAM User |
@@ -659,6 +682,8 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `POST /api/amazon/force-sync` — zera backoff + executa sync atomicamente
   - `POST /api/amazon/backfill?days=90&market=us` — backfill histórico via Reports API, em background.
     Responde na hora; progresso em `GET /api/status` → `amazon.backfill`. Ver 4.7.5.
+  - `POST /api/amazon/sync-names?market=us|br` — reconcilia nomes de produto (Reports API), em background,
+    ignorando o throttle. Sem `market` → US e BR. Ver 4.7.6.
   - `GET /shopee/connect` e `GET /shopee/callback`
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /googleads/connect` e `GET /googleads/callback`
@@ -700,10 +725,10 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 5. ~~**Amazon US na produção.**~~ **Resolvido 09/07/2026** — ver 4.7.2. Era paginação, não cota/autorização.
 6. ~~**Amazon — backfill histórico dos EUA.**~~ **Resolvido 09/07/2026** — ver 4.7.5. 83.897 pedidos (90 dias) em 4min40s.
 7. ~~**Amazon — `byState` com grafia inconsistente.**~~ **Resolvido 09/07/2026** — `ship-state`/`StateOrRegion` normalizados para maiúsculas.
-8. **⚠️ Amazon — sync contínuo não traz nome de produto (ver 4.7.6).** O backfill via Reports API preenche `items[].title`,
-   mas o `fetchOrders()` do sync (Orders API) não — pedidos novos entram com `title: ''` e as telas de Produtos/Estoque
-   vão desatualizando. **Prioridade alta**, já que o backfill acabou de tornar essas telas úteis para a Amazon.
-   Correção: usar a Reports API também no sync (relatório dos últimos ~2 dias, 1×/dia — balde de cota próprio).
+8. ~~**Amazon — sync contínuo não traz nome de produto.**~~ **Resolvido 10/07/2026** — ver 4.7.6. Job separado
+   (`reconcileAmazonNames`) busca um relatório curto (últimos 2 dias, Reports API, balde de cota próprio) e preenche
+   `items[].title` por id via `patchOrderItems`, sem tocar em `total`/`status`. Roda a cada 6h com throttle de 12h por
+   mercado; disparo manual em `POST /api/amazon/sync-names`.
 9. ~~**Performance do `store.js` com volume alto.**~~ **Resolvido 10/07/2026** — ver 3 (índice em memória do
    `getOrders`). Era `Object.values()` + várias passadas de `.filter()` reparsando `Date.parse()` a cada request
    (~6×/dashboard). Trocado por índice por mercado ordenado por timestamp + busca binária na janela de datas.
