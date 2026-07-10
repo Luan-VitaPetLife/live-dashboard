@@ -4,7 +4,7 @@
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
 import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, load } from './store.js';
-import { normalizeUsState } from './us-states.js';
+import { normalizeUsState, isUsRegionCode } from './us-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -270,9 +270,12 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // por estado (endereço de entrega dos pedidos válidos)
   // US: normaliza a grafia do estado ("California"/"CALIFORNIA"/"CA."/"N.Y." → "CA"/"NY"),
   // senão cada variante da Amazon vira uma linha no ranking e o mapa subconta. Ver 4.10/4.7.5.
+  // Endereços que não são região dos EUA (províncias do Canadá, etc.) são agrupados num
+  // único bucket 'INTL' — não poluem o ranking com cada país, mas não perdem receita.
   const byState = {};
   valid.forEach(o => {
-    const s = market === 'us' ? normalizeUsState(o.state) : o.state;
+    let s = o.state;
+    if (market === 'us') { s = normalizeUsState(s); if (s && !isUsRegionCode(s)) s = 'INTL'; }
     if (s && o.total > 0) {
       if (!byState[s]) byState[s] = { revenue: 0, orders: 0, byChannel: {} };
       byState[s].revenue += o.total;

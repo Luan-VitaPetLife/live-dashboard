@@ -438,9 +438,13 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Modal de estado:** clique em card de ranking abre modal com 4 KPIs + gráfico de barras comparativo.
 - **Dados:** campo `byState` do `/api/dashboard` → `{ [UF]: { revenue, orders } }`. `byState` filtra `o.total > 0`.
 - **Normalização de estado US:** as chaves de `byState` no mercado US passam por `normalizeUsState` (`src/us-states.js`),
-  que reduz as várias grafias da Amazon (`"California"`/`"CALIFORNIA"`/`"CA"`/`"CA."`/`"N.Y."`) ao código de 2 letras —
-  senão cada variante virava uma linha no ranking e o mapa (que casa por código `_uf`) subcontava. Grafias que não
-  batem com um código conhecido (província canadense, typo) ficam como texto limpo, sem virar código. Ver 4.7.5.
+  que reduz as várias grafias da Amazon (`"California"`/`"CALIFORNIA"`/`"CA"`/`"CA."`/`"N.Y."`, e o typo `"MARULAND"`→MD)
+  ao código de 2 letras — senão cada variante virava uma linha no ranking e o mapa (que casa por código `_uf`) subcontava.
+- **Agrupamento de não-EUA (`INTL`):** ainda em `byState` US, o que **não** é uma região dos EUA (`isUsRegionCode` falso —
+  ex.: províncias do Canadá) é agrupado num único bucket **`'INTL'`**, em vez de aparecer como cada país no ranking. Não
+  perde receita. Territórios (PR, DC, VI, GU, AS) e endereços militares (AA/AE/AP) **contam como EUA** e ficam como linha
+  própria. Em `geografia-us.html`, `STATE_NAMES` rotula território/militar/`INTL` ("Porto Rico", "Militar (Europa)",
+  "Outros (internacional)"), e o KPI "Estados com vendas" conta só os 50 estados de fato (`US_50`). Ver 4.7.5.
 
 ### 4.12 Google Ads — EUA apenas (implementado 01/07/2026)
 - Implementado em `src/googleads.js`. OAuth 2.0 (authorization_code) + refresh_token de longa duração, seguindo o mesmo padrão de `mercadolivre.js` (`/googleads/connect` → autoriza → `/googleads/callback` troca `code` por tokens, salvos no store via `kv.googleAdsTokens`).

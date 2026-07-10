@@ -43,7 +43,15 @@ const NAME_TO_CODE = {
   'ST CROIX':'VI', 'ST CROIX VI':'VI', 'ST THOMAS':'VI', 'ST THOMAS VI':'VI',
   'ST JOHN':'VI', 'ST JOHN VI':'VI',
   GUAM:'GU', 'AMERICAN SAMOA':'AS', 'NORTHERN MARIANA ISLANDS':'MP',
+  // typos observados em endereços reais da Amazon
+  MARULAND:'MD',
 };
+
+// true se `code` é uma região dos EUA (estado, DC, território ou endereço militar).
+// Usado para separar o que é EUA do que é estrangeiro no ranking de Geografia US.
+export function isUsRegionCode(code) {
+  return CODES.has(code);
+}
 
 export function normalizeUsState(raw) {
   if (raw == null) return raw;
