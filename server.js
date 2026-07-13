@@ -6,7 +6,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock } from './src/metrics.js';
-import { runSync, reconcileAmazonNames } from './src/sync.js';
+import { runSync, reconcileAmazonNames, enrichAmazonItems } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, upsertOrders, load, removeAmazonMarketLeak } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
@@ -230,6 +230,25 @@ app.post('/api/amazon/cleanup-market-leak', (req, res) => {
   }
 });
 
+// Busca nomes de produto da Amazon via getOrderItems (Orders API, por-pedido) — o caminho
+// que funciona pro BR, cujo relatório não traz pedidos BR reais (contas vinculadas, ver
+// 4.7.8). Roda em background (BR ~120 pedidos × 0,5 req/s ≈ 5 min). Progresso no log e em
+// GET /api/status → amazon.items. Padrão market=br (o US usa a Reports API, seria inviável aqui).
+let itemsRunning = false;
+let itemsStatus  = null;
+app.post('/api/amazon/fetch-items', (req, res) => {
+  if (itemsRunning) return res.status(409).json({ error: 'Busca de itens já em andamento.' });
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  const limit  = Math.min(Number(req.query.limit || 1000), 5000);
+  itemsRunning = true;
+  itemsStatus  = { status: 'running', market, message: 'iniciando', startedAt: new Date().toISOString() };
+  enrichAmazonItems({ market, limit, onProgress: m => { itemsStatus = { status: 'running', market, message: m, startedAt: itemsStatus.startedAt }; } })
+    .then(r => { itemsStatus = { status: 'done', market, result: r, finishedAt: new Date().toISOString() }; console.log('Amazon itens:', r); })
+    .catch(e => { itemsStatus = { status: 'error', market, message: e.message, finishedAt: new Date().toISOString() }; console.error('Amazon itens falhou:', e.message); })
+    .finally(() => { itemsRunning = false; });
+  res.json({ ok: true, message: `Busca de itens (${market.toUpperCase()}, até ${limit}) iniciada. Acompanhe em GET /api/status → amazon.items.` });
+});
+
 // Diagnóstico: colunas reais do relatório da Amazon + amostra dos campos que decidem o
 // mercado (order-status/currency/sales-channel/ship-country/ship-state) e a proporção de
 // contaminação. Usado para confirmar o discriminador correto do rowMarket. Ver 4.7.8.
@@ -328,6 +347,7 @@ app.get('/api/status', (_req, res) => {
       backoffUntil:  backoffActive ? new Date(backoffUntil).toISOString() : null,
       nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
       backfill:      getAmazonBackfill(),
+      items:         itemsStatus,
     },
     amazon_br: {
       // US e BR usam o mesmo app/token e o mesmo balde de cota (chamada combinada).
@@ -372,9 +392,22 @@ app.listen(PORT, () => {
   // backfill roda, para não disputar a cota da Reports API.
   const runAmazonNames = () => {
     if (backfillRunning) return;
-    reconcileAmazonNames()
-      .then(r => { if (r.patched || r.inserted || r.errors.length) console.log('Amazon nomes:', r); })
-      .catch(e => console.error('Amazon nomes falhou:', e.message));
+    // US: nomes via Reports API — volume alto (~1000/dia), o relatório é o único caminho viável.
+    reconcileAmazonNames({ markets: ['us'] })
+      .then(r => { if (r.patched || r.inserted || r.errors.length) console.log('Amazon nomes US:', r); })
+      .catch(e => console.error('Amazon nomes US falhou:', e.message));
+    // BR: nomes via getOrderItems (por-pedido). O relatório do marketplace BR NÃO traz os
+    // pedidos BR reais (contas vinculadas devolvem só US — ver 4.7.8), então a Reports API
+    // não serve pro BR. Volume baixo (~120), então buscar item por item é viável. Só processa
+    // pedidos sem título, então após limpar o backlog custa quase nada (só os poucos novos).
+    if (!itemsRunning) {
+      itemsRunning = true;
+      itemsStatus = { status: 'running', market: 'br', message: 'auto', startedAt: new Date().toISOString() };
+      enrichAmazonItems({ market: 'br', onProgress: m => { itemsStatus = { status: 'running', market: 'br', message: m, startedAt: itemsStatus.startedAt }; } })
+        .then(r => { itemsStatus = { status: 'done', market: 'br', result: r, finishedAt: new Date().toISOString() }; if (r.patched || r.errors.length) console.log('Amazon itens BR:', r); })
+        .catch(e => { itemsStatus = { status: 'error', market: 'br', message: e.message, finishedAt: new Date().toISOString() }; console.error('Amazon itens BR falhou:', e.message); })
+        .finally(() => { itemsRunning = false; });
+    }
   };
   setTimeout(runAmazonNames, 3 * 60 * 1000);        // 3 min após subir
   setInterval(runAmazonNames, 6 * 60 * 60 * 1000);  // a cada 6h (throttle interno limita a 12h)
