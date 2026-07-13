@@ -353,12 +353,16 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   (`AMAZON_REFRESH_TOKEN` e `AMAZON_BR_REFRESH_TOKEN`) enxergam **exatamente os mesmos 10 marketplaces**,
   **incluindo `A2Q3Y263D00KWC` (Amazon.com.br) com `participating: true`**. Ou seja, é **uma conta unificada da
   América do Norte** (US+CA+MX+BR) e o token TEM acesso ao Brasil. Não é problema de token/conta.
-- **O que ainda investigamos:** `getOrderItems` funciona nos pedidos formato `111-/112-` (devolveu nomes em
-  inglês, US) mas dá **HTTP 400 InvalidInput** nos de formato `701-/702-/S01-` (que carregam os R$ 9.052 do BR).
-  Como o token TEM acesso ao BR, o 400 tem outra causa (a apurar): tipo de pedido (MCF/Non-Amazon), pedido
-  arquivado, ou necessidade de outro parâmetro. Diagnóstico: `GET /api/amazon/probe-order?id=<id>&market=br`
-  (`probeOrder`) devolve os campos do pedido (MarketplaceId, OrderType, FulfillmentChannel, SalesChannel) + o
-  erro exato do getOrderItems, pra identificar o que são esses pedidos.
+- **CAUSA REAL (apurada 13/07/2026):** o app tem acesso de **LISTAGEM** aos pedidos BR, mas **NÃO** aos
+  **detalhes**. Prova via `probe-order` num pedido `701-`: `getOrder` devolve `{ payload: {} }` (vazio, sem
+  erro) e `getOrderItems` dá **400 InvalidInput COM e SEM RDT** (logo não é LGPD/RDT). Decisivo: o **mesmo token
+  BR** lê itens de pedido **US** (`111-/112-`) mas falha no pedido **BR** (`701-/702-`) — muda só o pedido, então
+  a trava é do **marketplace Brasil**. Bate com o relatório BR vir sem os pedidos BR. Ou seja: **participar do
+  marketplace (whoami) ≠ ter autorização de detalhe de pedido nele**. É uma **limitação de autorização do app no
+  lado da Amazon, específica do Brasil** — resolver no portal (Seller Central / autorização do app pro
+  marketplace BR), NÃO no código. Enquanto isso, o Amazon BR mostra valor/qtd/pedidos corretos, só sem nome de
+  produto. Diagnósticos deixados prontos: `GET /api/amazon/whoami`, `GET /api/amazon/probe-order?id=<id>&market=`,
+  `GET /api/amazon/report-columns?market=`.
 - **Caminho de nome de produto BR:** `enrichAmazonItems({market:'br'})` em `sync.js` — busca
   `/orders/v0/orders/{id}/orderItems` (traz `Title`) pedido a pedido (BR tem volume baixo; o US continua na
   Reports API). Disparo manual: `POST /api/amazon/fetch-items?market=br`; progresso em `/api/status →
