@@ -343,6 +343,31 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
      o deploy.** ⚠️ Não re-rodar se um dia um backfill BR de verdade for feito (aí pedido BR real teria título/
      grafia de relatório).
 
+#### 4.7.9 ⚠️ DESCOBERTA: `AMAZON_BR_REFRESH_TOKEN` autoriza a conta US, não a CocoandLuna (13/07/2026)
+- **Contexto:** ao tentar obter os nomes de produto do Amazon BR (backlog item 11), descobrimos que o token BR
+  está autorizando a conta **errada**. Os dois tokens (`AMAZON_REFRESH_TOKEN` e `AMAZON_BR_REFRESH_TOKEN`) são
+  strings **diferentes**, mas **ambos pertencem à conta US (VITA PET LIFE)** — não é o bug de token idêntico.
+- **Prova definitiva (dois testes independentes):**
+  1. **Relatório** (`inspectReport?market=br`): 1815 linhas, **1811 US / 0 BR** — o relatório do marketplace BR
+     devolve só pedidos US (`ship-country=US`, `sales-channel="Non-Amazon US"`, `currency` vazia).
+  2. **`getOrderItems`** rodado nos 120 pedidos do balde BR: **funcionou nos 43 de formato US** (`111-/112-/
+     113-/114-`, devolveu nomes em inglês) e **falhou com HTTP 400 InvalidInput nos 77 de formato BR** (`701-/
+     702-/S01-`, que são os pedidos Amazon.com.br REAIS, os que carregam os R$ 9.052). Ou seja, o token lê
+     pedido US e NÃO lê pedido BR → é a conta US.
+- **Consequência:** **não dá pra obter nome de produto (nem sincronizar de forma confiável) do Amazon BR** até
+  o token ser corrigido. Os 77 pedidos BR reais no banco são legado (de quando o token era a CocoandLuna, ou do
+  período SAME_TOKEN); o sync atual não traz BR novo (o token US devolve 0 no marketplace BR).
+- **AÇÃO NECESSÁRIA (Luan, no portal — precisa do chefe):** regenerar `AMAZON_BR_REFRESH_TOKEN` **autorizando a
+  conta CocoandLuna** no Solution Provider Portal (link "sign in to that account" na linha da CocoandLuna, ver
+  4.7.1). Depois é só colar no Railway — o código já está pronto: o job de nomes BR (getOrderItems) volta a
+  funcionar sozinho e passa a nomear os pedidos `701-/702-`.
+- **Caminho de nome de produto BR (quando o token estiver certo):** `enrichAmazonItems({market:'br'})` em
+  `sync.js` — busca `/orders/v0/orders/{id}/orderItems` (traz `Title`) pedido a pedido. Só serve pro BR (volume
+  baixo); o US continua na Reports API. Disparo manual: `POST /api/amazon/fetch-items?market=br`; progresso em
+  `/api/status → amazon.items`. Job agendado (server.js) faz US via relatório + BR via getOrderItems. Tem trava
+  `ABORT_AFTER=15` (aborta cedo se o token não tem acesso — evita 77 chamadas inúteis a cada 6h; auto-recupera
+  quando o token for corrigido).
+
 #### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
 - **Pedidos `Pending` vêm com `total: 0`** — a SP-API omite `OrderTotal` enquanto o pagamento não é capturado.
