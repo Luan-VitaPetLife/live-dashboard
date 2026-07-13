@@ -249,6 +249,20 @@ app.post('/api/amazon/fetch-items', (req, res) => {
   res.json({ ok: true, message: `Busca de itens (${market.toUpperCase()}, até ${limit}) iniciada. Acompanhe em GET /api/status → amazon.items.` });
 });
 
+// Diagnóstico: quais marketplaces cada token da Amazon enxerga (getMarketplaceParticipations).
+// Prova definitiva de qual conta de vendedor cada refresh token autoriza. Ver 4.7.9.
+app.get('/api/amazon/whoami', async (_req, res) => {
+  try {
+    const [us, br] = await Promise.allSettled([amazon.whoAmI('us'), amazon.whoAmI('br')]);
+    res.json({
+      us: us.status === 'fulfilled' ? us.value : { error: us.reason?.message },
+      br: br.status === 'fulfilled' ? br.value : { error: br.reason?.message },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Diagnóstico: colunas reais do relatório da Amazon + amostra dos campos que decidem o
 // mercado (order-status/currency/sales-channel/ship-country/ship-state) e a proporção de
 // contaminação. Usado para confirmar o discriminador correto do rowMarket. Ver 4.7.8.
