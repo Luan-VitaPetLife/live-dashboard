@@ -473,14 +473,23 @@ function parseTsv(text) {
   });
 }
 
-// Mercado real de uma linha do relatório pela moeda (USD → US, BRL → BR). O relatório
-// ALL_ORDERS pode vir contaminado com pedidos de outro marketplace quando o token de um
-// mercado enxerga a conta do outro (tokens iguais / mesma conta) — ver CLAUDE.md 4.7.8.
-// null quando indeterminado (não descarta, por segurança).
+// Mercado REAL de uma linha do relatório. O relatório ALL_ORDERS vem contaminado com
+// pedidos do outro marketplace porque as contas CocoandLuna (BR) e VITA PET LIFE (US)
+// são VINCULADAS na Amazon: o relatório ignora o filtro de marketplaceIds e devolve os
+// dois mercados juntos (a Orders API respeita o filtro; por isso o sync traz só o mercado
+// certo). Ver CLAUDE.md 4.7.8. Precisamos descartar a linha do outro mercado.
+//
+// Sinal PRINCIPAL é o país de entrega (ship-country): é físico e não é reescrito pelo
+// contexto do relatório — pedido entregue nos EUA é 'US' sempre. A moeda NÃO serve
+// (o relatório BR reporta tudo em BRL, inclusive pedido US — foi o que furou o 1º filtro).
+// Fallback por sales-channel. null = indeterminado (não descarta, por segurança).
 function rowMarket(r) {
-  const cur = (r['currency'] || '').trim().toUpperCase();
-  if (cur === 'USD') return 'us';
-  if (cur === 'BRL') return 'br';
+  const country = (r['ship-country'] || '').trim().toUpperCase();
+  if (country === 'US') return 'us';
+  if (country === 'BR') return 'br';
+  const sc = (r['sales-channel'] || '').trim().toLowerCase();
+  if (sc.includes('.br')) return 'br';
+  if (sc.includes('amazon.com')) return 'us';
   return null;
 }
 
@@ -535,7 +544,9 @@ function ordersFromRows(rows, marketplaceId) {
   return [...byOrder.values()];
 }
 
-async function runOneReport({ getLwa, marketplaceId, startISO, endISO, label, onProgress }) {
+// Busca o relatório e devolve as LINHAS cruas (parseTsv). Reaproveitado por runOneReport
+// e pelo diagnóstico inspectReport.
+async function fetchReportRows({ getLwa, marketplaceId, startISO, endISO, label, onProgress }) {
   onProgress?.(`${label}: criando relatório ${startISO.slice(0, 10)} → ${endISO.slice(0, 10)}`);
 
   const created = await spPost(getLwa, '/reports/2021-06-30/reports', {
@@ -565,10 +576,48 @@ async function runOneReport({ getLwa, marketplaceId, startISO, endISO, label, on
     ? zlib.gunzipSync(buf).toString('utf8')
     : buf.toString('utf8');
 
-  const rows   = parseTsv(text);
+  return parseTsv(text);
+}
+
+async function runOneReport({ getLwa, marketplaceId, startISO, endISO, label, onProgress }) {
+  const rows   = await fetchReportRows({ getLwa, marketplaceId, startISO, endISO, label, onProgress });
   const orders = ordersFromRows(rows, marketplaceId);
   onProgress?.(`${label}: ${rows.length} linhas → ${orders.length} pedidos`);
   return orders;
+}
+
+// Diagnóstico: devolve as COLUNAS reais do relatório + uma amostra dos campos que
+// decidem o mercado (para confirmar o nome/valor certos e blindar o rowMarket). Sem
+// PII: só order-status/currency/sales-channel/ship-country/ship-state + o mercado que
+// o rowMarket deduziu. Ver CLAUDE.md 4.7.8.
+export async function inspectReport({ market = 'br', days = 1 } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const isUs          = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`inspectReport: token ${market} não configurado.`);
+
+  const end   = new Date(Date.now() - 3 * 60 * 1000);
+  const start = new Date(end.getTime() - days * 864e5);
+  const rows  = await fetchReportRows({
+    getLwa, marketplaceId, label: `Inspect ${market.toUpperCase()}`,
+    startISO: start.toISOString(), endISO: end.toISOString(),
+  });
+
+  const columns = rows.length ? Object.keys(rows[0]) : [];
+  const sample = rows.slice(0, 8).map(r => ({
+    orderStatus:  r['order-status'],
+    currency:     r['currency'],
+    salesChannel: r['sales-channel'],
+    shipCountry:  r['ship-country'],
+    shipState:    r['ship-state'],
+    rowMarket:    rowMarket(r),
+  }));
+  // Contagem por mercado deduzido, pra ver a proporção de contaminação.
+  const tally = {};
+  for (const r of rows) { const m = rowMarket(r) || 'null'; tally[m] = (tally[m] || 0) + 1; }
+
+  return { market, requestedMarketplace: marketplaceId, totalRows: rows.length, columns, rowMarketTally: tally, sample };
 }
 
 // Backfill histórico de um mercado. Quebra o período em janelas de REPORT_CHUNK_DAYS
