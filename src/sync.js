@@ -225,6 +225,12 @@ export async function enrichAmazonItems({ market = 'br', limit = 1000, onProgres
     .slice(0, limit);
   onProgress?.(`${market}: ${pending.length} pedidos sem nome para buscar`);
 
+  // Se o token não tem acesso ao mercado (ex.: AMAZON_BR_REFRESH_TOKEN apontando pra conta
+  // US — ver 4.7.8), TODA chamada dá 400. Abortamos após ABORT_AFTER falhas seguidas sem
+  // nenhum sucesso, pra não gastar centenas de chamadas inúteis a cada rodada. Se o token
+  // for corrigido, os primeiros pedidos passam a dar certo e a execução segue normal.
+  const ABORT_AFTER = 15;
+  let consecFails = 0;
   for (const o of pending) {
     out.scanned++;
     const orderId = o.id.slice(o.id.indexOf(':') + 1);
@@ -233,12 +239,19 @@ export async function enrichAmazonItems({ market = 'br', limit = 1000, onProgres
         const items = await amazon.fetchOrderItems(orderId, { market });
         if (items.length) { patchOrderItems([{ id: o.id, items }]); out.patched++; }
         else out.empty++;
+        consecFails = 0;
         break;
       } catch (e) {
         if (e.isRateLimit && attempt === 1) { await sleep(61000); continue; } // espera a cota e tenta de novo
         out.errors.push(`${orderId}: ${e.message}`);
+        consecFails++;
         break;
       }
+    }
+    if (out.patched === 0 && consecFails >= ABORT_AFTER) {
+      out.aborted = `${consecFails} falhas seguidas sem sucesso — token provavelmente sem acesso ao mercado ${market} (ver 4.7.8)`;
+      onProgress?.(out.aborted);
+      break;
     }
     if (out.scanned % 10 === 0) onProgress?.(`${out.scanned}/${pending.length} — ${out.patched} nomeados`);
     await sleep(ITEMS_RATE_MS);

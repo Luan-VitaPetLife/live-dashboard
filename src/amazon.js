@@ -707,3 +707,20 @@ export async function fetchOrderItems(orderId, { market = 'br' } = {}) {
   } while (nextToken);
   return items;
 }
+
+// ── Diagnóstico: quais marketplaces cada token enxerga (getMarketplaceParticipations) ──
+// Prova definitiva de QUAL conta de vendedor um refresh token autoriza. Se o token BR
+// devolver só o Brasil → é a CocoandLuna; se devolver US/CA/MX/BR → é a VITA PET LIFE
+// (token da conta errada — ver 4.7.9). Devolve a lista de marketplaces participantes.
+export async function whoAmI(market = 'br') {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
+  const data = await spGet(getLwa, '/sellers/v1/marketplaceParticipations');
+  const list = (data.payload || []).map(p => ({
+    id:          p.marketplace?.id,
+    country:     p.marketplace?.countryCode,
+    name:        p.marketplace?.name,
+    participating: p.participation?.isParticipating,
+  }));
+  return { market, marketplaces: list };
+}
