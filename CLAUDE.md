@@ -323,9 +323,14 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   3. **`inferMarket` (store.js)** passou a mapear `channel === 'amazon_us'` → `us` (defensivo; pedido US sem
      campo `market` não cai mais em BR).
   4. **Limpeza do já gravado:** `POST /api/amazon/cleanup-market-leak` (`removeAmazonMarketLeak`) remove
-     `channel:'amazon'` + `market:'br'` **com item titulado** — sinal seguro porque o Amazon BR nunca teve
-     título (nenhum backfill BR rodado, backlog item 11); todo BR-amazon titulado é US vazado. Idempotente.
-     **Rodar UMA vez após o deploy.**
+     `channel:'amazon'` + `market:'br'` por dois sinais, ambos exclusivos da Reports API (o Amazon BR nunca
+     passou por ela — nenhum backfill BR rodado, backlog item 11): **(a) item titulado** (pedido US enviado/
+     pendente vazado) e **(b) `status === 'Cancelled'` com R$ 0 e sem item** — a grafia com DOIS L que só o
+     relatório grava (a Orders API grava `'Canceled'`, um L); pega o pedido US cancelado, que no relatório não
+     vira linha de item (fica sem título/R$ 0) e escaparia do sinal (a). **Cuidado:** casar `'Canceled'` (um L)
+     apagaria cancelamento BR real — casar sempre exatamente `'Cancelled'`. Idempotente. **Rodar UMA vez após
+     o deploy.** ⚠️ Não re-rodar se um dia um backfill BR de verdade for feito (aí pedido BR real teria título/
+     grafia de relatório).
 
 #### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
