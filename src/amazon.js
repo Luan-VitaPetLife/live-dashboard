@@ -734,26 +734,32 @@ export async function probeOrder(orderId, market = 'br') {
   const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
   const out = { orderId, market };
 
+  const oid = encodeURIComponent(orderId);
+
+  // 1) getOrder — resposta crua (pra ver exatamente o que a Amazon devolve)
   try {
-    const d = await spGet(getLwa, `/orders/v0/orders/${encodeURIComponent(orderId)}`);
-    const o = d.payload || {};
-    out.order = {
-      MarketplaceId:     o.MarketplaceId,
-      OrderType:         o.OrderType,
-      FulfillmentChannel: o.FulfillmentChannel,
-      SalesChannel:      o.SalesChannel,
-      OrderStatus:       o.OrderStatus,
-      OrderTotal:        o.OrderTotal,
-      NumberOfItemsShipped:   o.NumberOfItemsShipped,
-      NumberOfItemsUnshipped: o.NumberOfItemsUnshipped,
-      PurchaseDate:      o.PurchaseDate,
-    };
+    const d = await spGet(getLwa, `/orders/v0/orders/${oid}`);
+    out.rawOrder = d;
   } catch (e) { out.orderError = e.message; }
 
+  // 2) getOrderItems SEM RDT (o que falha hoje)
   try {
-    const di = await spGet(getLwa, `/orders/v0/orders/${encodeURIComponent(orderId)}/orderItems`);
-    out.items = (di.payload?.OrderItems || []).map(it => ({ Title: it.Title, ASIN: it.ASIN, SellerSKU: it.SellerSKU, QuantityOrdered: it.QuantityOrdered }));
+    const di = await spGet(getLwa, `/orders/v0/orders/${oid}/orderItems`);
+    out.items = (di.payload?.OrderItems || []).map(it => ({ Title: it.Title, ASIN: it.ASIN, QuantityOrdered: it.QuantityOrdered }));
   } catch (e) { out.itemsError = e.message; }
+
+  // 3) getOrderItems COM RDT (Restricted Data Token) — hipótese LGPD/BR
+  try {
+    const rdtResp = await spPost(getLwa, '/tokens/2021-03-01/restrictedDataToken', {
+      restrictedResources: [{ method: 'GET', path: `/orders/v0/orders/${orderId}/orderItems` }],
+    });
+    const rdt = rdtResp.restrictedDataToken;
+    if (!rdt) { out.rdtError = 'sem restrictedDataToken na resposta: ' + JSON.stringify(rdtResp).slice(0, 200); }
+    else {
+      const di2 = await spGet(getLwa, `/orders/v0/orders/${oid}/orderItems`, {}, rdt);
+      out.itemsWithRdt = (di2.payload?.OrderItems || []).map(it => ({ Title: it.Title, ASIN: it.ASIN, QuantityOrdered: it.QuantityOrdered }));
+    }
+  } catch (e) { out.rdtError = e.message; }
 
   return out;
 }
