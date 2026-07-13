@@ -172,6 +172,12 @@
   .legend-line{width:20px;height:1.5px;border-radius:1px} .legend-sq{width:10px;height:10px;border-radius:2px}
   .ch220{position:relative;height:220px} .ch180{position:relative;height:180px}
   .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
+  .orders-pager{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 16px 2px;flex-wrap:wrap}
+  .orders-pager:empty{display:none}
+  .ro-pg-info{font-size:11px;color:var(--muted)}
+  .ro-pg-btn{font-size:12px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px 12px;cursor:pointer;transition:background .15s}
+  .ro-pg-btn:hover:not(:disabled){background:var(--surface2)}
+  .ro-pg-btn:disabled{opacity:.4;cursor:default}
   footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
 
   /* ── Sidebar toggle ── */
@@ -488,6 +494,7 @@
           <div class="card-top"><div><div class="ct-title">Pedidos recentes</div><div class="ct-sub">Mais recentes primeiro</div></div><span style="font-size:11px;color:var(--muted)" id="ordersMeta">—</span></div>
           <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Itens</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
           <tbody id="ordersBody"></tbody></table>
+          <div id="ordersPager" class="orders-pager"></div>
         </div></div>
       </div>
     </div>
@@ -854,23 +861,56 @@ function render(d) {
     document.getElementById('topProducts').innerHTML = '<div class="muted-state">Sem vendas no período.</div>';
   }
 
-  // Recent orders
-  const ro = d.recentOrders;
-  const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
-  document.getElementById('ordersMeta').textContent = ro.length?`${ro.length} pedidos`:'0 pedidos';
-  if (ro.length) {
-    const orderRows = ro.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=isAllCh?chBadgeHTML(o.channel):`<span style="font-size:10px;color:var(--muted)">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
-    const summaryRow = `<tr style="background:var(--surface2)"><td colspan="4" style="padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">Total (${ro.filter(o=>!o.cancelled).length} válidos)</td><td></td><td style="padding:10px 16px;font-weight:600;font-size:13px">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
-    document.getElementById('ordersBody').innerHTML = orderRows + summaryRow;
-  } else {
-    document.getElementById('ordersBody').innerHTML = '<tr><td colspan="8" class="muted-state">Nenhum pedido.</td></tr>';
-  }
+  // Recent orders (paginado — RO_PAGE_SIZE por página; backend devolve até 100)
+  _roAll = d.recentOrders || [];
+  _roIsAllCh = isAllCh;
+  document.getElementById('ordersMeta').textContent = _roAll.length?`${_roAll.length} pedidos`:'0 pedidos';
+  renderOrdersPage();
 
   const now=new Date(), hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
   setLive('ok',`Ao vivo · ${hh}:${mm}`);
   const up = d.updatedAt?new Date(d.updatedAt).toLocaleString('pt-BR'):'—';
   document.getElementById('footerDate').textContent = `Coco and Luna · ${CHAN[d.channel]} · período ${label} · última sincronização: ${up}`;
   updateCardVisibility();
+}
+
+// ── Pedidos recentes: paginação client-side ──
+const RO_PAGE_SIZE = 10;
+let _roAll = [];
+let _roPage = 0;
+let _roIsAllCh = true;
+
+function renderOrdersPage() {
+  const body = document.getElementById('ordersBody');
+  const pager = document.getElementById('ordersPager');
+  const ro = _roAll;
+  if (!ro.length) {
+    body.innerHTML = '<tr><td colspan="8" class="muted-state">Nenhum pedido.</td></tr>';
+    pager.innerHTML = '';
+    return;
+  }
+  const pages = Math.max(1, Math.ceil(ro.length / RO_PAGE_SIZE));
+  if (_roPage >= pages) _roPage = pages - 1;
+  if (_roPage < 0) _roPage = 0;
+  const start = _roPage * RO_PAGE_SIZE;
+  const pageItems = ro.slice(start, start + RO_PAGE_SIZE);
+
+  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=_roIsAllCh?chBadgeHTML(o.channel):`<span style="font-size:10px;color:var(--muted)">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+  // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
+  const roValidCount = ro.filter(o=>!o.cancelled).length;
+  const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
+  const summaryRow = `<tr style="background:var(--surface2)"><td colspan="4" style="padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">Total (${roValidCount} válidos)</td><td></td><td style="padding:10px 16px;font-weight:600;font-size:13px">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
+  body.innerHTML = orderRows + summaryRow;
+
+  if (pages > 1) {
+    pager.innerHTML = `<button class="ro-pg-btn" id="roPrev" ${_roPage===0?'disabled':''}>‹ Anterior</button>`
+      + `<span class="ro-pg-info">Página ${_roPage+1} de ${pages} · ${start+1}–${start+pageItems.length} de ${ro.length}</span>`
+      + `<button class="ro-pg-btn" id="roNext" ${_roPage>=pages-1?'disabled':''}>Próxima ›</button>`;
+    document.getElementById('roPrev').onclick = ()=>{ if(_roPage>0){ _roPage--; renderOrdersPage(); } };
+    document.getElementById('roNext').onclick = ()=>{ if(_roPage<pages-1){ _roPage++; renderOrdersPage(); } };
+  } else {
+    pager.innerHTML = '';
+  }
 }
 
 function statusTag(o) {
