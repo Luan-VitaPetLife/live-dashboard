@@ -10,7 +10,9 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor, pruneOrders } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders } from './store.js';
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -197,6 +199,51 @@ export async function reconcileAmazonNames({ markets = ['us', 'br'], force = fal
       out.errors.push(`amazon.names.${market}: ${e.message}`);
     }
   }
+  return out;
+}
+
+// ── Nomes de produto da Amazon via getOrderItems (Orders API) ──────────────────
+//  Alternativa à Reports API para preencher items[].title. O relatório do marketplace
+//  BR vem contaminado com pedidos US (contas vinculadas, ver CLAUDE.md 4.7.8) e NÃO traz
+//  os pedidos BR reais, então a reconciliação por relatório não funciona pro BR. Mas o
+//  endpoint /orders/v0/orders/{id}/orderItems traz o item (com Title) de UM pedido — e o
+//  token BR consegue lê-los (foi ele que trouxe os pedidos). Como o BR tem volume baixo
+//  (~120 pedidos), dá pra buscar item por item. Para o US isso é inviável (milhares × cota
+//  0,5 req/s) — lá continua a Reports API. Só processa pedidos SEM título, casa por id e
+//  patch-only (o pedido já existe). Respeita a cota espaçando as chamadas.
+const ITEMS_RATE_MS = 2200; // 0,5 req/s (burst 30) — 2,2s entre chamadas fica folgado
+
+export async function enrichAmazonItems({ market = 'br', limit = 1000, onProgress } = {}) {
+  const out = { scanned: 0, patched: 0, empty: 0, errors: [] };
+  if (!amazon.hasAwsCreds()) { out.errors.push('sem credenciais AWS'); return out; }
+  const configured = market === 'us' ? amazon.isConfigured() : amazon.isConfiguredBR();
+  if (!configured) { out.errors.push(`${market}: sem token`); return out; }
+
+  const channel = market === 'us' ? 'amazon_us' : 'amazon';
+  const pending = getOrders({ channel, market })
+    .filter(o => !o.cancelled && (!o.items || !o.items.length || o.items.every(it => !it.title)))
+    .slice(0, limit);
+  onProgress?.(`${market}: ${pending.length} pedidos sem nome para buscar`);
+
+  for (const o of pending) {
+    out.scanned++;
+    const orderId = o.id.slice(o.id.indexOf(':') + 1);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const items = await amazon.fetchOrderItems(orderId, { market });
+        if (items.length) { patchOrderItems([{ id: o.id, items }]); out.patched++; }
+        else out.empty++;
+        break;
+      } catch (e) {
+        if (e.isRateLimit && attempt === 1) { await sleep(61000); continue; } // espera a cota e tenta de novo
+        out.errors.push(`${orderId}: ${e.message}`);
+        break;
+      }
+    }
+    if (out.scanned % 10 === 0) onProgress?.(`${out.scanned}/${pending.length} — ${out.patched} nomeados`);
+    await sleep(ITEMS_RATE_MS);
+  }
+  onProgress?.(`${market}: concluído — ${out.patched} nomeados, ${out.empty} sem item, ${out.errors.length} erros`);
   return out;
 }
 

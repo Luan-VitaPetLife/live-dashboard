@@ -679,3 +679,31 @@ export async function fetchRecentNamedOrders({ market = 'us', days = 2, onProgre
     onProgress,
   });
 }
+
+// ── Itens de UM pedido via Orders API (getOrderItems) ──────────────────────────
+// A LISTAGEM de pedidos (/orders/v0/orders) não traz item, mas o endpoint
+// /orders/v0/orders/{id}/orderItems traz — COM o Title (nome do produto). Para o US
+// isso é inviável (milhares de pedidos × 0,5 req/s), por isso lá usamos a Reports API.
+// Para o BR (volume baixíssimo) é o caminho certo: o relatório BR vem contaminado com
+// pedidos US (contas vinculadas, ver 4.7.8), mas o getOrderItems é por-pedido e devolve
+// exatamente o item daquele pedido BR. Devolve [{ title, qty, amount }]. Cota: 0,5 req/s
+// (burst 30) — o chamador espaça as chamadas. Lança RateLimitError em 429 (isRateLimit).
+export async function fetchOrderItems(orderId, { market = 'br' } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
+  const items = [];
+  let nextToken = null;
+  do {
+    const params = nextToken ? { NextToken: nextToken } : {};
+    const data = await spGet(getLwa, `/orders/v0/orders/${encodeURIComponent(orderId)}/orderItems`, params);
+    const list = data.payload?.OrderItems || [];
+    for (const it of list) {
+      const title = it.Title || '';
+      const qty   = Number(it.QuantityOrdered || 0);
+      const amount = Number(it.ItemPrice?.Amount || 0); // preço da LINHA (não por unidade)
+      if (title) items.push({ title, qty, amount });
+    }
+    nextToken = data.payload?.NextToken || null;
+  } while (nextToken);
+  return items;
+}
