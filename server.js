@@ -263,6 +263,14 @@ app.get('/api/amazon/whoami', async (_req, res) => {
   }
 });
 
+// Diagnóstico: lista crua de pedidos da Amazon (MarketplaceId + SalesChannel reais). Ver 4.7.9.
+app.get('/api/amazon/list-orders', async (req, res) => {
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  const days   = Math.min(Number(req.query.days || 14), 60);
+  try { res.json(await amazon.listOrdersDiag({ market, days })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Diagnóstico: inspeciona UM pedido (getOrder + getOrderItems) para entender o 400. Ver 4.7.9.
 app.get('/api/amazon/probe-order', async (req, res) => {
   const id = req.query.id;
