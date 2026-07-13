@@ -725,6 +725,25 @@ export async function whoAmI(market = 'br') {
   return { market, marketplaces: list };
 }
 
+// ── Diagnóstico: lista crua de pedidos (o que a Amazon devolve AGORA) ────────────
+// Mostra o MarketplaceId e o SalesChannel REAIS de cada pedido que a conta retorna,
+// pra descobrir o que são os pedidos 701-/702- (Amazon.com.br de verdade? MCF/Non-Amazon?).
+export async function listOrdersDiag({ market = 'br', days = 14 } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
+  const mp     = market === 'us' ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  const createdAfter = new Date(Date.now() - days * 864e5).toISOString();
+  const data = await spGet(getLwa, '/orders/v0/orders', { MarketplaceIds: mp, CreatedAfter: createdAfter, MaxResultsPerPage: 50 });
+  const orders = data.payload?.Orders || [];
+  return {
+    market, requestedMarketplace: mp, createdAfter, count: orders.length,
+    sample: orders.slice(0, 15).map(o => ({
+      id: o.AmazonOrderId, marketplaceId: o.MarketplaceId, salesChannel: o.SalesChannel,
+      status: o.OrderStatus, fulfillment: o.FulfillmentChannel, total: o.OrderTotal,
+    })),
+  };
+}
+
 // ── Diagnóstico: o que é UM pedido (getOrder) + tenta getOrderItems ──────────────
 // Para entender por que getOrderItems dá 400 em certos pedidos (ex.: 701-/702-):
 // devolve os campos do pedido (MarketplaceId, FulfillmentChannel, SalesChannel,
