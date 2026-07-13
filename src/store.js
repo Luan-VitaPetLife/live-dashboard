@@ -271,17 +271,25 @@ export function patchOrderItems(orders, { allowInsert = false } = {}) {
 }
 
 // Limpeza pontual do vazamento de mercado da Amazon (ver patchOrderItems / CLAUDE.md
-// 4.7.8): remove pedidos gravados no mercado ERRADO por um relatório cego-tagueado.
-// O sinal é seguro porque o canal Amazon BR nunca teve título de item (nenhum backfill
-// BR foi rodado — CLAUDE.md backlog item 11): todo pedido market:'br' / channel:'amazon'
-// COM item titulado é, na verdade, um pedido US vazado. O inverso (market:'us' com título
-// em canal 'amazon' BR) também é coberto. Idempotente. Retorna quantos removeu.
+// 4.7.8): remove pedidos US que um relatório cego-tagueado gravou como Amazon BR.
+// Dois sinais, ambos seguros porque o canal Amazon BR nunca passou pela Reports API
+// (nenhum backfill BR foi rodado — CLAUDE.md backlog item 11):
+//   1) item TITULADO — só a Reports API traz título; pedido US enviado/pendente vazado.
+//   2) status === 'Cancelled' (com DOIS L) + R$ 0 + sem item — é a grafia que SÓ o
+//      relatório grava (a Orders API grava 'Canceled', com um L). Pega o pedido US
+//      cancelado, que no relatório não gera linha de item (fica sem título e R$ 0) e por
+//      isso escaparia do sinal 1. Casar 'Canceled' (um L) apagaria cancelamento BR REAL,
+//      então casamos exatamente 'Cancelled'.
+// Nenhum pedido BR real (sempre via Orders API, sem título, status 'Canceled'/'Shipped'/
+// 'Pending') casa qualquer um dos dois. Idempotente. Retorna quantos removeu.
 export function removeAmazonMarketLeak() {
   const db = load();
   const ids = [];
   for (const [id, o] of Object.entries(db.orders)) {
+    if (o.channel !== 'amazon' || o.market !== 'br') continue;
     const titled = Array.isArray(o.items) && o.items.some(it => it && it.title);
-    if (o.channel === 'amazon' && o.market === 'br' && titled) ids.push(id);
+    const reportCancelled = o.status === 'Cancelled' && !Number(o.total) && !titled;
+    if (titled || reportCancelled) ids.push(id);
   }
   for (const id of ids) delete db.orders[id];
   if (ids.length) {
