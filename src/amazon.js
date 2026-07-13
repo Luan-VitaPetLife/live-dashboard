@@ -724,3 +724,36 @@ export async function whoAmI(market = 'br') {
   }));
   return { market, marketplaces: list };
 }
+
+// ── Diagnóstico: o que é UM pedido (getOrder) + tenta getOrderItems ──────────────
+// Para entender por que getOrderItems dá 400 em certos pedidos (ex.: 701-/702-):
+// devolve os campos do pedido (MarketplaceId, FulfillmentChannel, SalesChannel,
+// OrderType, status) e o resultado/erro de getOrderItems. Ver 4.7.9.
+export async function probeOrder(orderId, market = 'br') {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
+  const out = { orderId, market };
+
+  try {
+    const d = await spGet(getLwa, `/orders/v0/orders/${encodeURIComponent(orderId)}`);
+    const o = d.payload || {};
+    out.order = {
+      MarketplaceId:     o.MarketplaceId,
+      OrderType:         o.OrderType,
+      FulfillmentChannel: o.FulfillmentChannel,
+      SalesChannel:      o.SalesChannel,
+      OrderStatus:       o.OrderStatus,
+      OrderTotal:        o.OrderTotal,
+      NumberOfItemsShipped:   o.NumberOfItemsShipped,
+      NumberOfItemsUnshipped: o.NumberOfItemsUnshipped,
+      PurchaseDate:      o.PurchaseDate,
+    };
+  } catch (e) { out.orderError = e.message; }
+
+  try {
+    const di = await spGet(getLwa, `/orders/v0/orders/${encodeURIComponent(orderId)}/orderItems`);
+    out.items = (di.payload?.OrderItems || []).map(it => ({ Title: it.Title, ASIN: it.ASIN, SellerSKU: it.SellerSKU, QuantityOrdered: it.QuantityOrdered }));
+  } catch (e) { out.itemsError = e.message; }
+
+  return out;
+}

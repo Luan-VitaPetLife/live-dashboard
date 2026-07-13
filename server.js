@@ -263,6 +263,15 @@ app.get('/api/amazon/whoami', async (_req, res) => {
   }
 });
 
+// Diagnóstico: inspeciona UM pedido (getOrder + getOrderItems) para entender o 400. Ver 4.7.9.
+app.get('/api/amazon/probe-order', async (req, res) => {
+  const id = req.query.id;
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  if (!id) return res.status(400).json({ error: 'passe ?id=<AmazonOrderId>' });
+  try { res.json(await amazon.probeOrder(id, market)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Diagnóstico: colunas reais do relatório da Amazon + amostra dos campos que decidem o
 // mercado (order-status/currency/sales-channel/ship-country/ship-state) e a proporção de
 // contaminação. Usado para confirmar o discriminador correto do rowMarket. Ver 4.7.8.
