@@ -58,7 +58,7 @@ let indexDirty     = true;
 // shopify_us → us, senão amazon com id 'amazon-us:' → us, senão br (legado).
 function inferMarket(o) {
   return o.market ||
-    (o.channel === 'shopify_us' ? 'us'
+    (o.channel === 'shopify_us' || o.channel === 'amazon_us' ? 'us'
       : (o.channel === 'amazon' && o.id.startsWith('amazon-us:') ? 'us' : 'br'));
 }
 
@@ -233,9 +233,18 @@ export function pruneOrders({ channels, olderThanIso }) {
 // Preenche items[] (títulos de produto) em pedidos JÁ existentes, sem tocar em
 // total/status — usado pela reconciliação de nomes da Amazon (Reports API), já que
 // o sync de pedidos (Orders API) não traz o título do item. Ver CLAUDE.md 4.7.6 /
-// backlog item 8. Pedido que ainda não existe no store é inserido inteiro (não se
-// perde), mas o comum é só corrigir os títulos dos que o sync de pedidos já gravou.
-export function patchOrderItems(orders) {
+// backlog item 8.
+//
+// **NÃO insere pedido novo (allowInsert padrão false).** Antes inseria o pedido inteiro
+// quando o id não existia — mas isso abriu um vazamento de mercado: o relatório "BR"
+// (fetchRecentNamedOrders market='br') vinha contaminado com pedidos US (tokens iguais /
+// conta US enxergando o relatório), e como esses ids `amazon-br:<idUS>` não existiam no
+// store, eram INSERIDOS como pedidos Amazon BR com títulos em inglês — inflando a receita
+// do Brasil (incidente 13/07/2026). A reconciliação só deve CORRIGIR TÍTULO de pedido que
+// o sync de pedidos (Orders API, a fonte de verdade do pedido e do seu mercado) já gravou;
+// o sync roda a cada 15 min e sempre insere o pedido antes da reconciliação (a cada 12h),
+// então o insert aqui nunca era necessário de verdade. Ver CLAUDE.md 4.7.8.
+export function patchOrderItems(orders, { allowInsert = false } = {}) {
   const db = load();
   let patched = 0, inserted = 0;
   const toPersist = [];
@@ -248,7 +257,7 @@ export function patchOrderItems(orders) {
         patched++;
         toPersist.push(existing);
       }
-    } else {
+    } else if (allowInsert) {
       db.orders[o.id] = o;
       inserted++;
       toPersist.push(o);
@@ -259,6 +268,31 @@ export function patchOrderItems(orders) {
   saveJson();
   if (USE_PG) pgUpsertOrders(toPersist);
   return { patched, inserted };
+}
+
+// Limpeza pontual do vazamento de mercado da Amazon (ver patchOrderItems / CLAUDE.md
+// 4.7.8): remove pedidos gravados no mercado ERRADO por um relatório cego-tagueado.
+// O sinal é seguro porque o canal Amazon BR nunca teve título de item (nenhum backfill
+// BR foi rodado — CLAUDE.md backlog item 11): todo pedido market:'br' / channel:'amazon'
+// COM item titulado é, na verdade, um pedido US vazado. O inverso (market:'us' com título
+// em canal 'amazon' BR) também é coberto. Idempotente. Retorna quantos removeu.
+export function removeAmazonMarketLeak() {
+  const db = load();
+  const ids = [];
+  for (const [id, o] of Object.entries(db.orders)) {
+    const titled = Array.isArray(o.items) && o.items.some(it => it && it.title);
+    if (o.channel === 'amazon' && o.market === 'br' && titled) ids.push(id);
+  }
+  for (const id of ids) delete db.orders[id];
+  if (ids.length) {
+    indexDirty = true;
+    saveJson();
+    if (USE_PG) {
+      pool.query(`DELETE FROM orders WHERE id = ANY($1)`, [ids])
+        .catch(e => console.error('PG leak-cleanup error:', e.message));
+    }
+  }
+  return ids.length;
 }
 
 export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {

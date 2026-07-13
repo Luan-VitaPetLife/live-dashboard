@@ -302,6 +302,31 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Estado (10/07/2026):** 365 dias de Amazon US mantidos no Hobby com volume de 5 GB. `AMAZON_RETENTION_DAYS=365` no
   Railway mantém a janela móvel; o sync diário adiciona ~30 mil/mês e a poda tira o que passa de 1 ano → tamanho estável.
 
+#### 4.7.8 ⚠️ Vazamento de mercado: pedidos US gravados como Amazon BR (corrigido 13/07/2026)
+- **Sintoma:** o card de Produtos do **Brasil** mostrava pedidos da Amazon **US** — canal `amazon` (BR) com
+  US$ 97.762 / 3.367 pedidos / 32 produtos, **todos com título em inglês** ("Cranberry for Dogs",
+  "L-Lysine for Cats 900mg", "Turmeric for Dogs"). Inflava a receita do BR em todas as telas (dashboard,
+  Produtos, Estoque, Segmentos, Geografia BR — todas leem `getOrders({market:'br'})`).
+- **Causa raiz — relatório cego-tagueado + insert na reconciliação:** `reconcileAmazonNames` roda para
+  `['us','br']` (job a cada 6h). Para `br`, `fetchRecentNamedOrders` pede o relatório `ALL_ORDERS` e
+  `ordersFromRows(rows, MARKETPLACE_ID_BR)` **tagueava toda linha** como `market:'br'`/`channel:'amazon'`/
+  id `amazon-br:<id>`, **sem checar o marketplace real da linha**. O relatório "BR" vinha contaminado com
+  pedidos US (tokens iguais / a conta US enxerga o relatório), e `patchOrderItems` **inseria** esses ids
+  inexistentes como pedidos Amazon BR novos. (A Orders API do sync tagueia por `o.MarketplaceId` e vem sem
+  título, então **só o caminho da Reports API** produzia esse lixo — por isso todos tinham nome em inglês.)
+- **Correções (defesa em profundidade):**
+  1. **`patchOrderItems` não insere mais** (`allowInsert` padrão `false`) — a reconciliação só CORRIGE TÍTULO
+     de pedido que a Orders API (fonte de verdade do pedido e do mercado) já gravou. O sync roda a cada 15 min
+     e sempre insere o pedido antes da reconciliação (12h), então o insert nunca era necessário.
+  2. **`ordersFromRows` valida a moeda por linha** (`rowMarket`: USD→us, BRL→br) e descarta linha de outro
+     mercado — um backfill/relatório contaminado não grava mais pedido no mercado errado.
+  3. **`inferMarket` (store.js)** passou a mapear `channel === 'amazon_us'` → `us` (defensivo; pedido US sem
+     campo `market` não cai mais em BR).
+  4. **Limpeza do já gravado:** `POST /api/amazon/cleanup-market-leak` (`removeAmazonMarketLeak`) remove
+     `channel:'amazon'` + `market:'br'` **com item titulado** — sinal seguro porque o Amazon BR nunca teve
+     título (nenhum backfill BR rodado, backlog item 11); todo BR-amazon titulado é US vazado. Idempotente.
+     **Rodar UMA vez após o deploy.**
+
 #### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
 - **Pedidos `Pending` vêm com `total: 0`** — a SP-API omite `OrderTotal` enquanto o pagamento não é capturado.
@@ -741,6 +766,8 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     Responde na hora; progresso em `GET /api/status` → `amazon.backfill`. Ver 4.7.5.
   - `POST /api/amazon/sync-names?market=us|br` — reconcilia nomes de produto (Reports API), em background,
     ignorando o throttle. Sem `market` → US e BR. Ver 4.7.6.
+  - `POST /api/amazon/cleanup-market-leak` — remove pedidos US que foram gravados como Amazon BR (vazamento
+    de mercado). Idempotente; rodar uma vez após o deploy da correção. Ver 4.7.8.
   - `GET /shopee/connect` e `GET /shopee/callback`
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /googleads/connect` e `GET /googleads/callback`

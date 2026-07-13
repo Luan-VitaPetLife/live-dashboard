@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock } from './src/metrics.js';
 import { runSync, reconcileAmazonNames } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, upsertOrders, load } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, upsertOrders, load, removeAmazonMarketLeak } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -216,6 +216,18 @@ app.post('/api/amazon/sync-names', (req, res) => {
     .then(r => console.log('Amazon nomes (manual):', r))
     .catch(e => console.error('Amazon nomes (manual) falhou:', e.message));
   res.json({ ok: true, message: `Reconciliação de nomes (${markets.join(', ')}) iniciada. Acompanhe no log; confirme em Produtos.` });
+});
+
+// Limpeza pontual do vazamento de mercado da Amazon: remove pedidos US que foram gravados
+// como Amazon BR por um relatório cego-tagueado (ver CLAUDE.md 4.7.8). Rodar UMA vez após o
+// deploy da correção. Idempotente — pode rodar de novo sem efeito se já estiver limpo.
+app.post('/api/amazon/cleanup-market-leak', (req, res) => {
+  try {
+    const removed = removeAmazonMarketLeak();
+    res.json({ ok: true, removed, message: `${removed} pedidos US vazados no mercado BR removidos.` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Forçar uma sincronização manual (protegido por token)
