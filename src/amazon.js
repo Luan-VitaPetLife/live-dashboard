@@ -473,6 +473,17 @@ function parseTsv(text) {
   });
 }
 
+// Mercado real de uma linha do relatório pela moeda (USD → US, BRL → BR). O relatório
+// ALL_ORDERS pode vir contaminado com pedidos de outro marketplace quando o token de um
+// mercado enxerga a conta do outro (tokens iguais / mesma conta) — ver CLAUDE.md 4.7.8.
+// null quando indeterminado (não descarta, por segurança).
+function rowMarket(r) {
+  const cur = (r['currency'] || '').trim().toUpperCase();
+  if (cur === 'USD') return 'us';
+  if (cur === 'BRL') return 'br';
+  return null;
+}
+
 // Agrupa as linhas-item em pedidos, no mesmo formato normalizado de fetchOrders().
 function ordersFromRows(rows, marketplaceId) {
   const { market, channel } = MARKET_BY_MP[marketplaceId];
@@ -481,6 +492,11 @@ function ordersFromRows(rows, marketplaceId) {
   for (const r of rows) {
     const orderId = r['amazon-order-id'];
     if (!orderId) continue;
+
+    // Descarta linha que claramente pertence a outro mercado (relatório contaminado):
+    // não deixa um relatório "BR" gravar pedido US como Amazon BR, e vice-versa.
+    const rm = rowMarket(r);
+    if (rm && rm !== market) continue;
 
     if (!byOrder.has(orderId)) {
       const status = r['order-status'] || '';
