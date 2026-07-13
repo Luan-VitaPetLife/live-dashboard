@@ -185,6 +185,11 @@ const DEFAULT_COMMISSION_PCT = {
   amazon: 12, amazon_us: 12,
 };
 
+// Teto de segurança do card de Pedidos recentes (paginado no front). Alto o bastante para
+// mostrar TODOS os pedidos do período em qualquer canal de volume normal; só limita o caso
+// extremo do amazon_us em janelas longas, evitando um payload gigante.
+const RECENT_MAX = 5000;
+
 export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br' }) {
   const span = daySpan(since, until);
   const grain = span <= 2 ? 'hour' : 'day';
@@ -331,10 +336,12 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     };
   }
 
-  // pedidos recentes (todos os canais do mercado, mais novos primeiro) — devolve até 100
-  // para o card poder paginar no front (10 por página); o payload continua pequeno.
-  const recent = getOrders({ channel, since: null, until: null, market })
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 100)
+  // pedidos recentes — respeita o PERÍODO e o CANAL selecionados (antes ignorava a janela
+  // e mostrava os últimos 100 de qualquer data, então "Hoje" trazia pedido de meses atrás).
+  // O card pagina no front (10 por página), então devolvemos todos os do período; o teto
+  // RECENT_MAX é só uma trava de segurança de payload para o amazon_us (~1000 pedidos/dia).
+  const recent = getOrders({ channel, since, until, market })
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, RECENT_MAX)
     .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
 
   // conversão anterior
