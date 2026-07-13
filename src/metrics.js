@@ -331,9 +331,10 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     };
   }
 
-  // pedidos recentes (todos os canais do mercado, mais novos primeiro)
+  // pedidos recentes (todos os canais do mercado, mais novos primeiro) — devolve até 100
+  // para o card poder paginar no front (10 por página); o payload continua pequeno.
   const recent = getOrders({ channel, since: null, until: null, market })
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 10)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 100)
     .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
 
   // conversão anterior
