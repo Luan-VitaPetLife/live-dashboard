@@ -230,6 +230,19 @@ app.post('/api/amazon/cleanup-market-leak', (req, res) => {
   }
 });
 
+// Diagnóstico: colunas reais do relatório da Amazon + amostra dos campos que decidem o
+// mercado (order-status/currency/sales-channel/ship-country/ship-state) e a proporção de
+// contaminação. Usado para confirmar o discriminador correto do rowMarket. Ver 4.7.8.
+app.get('/api/amazon/report-columns', async (req, res) => {
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  const days   = Math.min(Number(req.query.days || 1), 7);
+  try {
+    res.json(await amazon.inspectReport({ market, days }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Forçar uma sincronização manual (protegido por token)
 app.post('/api/sync', async (req, res) => {
   const secret = process.env.SYNC_SECRET;

@@ -318,8 +318,19 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   1. **`patchOrderItems` não insere mais** (`allowInsert` padrão `false`) — a reconciliação só CORRIGE TÍTULO
      de pedido que a Orders API (fonte de verdade do pedido e do mercado) já gravou. O sync roda a cada 15 min
      e sempre insere o pedido antes da reconciliação (12h), então o insert nunca era necessário.
-  2. **`ordersFromRows` valida a moeda por linha** (`rowMarket`: USD→us, BRL→br) e descarta linha de outro
-     mercado — um backfill/relatório contaminado não grava mais pedido no mercado errado.
+  2. **`ordersFromRows` valida o mercado real por linha** (`rowMarket`) e descarta linha de outro mercado —
+     um backfill/relatório contaminado não grava mais pedido no mercado errado.
+     - ⚠️ **A 1ª versão usava a MOEDA (`currency`) e FALHOU** (13/07/2026): o backfill BR gravou o catálogo US
+       de novo. Motivo: as contas **CocoandLuna (BR)** e **VITA PET LIFE (US)** são **VINCULADAS na Amazon**
+       (tokens são DIFERENTES — não é o bug de token igual), e o relatório ALL_ORDERS **ignora o filtro
+       `marketplaceIds`** e devolve os dois mercados juntos, reportando **tudo em BRL** no contexto BR — então
+       `currency` não discrimina. (A Orders API respeita o filtro; por isso o sync traz só o mercado certo.)
+     - **Correção:** `rowMarket` usa o **país de entrega (`ship-country`)** — físico, não reescrito pelo
+       contexto do relatório (pedido entregue nos EUA é `US` sempre); fallback por `sales-channel`. NÃO usar
+       moeda nem `ship-state` (siglas de UF BR colidem com estados US: SC, PA, MA, MT, MS, AL, PR, AP).
+     - **Diagnóstico:** `GET /api/amazon/report-columns?market=br` (`inspectReport`) devolve as COLUNAS reais
+       do relatório + amostra dos campos de mercado + proporção US/BR — confirmar o discriminador certo antes
+       de reconfiar no backfill BR. Enquanto não confirmado, **não rodar `backfill?market=br`**.
   3. **`inferMarket` (store.js)** passou a mapear `channel === 'amazon_us'` → `us` (defensivo; pedido US sem
      campo `market` não cai mais em BR).
   4. **Limpeza do já gravado:** `POST /api/amazon/cleanup-market-leak` (`removeAmazonMarketLeak`) remove
