@@ -111,7 +111,7 @@
   .modal h3{font-size:16px;font-weight:600;margin-bottom:16px}
   .field{margin-bottom:14px}
   .field label{display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
-  .field input,.field select{width:100%;font-family:inherit;font-size:13px;color:var(--text);padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none;transition:border-color .12s;appearance:none}
+  .field input:not([type=checkbox]):not([type=radio]),.field select{width:100%;font-family:inherit;font-size:13px;color:var(--text);padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none;transition:border-color .12s;appearance:none}
   .field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%239c9790' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:30px}
   .field input:focus,.field select:focus{border-color:var(--ink)}
   .field .field-hint{font-size:10px;color:var(--muted);margin-top:4px}
