@@ -4,8 +4,10 @@
 //
 //  US:  AMAZON_CLIENT_ID, AMAZON_CLIENT_SECRET, AMAZON_REFRESH_TOKEN
 //       → autorizar em sellercentral.amazon.com (North America Seller Central)
-//  BR:  AMAZON_BR_REFRESH_TOKEN (mesmo CLIENT_ID/SECRET)
-//       → autorizar em sellercentral.amazon.com.br (Brazil Seller Central)
+//  BR:  AMAZON_BR_REFRESH_TOKEN + (opcional) AMAZON_BR_CLIENT_ID/AMAZON_BR_CLIENT_SECRET
+//       → autorizar na conta CocoandLuna (Brazil Seller Central). Se o token BR vier de um
+//         APP PRÓPRIO do BR, setar também o client id/secret dele (o refresh token só
+//         funciona com o client que o emitiu). Sem eles, cai no CLIENT_ID/SECRET do US.
 //  Compartilhado: AMAZON_ROLE_ARN, AMAZON_AWS_ACCESS_KEY, AMAZON_AWS_SECRET_KEY
 //
 //  Estado atual (ver CLAUDE.md 4.7): a US ainda NÃO foi autorizada com token próprio —
@@ -66,6 +68,13 @@ const MARKETPLACE_ID   = 'ATVPDKIKX0DER';   // Amazon.com US
 const REFRESH_TOKEN_BR  = process.env.AMAZON_BR_REFRESH_TOKEN;
 const MARKETPLACE_ID_BR = 'A2Q3Y263D00KWC'; // Amazon.com.br
 
+// BR pode ter um APP PRÓPRIO (Client ID/Secret dedicados à conta CocoandLuna) — necessário
+// quando o refresh token BR foi gerado por um app diferente do app US. O refresh token só
+// funciona com o MESMO client que o emitiu. Fallback para o app compartilhado (US) mantém o
+// comportamento antigo intacto quando essas variáveis não estão setadas. Ver CLAUDE.md 4.7.9.
+const CLIENT_ID_BR     = process.env.AMAZON_BR_CLIENT_ID     || CLIENT_ID;
+const CLIENT_SECRET_BR = process.env.AMAZON_BR_CLIENT_SECRET || CLIENT_SECRET;
+
 const SP_HOST = 'sellingpartnerapi-na.amazon.com'; // região NA cobre US e BR
 
 // Canal/mercado por marketplace (para normalizar o pedido)
@@ -80,7 +89,7 @@ const AWS_ACCESS_KEY = process.env.AMAZON_AWS_ACCESS_KEY;
 const AWS_SECRET_KEY = process.env.AMAZON_AWS_SECRET_KEY;
 
 export function isConfigured()   { return Boolean(CLIENT_ID && CLIENT_SECRET && REFRESH_TOKEN); }
-export function isConfiguredBR() { return Boolean(CLIENT_ID && CLIENT_SECRET && REFRESH_TOKEN_BR); }
+export function isConfiguredBR() { return Boolean(CLIENT_ID_BR && CLIENT_SECRET_BR && REFRESH_TOKEN_BR); }
 export function hasAwsCreds()    { return Boolean(AWS_ACCESS_KEY && AWS_SECRET_KEY); }
 
 // ── Backoff exponencial ────────────────────────────────────────────────────────
@@ -144,8 +153,8 @@ function makeLwaGetter(clientId, secret, refreshToken, label) {
 }
 
 // Getters separados por mercado — cada um usa seu próprio refresh token
-const getLwaTokenUS = makeLwaGetter(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN,    'US');
-const getLwaTokenBR = makeLwaGetter(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN_BR, 'BR');
+const getLwaTokenUS = makeLwaGetter(CLIENT_ID,    CLIENT_SECRET,    REFRESH_TOKEN,    'US');
+const getLwaTokenBR = makeLwaGetter(CLIENT_ID_BR, CLIENT_SECRET_BR, REFRESH_TOKEN_BR, 'BR');
 
 // ── STS AssumeRole (IAM compartilhado entre US e BR) ──────────────────────────
 let roleCache = null;
