@@ -60,6 +60,9 @@ public/produtos.html    Tela de Produtos: catálogo completo por canal (tabela c
 public/estoque.html     Tela de Estoque: estoque + produção por canal, híbrido real (vendas) + manual (estoque/produção)
 public/sidebar.js       Componente de sidebar compartilhado (IIFE) — incluído em todos os HTMLs
 public/colors.js        Sistema de cores compartilhado (IIFE) — cores de canal/marketing + novo color picker (ver 4.9c)
+src/auth.js              Login/usuários: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página — ver 4.16
+public/login.html        Tela de login (standalone, sem sidebar) — ver 4.16
+public/configuracoes.html Tela de Configurações: geral, ativar/desativar login, gestão de usuários (admin only) — ver 4.16
 public/geografia.html   Mapa geográfico por estado BR (Leaflet.js, Voyager tile, coropleto + calor)
 public/geografia-us.html Mapa geográfico por estado US (Leaflet.js, Voyager tile, coropleto + calor)
 public/bandeira_brasil.webp  Imagem da bandeira BR usada nos botões de mercado
@@ -576,6 +579,50 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   depois **não** se autocorrigem sozinhos (o filtro do sync é por `created_at`, não `updated_at`) — Luan
   decidiu (08/07/2026) que não vale a pena um script de backfill agora; revisitar se aparecer um caso real.
 
+### 4.16 Login/usuários — branch `feat/auth-usuarios`, aguardando merge (implementado 14/07/2026)
+- Implementado em `src/auth.js` (novo, sem libs externas — só `crypto` nativo do Node) + wiring em
+  `server.js` + `public/login.html` (novo) + `public/configuracoes.html` (novo) + `public/sidebar.js`
+  (chip de usuário no rodapé). Construído com uma equipe de agentes em paralelo, um arquivo por agente,
+  a partir de um contrato de API fixo combinado antes — igual ao padrão já usado em 4.9c.
+- **Senha:** scrypt + salt (`crypto.scryptSync`), comparação em tempo constante (`timingSafeEqual`).
+  Nunca fica em texto puro — nem no banco, nem em memória além do momento do hash.
+- **Sessão:** cookie `coco_session` (HttpOnly, SameSite=Lax, `Secure` sob HTTPS via `app.set('trust
+  proxy',1)`), validade 30 dias, guardada em `kv.authSessions` (mesmo padrão Postgres/JSON do resto do
+  store — `kv.users`, `kv.authConfig`, `kv.authSessions`, ver `store.js`).
+- **Dois níveis:** `admin` (acessa tudo, gerencia usuários e o toggle de login) e `padrao` (só as páginas
+  liberadas por usuário, array `pages`). A página `configuracoes.html` é sempre admin-only, mesmo que
+  esteja marcada em `pages` por engano.
+- **Portão de acesso** em `server.js`: middleware ANTES do `express.static` que decide por `req.path` —
+  libera sempre `/health`, `/login.html`, `/api/login|logout|me|sync`, assets estáticos e as rotas de
+  OAuth (`/shopee/`, `/mercadolivre/`, `/googleads/`); sem sessão válida → 401 em `/api/*` ou redirect
+  pra `/login.html`; com sessão mas sem permissão na página pedida → redirect pra a primeira página
+  permitida do usuário (ou 403 se não tiver nenhuma). Quando `authConfig.enabled === false`, o portão
+  deixa tudo passar (comportamento de hoje, sem login).
+- **`GET /api/me`** é o contrato entre backend e front: `{ enabled, user, pages }` — `sidebar.js` usa isso
+  pra montar o chip de usuário (avatar de iniciais coloridas por hash do nome, nome, tag de nível "Admin"/
+  "Padrão", botão sair), esconder itens de navegação sem acesso e mostrar/ocultar o item "Configurações".
+- **Primeiro usuário semente:** `admin` / `123456`, criado automaticamente por `initAuth()` no boot
+  (chamado logo após `await initStore()`) se `kv.users` estiver vazio. `initAuth()` também **liga o login
+  por padrão** (`authConfig.enabled = true`) na primeira vez que roda — **decisão deliberada do Luan**:
+  ao mergear essa branch, o próximo deploy passa a **exigir login imediatamente**, sem passo manual extra.
+- **Recuperação se o acesso travar** (ex.: perdeu a senha do admin e não sobrou nenhum outro admin):
+  editar o kv direto no Postgres do Railway — `UPDATE kv SET value='{"enabled":false}' WHERE
+  key='authConfig';` reabre a dashboard, ou apagar a linha `key='users'` re-semeia o admin no próximo
+  boot. Endpoint normal (com sessão admin): `POST /api/auth/config {enabled:false}`.
+- **Testado localmente (modo JSON, 14/07/2026):** login certo/errado, gate de página por permissão
+  (usuário `padrao` redirecionado das páginas não liberadas), `configuracoes.html`/`/api/users`
+  bloqueados pra não-admin, proteção do último admin (`DELETE` recusado), toggle liga/desliga (modo
+  aberto libera `/api/dashboard`, `/api/users` etc. mesmo sem sessão), logout limpa o cookie,
+  persistência confirmada com hash+salt no `db.json` (sem senha em texto puro). PR draft aberto:
+  `feat/auth-usuarios` → `master` (branch criada a partir de `master`, sem os commits da branch da
+  Amazon — merge independente).
+- **⚠️ Bug encontrado e corrigido no mesmo dia:** `configuracoes.html` foi montado copiando a estrutura
+  de `produtos.html`, mas o agente trouxe só o CSS do toggle/responsivo da sidebar — **esqueceu o bloco
+  base** (`.sidebar`, `.brand`, `.brand-logo`, `.brand-name`, `.nav-group`, `.nav-label`, `.nav-item`,
+  `.nav-icon`, `.sidebar-header`, `.sidebar-close-btn`). Resultado visual: logo em tamanho natural
+  (gigante) e menu como uma lista de links sem estilo nenhum. Corrigido copiando o bloco exato de
+  `produtos.html`. Isso expôs um problema estrutural do projeto — ver backlog item 12.
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js
@@ -662,6 +709,12 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /googleads/connect` e `GET /googleads/callback`
   - `GET /health`
+  - **Autenticação (branch `feat/auth-usuarios`, ver 4.16):**
+    - `POST /api/login` / `POST /api/logout` / `GET /api/me` — públicas (sessão por cookie `coco_session`).
+    - `GET /api/users` / `POST /api/users` / `PUT /api/users/:id` / `DELETE /api/users/:id` — gestão de usuários (admin).
+    - `POST /api/auth/config` — liga/desliga a exigência de login (admin), `{ enabled }`.
+    - `POST /api/me/password` — troca a própria senha (qualquer usuário logado), `{ current, next }`.
+    - `GET /login.html`, `GET /configuracoes.html`
 
 ## 8. Status das integrações (09/07/2026)
 
@@ -695,7 +748,8 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 1. Decidir tratamento de **PENDING** (contar só pagos?) — ver 4.1.
 2. ~~**Google Ads:** falta configurar credenciais e autorizar via `/googleads/connect`.~~ **Resolvido 09/07/2026** — ativo ✅.
 3. ~~**ML Ads ROAS por campanha:** verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.~~ **Resolvido 07/07/2026** — ver 4.6: o campo nunca vinha de `/orders/search` mesmo, foi movido pra ler do recurso `/items`.
-4. Login/usuários se mais pessoas precisarem acessar.
+4. ~~Login/usuários se mais pessoas precisarem acessar.~~ **Implementado 14/07/2026** — branch
+   `feat/auth-usuarios` aguardando merge em `master`. Ver 4.16.
 5. ~~**Amazon US na produção.**~~ **Resolvido 09/07/2026** — ver 4.7.2. Era paginação, não cota/autorização.
 6. ~~**Amazon — backfill histórico dos EUA.**~~ **Resolvido 09/07/2026** — ver 4.7.5. 83.897 pedidos (90 dias) em 4min40s.
 7. ~~**Amazon — `byState` com grafia inconsistente.**~~ **Resolvido 09/07/2026** — `ship-state`/`StateOrRegion` normalizados para maiúsculas.
@@ -713,6 +767,22 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 11. **Amazon BR — sem itens:** o backfill/Reports foi rodado só para `market=us`. A Amazon BR continua sem
    `items[].title`, e por isso a tela de Estoque ainda injeta o placeholder "Produto TESTE" nela (ver 4.14).
    Rodar `POST /api/amazon/backfill?days=90&market=br` resolve — não foi feito por ora (volume BR é baixo).
+12. **⚠️ PENDENTE — CSS da sidebar duplicado por página:** cada HTML repete o CSS **base** da sidebar
+   (`.sidebar`, `.brand`, `.brand-logo`, `.brand-name`, `.nav-group`, `.nav-label`, `.nav-item`,
+   `.nav-icon`, `.sidebar-header`, `.sidebar-close-btn`, mais o CSS do toggle/responsivo) no próprio
+   `<style>`, em vez de vir só do `sidebar.js`. Foi exatamente essa duplicação que causou o bug de
+   `configuracoes.html` sem estilo nenhum (logo gigante, menu como links soltos) — ver 4.16. Ideia:
+   mover esse bloco pro `<style id="sidebarComponentStyle">` que `sidebar.js` já injeta sozinho (mesmo
+   mecanismo hoje usado só pro `.nav-flag`), e então remover a duplicata de cada página (`index.html`,
+   `segmentos.html`, `geografia.html`, `geografia-us.html`, `produtos.html`, `estoque.html`,
+   `campanhas.html`, `configuracoes.html`).
+   **Cuidado antes de mexer — já detectada uma divergência real entre páginas:** `geografia.html` e
+   `geografia-us.html` usam `.sidebar{z-index:3000}` **sem** a `transition` de slide, enquanto as demais
+   usam `z-index:200` **com** `transition:transform .25s cubic-bezier(.4,0,.2,1)` — provavelmente por
+   causa das camadas do Leaflet (mapa) competindo em z-index com a sidebar. Confirmar se dá pra unificar
+   num valor só sem quebrar o mapa (ou manter um override pontual nessas duas páginas) antes de remover a
+   duplicata delas. Investigação começou em 14/07/2026 e foi pausada a pedido do Luan para não atrasar o
+   registro desta atualização — retomar quando for mexer nisso.
 
 ## 10. Convenções
 
