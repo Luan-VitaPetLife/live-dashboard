@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configurações — Coco and Luna</title>
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<style>
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* ── Sidebar toggle ── */
+  .sidebar-open-btn{display:none;position:fixed;left:12px;top:11px;z-index:300;width:36px;height:32px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(30,28,24,.1);transition:all .15s}
+  .sidebar-open-btn:hover{border-color:var(--ink);color:var(--text)}
+  body.sidebar-hidden .sidebar-open-btn{display:flex}
+  @media(max-width:768px){.sidebar-open-btn{display:flex}}
+  body.sidebar-mobile-open .sidebar-open-btn{display:none!important}
+  .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;opacity:0;pointer-events:none;transition:opacity .25s}
+  body.sidebar-mobile-open .sidebar-overlay{opacity:1;pointer-events:auto}
+  body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
+  body.sidebar-hidden .sidebar{transform:translateX(-100%)}
+  body.sidebar-hidden .main{margin-left:0}
+
+  /* ── Main ── */
+  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+  .topbar-title{font-size:12px;font-weight:600;color:var(--sub);letter-spacing:.2px}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Content ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;max-width:900px;width:100%}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  /* ── Section label + card ── */
+  .section-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:6px 0 -6px 2px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+  .card h2{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+  .card p.desc{font-size:12px;color:var(--sub);line-height:1.6}
+  .card p.desc + p.desc{margin-top:8px}
+  .hint{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6}
+  .hint i{color:var(--sub)}
+
+  /* ── Toggle switch ── */
+  .switch-row{display:flex;align-items:center;gap:14px;margin:14px 0 6px}
+  .switch{position:relative;width:46px;height:26px;flex-shrink:0;cursor:pointer}
+  .switch input{opacity:0;width:0;height:0;position:absolute}
+  .switch .track{position:absolute;inset:0;background:var(--border2);border-radius:20px;transition:background .18s}
+  .switch .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s}
+  .switch input:checked + .track{background:var(--sage)}
+  .switch input:checked + .track + .knob{transform:translateX(20px)}
+  .switch input:disabled ~ .track{opacity:.5}
+  .switch-status{font-size:13px;font-weight:600;color:var(--text)}
+  .switch-status.off{color:var(--muted)}
+
+  /* ── Buttons ── */
+  .btn{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12px;font-weight:600;padding:9px 14px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s}
+  .btn:hover{border-color:var(--ink);color:var(--text)}
+  .btn-primary{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .btn-primary:hover{opacity:.88;color:var(--side-text)}
+  .btn-danger{color:var(--red);border-color:rgba(155,58,58,.3)}
+  .btn-danger:hover{background:rgba(155,58,58,.08);border-color:var(--red);color:var(--red)}
+  .btn-icon{padding:7px 9px}
+  .btn-sm{font-size:11px;padding:6px 10px}
+
+  /* ── Users list ── */
+  .users-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .user-list{display:flex;flex-direction:column;gap:10px}
+  .user-row{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
+  .avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;letter-spacing:.5px}
+  .user-info{flex:1;min-width:0}
+  .user-name{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .user-handle{font-size:11px;color:var(--muted)}
+  .user-pages{font-size:11px;color:var(--sub);margin-top:3px}
+  .tag{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:3px 8px;border-radius:20px}
+  .tag-admin{background:var(--rust);color:#fff}
+  .tag-padrao{background:var(--surface);border:1px solid var(--border2);color:var(--sub)}
+  .user-actions{display:flex;gap:6px;flex-shrink:0}
+  .empty{font-size:12px;color:var(--muted);padding:18px;text-align:center}
+
+  /* ── Modal / form ── */
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,18,15,.5);z-index:400;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.28);width:100%;max-width:460px;padding:24px}
+  .modal h3{font-size:16px;font-weight:600;margin-bottom:16px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .field input,.field select{width:100%;font-family:inherit;font-size:13px;color:var(--text);padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none;transition:border-color .12s;appearance:none}
+  .field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%239c9790' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:30px}
+  .field input:focus,.field select:focus{border-color:var(--ink)}
+  .field .field-hint{font-size:10px;color:var(--muted);margin-top:4px}
+  .pages-box{border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);padding:10px;max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+  .page-check{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:background .12s}
+  .page-check:hover{background:var(--surface)}
+  .page-check input{width:16px;height:16px;accent-color:var(--sage);cursor:pointer}
+  .page-check span{font-size:12px;color:var(--text)}
+  .modal-err{font-size:11px;color:var(--red);min-height:14px;margin-bottom:10px}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+
+  .banner{background:rgba(155,122,42,.1);border:1px solid rgba(155,122,42,.3);color:var(--amber);font-size:12px;font-weight:500;padding:12px 16px;border-radius:var(--radius-sm);display:none;align-items:center;gap:8px}
+  .banner.show{display:flex}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--side-text);font-size:12px;font-weight:600;padding:11px 20px;border-radius:20px;box-shadow:0 8px 28px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:all .25s;z-index:500}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red)}
+
+  @media(max-width:560px){
+    .content{padding:20px 16px}
+    .user-row{flex-wrap:wrap}
+    .user-actions{width:100%;justify-content:flex-end}
+  }
+</style>
+</head>
+<body>
+
+<script src="sidebar.js"></script>
+
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title">Configurações do sistema</span>
+    <div class="live-dot-wrap"><div class="ldot"></div><span id="whoami">—</span></div>
+  </div>
+
+  <div class="content">
+    <div>
+      <div class="page-title">Configurações</div>
+      <div class="page-sub">Coco and Luna · administração do painel</div>
+    </div>
+
+    <div class="banner" id="notAdminBanner">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>Esta área é restrita a administradores. Algumas ações podem não estar disponíveis para o seu usuário.</span>
+    </div>
+
+    <!-- ── SEÇÃO 1 · GERAL ── -->
+    <div class="section-label">Geral</div>
+    <div class="card">
+      <h2>Coco and Luna — Painel de vendas</h2>
+      <p class="desc">Este é o centro de configurações do sistema. Aqui ficam os ajustes que valem para todo o painel: controle de acesso e gerenciamento de usuários.</p>
+      <p class="hint"><i class="bi bi-info-circle"></i> As preferências visuais de cada tela — cores dos canais, período e frequência de atualização — continuam no ícone <i class="bi bi-gear-fill"></i> disponível no topo das próprias telas do painel.</p>
+    </div>
+
+    <!-- ── SEÇÃO 2 · ACESSO / LOGIN ── -->
+    <div class="section-label">Acesso · Login</div>
+    <div class="card">
+      <h2>Exigir login</h2>
+      <p class="desc">Quando <b>ligado</b>, todos precisam entrar com usuário e senha para abrir o painel. Quando <b>desligado</b>, a dashboard fica aberta a qualquer pessoa que tenha o link — use apenas em ambiente controlado (rede interna, uso pessoal).</p>
+      <div class="switch-row">
+        <label class="switch">
+          <input type="checkbox" id="loginToggle" disabled>
+          <span class="track"></span><span class="knob"></span>
+        </label>
+        <span class="switch-status" id="loginStatus">Carregando…</span>
+      </div>
+    </div>
+
+    <!-- ── SEÇÃO 3 · USUÁRIOS ── -->
+    <div class="section-label">Usuários</div>
+    <div class="card">
+      <div class="users-head">
+        <div>
+          <h2>Usuários do painel</h2>
+          <p class="desc">Quem pode acessar e o que cada pessoa enxerga.</p>
+        </div>
+        <button class="btn btn-primary" id="addUserBtn"><i class="bi bi-plus-lg"></i> Adicionar usuário</button>
+      </div>
+      <div class="user-list" id="userList">
+        <div class="empty">Carregando usuários…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal de usuário ── -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal">
+    <h3 id="modalTitle">Adicionar usuário</h3>
+    <div class="modal-err" id="modalErr"></div>
+    <div class="field">
+      <label>Nome</label>
+      <input type="text" id="fName" placeholder="Ex.: Maria Silva" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Usuário</label>
+      <input type="text" id="fUsername" placeholder="Ex.: maria" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input type="password" id="fPassword" placeholder="Senha de acesso" autocomplete="new-password">
+      <div class="field-hint" id="pwdHint" style="display:none">Deixe em branco para manter a senha atual.</div>
+    </div>
+    <div class="field">
+      <label>Nível</label>
+      <select id="fRole">
+        <option value="admin">Admin</option>
+        <option value="padrao">Padrão</option>
+      </select>
+    </div>
+    <div class="field" id="pagesField" style="display:none">
+      <label>Páginas liberadas</label>
+      <div class="pages-box" id="pagesBox"></div>
+      <div class="field-hint">Marque as telas que este usuário poderá acessar.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalSave">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let AVAILABLE_PAGES = [];   // [{file,label}]
+let IS_ADMIN = true;
+let EDIT_ID = null;         // id do usuário em edição (null = novo)
+
+const FALLBACK_PAGES = [
+  { file:'index.html', label:'Dashboard' },
+  { file:'campanhas.html', label:'Campanhas' },
+  { file:'produtos.html', label:'Produtos' },
+  { file:'estoque.html', label:'Estoque' },
+  { file:'segmentos.html', label:'Segmentos' },
+  { file:'geografia.html', label:'Geografia' }
+];
+
+function toast(msg, isErr){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  setTimeout(()=>{ t.className = 'toast' + (isErr ? ' err' : ''); }, 2600);
+}
+
+function pageLabel(file){
+  const p = AVAILABLE_PAGES.find(x => x.file === file);
+  return p ? p.label : file;
+}
+
+/* iniciais + cor por hash do nome */
+function initials(name){
+  const parts = (name || '?').trim().split(/\s+/).filter(Boolean);
+  if(!parts.length) return '?';
+  if(parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+  return (parts[0][0] + parts[parts.length-1][0]).toUpperCase();
+}
+function hashColor(str){
+  let h = 0;
+  for(let i=0;i<(str||'').length;i++) h = (h*31 + str.charCodeAt(i)) & 0xffffffff;
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue},42%,45%)`;
+}
+
+/* ── /api/me — estado de login + páginas + admin ── */
+async function loadMe(){
+  try{
+    const r = await fetch('/api/me', { credentials:'same-origin' });
+    if(!r.ok) throw new Error('http '+r.status);
+    const d = await r.json();
+
+    AVAILABLE_PAGES = Array.isArray(d.pages) && d.pages.length ? d.pages : FALLBACK_PAGES;
+    IS_ADMIN = (d.isAdmin === true) || (d.role === 'admin') || (d.user && d.user.role === 'admin');
+
+    // login toggle
+    const enabled = !!d.enabled;
+    const cb = $('loginToggle');
+    cb.checked = enabled;
+    cb.disabled = false;
+    setLoginStatus(enabled);
+
+    // whoami no topo
+    const uname = d.username || (d.user && (d.user.name || d.user.username)) || (IS_ADMIN ? 'Admin' : 'Usuário');
+    $('whoami').textContent = uname;
+
+    if(!IS_ADMIN) $('notAdminBanner').classList.add('show');
+  }catch(e){
+    AVAILABLE_PAGES = FALLBACK_PAGES;
+    $('loginStatus').textContent = 'Não foi possível carregar o estado do login.';
+    $('whoami').textContent = '—';
+  }
+}
+
+function setLoginStatus(enabled){
+  const el = $('loginStatus');
+  if(enabled){ el.textContent = 'Login exigido'; el.className = 'switch-status'; }
+  else{ el.textContent = 'Dashboard aberta a todos'; el.className = 'switch-status off'; }
+}
+
+/* ── Toggle de login ── */
+$('loginToggle').addEventListener('change', async function(){
+  const desired = this.checked;
+  this.disabled = true;
+  try{
+    const r = await fetch('/api/auth/config', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ enabled: desired })
+    });
+    if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || 'http '+r.status); }
+    setLoginStatus(desired);
+    toast(desired ? 'Login passou a ser exigido.' : 'Login desativado.');
+  }catch(e){
+    this.checked = !desired;         // reverte
+    setLoginStatus(!desired);
+    toast('Erro ao salvar: ' + (e.message || 'falha de rede'), true);
+  }finally{
+    this.disabled = false;
+  }
+});
+
+/* ── Lista de usuários ── */
+async function loadUsers(){
+  const list = $('userList');
+  try{
+    const r = await fetch('/api/users', { credentials:'same-origin' });
+    if(!r.ok) throw new Error('http '+r.status);
+    const d = await r.json();
+    const users = Array.isArray(d.users) ? d.users : [];
+    if(!users.length){ list.innerHTML = '<div class="empty">Nenhum usuário cadastrado.</div>'; return; }
+    list.innerHTML = '';
+    users.forEach(u => list.appendChild(userRow(u)));
+  }catch(e){
+    list.innerHTML = '<div class="empty">Não foi possível carregar os usuários.</div>';
+  }
+}
+
+function pagesSummary(u){
+  if(u.role === 'admin') return 'Todas as páginas';
+  const pages = Array.isArray(u.pages) ? u.pages : [];
+  if(!pages.length) return 'Nenhuma página liberada';
+  if(pages.length <= 3) return pages.map(pageLabel).join(' · ');
+  return pages.length + ' páginas liberadas';
+}
+
+function userRow(u){
+  const row = document.createElement('div');
+  row.className = 'user-row';
+  const av = document.createElement('div');
+  av.className = 'avatar';
+  av.style.background = hashColor(u.name || u.username);
+  av.textContent = initials(u.name || u.username);
+  row.appendChild(av);
+
+  const info = document.createElement('div');
+  info.className = 'user-info';
+  const isAdmin = u.role === 'admin';
+  info.innerHTML =
+    `<div class="user-name">${escapeHtml(u.name || u.username)}
+       <span class="tag ${isAdmin?'tag-admin':'tag-padrao'}">${isAdmin?'Admin':'Padrão'}</span>
+     </div>
+     <div class="user-handle">@${escapeHtml(u.username)}</div>
+     <div class="user-pages"><i class="bi bi-window-stack"></i> ${escapeHtml(pagesSummary(u))}</div>`;
+  row.appendChild(info);
+
+  const actions = document.createElement('div');
+  actions.className = 'user-actions';
+  const edit = document.createElement('button');
+  edit.className = 'btn btn-icon btn-sm';
+  edit.title = 'Editar';
+  edit.innerHTML = '<i class="bi bi-pencil"></i>';
+  edit.onclick = () => openModal(u);
+  const del = document.createElement('button');
+  del.className = 'btn btn-icon btn-sm btn-danger';
+  del.title = 'Excluir';
+  del.innerHTML = '<i class="bi bi-trash"></i>';
+  del.onclick = () => deleteUser(u);
+  actions.appendChild(edit);
+  actions.appendChild(del);
+  row.appendChild(actions);
+  return row;
+}
+
+async function deleteUser(u){
+  if(!confirm(`Excluir o usuário "${u.name || u.username}"? Esta ação não pode ser desfeita.`)) return;
+  try{
+    const r = await fetch('/api/users/' + encodeURIComponent(u.id), { method:'DELETE', credentials:'same-origin' });
+    if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || 'http '+r.status); }
+    toast('Usuário excluído.');
+    loadUsers();
+  }catch(e){
+    toast('Erro ao excluir: ' + (e.message || 'falha de rede'), true);
+  }
+}
+
+/* ── Modal ── */
+function renderPagesBox(selected){
+  const box = $('pagesBox');
+  box.innerHTML = '';
+  const sel = new Set(selected || []);
+  AVAILABLE_PAGES.forEach(p => {
+    const lab = document.createElement('label');
+    lab.className = 'page-check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = p.file;
+    cb.checked = sel.has(p.file);
+    const sp = document.createElement('span');
+    sp.textContent = p.label;
+    lab.appendChild(cb);
+    lab.appendChild(sp);
+    box.appendChild(lab);
+  });
+}
+
+function syncRoleUI(){
+  const isPadrao = $('fRole').value === 'padrao';
+  $('pagesField').style.display = isPadrao ? 'block' : 'none';
+}
+
+function openModal(user){
+  EDIT_ID = user ? user.id : null;
+  $('modalTitle').textContent = user ? 'Editar usuário' : 'Adicionar usuário';
+  $('modalErr').textContent = '';
+  $('fName').value = user ? (user.name || '') : '';
+  $('fUsername').value = user ? (user.username || '') : '';
+  $('fPassword').value = '';
+  $('fPassword').placeholder = user ? '••••••••' : 'Senha de acesso';
+  $('pwdHint').style.display = user ? 'block' : 'none';
+  $('fRole').value = user ? (user.role || 'padrao') : 'admin';
+  renderPagesBox(user ? user.pages : []);
+  syncRoleUI();
+  $('userModal').classList.add('open');
+  setTimeout(()=>$('fName').focus(), 30);
+}
+
+function closeModal(){ $('userModal').classList.remove('open'); }
+
+async function saveUser(){
+  const name = $('fName').value.trim();
+  const username = $('fUsername').value.trim();
+  const password = $('fPassword').value;
+  const role = $('fRole').value;
+  const errEl = $('modalErr');
+  errEl.textContent = '';
+
+  if(!name){ errEl.textContent = 'Informe o nome.'; return; }
+  if(!username){ errEl.textContent = 'Informe o usuário.'; return; }
+  if(!EDIT_ID && !password){ errEl.textContent = 'Informe uma senha.'; return; }
+
+  const pages = role === 'padrao'
+    ? Array.from($('pagesBox').querySelectorAll('input:checked')).map(c => c.value)
+    : [];
+
+  const body = { name, username, role, pages };
+  if(password) body.password = password;
+
+  const url = EDIT_ID ? '/api/users/' + encodeURIComponent(EDIT_ID) : '/api/users';
+  const method = EDIT_ID ? 'PUT' : 'POST';
+
+  const saveBtn = $('modalSave');
+  saveBtn.disabled = true;
+  try{
+    const r = await fetch(url, {
+      method, credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error || 'Erro ao salvar.');
+    toast(EDIT_ID ? 'Usuário atualizado.' : 'Usuário criado.');
+    closeModal();
+    loadUsers();
+  }catch(e){
+    errEl.textContent = e.message || 'Falha de rede.';
+  }finally{
+    saveBtn.disabled = false;
+  }
+}
+
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ── Wiring ── */
+$('addUserBtn').addEventListener('click', ()=>openModal(null));
+$('modalCancel').addEventListener('click', closeModal);
+$('modalSave').addEventListener('click', saveUser);
+$('fRole').addEventListener('change', syncRoleUI);
+$('userModal').addEventListener('click', e => { if(e.target === $('userModal')) closeModal(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal(); });
+
+/* ── Init ── */
+(async function(){
+  await loadMe();
+  await loadUsers();
+})();
+</script>
+</body>
+</html>

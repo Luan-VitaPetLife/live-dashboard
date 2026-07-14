@@ -36,6 +36,10 @@ const EMPTY = {
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
   amazonCursors: {},
+  // ── Autenticação (login/usuários) ──
+  users: [],          // [{ id, username, name, role, salt, hash, pages:[], createdAt }]
+  authConfig: null,   // { enabled: bool } — null = ainda não inicializado (initAuth semeia)
+  authSessions: {},   // { token: { userId, createdAt, expiresAt } }
 };
 
 let cache = null;
@@ -73,6 +77,9 @@ export async function initStore() {
       if (r.key === 'amazonBRBackoffCount')  cache.amazonBRBackoffCount  = Number(r.value);
       if (r.key === 'amazonCursors')         cache.amazonCursors         = r.value;
       if (r.key === 'amazonBackfill')        cache.amazonBackfill        = r.value;
+      if (r.key === 'users')                 cache.users                 = r.value;
+      if (r.key === 'authConfig')            cache.authConfig            = r.value;
+      if (r.key === 'authSessions')          cache.authSessions          = r.value;
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -302,3 +309,24 @@ export function setAmazonBackfill(state) {
   if (USE_PG) pgKv('amazonBackfill', state);
 }
 export function getAmazonBackfill() { return load().amazonBackfill || null; }
+
+// ── Autenticação (login/usuários/sessões) ─────
+// Toda a lógica (hash, sessão, permissão) vive em src/auth.js; aqui só a persistência,
+// no mesmo padrão kv dos demais dados. Ver CLAUDE.md (tela de Configurações / login).
+export function getUsers() { return load().users || []; }
+export function setUsers(users) {
+  const db = load(); db.users = users; saveJson();
+  if (USE_PG) pgKv('users', users);
+}
+
+export function getAuthConfig() { return load().authConfig || null; }
+export function setAuthConfig(cfg) {
+  const db = load(); db.authConfig = cfg; saveJson();
+  if (USE_PG) pgKv('authConfig', cfg);
+}
+
+export function getAuthSessions() { return load().authSessions || {}; }
+export function setAuthSessions(sessions) {
+  const db = load(); db.authSessions = sessions; saveJson();
+  if (USE_PG) pgKv('authSessions', sessions);
+}

@@ -13,13 +13,93 @@ import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
 import * as meta from './src/meta.js';
 import * as googleads from './src/googleads.js';
+import * as auth from './src/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.set('trust proxy', 1); // Railway fica atrás de um proxy TLS — necessário para req.secure
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Detecta se a conexão original (antes do proxy) é HTTPS — usado para o atributo Secure do cookie.
+const isHttps = req => req.secure || req.headers['x-forwarded-proto'] === 'https';
+
+// ── Pipeline base (ordem importa) ──
 app.use(express.json());
+
+// Resolve o usuário do cookie de sessão em TODA requisição.
+app.use((req, _res, next) => {
+  const t = auth.parseCookies(req)[auth.SESSION_COOKIE_NAME];
+  req.authToken = t || null;
+  req.authUser = t ? auth.userFromToken(t) : null;
+  next();
+});
+
+// ── Rotas públicas de autenticação (antes do portão) ──
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body || {};
+  const result = auth.login(username, password);
+  if (!result) return res.status(401).json({ error: 'Usuário ou senha inválidos.' });
+  res.setHeader('Set-Cookie', auth.buildSessionCookie(result.token, { secure: isHttps(req) }));
+  res.json({ ok: true, user: result.user });
+});
+
+app.post('/api/logout', (req, res) => {
+  auth.logout(req.authToken);
+  res.setHeader('Set-Cookie', auth.buildClearCookie({ secure: isHttps(req) }));
+  res.json({ ok: true });
+});
+
+app.get('/api/me', (req, res) => {
+  res.json({
+    enabled: auth.isEnabled(),
+    user: req.authUser ? auth.publicUser(req.authUser) : null,
+    pages: auth.PAGES,
+  });
+});
+
+// ── Portão de acesso (antes do static): controla páginas e APIs quando o login está ligado ──
+const STATIC_ASSET_RE = /\.(css|js|png|jpe?g|svg|webp|gif|ico|woff2?|ttf|map|json)$/i;
+app.use((req, res, next) => {
+  if (!auth.isEnabled()) return next(); // login desligado: tudo aberto (comportamento atual)
+
+  const p = req.path;
+
+  // Sempre liberados: health, tela de login, rotas de auth, sync (tem token próprio), assets estáticos e OAuth.
+  if (
+    p === '/health' || p === '/login.html' ||
+    p === '/api/login' || p === '/api/logout' || p === '/api/me' || p === '/api/sync' ||
+    STATIC_ASSET_RE.test(p) ||
+    p.startsWith('/shopee/') || p.startsWith('/mercadolivre/') || p.startsWith('/googleads/')
+  ) return next();
+
+  const user = req.authUser;
+  if (!user) {
+    if (p.startsWith('/api/')) return res.status(401).json({ error: 'Não autenticado.' });
+    return res.redirect('/login.html');
+  }
+
+  // Controle de acesso por página (só para requisições de HTML).
+  if (p === '/' || p.endsWith('.html')) {
+    const file = (p === '/' ? 'index.html' : p.slice(1)).toLowerCase();
+    if (file === 'configuracoes.html' && user.role !== 'admin') return res.redirect('/index.html');
+    if (auth.isManagedPage(file) && !auth.canAccessPage(user, file)) {
+      const fp = auth.firstAllowedPage(user);
+      if (fp) return res.redirect('/' + fp);
+      return res.status(403).send('<h2>Sem permissão</h2><p>Seu usuário não tem acesso a nenhuma página. Fale com um administrador.</p>');
+    }
+  }
+
+  next();
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Exige admin em rotas de gestão. Modo aberto quando o login está desligado (permite configuração inicial).
+function requireAdmin(req, res, next) {
+  if (!auth.isEnabled()) return next();
+  if (req.authUser && req.authUser.role === 'admin') return next();
+  return res.status(403).json({ error: 'Apenas administradores.' });
+}
 
 // Dados da dashboard
 app.get('/api/dashboard', (req, res) => {
@@ -320,7 +400,44 @@ app.get('/api/status', (_req, res) => {
   });
 });
 
+// ── Gestão de usuários e configuração de login (somente admin) ──
+app.get('/api/users', requireAdmin, (_req, res) => {
+  res.json({ users: auth.listUsers() });
+});
+
+app.post('/api/users', requireAdmin, (req, res) => {
+  try { res.json({ user: auth.createUser(req.body || {}) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.put('/api/users/:id', requireAdmin, (req, res) => {
+  try { res.json({ user: auth.updateUser(req.params.id, req.body || {}) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
+  try { auth.deleteUser(req.params.id); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/auth/config', requireAdmin, (req, res) => {
+  const enabled = Boolean((req.body || {}).enabled);
+  auth.setEnabled(enabled);
+  res.json({ ok: true, enabled });
+});
+
+// Troca da própria senha (qualquer usuário logado).
+app.post('/api/me/password', (req, res) => {
+  if (!req.authUser) return res.status(401).json({ error: 'Não autenticado.' });
+  const { current, next: novo } = req.body || {};
+  if (!auth.verifyCredentials(req.authUser.username, current)) return res.status(400).json({ error: 'Senha atual incorreta.' });
+  if (!novo) return res.status(400).json({ error: 'Nova senha obrigatória.' });
+  auth.changePassword(req.authUser.id, novo);
+  res.json({ ok: true });
+});
+
 await initStore();
+auth.initAuth();
 
 app.listen(PORT, () => {
   console.log(`Dashboard rodando em http://localhost:${PORT}`);

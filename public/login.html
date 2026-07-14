@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrar — Coco and Luna</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <style>
+    :root{ color-scheme:light;
+      --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+      --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--ink:#2d2a26;--side-text:#f0ebe0;--red:#9b3a3a;--radius:10px;--radius-sm:6px; }
+
+    *{ box-sizing:border-box; margin:0; padding:0; }
+
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      -webkit-font-smoothing:antialiased;
+    }
+
+    .card{
+      width:360px;
+      max-width:90%;
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:0 10px 30px rgba(30,28,24,0.08), 0 2px 8px rgba(30,28,24,0.05);
+      padding:32px;
+    }
+
+    .brand{
+      text-align:center;
+      margin-bottom:26px;
+    }
+    .brand img{
+      width:48px;
+      height:48px;
+      border-radius:12px;
+      object-fit:cover;
+      display:inline-block;
+    }
+    .brand h1{
+      font-size:19px;
+      font-weight:600;
+      color:var(--text);
+      margin-top:14px;
+      letter-spacing:.2px;
+    }
+    .brand p{
+      font-size:13px;
+      color:var(--muted);
+      margin-top:4px;
+    }
+
+    form{ display:flex; flex-direction:column; gap:16px; }
+
+    .field{ display:flex; flex-direction:column; gap:6px; }
+    .field label{
+      font-size:12.5px;
+      font-weight:500;
+      color:var(--sub);
+      letter-spacing:.2px;
+    }
+
+    .input-wrap{ position:relative; display:flex; }
+    input[type=text],
+    input[type=password]{
+      width:100%;
+      font-family:inherit;
+      font-size:14px;
+      color:var(--text);
+      background:var(--surface2);
+      border:1px solid var(--border2);
+      border-radius:var(--radius-sm);
+      padding:11px 12px;
+      outline:none;
+      transition:border-color .15s ease, background .15s ease;
+    }
+    input[type=text]:focus,
+    input[type=password]:focus{
+      border-color:var(--ink);
+      background:var(--surface);
+    }
+    input::placeholder{ color:var(--muted); }
+
+    .pw-wrap input{ padding-right:42px; }
+    .pw-toggle{
+      position:absolute;
+      top:0; right:0;
+      height:100%;
+      width:40px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:none;
+      border:none;
+      cursor:pointer;
+      color:var(--muted);
+      font-size:16px;
+      border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+      transition:color .15s ease;
+    }
+    .pw-toggle:hover{ color:var(--sub); }
+
+    button[type=submit]{
+      width:100%;
+      font-family:inherit;
+      font-size:14px;
+      font-weight:600;
+      letter-spacing:.3px;
+      color:var(--side-text);
+      background:var(--ink);
+      border:none;
+      border-radius:var(--radius-sm);
+      padding:12px;
+      margin-top:4px;
+      cursor:pointer;
+      transition:opacity .15s ease;
+    }
+    button[type=submit]:hover{ opacity:.9; }
+    button[type=submit]:disabled{ opacity:.6; cursor:default; }
+
+    .err{
+      display:none;
+      font-size:12.5px;
+      color:var(--red);
+      background:rgba(155,58,58,0.08);
+      border:1px solid rgba(155,58,58,0.20);
+      border-radius:var(--radius-sm);
+      padding:9px 11px;
+      line-height:1.4;
+    }
+    .err.show{ display:block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <img src="Logo2.png" alt="Coco and Luna">
+      <h1>Coco and Luna</h1>
+      <p>Painel de vendas</p>
+    </div>
+
+    <form id="loginForm" novalidate>
+      <div class="field">
+        <label for="username">Usuário</label>
+        <div class="input-wrap">
+          <input type="text" id="username" name="username" autocomplete="username" autofocus>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="password">Senha</label>
+        <div class="input-wrap pw-wrap">
+          <input type="password" id="password" name="password" autocomplete="current-password">
+          <button type="button" class="pw-toggle" id="pwToggle" aria-label="Mostrar senha">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="err" id="err"></div>
+
+      <button type="submit" id="submitBtn">Entrar</button>
+    </form>
+  </div>
+
+  <script>
+    (function(){
+      const form = document.getElementById('loginForm');
+      const btn = document.getElementById('submitBtn');
+      const errEl = document.getElementById('err');
+      const userEl = document.getElementById('username');
+      const passEl = document.getElementById('password');
+      const pwToggle = document.getElementById('pwToggle');
+      const pwIcon = pwToggle.querySelector('i');
+
+      // Mostrar / ocultar senha
+      pwToggle.addEventListener('click', function(){
+        const show = passEl.type === 'password';
+        passEl.type = show ? 'text' : 'password';
+        pwIcon.className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+        pwToggle.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+        passEl.focus();
+      });
+
+      function showError(msg){
+        errEl.textContent = msg;
+        errEl.classList.add('show');
+      }
+      function clearError(){
+        errEl.textContent = '';
+        errEl.classList.remove('show');
+      }
+
+      form.addEventListener('submit', async function(e){
+        e.preventDefault();
+        clearError();
+
+        const username = userEl.value.trim();
+        const password = passEl.value;
+
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.textContent = 'Entrando...';
+
+        try{
+          const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ username, password })
+          });
+
+          if(res.ok){
+            window.location.href = '/index.html';
+            return;
+          }
+
+          let data = {};
+          try{ data = await res.json(); }catch(_){}
+          showError(data.error || 'Não foi possível entrar.');
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }catch(err){
+          showError('Erro de conexão. Tente novamente.');
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
