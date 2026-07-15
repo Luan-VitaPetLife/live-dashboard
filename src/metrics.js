@@ -495,11 +495,25 @@ export function computeProducts({ market = 'br', since, until } = {}) {
   const orders = getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o));
   const byChannel = aggregateProductsByChannel(orders);
 
+  // Catálogo (todos os pedidos, sem filtro de período) — é uma tela de catálogo, então um produto
+  // do marketplace continua listado mesmo sem venda no período escolhido (qty/receita ficam 0).
+  const allOrders = getOrders({ channel: 'todos', market }).filter(o => !isCancelled(o));
+  const catalogByChannel = aggregateProductsByChannel(allOrders);
+
   const finance = getProductFinance();
   const channels = {};
-  for (const [ch, c] of Object.entries(byChannel)) {
-    const products = Object.entries(c.products)
-      .map(([title, p]) => {
+  const chKeys = new Set([...Object.keys(byChannel), ...Object.keys(catalogByChannel)]);
+  for (const ch of chKeys) {
+    const c = byChannel[ch] || { revenue: 0, orders: 0, products: {} };
+    const catalogProducts = catalogByChannel[ch]?.products || {};
+    const titles = new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)]);
+    const empty = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
+    const products = [...titles]
+      .map(title => {
+        const cat = catalogProducts[title];
+        const p = c.products[title] || { ...empty, type: cat?.type ?? null, image: cat?.image ?? null };
+        if (!p.type && cat?.type) p.type = cat.type;
+        if (!p.image && cat?.image) p.image = cat.image;
         const qty = p.avulsoQty + p.comboQty;
         const revenue = p.revenue;
         const ov = finance[`${ch}|||${title}`] || {};
