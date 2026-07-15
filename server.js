@@ -6,8 +6,8 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock } from './src/metrics.js';
-import { runSync } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load } from './src/store.js';
+import { runSync, reconcileAmazonNames, enrichAmazonItems } from './src/sync.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -332,6 +332,93 @@ app.post('/api/amazon/images', (req, res) => {
   res.json({ ok: true, message: `Buscando imagem de ${asins.length} ASINs (${market.toUpperCase()}). Acompanhe em GET /api/status.` });
 });
 
+// Forçar a reconciliação de nomes de produto da Amazon (Reports API). Ignora o
+// throttle (force) e roda em background — o relatório leva ~1-2 min. Resultado no
+// log do servidor; confirme na tela de Produtos. Ver CLAUDE.md 4.7.6 / backlog item 8.
+app.post('/api/amazon/sync-names', (req, res) => {
+  if (backfillRunning) return res.status(409).json({ error: 'Backfill em andamento — tente depois que terminar.' });
+  const markets = req.query.market === 'br' ? ['br'] : req.query.market === 'us' ? ['us'] : ['us', 'br'];
+  reconcileAmazonNames({ markets, force: true })
+    .then(r => console.log('Amazon nomes (manual):', r))
+    .catch(e => console.error('Amazon nomes (manual) falhou:', e.message));
+  res.json({ ok: true, message: `Reconciliação de nomes (${markets.join(', ')}) iniciada. Acompanhe no log; confirme em Produtos.` });
+});
+
+// Limpeza pontual do vazamento de mercado da Amazon: remove pedidos US que foram gravados
+// como Amazon BR por um relatório cego-tagueado (ver CLAUDE.md 4.7.8). Rodar UMA vez após o
+// deploy da correção. Idempotente — pode rodar de novo sem efeito se já estiver limpo.
+app.post('/api/amazon/cleanup-market-leak', (req, res) => {
+  try {
+    const removed = removeAmazonMarketLeak();
+    res.json({ ok: true, removed, message: `${removed} pedidos US vazados no mercado BR removidos.` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Busca nomes de produto da Amazon via getOrderItems (Orders API, por-pedido) — o caminho
+// que funciona pro BR, cujo relatório não traz pedidos BR reais (contas vinculadas, ver
+// 4.7.8). Roda em background (BR ~120 pedidos × 0,5 req/s ≈ 5 min). Progresso no log e em
+// GET /api/status → amazon.items. Padrão market=br (o US usa a Reports API, seria inviável aqui).
+let itemsRunning = false;
+let itemsStatus  = null;
+app.post('/api/amazon/fetch-items', (req, res) => {
+  if (itemsRunning) return res.status(409).json({ error: 'Busca de itens já em andamento.' });
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  const limit  = Math.min(Number(req.query.limit || 1000), 5000);
+  itemsRunning = true;
+  itemsStatus  = { status: 'running', market, message: 'iniciando', startedAt: new Date().toISOString() };
+  enrichAmazonItems({ market, limit, onProgress: m => { itemsStatus = { status: 'running', market, message: m, startedAt: itemsStatus.startedAt }; } })
+    .then(r => { itemsStatus = { status: 'done', market, result: r, finishedAt: new Date().toISOString() }; console.log('Amazon itens:', r); })
+    .catch(e => { itemsStatus = { status: 'error', market, message: e.message, finishedAt: new Date().toISOString() }; console.error('Amazon itens falhou:', e.message); })
+    .finally(() => { itemsRunning = false; });
+  res.json({ ok: true, message: `Busca de itens (${market.toUpperCase()}, até ${limit}) iniciada. Acompanhe em GET /api/status → amazon.items.` });
+});
+
+// Diagnóstico: quais marketplaces cada token da Amazon enxerga (getMarketplaceParticipations).
+// Prova definitiva de qual conta de vendedor cada refresh token autoriza. Ver 4.7.9.
+app.get('/api/amazon/whoami', async (_req, res) => {
+  try {
+    const [us, br] = await Promise.allSettled([amazon.whoAmI('us'), amazon.whoAmI('br')]);
+    res.json({
+      us: us.status === 'fulfilled' ? us.value : { error: us.reason?.message },
+      br: br.status === 'fulfilled' ? br.value : { error: br.reason?.message },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Diagnóstico: lista crua de pedidos da Amazon (MarketplaceId + SalesChannel reais). Ver 4.7.9.
+app.get('/api/amazon/list-orders', async (req, res) => {
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  const days   = Math.min(Number(req.query.days || 14), 60);
+  try { res.json(await amazon.listOrdersDiag({ market, days })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Diagnóstico: inspeciona UM pedido (getOrder + getOrderItems) para entender o 400. Ver 4.7.9.
+app.get('/api/amazon/probe-order', async (req, res) => {
+  const id = req.query.id;
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  if (!id) return res.status(400).json({ error: 'passe ?id=<AmazonOrderId>' });
+  try { res.json(await amazon.probeOrder(id, market)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Diagnóstico: colunas reais do relatório da Amazon + amostra dos campos que decidem o
+// mercado (order-status/currency/sales-channel/ship-country/ship-state) e a proporção de
+// contaminação. Usado para confirmar o discriminador correto do rowMarket. Ver 4.7.8.
+app.get('/api/amazon/report-columns', async (req, res) => {
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  const days   = Math.min(Number(req.query.days || 1), 7);
+  try {
+    res.json(await amazon.inspectReport({ market, days }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Forçar uma sincronização manual (protegido por token)
 app.post('/api/sync', async (req, res) => {
   const secret = process.env.SYNC_SECRET;
@@ -418,6 +505,7 @@ app.get('/api/status', (_req, res) => {
       nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
       backfill:      getAmazonBackfill(),
       images:        getAmazonImagesJob(),
+      items:         itemsStatus,
     },
     amazon_br: {
       // US e BR usam o mesmo app/token e o mesmo balde de cota (chamada combinada).
@@ -491,4 +579,31 @@ app.listen(PORT, () => {
   runSync().then(r => console.log('Sync inicial:', r)).catch(e => console.error('Sync inicial falhou:', e.message));
   const minutes = Number(process.env.SYNC_INTERVAL_MINUTES || 15);
   setInterval(() => runSync().then(r => console.log('Sync:', r)).catch(e => console.error('Sync falhou:', e.message)), minutes * 60 * 1000);
+
+  // Reconciliação de nomes de produto da Amazon (Reports API, balde de cota próprio —
+  // ver CLAUDE.md 4.7.6 / backlog item 8). Job separado do sync de pedidos para não
+  // travar o "Sincronizar agora". A própria função só dispara um relatório se já
+  // passou AMAZON_NAMES_EVERY_HOURS desde o último, por mercado. Pulamos enquanto um
+  // backfill roda, para não disputar a cota da Reports API.
+  const runAmazonNames = () => {
+    if (backfillRunning) return;
+    // US: nomes via Reports API — volume alto (~1000/dia), o relatório é o único caminho viável.
+    reconcileAmazonNames({ markets: ['us'] })
+      .then(r => { if (r.patched || r.inserted || r.errors.length) console.log('Amazon nomes US:', r); })
+      .catch(e => console.error('Amazon nomes US falhou:', e.message));
+    // BR: nomes via getOrderItems (por-pedido). O relatório do marketplace BR NÃO traz os
+    // pedidos BR reais (contas vinculadas devolvem só US — ver 4.7.8), então a Reports API
+    // não serve pro BR. Volume baixo (~120), então buscar item por item é viável. Só processa
+    // pedidos sem título, então após limpar o backlog custa quase nada (só os poucos novos).
+    if (!itemsRunning) {
+      itemsRunning = true;
+      itemsStatus = { status: 'running', market: 'br', message: 'auto', startedAt: new Date().toISOString() };
+      enrichAmazonItems({ market: 'br', onProgress: m => { itemsStatus = { status: 'running', market: 'br', message: m, startedAt: itemsStatus.startedAt }; } })
+        .then(r => { itemsStatus = { status: 'done', market: 'br', result: r, finishedAt: new Date().toISOString() }; if (r.patched || r.errors.length) console.log('Amazon itens BR:', r); })
+        .catch(e => { itemsStatus = { status: 'error', market: 'br', message: e.message, finishedAt: new Date().toISOString() }; console.error('Amazon itens BR falhou:', e.message); })
+        .finally(() => { itemsRunning = false; });
+    }
+  };
+  setTimeout(runAmazonNames, 3 * 60 * 1000);        // 3 min após subir
+  setInterval(runAmazonNames, 6 * 60 * 60 * 1000);  // a cada 6h (throttle interno limita a 12h)
 });

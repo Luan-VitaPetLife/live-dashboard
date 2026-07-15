@@ -434,7 +434,19 @@ const STATE_NAMES = {
   PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',
   TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',
   WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',
+  // Territórios dos EUA, endereços militares (APO/FPO) e bucket de estrangeiros.
+  // Não são um dos 50 estados nem pintam o mapa, mas aparecem no ranking. Ver 4.10.
+  PR:'Porto Rico',VI:'Ilhas Virgens',GU:'Guam',AS:'Samoa Americana',MP:'Marianas',
+  AA:'Militar (Américas)',AE:'Militar (Europa)',AP:'Militar (Pacífico)',
+  INTL:'Outros (internacional)',
 };
+
+// Os 50 estados de fato (para o contador "de 50 estados") — exclui DC, territórios,
+// militar e o bucket INTL, que aparecem no ranking mas não contam como estado.
+const US_50 = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID',
+  'IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV',
+  'NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT',
+  'VT','VA','WA','WV','WI','WY']);
 
 // FIPS (zero-padded 2-digit) → 2-letter state code
 const FIPS_UF = {
@@ -822,7 +834,8 @@ function render(d) {
   const sorted=Object.entries(stateData).map(([code,s])=>({code,...s,val:isMoney?s.revenue:s.orders})).sort((a,b)=>b.val-a.val);
   const total=sorted.reduce((a,s)=>a+s.val,0);
   document.getElementById('rankTotal').textContent=sorted.length?`Total: ${isMoney?fmtUSD(total):fmtInt(total)+' pedidos'}`:'';
-  document.getElementById('kpiStates').textContent=sorted.length||'—';
+  const stateCount=sorted.filter(s=>US_50.has(s.code)).length;
+  document.getElementById('kpiStates').textContent=sorted.length?stateCount:'—';
   document.getElementById('kpiStatesSub').textContent=sorted.length?`de 50 estados dos EUA`:'sincronize para carregar';
   if(sorted.length){
     document.getElementById('kpiLeader').textContent=STATE_NAMES[sorted[0].code]||sorted[0].code;

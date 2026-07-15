@@ -4,8 +4,10 @@
 //
 //  US:  AMAZON_CLIENT_ID, AMAZON_CLIENT_SECRET, AMAZON_REFRESH_TOKEN
 //       → autorizar em sellercentral.amazon.com (North America Seller Central)
-//  BR:  AMAZON_BR_REFRESH_TOKEN (mesmo CLIENT_ID/SECRET)
-//       → autorizar em sellercentral.amazon.com.br (Brazil Seller Central)
+//  BR:  AMAZON_BR_REFRESH_TOKEN + (opcional) AMAZON_BR_CLIENT_ID/AMAZON_BR_CLIENT_SECRET
+//       → autorizar na conta CocoandLuna (Brazil Seller Central). Se o token BR vier de um
+//         APP PRÓPRIO do BR, setar também o client id/secret dele (o refresh token só
+//         funciona com o client que o emitiu). Sem eles, cai no CLIENT_ID/SECRET do US.
 //  Compartilhado: AMAZON_ROLE_ARN, AMAZON_AWS_ACCESS_KEY, AMAZON_AWS_SECRET_KEY
 //
 //  Estado atual (ver CLAUDE.md 4.7): a US ainda NÃO foi autorizada com token próprio —
@@ -18,6 +20,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import zlib from 'zlib';
+import { normalizeUsState } from './us-states.js';
 import {
   getAmazonBackoff,      setAmazonBackoff,
   getAmazonBackoffCount, setAmazonBackoffCount,
@@ -65,6 +68,13 @@ const MARKETPLACE_ID   = 'ATVPDKIKX0DER';   // Amazon.com US
 const REFRESH_TOKEN_BR  = process.env.AMAZON_BR_REFRESH_TOKEN;
 const MARKETPLACE_ID_BR = 'A2Q3Y263D00KWC'; // Amazon.com.br
 
+// BR pode ter um APP PRÓPRIO (Client ID/Secret dedicados à conta CocoandLuna) — necessário
+// quando o refresh token BR foi gerado por um app diferente do app US. O refresh token só
+// funciona com o MESMO client que o emitiu. Fallback para o app compartilhado (US) mantém o
+// comportamento antigo intacto quando essas variáveis não estão setadas. Ver CLAUDE.md 4.7.9.
+const CLIENT_ID_BR     = process.env.AMAZON_BR_CLIENT_ID     || CLIENT_ID;
+const CLIENT_SECRET_BR = process.env.AMAZON_BR_CLIENT_SECRET || CLIENT_SECRET;
+
 const SP_HOST = 'sellingpartnerapi-na.amazon.com'; // região NA cobre US e BR
 
 // Canal/mercado por marketplace (para normalizar o pedido)
@@ -79,7 +89,7 @@ const AWS_ACCESS_KEY = process.env.AMAZON_AWS_ACCESS_KEY;
 const AWS_SECRET_KEY = process.env.AMAZON_AWS_SECRET_KEY;
 
 export function isConfigured()   { return Boolean(CLIENT_ID && CLIENT_SECRET && REFRESH_TOKEN); }
-export function isConfiguredBR() { return Boolean(CLIENT_ID && CLIENT_SECRET && REFRESH_TOKEN_BR); }
+export function isConfiguredBR() { return Boolean(CLIENT_ID_BR && CLIENT_SECRET_BR && REFRESH_TOKEN_BR); }
 export function hasAwsCreds()    { return Boolean(AWS_ACCESS_KEY && AWS_SECRET_KEY); }
 
 // ── Backoff exponencial ────────────────────────────────────────────────────────
@@ -143,8 +153,8 @@ function makeLwaGetter(clientId, secret, refreshToken, label) {
 }
 
 // Getters separados por mercado — cada um usa seu próprio refresh token
-const getLwaTokenUS = makeLwaGetter(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN,    'US');
-const getLwaTokenBR = makeLwaGetter(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN_BR, 'BR');
+const getLwaTokenUS = makeLwaGetter(CLIENT_ID,    CLIENT_SECRET,    REFRESH_TOKEN,    'US');
+const getLwaTokenBR = makeLwaGetter(CLIENT_ID_BR, CLIENT_SECRET_BR, REFRESH_TOKEN_BR, 'BR');
 
 // ── STS AssumeRole (IAM compartilhado entre US e BR) ──────────────────────────
 let roleCache = null;
@@ -334,8 +344,11 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
           total:     Number(o.OrderTotal?.Amount || 0),
           source:    'Amazon',
           customer:  o.BuyerInfo?.BuyerName || '',
-          // A Amazon não normaliza a grafia: vem "UT" e "Ut" para o mesmo estado.
-          state:     (o.ShippingAddress?.StateOrRegion || '').trim().toUpperCase() || null,
+          // A Amazon não normaliza a grafia: vem "UT"/"Ut"/"Utah"/"CA."/"N.Y." para o
+          // mesmo estado. Nos EUA, reduz ao código de 2 letras (ver us-states.js / 4.7.5).
+          state:     market === 'us'
+                       ? (normalizeUsState(o.ShippingAddress?.StateOrRegion) || null)
+                       : ((o.ShippingAddress?.StateOrRegion || '').trim().toUpperCase() || null),
           items:     Array.from(
             { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
             () => ({ title: '', qty: 1, amount: 0 })
@@ -469,6 +482,26 @@ function parseTsv(text) {
   });
 }
 
+// Mercado REAL de uma linha do relatório. O relatório ALL_ORDERS vem contaminado com
+// pedidos do outro marketplace porque as contas CocoandLuna (BR) e VITA PET LIFE (US)
+// são VINCULADAS na Amazon: o relatório ignora o filtro de marketplaceIds e devolve os
+// dois mercados juntos (a Orders API respeita o filtro; por isso o sync traz só o mercado
+// certo). Ver CLAUDE.md 4.7.8. Precisamos descartar a linha do outro mercado.
+//
+// Sinal PRINCIPAL é o país de entrega (ship-country): é físico e não é reescrito pelo
+// contexto do relatório — pedido entregue nos EUA é 'US' sempre. A moeda NÃO serve
+// (o relatório BR reporta tudo em BRL, inclusive pedido US — foi o que furou o 1º filtro).
+// Fallback por sales-channel. null = indeterminado (não descarta, por segurança).
+function rowMarket(r) {
+  const country = (r['ship-country'] || '').trim().toUpperCase();
+  if (country === 'US') return 'us';
+  if (country === 'BR') return 'br';
+  const sc = (r['sales-channel'] || '').trim().toLowerCase();
+  if (sc.includes('.br')) return 'br';
+  if (sc.includes('amazon.com')) return 'us';
+  return null;
+}
+
 // Agrupa as linhas-item em pedidos, no mesmo formato normalizado de fetchOrders().
 function ordersFromRows(rows, marketplaceId) {
   const { market, channel } = MARKET_BY_MP[marketplaceId];
@@ -477,6 +510,11 @@ function ordersFromRows(rows, marketplaceId) {
   for (const r of rows) {
     const orderId = r['amazon-order-id'];
     if (!orderId) continue;
+
+    // Descarta linha que claramente pertence a outro mercado (relatório contaminado):
+    // não deixa um relatório "BR" gravar pedido US como Amazon BR, e vice-versa.
+    const rm = rowMarket(r);
+    if (rm && rm !== market) continue;
 
     if (!byOrder.has(orderId)) {
       const status = r['order-status'] || '';
@@ -491,8 +529,11 @@ function ordersFromRows(rows, marketplaceId) {
         total:     0,
         source:    'Amazon',
         customer:  '',
-        // A Amazon não normaliza a grafia: vem "UT" e "Ut" para o mesmo estado.
-        state:     (r['ship-state'] || '').trim().toUpperCase() || null,
+        // A Amazon não normaliza a grafia: vem "UT"/"Ut"/"Utah"/"CA."/"N.Y." para o
+        // mesmo estado. Nos EUA, reduz ao código de 2 letras (ver us-states.js / 4.7.5).
+        state:     market === 'us'
+                     ? (normalizeUsState(r['ship-state']) || null)
+                     : ((r['ship-state'] || '').trim().toUpperCase() || null),
         items:     [],
       });
     }
@@ -512,7 +553,9 @@ function ordersFromRows(rows, marketplaceId) {
   return [...byOrder.values()];
 }
 
-async function runOneReport({ getLwa, marketplaceId, startISO, endISO, label, onProgress }) {
+// Busca o relatório e devolve as LINHAS cruas (parseTsv). Reaproveitado por runOneReport
+// e pelo diagnóstico inspectReport.
+async function fetchReportRows({ getLwa, marketplaceId, startISO, endISO, label, onProgress }) {
   onProgress?.(`${label}: criando relatório ${startISO.slice(0, 10)} → ${endISO.slice(0, 10)}`);
 
   const created = await spPost(getLwa, '/reports/2021-06-30/reports', {
@@ -542,10 +585,48 @@ async function runOneReport({ getLwa, marketplaceId, startISO, endISO, label, on
     ? zlib.gunzipSync(buf).toString('utf8')
     : buf.toString('utf8');
 
-  const rows   = parseTsv(text);
+  return parseTsv(text);
+}
+
+async function runOneReport({ getLwa, marketplaceId, startISO, endISO, label, onProgress }) {
+  const rows   = await fetchReportRows({ getLwa, marketplaceId, startISO, endISO, label, onProgress });
   const orders = ordersFromRows(rows, marketplaceId);
   onProgress?.(`${label}: ${rows.length} linhas → ${orders.length} pedidos`);
   return orders;
+}
+
+// Diagnóstico: devolve as COLUNAS reais do relatório + uma amostra dos campos que
+// decidem o mercado (para confirmar o nome/valor certos e blindar o rowMarket). Sem
+// PII: só order-status/currency/sales-channel/ship-country/ship-state + o mercado que
+// o rowMarket deduziu. Ver CLAUDE.md 4.7.8.
+export async function inspectReport({ market = 'br', days = 1 } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const isUs          = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`inspectReport: token ${market} não configurado.`);
+
+  const end   = new Date(Date.now() - 3 * 60 * 1000);
+  const start = new Date(end.getTime() - days * 864e5);
+  const rows  = await fetchReportRows({
+    getLwa, marketplaceId, label: `Inspect ${market.toUpperCase()}`,
+    startISO: start.toISOString(), endISO: end.toISOString(),
+  });
+
+  const columns = rows.length ? Object.keys(rows[0]) : [];
+  const sample = rows.slice(0, 8).map(r => ({
+    orderStatus:  r['order-status'],
+    currency:     r['currency'],
+    salesChannel: r['sales-channel'],
+    shipCountry:  r['ship-country'],
+    shipState:    r['ship-state'],
+    rowMarket:    rowMarket(r),
+  }));
+  // Contagem por mercado deduzido, pra ver a proporção de contaminação.
+  const tally = {};
+  for (const r of rows) { const m = rowMarket(r) || 'null'; tally[m] = (tally[m] || 0) + 1; }
+
+  return { market, requestedMarketplace: marketplaceId, totalRows: rows.length, columns, rowMarketTally: tally, sample };
 }
 
 // Backfill histórico de um mercado. Quebra o período em janelas de REPORT_CHUNK_DAYS
@@ -580,6 +661,135 @@ export async function backfillOrders({ market = 'us', days = 90, onProgress, onC
 
   onProgress?.(`${label}: concluído — ${total} pedidos`);
   return total;
+}
+
+// Reconciliação de nomes de produto (ver CLAUDE.md 4.7.6 / backlog item 8).
+// O sync contínuo (Orders API, fetchOrders) nunca traz o título do item — pedidos
+// novos entram com items[].title vazio e Produtos/Estoque vão desatualizando. Aqui
+// buscamos um relatório curto dos últimos `days` dias (uma única janela, days ≤ 30) —
+// a Reports API tem balde de cota próprio, então isso não concorre com o sync de
+// pedidos nem provoca 429. Devolve pedidos já no formato normalizado, com items[] +
+// title preenchido; quem chama casa por id e preenche os títulos (patchOrderItems).
+export async function fetchRecentNamedOrders({ market = 'us', days = 2, onProgress } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+
+  const isUs          = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  const label         = isUs ? 'Nomes US' : 'Nomes BR';
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`${label}: refresh token não configurado.`);
+
+  const end   = new Date(Date.now() - 3 * 60 * 1000); // margem exigida pela SP-API
+  const start = new Date(end.getTime() - days * 864e5);
+
+  return runOneReport({
+    getLwa, marketplaceId, label,
+    startISO: start.toISOString(), endISO: end.toISOString(),
+    onProgress,
+  });
+}
+
+// ── Itens de UM pedido via Orders API (getOrderItems) ──────────────────────────
+// A LISTAGEM de pedidos (/orders/v0/orders) não traz item, mas o endpoint
+// /orders/v0/orders/{id}/orderItems traz — COM o Title (nome do produto). Para o US
+// isso é inviável (milhares de pedidos × 0,5 req/s), por isso lá usamos a Reports API.
+// Para o BR (volume baixíssimo) é o caminho certo: o relatório BR vem contaminado com
+// pedidos US (contas vinculadas, ver 4.7.8), mas o getOrderItems é por-pedido e devolve
+// exatamente o item daquele pedido BR. Devolve [{ title, qty, amount }]. Cota: 0,5 req/s
+// (burst 30) — o chamador espaça as chamadas. Lança RateLimitError em 429 (isRateLimit).
+export async function fetchOrderItems(orderId, { market = 'br' } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
+  const items = [];
+  let nextToken = null;
+  do {
+    const params = nextToken ? { NextToken: nextToken } : {};
+    const data = await spGet(getLwa, `/orders/v0/orders/${encodeURIComponent(orderId)}/orderItems`, params);
+    const list = data.payload?.OrderItems || [];
+    for (const it of list) {
+      const title = it.Title || '';
+      const qty   = Number(it.QuantityOrdered || 0);
+      const amount = Number(it.ItemPrice?.Amount || 0); // preço da LINHA (não por unidade)
+      if (title) items.push({ title, qty, amount, asin: it.ASIN || null });
+    }
+    nextToken = data.payload?.NextToken || null;
+  } while (nextToken);
+  return items;
+}
+
+// ── Diagnóstico: quais marketplaces cada token enxerga (getMarketplaceParticipations) ──
+// Prova definitiva de QUAL conta de vendedor um refresh token autoriza. Se o token BR
+// devolver só o Brasil → é a CocoandLuna; se devolver US/CA/MX/BR → é a VITA PET LIFE
+// (token da conta errada — ver 4.7.9). Devolve a lista de marketplaces participantes.
+export async function whoAmI(market = 'br') {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
+  const data = await spGet(getLwa, '/sellers/v1/marketplaceParticipations');
+  const list = (data.payload || []).map(p => ({
+    id:          p.marketplace?.id,
+    country:     p.marketplace?.countryCode,
+    name:        p.marketplace?.name,
+    participating: p.participation?.isParticipating,
+  }));
+  return { market, marketplaces: list };
+}
+
+// ── Diagnóstico: lista crua de pedidos (o que a Amazon devolve AGORA) ────────────
+// Mostra o MarketplaceId e o SalesChannel REAIS de cada pedido que a conta retorna,
+// pra descobrir o que são os pedidos 701-/702- (Amazon.com.br de verdade? MCF/Non-Amazon?).
+export async function listOrdersDiag({ market = 'br', days = 14 } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
+  const mp     = market === 'us' ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  const createdAfter = new Date(Date.now() - days * 864e5).toISOString();
+  const data = await spGet(getLwa, '/orders/v0/orders', { MarketplaceIds: mp, CreatedAfter: createdAfter, MaxResultsPerPage: 50 });
+  const orders = data.payload?.Orders || [];
+  return {
+    market, requestedMarketplace: mp, createdAfter, count: orders.length,
+    sample: orders.slice(0, 15).map(o => ({
+      id: o.AmazonOrderId, marketplaceId: o.MarketplaceId, salesChannel: o.SalesChannel,
+      status: o.OrderStatus, fulfillment: o.FulfillmentChannel, total: o.OrderTotal,
+    })),
+  };
+}
+
+// ── Diagnóstico: o que é UM pedido (getOrder) + tenta getOrderItems ──────────────
+// Para entender por que getOrderItems dá 400 em certos pedidos (ex.: 701-/702-):
+// devolve os campos do pedido (MarketplaceId, FulfillmentChannel, SalesChannel,
+// OrderType, status) e o resultado/erro de getOrderItems. Ver 4.7.9.
+export async function probeOrder(orderId, market = 'br') {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const getLwa = market === 'us' ? getLwaTokenUS : getLwaTokenBR;
+  const out = { orderId, market };
+
+  const oid = encodeURIComponent(orderId);
+
+  // 1) getOrder — resposta crua (pra ver exatamente o que a Amazon devolve)
+  try {
+    const d = await spGet(getLwa, `/orders/v0/orders/${oid}`);
+    out.rawOrder = d;
+  } catch (e) { out.orderError = e.message; }
+
+  // 2) getOrderItems SEM RDT (o que falha hoje)
+  try {
+    const di = await spGet(getLwa, `/orders/v0/orders/${oid}/orderItems`);
+    out.items = (di.payload?.OrderItems || []).map(it => ({ Title: it.Title, ASIN: it.ASIN, QuantityOrdered: it.QuantityOrdered }));
+  } catch (e) { out.itemsError = e.message; }
+
+  // 3) getOrderItems COM RDT (Restricted Data Token) — hipótese LGPD/BR
+  try {
+    const rdtResp = await spPost(getLwa, '/tokens/2021-03-01/restrictedDataToken', {
+      restrictedResources: [{ method: 'GET', path: `/orders/v0/orders/${orderId}/orderItems` }],
+    });
+    const rdt = rdtResp.restrictedDataToken;
+    if (!rdt) { out.rdtError = 'sem restrictedDataToken na resposta: ' + JSON.stringify(rdtResp).slice(0, 200); }
+    else {
+      const di2 = await spGet(getLwa, `/orders/v0/orders/${oid}/orderItems`, {}, rdt);
+      out.itemsWithRdt = (di2.payload?.OrderItems || []).map(it => ({ Title: it.Title, ASIN: it.ASIN, QuantityOrdered: it.QuantityOrdered }));
+    }
+  } catch (e) { out.rdtError = e.message; }
+
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

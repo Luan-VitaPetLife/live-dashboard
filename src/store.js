@@ -46,6 +46,58 @@ const EMPTY = {
 
 let cache = null;
 
+// ── Índice em memória para getOrders() ────────
+// Com ~85 mil+ pedidos (e potencialmente centenas de milhares após backfills
+// grandes), o padrão antigo — Object.values(db.orders) + várias passadas de
+// .filter() reparsando Date.parse() a cada request, ~6× por /api/dashboard —
+// ficava lento (item 9 do backlog). Aqui mantemos, por mercado, um array de
+// pedidos ordenado por timestamp (asc) + um array paralelo dos timestamps já
+// parseados, permitindo recortar a janela de datas por busca binária em vez de
+// varrer tudo. O índice é reconstruído preguiçosamente (só na próxima leitura
+// após uma escrita), então backfills que fazem muitos upserts em lote só pagam
+// uma reconstrução. Ver CLAUDE.md 4.8 / seção 9.
+let ordersByMarket = {};   // { br: [pedido,...], us: [...] } ordenado por _ts asc
+let tsByMarket     = {};   // { br: [ts,...],    us: [...] } alinhado a ordersByMarket
+let indexDirty     = true;
+
+// Mesma inferência de mercado do getOrders antigo: campo market, senão
+// shopify_us → us, senão amazon com id 'amazon-us:' → us, senão br (legado).
+function inferMarket(o) {
+  return o.market ||
+    (o.channel === 'shopify_us' || o.channel === 'amazon_us' ? 'us'
+      : (o.channel === 'amazon' && o.id.startsWith('amazon-us:') ? 'us' : 'br'));
+}
+
+function rebuildOrdersIndex() {
+  const byM = {}; // mercado → [[ts, pedido], ...]
+  for (const o of Object.values(cache.orders)) {
+    const m = inferMarket(o);
+    (byM[m] || (byM[m] = [])).push([Date.parse(o.createdAt), o]);
+  }
+  ordersByMarket = {};
+  tsByMarket = {};
+  for (const m of Object.keys(byM)) {
+    const pairs = byM[m];
+    pairs.sort((a, b) => a[0] - b[0]);
+    ordersByMarket[m] = pairs.map(p => p[1]);
+    tsByMarket[m]     = pairs.map(p => p[0]);
+  }
+  indexDirty = false;
+}
+
+// Primeiro índice i em ts[] tal que ts[i] >= alvo (início da janela).
+function lowerBound(ts, target) {
+  let lo = 0, hi = ts.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (ts[mid] < target) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+// Primeiro índice i em ts[] tal que ts[i] > alvo (fim exclusivo da janela).
+function upperBound(ts, target) {
+  let lo = 0, hi = ts.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (ts[mid] <= target) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
 // ── Inicialização (chamar uma vez no startup) ──
 export async function initStore() {
   if (USE_PG) {
@@ -118,39 +170,178 @@ function pgKv(key, value) {
 }
 
 // ── Pedidos ──────────────────────────────────
-export function upsertOrders(orders) {
-  const db = load();
-  for (const o of orders) db.orders[o.id] = o;
-  saveJson();
-  if (USE_PG) {
-    for (const o of orders) {
-      pool.query(
-        'INSERT INTO orders(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=$2',
-        [o.id, o]
-      ).catch(e => console.error('PG orders error:', e.message));
-    }
+// Grava em LOTE (INSERT multi-linha), não uma query por pedido. Um backfill que
+// despejava ~30 mil INSERTs autocommit por chunk gerava um pico de WAL que encheu
+// o disco do Postgres e derrubou o banco (incidente 10/07/2026 — Hobby, sem como
+// aumentar o volume). Em lotes de PG_BATCH linhas, são ~60 statements em vez de
+// 30 mil, com uma fração do WAL. Limite de params do pg é 65535 (2 por linha).
+const PG_BATCH = 500;
+
+function pgUpsertOrders(orders) {
+  for (let i = 0; i < orders.length; i += PG_BATCH) {
+    const batch  = orders.slice(i, i + PG_BATCH);
+    const values = batch.map((_, j) => `($${j * 2 + 1},$${j * 2 + 2})`).join(',');
+    const params = [];
+    for (const o of batch) params.push(o.id, o);
+    pool.query(
+      `INSERT INTO orders(id,data) VALUES ${values} ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data`,
+      params
+    ).catch(e => console.error('PG orders batch error:', e.message));
   }
 }
 
-export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {
+export function upsertOrders(orders) {
   const db = load();
-  let arr = Object.values(db.orders);
-  // Market filter: pedidos sem campo market são legados e pertencem ao BR.
-  // No src/store.js, altere a linha do filtro para:
-if (market) {
-  arr = arr.filter(o => {
-    // Fallback: se o canal for 'amazon' e o ID do pedido começar com 'amazon-us:', força 'us'
-    const inferredMarket = o.market || 
-                           (o.channel === 'shopify_us' ? 'us' : 
-                           (o.channel === 'amazon' && o.id.startsWith('amazon-us:') ? 'us' : 'br'));
-    return inferredMarket === market;
-  });
+  for (const o of orders) {
+    const existing = db.orders[o.id];
+    // Preserva os títulos de item já preenchidos (backfill / Reports API) quando o
+    // pedido chega SEM título. A Orders API da Amazon nunca traz o nome do item, e o
+    // sync roda a cada 15 min re-baixando pedidos recém-atualizados — sem esta guarda,
+    // ele apagava a cada ciclo os nomes que a Reports API preencheu, deixando
+    // Segmentos/Produtos/Estoque vazios para a Amazon apesar da receita certa. O
+    // total/status continuam vindo do pedido novo (Orders API é a fonte deles).
+    // Ver CLAUDE.md 4.7.6. Para outros canais o item sempre tem título → não dispara.
+    if (existing && Array.isArray(o.items) && o.items.length
+        && o.items.every(it => !it.title)
+        && Array.isArray(existing.items) && existing.items.some(it => it.title)) {
+      o.items = existing.items;
+    }
+    db.orders[o.id] = o;
+  }
+  indexDirty = true;
+  saveJson();
+  if (USE_PG) pgUpsertOrders(orders);
 }
-  if (channel && channel !== 'todos') arr = arr.filter(o => o.channel === channel);
+
+// Poda de retenção: remove pedidos dos canais informados mais antigos que olderThanIso.
+// Usada só para a Amazon (canal de maior volume, ~1000 pedidos/dia US) — sem isso o
+// banco cresce ~30 mil/mês e volta a encher o disco do Hobby. Os outros canais são de
+// baixo volume e ficam completos. Autovacuum reaproveita o espaço liberado, então o
+// tamanho da tabela estabiliza na janela de retenção. Ver CLAUDE.md 4.7.7.
+export function pruneOrders({ channels, olderThanIso }) {
+  const db = load();
+  const chSet = new Set(channels);
+  let removed = 0;
+  for (const [id, o] of Object.entries(db.orders)) {
+    if (chSet.has(o.channel) && o.createdAt && o.createdAt < olderThanIso) {
+      delete db.orders[id];
+      removed++;
+    }
+  }
+  if (removed) {
+    indexDirty = true;
+    saveJson();
+    if (USE_PG) {
+      pool.query(
+        `DELETE FROM orders WHERE data->>'channel' = ANY($1) AND data->>'createdAt' < $2`,
+        [channels, olderThanIso]
+      ).catch(e => console.error('PG prune error:', e.message));
+    }
+  }
+  return removed;
+}
+
+// Preenche items[] (títulos de produto) em pedidos JÁ existentes, sem tocar em
+// total/status — usado pela reconciliação de nomes da Amazon (Reports API), já que
+// o sync de pedidos (Orders API) não traz o título do item. Ver CLAUDE.md 4.7.6 /
+// backlog item 8.
+//
+// **NÃO insere pedido novo (allowInsert padrão false).** Antes inseria o pedido inteiro
+// quando o id não existia — mas isso abriu um vazamento de mercado: o relatório "BR"
+// (fetchRecentNamedOrders market='br') vinha contaminado com pedidos US (tokens iguais /
+// conta US enxergando o relatório), e como esses ids `amazon-br:<idUS>` não existiam no
+// store, eram INSERIDOS como pedidos Amazon BR com títulos em inglês — inflando a receita
+// do Brasil (incidente 13/07/2026). A reconciliação só deve CORRIGIR TÍTULO de pedido que
+// o sync de pedidos (Orders API, a fonte de verdade do pedido e do seu mercado) já gravou;
+// o sync roda a cada 15 min e sempre insere o pedido antes da reconciliação (a cada 12h),
+// então o insert aqui nunca era necessário de verdade. Ver CLAUDE.md 4.7.8.
+export function patchOrderItems(orders, { allowInsert = false } = {}) {
+  const db = load();
+  let patched = 0, inserted = 0;
+  const toPersist = [];
+  for (const o of orders) {
+    const existing = db.orders[o.id];
+    if (existing) {
+      // Só sobrescreve se o relatório trouxe itens com título (não apagar por engano).
+      if (o.items && o.items.length && o.items.some(it => it.title)) {
+        existing.items = o.items;
+        patched++;
+        toPersist.push(existing);
+      }
+    } else if (allowInsert) {
+      db.orders[o.id] = o;
+      inserted++;
+      toPersist.push(o);
+    }
+  }
+  if (!toPersist.length) return { patched, inserted };
+  indexDirty = true;
+  saveJson();
+  if (USE_PG) pgUpsertOrders(toPersist);
+  return { patched, inserted };
+}
+
+// Limpeza pontual do vazamento de mercado da Amazon (ver patchOrderItems / CLAUDE.md
+// 4.7.8): remove pedidos US que um relatório cego-tagueado gravou como Amazon BR.
+// Dois sinais, ambos seguros porque o canal Amazon BR nunca passou pela Reports API
+// (nenhum backfill BR foi rodado — CLAUDE.md backlog item 11):
+//   1) item TITULADO — só a Reports API traz título; pedido US enviado/pendente vazado.
+//   2) status === 'Cancelled' (com DOIS L) + R$ 0 + sem item — é a grafia que SÓ o
+//      relatório grava (a Orders API grava 'Canceled', com um L). Pega o pedido US
+//      cancelado, que no relatório não gera linha de item (fica sem título e R$ 0) e por
+//      isso escaparia do sinal 1. Casar 'Canceled' (um L) apagaria cancelamento BR REAL,
+//      então casamos exatamente 'Cancelled'.
+// Nenhum pedido BR real (sempre via Orders API, sem título, status 'Canceled'/'Shipped'/
+// 'Pending') casa qualquer um dos dois. Idempotente. Retorna quantos removeu.
+export function removeAmazonMarketLeak() {
+  const db = load();
+  const ids = [];
+  for (const [id, o] of Object.entries(db.orders)) {
+    if (o.channel !== 'amazon' || o.market !== 'br') continue;
+    const titled = Array.isArray(o.items) && o.items.some(it => it && it.title);
+    const reportCancelled = o.status === 'Cancelled' && !Number(o.total) && !titled;
+    if (titled || reportCancelled) ids.push(id);
+  }
+  for (const id of ids) delete db.orders[id];
+  if (ids.length) {
+    indexDirty = true;
+    saveJson();
+    if (USE_PG) {
+      pool.query(`DELETE FROM orders WHERE id = ANY($1)`, [ids])
+        .catch(e => console.error('PG leak-cleanup error:', e.message));
+    }
+  }
+  return ids.length;
+}
+
+export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {
+  load();
+  if (indexDirty) rebuildOrdersIndex();
+
+  // Sem market → considera todos (raro; o dashboard sempre passa um mercado).
+  // Pedidos sem campo market são legados e são inferidos por inferMarket().
+  const markets = market ? [market] : Object.keys(ordersByMarket);
+  // Fuso da loja para converter a data (YYYY-MM-DD) da janela em instante absoluto.
   const tz = market === 'us' ? 'Z' : '-03:00';
-  if (since) { const t = Date.parse(since + 'T00:00:00' + tz); arr = arr.filter(o => Date.parse(o.createdAt) >= t); }
-  if (until) { const t = Date.parse(until + 'T23:59:59' + tz); arr = arr.filter(o => Date.parse(o.createdAt) <= t); }
-  return arr;
+  const lo = since ? Date.parse(since + 'T00:00:00' + tz) : -Infinity;
+  const hi = until ? Date.parse(until + 'T23:59:59' + tz) :  Infinity;
+  const byChannel = channel && channel !== 'todos';
+
+  const out = [];
+  for (const m of markets) {
+    const list = ordersByMarket[m];
+    if (!list || !list.length) continue;
+    const ts = tsByMarket[m];
+    // Recorta a janela por busca binária (arrays ordenados por _ts asc).
+    const start = since ? lowerBound(ts, lo) : 0;
+    const end   = until ? upperBound(ts, hi) : list.length;
+    for (let i = start; i < end; i++) {
+      const o = list[i];
+      if (byChannel && o.channel !== channel) continue;
+      out.push(o);
+    }
+  }
+  return out;
 }
 
 // ── Sessões diárias ───────────────────────────

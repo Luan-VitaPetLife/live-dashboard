@@ -68,6 +68,15 @@
   .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
   .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
   .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  /* Seletor de canal */
+  .chan-pop{position:absolute;top:calc(100% + 6px);left:0;min-width:170px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:6px;z-index:500;display:none;flex-direction:column;gap:2px}
+  .chan-pop.open{display:flex}
+  .chan-pop button{text-align:left;font-size:12px;font-weight:600;padding:8px 12px;border:0;background:none;color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .chan-pop button:hover{background:var(--surface2);color:var(--text)}
+  .chan-pop button.active{background:var(--ink);color:var(--side-text)}
+  /* Ver mais / ver menos nos top produtos */
+  .seg-more{display:block;width:100%;text-align:center;margin-top:6px;padding:6px;border:0;background:none;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.3px;cursor:pointer;border-radius:var(--radius-sm);transition:all .12s}
+  .seg-more:hover{background:var(--surface2);color:var(--text)}
   .pp-divider{height:1px;background:var(--border)}
   .pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
   .pp-dates{display:flex;flex-direction:column;gap:8px}
@@ -191,6 +200,14 @@
     </div>
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
     <div style="position:relative">
+      <div class="filter-pill" id="channelPill">
+        <span class="lbl">Canal</span>
+        <span class="val" id="channelValue">Todos</span>
+        <span class="arr">▾</span>
+      </div>
+      <div class="chan-pop" id="channelPop"></div>
+    </div>
+    <div style="position:relative">
       <div class="filter-pill period-pill-active" id="periodPill">
         <span class="lbl">Período</span>
         <span class="val" id="periodValue">30 dias</span>
@@ -262,6 +279,15 @@ let market = localStorage.getItem('coco_market') || 'br';
 let sinceDate = localStorage.getItem('coco_since') || isoLocal(addDays(new Date(),-29));
 let untilDate = localStorage.getItem('coco_until') || todayISO;
 
+// Canal — dropdown por mercado (mesmos canais do dashboard principal). O backend já
+// filtra os segmentos pelo parâmetro `channel` do /api/dashboard.
+const CH_LABELS = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', mercadolivre:'Mercado Livre', shopify_us:'Shopify US', amazon_us:'Amazon' };
+const CH_BY_MARKET = { br:['todos','shopify','shopee','mercadolivre'], us:['todos','shopify_us','amazon_us'] };
+let channel = 'todos';
+// Estado de expansão dos "top produtos" por segmento (ver mais / ver menos).
+const segExpanded = { cat:false, dog:false, other:false };
+let lastSegs = {};
+
 // ── Formatters ──
 function fmtMoney(v) {
   if (market === 'us') return '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -332,14 +358,9 @@ function comboBits(p) {
   return `${p.avulsoQty||0} avulso, ${parts.join(', ')}`;
 }
 
-function renderCards(segs) {
-  const totalUnits = (segs.cat?.units||0) + (segs.dog?.units||0);
-  const cards = ['cat','dog'].map(k => {
-    const s = segs[k] || { revenue:0, units:0, orders:0, pct:0, byType:{}, topProducts:[] };
-    const pctW = totalUnits > 0 ? Math.round(s.units / totalUnits * 100) : 0;
-
-    const prods = s.topProducts.length > 0
-      ? s.topProducts.map((p,i) => `
+// Item de produto (compartilhado entre os cards de segmento e o card "não classificados").
+function prodItemHtml(p, i) {
+  return `
         <div class="seg-prod-item">
           <span class="seg-prod-rank">${i+1}.</span>
           <div class="seg-prod-main">
@@ -348,8 +369,33 @@ function renderCards(segs) {
           </div>
           <span class="seg-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
           <span class="seg-prod-rev">${fmtMoney(p.revenue)}</span>
-        </div>`).join('')
-      : '<div class="seg-empty">Sem produtos no período</div>';
+        </div>`;
+}
+// Lista com "ver mais": mostra 5 e expande para todos. `key` é 'cat' | 'dog' | 'other'.
+function prodListHtml(products, key) {
+  if (!products || products.length === 0) return '<div class="seg-empty">Sem produtos no período</div>';
+  const exp = segExpanded[key];
+  const shown = exp ? products : products.slice(0, 5);
+  let html = shown.map(prodItemHtml).join('');
+  if (products.length > 5) {
+    const extra = products.length - 5;
+    html += `<button class="seg-more" onclick="toggleSegExpand('${key}')">${exp ? 'Ver menos' : 'Ver mais (' + extra + ')'}</button>`;
+  }
+  return html;
+}
+function toggleSegExpand(key) {
+  segExpanded[key] = !segExpanded[key];
+  renderCards(lastSegs);
+  renderOther(lastSegs);
+}
+
+function renderCards(segs) {
+  const totalUnits = (segs.cat?.units||0) + (segs.dog?.units||0);
+  const cards = ['cat','dog'].map(k => {
+    const s = segs[k] || { revenue:0, units:0, orders:0, pct:0, byType:{}, topProducts:[] };
+    const pctW = totalUnits > 0 ? Math.round(s.units / totalUnits * 100) : 0;
+
+    const prods = prodListHtml(s.topProducts, k);
 
     const byType = s.byType || {};
     const typeEntries = [
@@ -404,28 +450,21 @@ function renderOther(segs) {
   const card = document.getElementById('otherCard');
   if (!other || other.units === 0) { card.style.display = 'none'; return; }
   card.style.display = '';
-  document.getElementById('otherList').innerHTML = other.topProducts.map((p,i) => `
-    <div class="seg-prod-item">
-      <span class="seg-prod-rank">${i+1}.</span>
-      <div class="seg-prod-main">
-        <div class="seg-prod-name" title="${p.title}">${p.title}</div>
-        ${comboBits(p) ? `<div class="seg-prod-combo">${comboBits(p)}</div>` : ''}
-      </div>
-      <span class="seg-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
-      <span class="seg-prod-rev">${fmtMoney(p.revenue)}</span>
-    </div>`).join('');
+  document.getElementById('otherList').innerHTML = prodListHtml(other.topProducts, 'other');
 }
 
 // ── Render ──
 function render(d) {
   const segs = d.segments || {};
+  lastSegs = segs;
   renderChart(segs);
   renderLegend(segs);
   renderCards(segs);
   renderOther(segs);
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
-  document.getElementById('pageSub').textContent = `Gato vs Cão · ${rangeLabel(sinceDate, untilDate)} · última sincronização: ${up}`;
-  document.getElementById('footerDate').textContent = `Dashboard · Vita Pet Life · Coco and Luna · Segmentos · ${rangeLabel(sinceDate, untilDate)} · receita exclui cancelados · última sincronização: ${up}`;
+  const chLbl = CH_LABELS[channel] || channel;
+  document.getElementById('pageSub').textContent = `Gato vs Cão · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · última sincronização: ${up}`;
+  document.getElementById('footerDate').textContent = `Coco and Luna · Segmentos · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · receita exclui cancelados · última sincronização: ${up}`;
   setLive('ok', `Ao vivo · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`);
 }
 
@@ -433,7 +472,7 @@ function render(d) {
 async function loadData() {
   setLive('loading','Atualizando…');
   try {
-    const p = new URLSearchParams({ channel:'todos', metric:'receita', since:sinceDate, until:untilDate, market });
+    const p = new URLSearchParams({ channel, metric:'receita', since:sinceDate, until:untilDate, market });
     const r = await fetch('/api/dashboard?' + p);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
@@ -452,8 +491,39 @@ document.querySelectorAll('.mkt-btn').forEach(btn => {
     market = btn.dataset.market;
     localStorage.setItem('coco_market', market);
     document.querySelectorAll('.mkt-btn').forEach(b => b.classList.toggle('active', b.dataset.market === market));
+    channel = 'todos';            // troca de mercado reseta o canal (canais diferem por mercado)
+    segExpanded.cat = segExpanded.dog = segExpanded.other = false;
+    buildChannelDropdown();
     loadData();
   });
+});
+
+// ── Channel dropdown ──
+function buildChannelDropdown() {
+  const chans = CH_BY_MARKET[market] || ['todos'];
+  if (!chans.includes(channel)) channel = 'todos';
+  document.getElementById('channelPop').innerHTML = chans
+    .map(c => `<button data-ch="${c}" class="${c===channel?'active':''}">${CH_LABELS[c]||c}</button>`).join('');
+  document.getElementById('channelValue').textContent = CH_LABELS[channel] || channel;
+}
+document.getElementById('channelPill').addEventListener('click', e => {
+  e.stopPropagation();
+  const pop = document.getElementById('channelPop');
+  const pill = document.getElementById('channelPill');
+  const open = pop.classList.contains('open');
+  document.querySelectorAll('.chan-pop,.period-pop').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('open'));
+  if (!open) { pop.classList.add('open'); pill.classList.add('open'); }
+});
+document.getElementById('channelPop').addEventListener('click', e => {
+  const b = e.target.closest('button[data-ch]');
+  if (!b) return;
+  channel = b.dataset.ch;
+  segExpanded.cat = segExpanded.dog = segExpanded.other = false;
+  buildChannelDropdown();
+  document.getElementById('channelPop').classList.remove('open');
+  document.getElementById('channelPill').classList.remove('open');
+  loadData();
 });
 
 // ── Period picker ──
@@ -508,8 +578,13 @@ document.addEventListener('click', e => {
     document.getElementById('periodPop').classList.remove('open');
     document.getElementById('periodPill').classList.remove('open');
   }
+  if (!e.target.closest('#channelPill') && !e.target.closest('#channelPop')) {
+    document.getElementById('channelPop').classList.remove('open');
+    document.getElementById('channelPill').classList.remove('open');
+  }
 });
 
+buildChannelDropdown();
 syncPeriodPill();
 loadData();
 </script>

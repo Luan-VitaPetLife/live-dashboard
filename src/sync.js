@@ -10,7 +10,9 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders } from './store.js';
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Janela padrão de sincronização: últimos 60 dias.
 function defaultWindow(days = 60) {
@@ -140,8 +142,122 @@ async function doSync() {
     }
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
 
+  // Poda de retenção da Amazon: mantém só os últimos AMAZON_RETENTION_DAYS dias do
+  // canal de maior volume (~1000 pedidos/dia US), para o banco não crescer sem limite.
+  // **Opt-in: padrão 0 (DESLIGADA)** — de propósito, para um deploy nunca apagar dados
+  // sozinho (a poda com padrão agressivo quase apagou 9 meses recém-recuperados em
+  // 10/07/2026). Defina AMAZON_RETENTION_DAYS no Railway para ativar (ex.: 365 = janela
+  // móvel de 1 ano). Só Amazon; Shopify/Shopee/ML ficam completos. Ver CLAUDE.md 4.7.7.
+  try {
+    const retentionDays = Number(process.env.AMAZON_RETENTION_DAYS || 0);
+    if (retentionDays > 0) {
+      const cutoff = new Date(Date.now() - retentionDays * 864e5).toISOString();
+      const pruned = pruneOrders({ channels: ['amazon', 'amazon_us'], olderThanIso: cutoff });
+      if (pruned) report.amazonPruned = pruned;
+    }
+  } catch (e) { report.errors.push('amazon.prune: ' + e.message); }
+
   setLastSync(new Date().toISOString());
   return report;
+}
+
+// ── Reconciliação de nomes de produto da Amazon (Reports API) ──────────────────
+//  O sync de pedidos (Orders API) não traz o título do item, então pedidos novos da
+//  Amazon entram com items[].title vazio e as telas de Produtos/Estoque vão
+//  desatualizando (ver CLAUDE.md 4.7.6 / backlog item 8). Aqui buscamos um relatório
+//  curto dos últimos dias (balde de cota próprio, não concorre com o sync de pedidos)
+//  e preenchemos os títulos por id, sem tocar em total/status.
+//
+//  Roda como job separado (server.js), não dentro do runSync, para não deixar o
+//  "Sincronizar agora" travado enquanto a Amazon monta o relatório (leva ~1-2 min).
+//  Throttle por mercado via cursor 'names-<market>': dispara no máximo a cada
+//  AMAZON_NAMES_EVERY_HOURS (padrão 12h), então pode ser chamado com folga sem custo.
+const NAMES_EVERY_MS = Number(process.env.AMAZON_NAMES_EVERY_HOURS || 12) * 3600 * 1000;
+const NAMES_DAYS     = Number(process.env.AMAZON_NAMES_DAYS || 2);
+
+function namesDue(market) {
+  const last = getAmazonCursor(`names-${market}`);
+  return !last || (Date.now() - Date.parse(last)) >= NAMES_EVERY_MS;
+}
+
+export async function reconcileAmazonNames({ markets = ['us', 'br'], force = false } = {}) {
+  const out = { patched: 0, inserted: 0, byMarket: {}, skipped: [], errors: [] };
+  if (!amazon.hasAwsCreds()) { out.errors.push('amazon.names: credenciais AWS ausentes'); return out; }
+
+  for (const market of markets) {
+    const configured = market === 'us' ? amazon.isConfigured() : amazon.isConfiguredBR();
+    if (!configured) { out.skipped.push(`${market}: sem token`); continue; }
+    if (!force && !namesDue(market)) { out.skipped.push(`${market}: throttle`); continue; }
+    try {
+      const named = await amazon.fetchRecentNamedOrders({ market, days: NAMES_DAYS });
+      const r = patchOrderItems(named);
+      setAmazonCursor(`names-${market}`, new Date().toISOString());
+      out.patched  += r.patched;
+      out.inserted += r.inserted;
+      out.byMarket[market] = r;
+    } catch (e) {
+      out.errors.push(`amazon.names.${market}: ${e.message}`);
+    }
+  }
+  return out;
+}
+
+// ── Nomes de produto da Amazon via getOrderItems (Orders API) ──────────────────
+//  Alternativa à Reports API para preencher items[].title. O relatório do marketplace
+//  BR vem contaminado com pedidos US (contas vinculadas, ver CLAUDE.md 4.7.8) e NÃO traz
+//  os pedidos BR reais, então a reconciliação por relatório não funciona pro BR. Mas o
+//  endpoint /orders/v0/orders/{id}/orderItems traz o item (com Title) de UM pedido — e o
+//  token BR consegue lê-los (foi ele que trouxe os pedidos). Como o BR tem volume baixo
+//  (~120 pedidos), dá pra buscar item por item. Para o US isso é inviável (milhares × cota
+//  0,5 req/s) — lá continua a Reports API. Só processa pedidos SEM título, casa por id e
+//  patch-only (o pedido já existe). Respeita a cota espaçando as chamadas.
+const ITEMS_RATE_MS = 2200; // 0,5 req/s (burst 30) — 2,2s entre chamadas fica folgado
+
+export async function enrichAmazonItems({ market = 'br', limit = 1000, onProgress } = {}) {
+  const out = { scanned: 0, patched: 0, empty: 0, errors: [] };
+  if (!amazon.hasAwsCreds()) { out.errors.push('sem credenciais AWS'); return out; }
+  const configured = market === 'us' ? amazon.isConfigured() : amazon.isConfiguredBR();
+  if (!configured) { out.errors.push(`${market}: sem token`); return out; }
+
+  const channel = market === 'us' ? 'amazon_us' : 'amazon';
+  const pending = getOrders({ channel, market })
+    .filter(o => !o.cancelled && (!o.items || !o.items.length || o.items.every(it => !it.title)))
+    .slice(0, limit);
+  onProgress?.(`${market}: ${pending.length} pedidos sem nome para buscar`);
+
+  // Se o token não tem acesso ao mercado (ex.: AMAZON_BR_REFRESH_TOKEN apontando pra conta
+  // US — ver 4.7.8), TODA chamada dá 400. Abortamos após ABORT_AFTER falhas seguidas sem
+  // nenhum sucesso, pra não gastar centenas de chamadas inúteis a cada rodada. Se o token
+  // for corrigido, os primeiros pedidos passam a dar certo e a execução segue normal.
+  const ABORT_AFTER = 15;
+  let consecFails = 0;
+  for (const o of pending) {
+    out.scanned++;
+    const orderId = o.id.slice(o.id.indexOf(':') + 1);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const items = await amazon.fetchOrderItems(orderId, { market });
+        if (items.length) { patchOrderItems([{ id: o.id, items }]); out.patched++; }
+        else out.empty++;
+        consecFails = 0;
+        break;
+      } catch (e) {
+        if (e.isRateLimit && attempt === 1) { await sleep(61000); continue; } // espera a cota e tenta de novo
+        out.errors.push(`${orderId}: ${e.message}`);
+        consecFails++;
+        break;
+      }
+    }
+    if (out.patched === 0 && consecFails >= ABORT_AFTER) {
+      out.aborted = `${consecFails} falhas seguidas sem sucesso — token provavelmente sem acesso ao mercado ${market} (ver 4.7.8)`;
+      onProgress?.(out.aborted);
+      break;
+    }
+    if (out.scanned % 10 === 0) onProgress?.(`${out.scanned}/${pending.length} — ${out.patched} nomeados`);
+    await sleep(ITEMS_RATE_MS);
+  }
+  onProgress?.(`${market}: concluído — ${out.patched} nomeados, ${out.empty} sem item, ${out.errors.length} erros`);
+  return out;
 }
 
 // Execução direta: node src/sync.js

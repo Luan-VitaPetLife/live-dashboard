@@ -53,6 +53,7 @@ src/amazon.js           Amazon SP-API (EUA + BR): chamada combinada, LWA + SigV4
 src/meta.js             Meta Marketing API: gasto diário + fetchCampaigns (nível campanha, BR e US)
 src/googleads.js        Google Ads API: OAuth + fetchCampaigns (nível campanha, só EUA por enquanto)
 src/metrics.js          Calcula o payload da dashboard por mercado; inclui salesSplit
+src/us-states.js        normalizeUsState(): reduz grafias de estado dos EUA ao código de 2 letras (Geografia US)
 src/sync.js             Orquestra a busca de todos os canais BR e US e grava no store
 public/index.html       Dashboard principal (toggle de mercado, receita, tendência, canais, pedidos)
 public/campanhas.html   Tela de Campanhas: visão de gastos reais por canal + cards por campanha
@@ -86,7 +87,8 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - `initStore()` é async e DEVE ser chamado com `await` antes de `app.listen()`.
 - Tabelas Postgres: `orders` (id TEXT PK, data JSONB), `sessions_daily` (date TEXT PK, data JSONB), `kv` (key TEXT PK, value JSONB).
 - `kv` guarda: `shopeeTokens`, `mlTokens`, `metaInsightsDaily`, `metaUSInsightsDaily`, `mlAdCosts`, `amazonBackoff`, `amazonBRBackoff`, `lastSync`.
-- `getOrders({ channel, since, until, market })` — filtra por mercado. Pedidos legados sem campo `market` são inferidos como `'br'` (exceto `channel === 'shopify_us'` → `'us'`).
+- `getOrders({ channel, since, until, market })` — filtra por mercado. Pedidos legados sem campo `market` são inferidos como `'br'` (exceto `channel === 'shopify_us'` → `'us'`, e `channel === 'amazon'` com id `amazon-us:` → `'us'`).
+- **Índice em memória do `getOrders` (10/07/2026):** para aguentar centenas de milhares de pedidos (backfills grandes), o `getOrders` não faz mais `Object.values()` + `.filter()` encadeado a cada chamada. Mantém, por mercado (`ordersByMarket`), um array de pedidos ordenado por timestamp + um array paralelo dos timestamps parseados (`tsByMarket`), e recorta a janela de datas por **busca binária** (`lowerBound`/`upperBound`), filtrando o canal numa única passada. O índice é reconstruído **preguiçosamente** — `upsertOrders` só marca `indexDirty = true`; a reconstrução (`rebuildOrdersIndex`) roda na próxima leitura, então um backfill que faz muitos upserts em lote paga uma reconstrução só. A inferência de mercado (`inferMarket`) é a mesma de antes. Interface pública **inalterada** (continua síncrona). Ver seção 9, item 9.
 
 ## 4. Decisões e conhecimento de domínio (IMPORTANTE — não reinventar)
 
@@ -229,15 +231,146 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   `channelSplit.amazon_us` = US$ 2.014.895 em 90 dias. Amazon passou a aparecer em Produtos com nome real.
 - **`ship-state` normalizado para maiúsculas** aqui e em `fetchOrders()`: a Amazon devolve `"UT"` e `"Ut"` para o
   mesmo estado, criando duas chaves distintas em `byState` e quebrando a contagem no mapa de Geografia US.
+- **⚠️ O backfill roda no processo do servidor** (`backfillOrders` em background, não é um worker separado). Um
+  **deploy/restart do Railway no meio mata a execução** — o estado em `kv.amazonBackfill` congela no último
+  `running` e `backfillRunning` (flag em memória) volta a `false` no restart. Aconteceu em 10/07/2026: um backfill
+  de 365 dias começou às 17:17 e foi morto pelo deploy da otimização do `store.js` minutos depois, deixando o status
+  preso em "criando relatório ... → 0 pedidos". **Regra:** só disparar backfill quando não houver deploy pendente,
+  e não mergear/deployar nada até ele terminar (~15-20 min p/ 365 dias). Se morrer, é só re-disparar (upsert por id,
+  idempotente).
 
-#### 4.7.6 ⚠️ Divergência conhecida: sync contínuo não traz nome de produto
-- O backfill (Reports API) preenche `items[{ title, qty, amount }]`. O **sync contínuo** (`fetchOrders`, Orders API)
-  cria `items` com `title: ''` — a Orders API nunca devolve o título do item.
-- **Consequência:** pedidos da Amazon posteriores ao backfill entram sem nome de produto. Top Produtos, Produtos e
-  Estoque vão refletindo cada vez menos a realidade conforme o tempo passa desde o último backfill.
-- **Correção natural (não feita):** o sync da Amazon passar a usar a Reports API também — um relatório dos últimos
-  ~2 dias por ciclo (ou 1×/dia), que é barato, usa balde de cota próprio e já traz os itens. Ver backlog.
-- **Paliativo hoje:** rodar `POST /api/amazon/backfill?days=2` periodicamente reconcilia os títulos (upsert por id).
+#### 4.7.6 Reconciliação de nomes de produto (resolvido 10/07/2026)
+- **O problema (era):** o backfill (Reports API) preenche `items[{ title, qty, amount }]`, mas o **sync contínuo**
+  (`fetchOrders`, Orders API) cria `items` com `title: ''` — a Orders API nunca devolve o título do item. Pedidos da
+  Amazon posteriores ao backfill entravam sem nome, e Top Produtos/Produtos/Estoque desatualizavam com o tempo.
+- **Correção (backlog item 8):** um **job separado** (`reconcileAmazonNames` em `sync.js`, agendado em `server.js`)
+  busca um relatório curto dos últimos `AMAZON_NAMES_DAYS` dias (padrão 2) via `amazon.fetchRecentNamedOrders()` —
+  a Reports API tem **balde de cota próprio**, então não concorre com o sync de pedidos nem provoca 429 — e preenche
+  os títulos por id com `store.patchOrderItems()`.
+- **`patchOrderItems(orders)` (`store.js`):** casa por id e **só sobrescreve `items[]`** (quando o relatório trouxe
+  título), **sem tocar em `total`/`status`/`state`** — que continuam vindo da Orders API. Isso evita flip-flop do
+  valor entre as duas fontes (o `total` do relatório é somado dos itens e pode divergir do `OrderTotal`). Pedido que
+  ainda não existe no store é inserido inteiro (não se perde). Marca o índice em memória como sujo.
+- **Agendamento:** job próprio, **fora do `runSync`** (para não travar o "Sincronizar agora", já que o relatório leva
+  ~1-2 min). Roda 3 min após subir e a cada 6h; a função só dispara um relatório se já passou
+  `AMAZON_NAMES_EVERY_HOURS` (padrão 12h) desde o último, **por mercado** (throttle via cursor `names-<market>` em
+  `kv.amazonCursors`). Pulado enquanto um backfill roda (não disputar a cota da Reports API).
+- **Disparo manual:** `POST /api/amazon/sync-names?market=us|br` (ignora o throttle, roda em background). Útil para
+  verificar logo após deploy sem esperar o job automático. Sem `market` → US e BR.
+- **Cobertura:** com janela de 2 dias e cadência de 12h, todo pedido novo é visto várias vezes na sua primeira
+  janela, então o título entra em até ~12h após a criação (o pedido e o valor aparecem na hora, via Orders API).
+- **⚠️ Preservação de título no `upsertOrders` (corrigido 10/07/2026 — bug que esvaziava Segmentos/Produtos):** o sync
+  de pedidos (Orders API) roda a cada 15 min re-baixando pedidos **recém-atualizados** (pending→shipped, captura de
+  pagamento) — e regravava esses pedidos com `items` de **título vazio**, apagando os nomes que o backfill/reconciliação
+  tinham preenchido. Resultado: num dia de US$ 4k, a tela de Segmentos mostrava só ~3 unidades (só os poucos pedidos que
+  não foram re-sincronizados depois de nomeados). **Correção:** `upsertOrders` agora **preserva `items` já titulados**
+  quando o pedido que chega vem 100% sem título (`o.items.every(!title)` e o existente tem título) — mantém `total`/
+  `status` do pedido novo (Orders API é a fonte deles), só não deixa apagar os nomes. Para outros canais o item sempre
+  tem título, então a guarda nunca dispara. **Depois de deployar, rodar `POST /api/amazon/sync-names?market=us` uma vez**
+  para re-preencher os títulos já apagados — a partir daí eles **grudam**.
+- **⚠️ Receita por item escalada ao total capturado (`amazonRevFactor`, corrigido 10/07/2026):** os itens da Amazon
+  vêm do relatório com **preço bruto**, e pedidos **Pending** têm `total: 0` até a captura no envio. Como Segmentos/
+  Produtos/Top Produtos somavam `item.amount` (bruto), num dia de **US$ 5k capturado** a tela de Segmentos mostrava
+  **US$ 17k** (contava pedidos ainda não capturados a preço cheio). `amazonRevFactor(o)` em `metrics.js` escala a
+  receita dos itens para o `o.total` do pedido (fonte de verdade em todo o app): captado → itens somam o total;
+  Pending → 0. Só afeta a Amazon (outros canais retornam fator 1). **Unidades continuam contando todas** (unidades
+  pedidas), só a receita respeita a captura. Aplicado em `aggregateProductsByChannel` (Produtos/Estoque/Top Produtos)
+  e na agregação de Segmentos.
+- **Tela de Segmentos (`segmentos.html`, 10/07/2026):** ganhou **seletor de canal** (dropdown por mercado — o backend
+  já filtra os segmentos pelo `channel` do `/api/dashboard`) e **"ver mais/ver menos"** nos top produtos (o backend
+  passou a devolver a lista completa em `segments[k].topProducts`, a tela mostra 5 e expande).
+- **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
+  é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog item 10).
+
+#### 4.7.7 ⚠️ INCIDENTE 10/07/2026 — disco do Postgres cheio (recuperado via resize)
+- **O que aconteceu:** o backfill de **365 dias** trouxe **359.626 pedidos** US. O `upsertOrders` fazia **um `INSERT`
+  autocommit por pedido** — ~30 mil por chunk despejados de uma vez geraram um **pico de WAL** que **encheu o volume
+  do Postgres**, que estava em **apenas 500 MB**. O banco caiu com `No space left on device` no `pg_wal` e entrou em
+  **loop de recuperação** (o health check reiniciava antes de o replay concluir; sem espaço, o checkpoint não fechava).
+- **Como foi recuperado (SEM perda de dados):** o volume do Railway tem um botão **"Live resize"** e o plano **Hobby
+  permite até 5 GB** de storage (estava em 500 MB por padrão — não é limite do plano). Aumentar para **5 GB** deu espaço
+  para a recuperação concluir; o banco voltou com **todos os 359.626 pedidos, tokens e dados manuais intactos**. Não
+  houve reset. Custo: o Railway cobra só pelo uso real, então subir o teto do volume é barato.
+- **Lição:** o `pg_wal` bloat de um bulk insert autocommit derruba um volume pequeno; **o padrão de 500 MB era o gargalo
+  invisível**. Se o disco encher de novo, o primeiro reflexo é **Live resize** (até 5 GB no Hobby), não reset.
+- **Correção 1 — gravação em lote (`store.js`):** `pgUpsertOrders` faz `INSERT` multi-linha (lotes de `PG_BATCH`=500,
+  `ON CONFLICT DO UPDATE SET data=EXCLUDED.data`) em vez de uma query por pedido. ~60 statements por chunk em vez de
+  30 mil → uma fração do WAL. `upsertOrders` e `patchOrderItems` passam por ele. **É o que impede o pico de WAL repetir.**
+- **Correção 2 — poda de retenção (`store.js` `pruneOrders` + `sync.js`):** a cada sync, remove pedidos **só da Amazon**
+  (`amazon`/`amazon_us`) mais antigos que `AMAZON_RETENTION_DAYS`. **Opt-in: padrão `0` = DESLIGADA** — de propósito,
+  para um deploy nunca apagar dados sozinho (com padrão 90 teria apagado 9 meses recém-recuperados). Defina a env var
+  para ativar: **`AMAZON_RETENTION_DAYS=365`** = janela móvel de 1 ano (o que rodamos hoje — cabe nos 5 GB com o batch
+  insert). Shopify/Shopee/ML ficam completos. `DELETE ... WHERE data->>'channel' = ANY($1) AND data->>'createdAt' < $2`.
+  Autovacuum reaproveita o espaço; para devolver disco ao SO de fato, rodar `VACUUM FULL orders` uma vez após uma poda.
+- **Estado (10/07/2026):** 365 dias de Amazon US mantidos no Hobby com volume de 5 GB. `AMAZON_RETENTION_DAYS=365` no
+  Railway mantém a janela móvel; o sync diário adiciona ~30 mil/mês e a poda tira o que passa de 1 ano → tamanho estável.
+
+#### 4.7.8 ⚠️ Vazamento de mercado: pedidos US gravados como Amazon BR (corrigido 13/07/2026)
+- **Sintoma:** o card de Produtos do **Brasil** mostrava pedidos da Amazon **US** — canal `amazon` (BR) com
+  US$ 97.762 / 3.367 pedidos / 32 produtos, **todos com título em inglês** ("Cranberry for Dogs",
+  "L-Lysine for Cats 900mg", "Turmeric for Dogs"). Inflava a receita do BR em todas as telas (dashboard,
+  Produtos, Estoque, Segmentos, Geografia BR — todas leem `getOrders({market:'br'})`).
+- **Causa raiz — relatório cego-tagueado + insert na reconciliação:** `reconcileAmazonNames` roda para
+  `['us','br']` (job a cada 6h). Para `br`, `fetchRecentNamedOrders` pede o relatório `ALL_ORDERS` e
+  `ordersFromRows(rows, MARKETPLACE_ID_BR)` **tagueava toda linha** como `market:'br'`/`channel:'amazon'`/
+  id `amazon-br:<id>`, **sem checar o marketplace real da linha**. O relatório "BR" vinha contaminado com
+  pedidos US (tokens iguais / a conta US enxerga o relatório), e `patchOrderItems` **inseria** esses ids
+  inexistentes como pedidos Amazon BR novos. (A Orders API do sync tagueia por `o.MarketplaceId` e vem sem
+  título, então **só o caminho da Reports API** produzia esse lixo — por isso todos tinham nome em inglês.)
+- **Correções (defesa em profundidade):**
+  1. **`patchOrderItems` não insere mais** (`allowInsert` padrão `false`) — a reconciliação só CORRIGE TÍTULO
+     de pedido que a Orders API (fonte de verdade do pedido e do mercado) já gravou. O sync roda a cada 15 min
+     e sempre insere o pedido antes da reconciliação (12h), então o insert nunca era necessário.
+  2. **`ordersFromRows` valida o mercado real por linha** (`rowMarket`) e descarta linha de outro mercado —
+     um backfill/relatório contaminado não grava mais pedido no mercado errado.
+     - ⚠️ **A 1ª versão usava a MOEDA (`currency`) e FALHOU** (13/07/2026): o backfill BR gravou o catálogo US
+       de novo. Motivo: as contas **CocoandLuna (BR)** e **VITA PET LIFE (US)** são **VINCULADAS na Amazon**
+       (tokens são DIFERENTES — não é o bug de token igual), e o relatório ALL_ORDERS **ignora o filtro
+       `marketplaceIds`** e devolve os dois mercados juntos, reportando **tudo em BRL** no contexto BR — então
+       `currency` não discrimina. (A Orders API respeita o filtro; por isso o sync traz só o mercado certo.)
+     - **Correção:** `rowMarket` usa o **país de entrega (`ship-country`)** — físico, não reescrito pelo
+       contexto do relatório (pedido entregue nos EUA é `US` sempre); fallback por `sales-channel`. NÃO usar
+       moeda nem `ship-state` (siglas de UF BR colidem com estados US: SC, PA, MA, MT, MS, AL, PR, AP).
+     - **Diagnóstico:** `GET /api/amazon/report-columns?market=br` (`inspectReport`) devolve as COLUNAS reais
+       do relatório + amostra dos campos de mercado + proporção US/BR — confirmar o discriminador certo antes
+       de reconfiar no backfill BR. Enquanto não confirmado, **não rodar `backfill?market=br`**.
+  3. **`inferMarket` (store.js)** passou a mapear `channel === 'amazon_us'` → `us` (defensivo; pedido US sem
+     campo `market` não cai mais em BR).
+  4. **Limpeza do já gravado:** `POST /api/amazon/cleanup-market-leak` (`removeAmazonMarketLeak`) remove
+     `channel:'amazon'` + `market:'br'` por dois sinais, ambos exclusivos da Reports API (o Amazon BR nunca
+     passou por ela — nenhum backfill BR rodado, backlog item 11): **(a) item titulado** (pedido US enviado/
+     pendente vazado) e **(b) `status === 'Cancelled'` com R$ 0 e sem item** — a grafia com DOIS L que só o
+     relatório grava (a Orders API grava `'Canceled'`, um L); pega o pedido US cancelado, que no relatório não
+     vira linha de item (fica sem título/R$ 0) e escaparia do sinal (a). **Cuidado:** casar `'Canceled'` (um L)
+     apagaria cancelamento BR real — casar sempre exatamente `'Cancelled'`. Idempotente. **Rodar UMA vez após
+     o deploy.** ⚠️ Não re-rodar se um dia um backfill BR de verdade for feito (aí pedido BR real teria título/
+     grafia de relatório).
+
+#### 4.7.9 Nome de produto do Amazon BR: caminho getOrderItems + o 400 nos pedidos 701-/702- (13/07/2026)
+- **Contexto:** tentativa de obter os nomes de produto do Amazon BR (backlog item 11). O relatório (Reports API)
+  NÃO serve pro BR: `inspectReport?market=br` (2 dias) devolveu 1815 linhas, **1811 US / 0 BR** — o relatório do
+  marketplace BR vem dominado por pedidos US (`ship-country=US`, `sales-channel="Non-Amazon US"`). Por isso o
+  caminho passou a ser o `getOrderItems` (por-pedido).
+- **HIPÓTESE DESCARTADA (eu errei):** cheguei a concluir que `AMAZON_BR_REFRESH_TOKEN` autorizava a conta US
+  errada. **`getMarketplaceParticipations` (`/api/amazon/whoami`) provou o contrário:** os dois tokens
+  (`AMAZON_REFRESH_TOKEN` e `AMAZON_BR_REFRESH_TOKEN`) enxergam **exatamente os mesmos 10 marketplaces**,
+  **incluindo `A2Q3Y263D00KWC` (Amazon.com.br) com `participating: true`**. Ou seja, é **uma conta unificada da
+  América do Norte** (US+CA+MX+BR) e o token TEM acesso ao Brasil. Não é problema de token/conta.
+- **CAUSA REAL (apurada 13/07/2026):** o app tem acesso de **LISTAGEM** aos pedidos BR, mas **NÃO** aos
+  **detalhes**. Prova via `probe-order` num pedido `701-`: `getOrder` devolve `{ payload: {} }` (vazio, sem
+  erro) e `getOrderItems` dá **400 InvalidInput COM e SEM RDT** (logo não é LGPD/RDT). Decisivo: o **mesmo token
+  BR** lê itens de pedido **US** (`111-/112-`) mas falha no pedido **BR** (`701-/702-`) — muda só o pedido, então
+  a trava é do **marketplace Brasil**. Bate com o relatório BR vir sem os pedidos BR. Ou seja: **participar do
+  marketplace (whoami) ≠ ter autorização de detalhe de pedido nele**. É uma **limitação de autorização do app no
+  lado da Amazon, específica do Brasil** — resolver no portal (Seller Central / autorização do app pro
+  marketplace BR), NÃO no código. Enquanto isso, o Amazon BR mostra valor/qtd/pedidos corretos, só sem nome de
+  produto. Diagnósticos deixados prontos: `GET /api/amazon/whoami`, `GET /api/amazon/probe-order?id=<id>&market=`,
+  `GET /api/amazon/report-columns?market=`.
+- **Caminho de nome de produto BR:** `enrichAmazonItems({market:'br'})` em `sync.js` — busca
+  `/orders/v0/orders/{id}/orderItems` (traz `Title`) pedido a pedido (BR tem volume baixo; o US continua na
+  Reports API). Disparo manual: `POST /api/amazon/fetch-items?market=br`; progresso em `/api/status →
+  amazon.items`. Trava `ABORT_AFTER=15` (aborta a rodada se muitas chamadas seguidas falham, pra não desperdiçar).
+  Funciona para os pedidos que o getOrderItems aceita; os `701-/702-` ficam pendentes até entendermos o 400.
 
 #### 4.7.4 Detalhes operacionais
 - **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
@@ -257,8 +390,12 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Variável fantasma:** `AMAZON_RESET_BACKOFF` já existiu como variável no Railway mas **nunca foi lida por nenhum
   código** (nem hoje, nem no histórico do git) — não faz nada, pode remover. O reset real é o endpoint
   `POST /api/amazon/reset-backoff`.
-- **`byState` da Amazon US traz grafias inconsistentes** (`"UT"` e `"Ut"` como chaves distintas), porque
-  `ShippingAddress.StateOrRegion` não é normalizado pela Amazon. Ainda não tratado — ver backlog.
+- **`byState` da Amazon US traz grafias inconsistentes** (`"California"`, `"CALIFORNIA"`, `"CA"`, `"CA."`, `"N.Y."`,
+  `"PUERTO RICO"`... como chaves distintas), porque `ShippingAddress.StateOrRegion` / `ship-state` não são
+  normalizados pela Amazon. **Resolvido 10/07/2026** — `src/us-states.js` (`normalizeUsState`) reduz qualquer variante
+  ao código de 2 letras. Aplicado (a) na agregação, em `metrics.js` ao montar `byState` quando `market==='us'` (conserta
+  os 359 mil pedidos já gravados sem re-gravar nada) e (b) na gravação, em `amazon.js` (`fetchOrders`/`ordersFromRows`),
+  para dado novo já entrar limpo. Ver 4.10.
 
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
@@ -390,6 +527,14 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Popup ao clicar:** receita, pedidos, ticket médio, % do total.
 - **Modal de estado:** clique em card de ranking abre modal com 4 KPIs + gráfico de barras comparativo.
 - **Dados:** campo `byState` do `/api/dashboard` → `{ [UF]: { revenue, orders } }`. `byState` filtra `o.total > 0`.
+- **Normalização de estado US:** as chaves de `byState` no mercado US passam por `normalizeUsState` (`src/us-states.js`),
+  que reduz as várias grafias da Amazon (`"California"`/`"CALIFORNIA"`/`"CA"`/`"CA."`/`"N.Y."`, e o typo `"MARULAND"`→MD)
+  ao código de 2 letras — senão cada variante virava uma linha no ranking e o mapa (que casa por código `_uf`) subcontava.
+- **Agrupamento de não-EUA (`INTL`):** ainda em `byState` US, o que **não** é uma região dos EUA (`isUsRegionCode` falso —
+  ex.: províncias do Canadá) é agrupado num único bucket **`'INTL'`**, em vez de aparecer como cada país no ranking. Não
+  perde receita. Territórios (PR, DC, VI, GU, AS) e endereços militares (AA/AE/AP) **contam como EUA** e ficam como linha
+  própria. Em `geografia-us.html`, `STATE_NAMES` rotula território/militar/`INTL` ("Porto Rico", "Militar (Europa)",
+  "Outros (internacional)"), e o KPI "Estados com vendas" conta só os 50 estados de fato (`US_50`). Ver 4.7.5.
 
 ### 4.12 Google Ads — EUA apenas (implementado 01/07/2026)
 - Implementado em `src/googleads.js`. OAuth 2.0 (authorization_code) + refresh_token de longa duração, seguindo o mesmo padrão de `mercadolivre.js` (`/googleads/connect` → autoriza → `/googleads/callback` troca `code` por tokens, salvos no store via `kv.googleAdsTokens`).
@@ -670,6 +815,9 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 | `AMAZON_BR_REFRESH_TOKEN` | LWA Refresh Token da conta **CocoandLuna** (BR). **Nunca igual ao de cima** — ver 4.7.1 |
 | `AMAZON_BACKFILL_DAYS` | Janela só da 1ª carga, antes de existir cursor (padrão `2`). Ver 4.7.3 |
 | `AMAZON_FETCH_PII` | `1` liga a busca do nome do comprador via RDT — só se o papel PII for aprovado pela Amazon |
+| `AMAZON_NAMES_EVERY_HOURS` | Intervalo mínimo entre reconciliações de nome de produto da Amazon, por mercado (padrão `12`). Ver 4.7.6 |
+| `AMAZON_NAMES_DAYS` | Janela (dias) do relatório de reconciliação de nomes (padrão `2`). Ver 4.7.6 |
+| `AMAZON_RETENTION_DAYS` | Só Amazon: poda pedidos mais antigos que N dias a cada sync. **Opt-in, padrão `0` (desligada)**. `365` = janela móvel de 1 ano (em uso). Ver 4.7.7 |
 | `AMAZON_ROLE_ARN` | ARN do IAM Role com permissões SP-API — compartilhado entre EUA e BR |
 | `AMAZON_AWS_ACCESS_KEY` | Access Key do IAM User com permissão `sts:AssumeRole` no role acima |
 | `AMAZON_AWS_SECRET_KEY` | Secret Key do mesmo IAM User |
@@ -709,6 +857,10 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `POST /api/amazon/images?market=us|br` — preenche o cache de imagem de produto (Catalog Items
     API por ASIN), em background. Responde na hora; progresso em `GET /api/status` → `amazon.images`.
     Só acha ASIN em pedidos que já passaram pelo backfill. Ver 4.13.
+  - `POST /api/amazon/sync-names?market=us|br` — reconcilia nomes de produto (Reports API), em background,
+    ignorando o throttle. Sem `market` → US e BR. Ver 4.7.6.
+  - `POST /api/amazon/cleanup-market-leak` — remove pedidos US que foram gravados como Amazon BR (vazamento
+    de mercado). Idempotente; rodar uma vez após o deploy da correção. Ver 4.7.8.
   - `GET /shopee/connect` e `GET /shopee/callback`
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /googleads/connect` e `GET /googleads/callback`
@@ -757,14 +909,16 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 5. ~~**Amazon US na produção.**~~ **Resolvido 09/07/2026** — ver 4.7.2. Era paginação, não cota/autorização.
 6. ~~**Amazon — backfill histórico dos EUA.**~~ **Resolvido 09/07/2026** — ver 4.7.5. 83.897 pedidos (90 dias) em 4min40s.
 7. ~~**Amazon — `byState` com grafia inconsistente.**~~ **Resolvido 09/07/2026** — `ship-state`/`StateOrRegion` normalizados para maiúsculas.
-8. **⚠️ Amazon — sync contínuo não traz nome de produto (ver 4.7.6).** O backfill via Reports API preenche `items[].title`,
-   mas o `fetchOrders()` do sync (Orders API) não — pedidos novos entram com `title: ''` e as telas de Produtos/Estoque
-   vão desatualizando. **Prioridade alta**, já que o backfill acabou de tornar essas telas úteis para a Amazon.
-   Correção: usar a Reports API também no sync (relatório dos últimos ~2 dias, 1×/dia — balde de cota próprio).
-9. **Performance do `store.js` com volume alto:** o backfill levou o banco de ~1 mil para ~85 mil pedidos.
-   `store.js` carrega todos em memória no start e `getOrders()` faz `Object.values()` + filtros a cada request.
-   `/api/dashboard` de 90 dias saiu de ~200ms para **~2,1s** (medido em produção 09/07/2026). Ainda usável, mas
-   piora linearmente. Corrigir com índice por mercado/canal em memória, ou empurrar o filtro para o Postgres.
+8. ~~**Amazon — sync contínuo não traz nome de produto.**~~ **Resolvido 10/07/2026** — ver 4.7.6. Job separado
+   (`reconcileAmazonNames`) busca um relatório curto (últimos 2 dias, Reports API, balde de cota próprio) e preenche
+   `items[].title` por id via `patchOrderItems`, sem tocar em `total`/`status`. Roda a cada 6h com throttle de 12h por
+   mercado; disparo manual em `POST /api/amazon/sync-names`.
+9. ~~**Performance do `store.js` com volume alto.**~~ **Resolvido 10/07/2026** — ver 3 (índice em memória do
+   `getOrders`). Era `Object.values()` + várias passadas de `.filter()` reparsando `Date.parse()` a cada request
+   (~6×/dashboard). Trocado por índice por mercado ordenado por timestamp + busca binária na janela de datas.
+   Benchmark local (300 mil pedidos, dataset sintético maior que o alvo de 365 dias): ~288ms → ~4,7ms por request
+   (~60×), com os 9 cenários de filtro batendo exatamente contra a lógica antiga. Pré-requisito do backfill de
+   365 dias da Amazon US (ver 4.7.5).
 10. **Amazon — nome do comprador (PII):** hoje `customer` vem vazio. Exige o papel PII aprovado pela Amazon no
    Solution Provider Portal; depois é só ligar `AMAZON_FETCH_PII=1` no Railway (código já pronto). Ver 4.7.4.
    (O relatório de backfill também não traz o nome — é dado restrito nos dois caminhos.)
