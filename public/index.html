@@ -852,7 +852,8 @@ function render(d) {
   // Recent orders (paginado — RO_PAGE_SIZE por página; backend devolve até 100)
   _roAll = d.recentOrders || [];
   _roIsAllCh = isAllCh;
-  renderOrdersPage();
+  if (_roFilter.trim()) doSearch();  // busca ativa: re-consulta o histórico do mercado atual
+  else renderOrdersPage();
 
   const now=new Date(), hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
   setLive('ok',`Ao vivo · ${hh}:${mm}`);
@@ -861,37 +862,67 @@ function render(d) {
   updateCardVisibility();
 }
 
-// ── Pedidos recentes: paginação + busca client-side ──
+// ── Pedidos recentes: paginação + busca GERAL (histórico inteiro via backend) ──
 const RO_PAGE_SIZE = 10;
-let _roAll = [];
+let _roAll = [];        // pedidos recentes do período (do /api/dashboard)
+let _roSearch = [];     // resultados da busca geral (do /api/orders/search)
 let _roPage = 0;
 let _roIsAllCh = true;
 let _roFilter = '';
+let _roMode = 'recent'; // 'recent' | 'search'
+let _roSearchTotal = 0;
+let _roLimited = false;
+let _roLoading = false;
+let _roSeq = 0;         // descarta respostas de busca fora de ordem
 
-// Texto pesquisável de um pedido: nº, cliente, status (cru + rótulo pt-BR), canal (id + rótulo) e valor.
-function orderSearchText(o) {
-  const st = statusTag(o);
-  const chLabel = (window.CocoColors && CocoColors.ch[o.channel] && CocoColors.ch[o.channel].label) || o.channel || '';
-  return [o.name, o.customer, o.status, st.label, o.channel, chLabel, o.total]
-    .filter(v => v != null && v !== '').join(' ').toLowerCase();
+// Lista atualmente exibida no card (recentes ou resultado da busca geral).
+function activeOrders() { return _roMode === 'search' ? _roSearch : _roAll; }
+
+// Busca geral no backend: varre TODO o histórico do mercado atual (todos os canais, sem janela
+// de data). Escopo por mercado para não misturar BRL/USD. Chamada com debounce pelo input.
+async function doSearch() {
+  const q = _roFilter.trim();
+  if (!q) { _roMode = 'recent'; _roLoading = false; _roPage = 0; renderOrdersPage(); return; }
+  const seq = ++_roSeq;
+  _roMode = 'search'; _roLoading = true; renderOrdersPage();
+  try {
+    const r = await fetch(`/api/orders/search?market=${market}&q=${encodeURIComponent(q)}`, { credentials: 'same-origin' });
+    const data = await r.json();
+    if (seq !== _roSeq) return;   // uma busca mais nova já disparou; descarta esta resposta
+    _roSearch = data.results || [];
+    _roSearchTotal = data.total || 0;
+    _roLimited = !!data.limited;
+  } catch (e) {
+    if (seq !== _roSeq) return;
+    _roSearch = []; _roSearchTotal = 0; _roLimited = false;
+  }
+  _roLoading = false; _roPage = 0; renderOrdersPage();
 }
-// Filtra por termos (todos precisam bater — busca estilo "amazon pendente").
-function filteredRecentOrders() {
-  const q = _roFilter.trim().toLowerCase();
-  if (!q) return _roAll;
-  const terms = q.split(/\s+/);
-  return _roAll.filter(o => { const t = orderSearchText(o); return terms.every(term => t.includes(term)); });
+let _roDebounce = null;
+function scheduleSearch() {
+  clearTimeout(_roDebounce);
+  if (!_roFilter.trim()) { doSearch(); return; }  // limpar volta pros recentes na hora
+  _roDebounce = setTimeout(doSearch, 300);
 }
 
 function renderOrdersPage() {
   const body = document.getElementById('ordersBody');
   const pager = document.getElementById('ordersPager');
   const meta = document.getElementById('ordersMeta');
-  const ro = filteredRecentOrders();
-  const filtering = _roFilter.trim() !== '';
-  if (meta) meta.textContent = filtering ? `${ro.length} de ${_roAll.length} pedidos` : (_roAll.length ? `${_roAll.length} pedidos` : '0 pedidos');
+  const searching = _roMode === 'search';
+  const ro = activeOrders();
+  if (meta) {
+    meta.textContent = _roLoading ? 'Buscando…'
+      : searching ? `${_roSearchTotal} resultado${_roSearchTotal === 1 ? '' : 's'}${_roLimited ? ` (mostrando ${ro.length})` : ''}`
+      : (_roAll.length ? `${_roAll.length} pedidos` : '0 pedidos');
+  }
+  if (_roLoading && !ro.length) {
+    body.innerHTML = '<tr><td colspan="7" class="muted-state">Buscando…</td></tr>';
+    pager.innerHTML = '';
+    return;
+  }
   if (!ro.length) {
-    body.innerHTML = `<tr><td colspan="7" class="muted-state">${filtering ? 'Nenhum pedido encontrado para a busca.' : 'Nenhum pedido.'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="muted-state">${searching ? 'Nenhum pedido encontrado para a busca.' : 'Nenhum pedido.'}</td></tr>`;
     pager.innerHTML = '';
     return;
   }
@@ -901,7 +932,7 @@ function renderOrdersPage() {
   const start = _roPage * RO_PAGE_SIZE;
   const pageItems = ro.slice(start, start + RO_PAGE_SIZE);
 
-  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=_roIsAllCh?chBadgeHTML(o.channel):`<span style="font-size:10px;color:var(--muted)">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?chBadgeHTML(o.channel):`<span style="font-size:10px;color:var(--muted)">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
   // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
   const roValidCount = ro.filter(o=>!o.cancelled).length;
   const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
@@ -1298,8 +1329,7 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
 // ── Busca de pedidos recentes ──
 document.getElementById('ordersSearch').addEventListener('input', e => {
   _roFilter = e.target.value;
-  _roPage = 0;            // volta pra primeira página a cada busca
-  renderOrdersPage();
+  scheduleSearch();       // busca geral no backend (debounce); vazio volta pros recentes
 });
 
 // ── Init ──
