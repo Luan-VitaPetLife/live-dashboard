@@ -406,6 +406,13 @@ app.get('/api/amazon/probe-order', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Diagnóstico: resposta CRUA do Catalog Items API pra um ASIN (por que a imagem volta vazia).
+app.get('/api/amazon/probe-image', async (req, res) => {
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  try { res.json(await amazon.probeImage(req.query.asin || null, market)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Diagnóstico: colunas reais do relatório da Amazon + amostra dos campos que decidem o
 // mercado (order-status/currency/sales-channel/ship-country/ship-state) e a proporção de
 // contaminação. Usado para confirmar o discriminador correto do rowMarket. Ver 4.7.8.

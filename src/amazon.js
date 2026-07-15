@@ -826,6 +826,38 @@ async function fetchCatalogImage(getLwa, asin, marketplaceId) {
   return null;
 }
 
+// Diagnóstico: chama o Catalog Items API de UM asin e devolve a resposta CRUA (ou o erro),
+// pra descobrir por que a busca de imagem volta vazia (falta de permissão do app? formato
+// diferente? asin não encontrado?). Se asin não for passado, pega um de um relatório curto.
+export async function probeImage(asin, market = 'us') {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const isUs = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  const out = { market, marketplaceId };
+
+  if (!asin) {
+    try {
+      const orders = await runOneReport({
+        getLwa, marketplaceId, label: 'ProbeImg',
+        startISO: new Date(Date.now() - 3 * 864e5).toISOString(),
+        endISO:   new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+      });
+      asin = orders.flatMap(o => o.items).map(it => it.asin).find(Boolean) || null;
+    } catch (e) { out.reportError = e.message; }
+  }
+  out.asin = asin;
+  if (!asin) { out.error = 'nenhum asin disponível pra testar'; return out; }
+
+  try {
+    const data = await spGet(getLwa, `/catalog/2022-04-01/items/${asin}`, {
+      marketplaceIds: marketplaceId, includedData: 'images',
+    });
+    out.raw = data;
+  } catch (e) { out.error = e.message; }
+  return out;
+}
+
 // Busca a imagem de cada ASIN da lista (um por vez, com throttle fixo). Devolve um
 // Map asin → url só com os que resolveram. Chamado pelo job de POST /api/amazon/images.
 export async function fetchProductImages(asins, market = 'us', onProgress) {
