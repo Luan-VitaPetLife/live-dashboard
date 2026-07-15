@@ -295,7 +295,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   valid.forEach(o => {
     const rf = amazonRevFactor(o); // escala receita ao total capturado (Amazon); ver 4.7.6
     o.items.forEach(it => {
-      if (!it.title) return;
+      if (!it.title || it.title.trim() === '-') return; // placeholder de frete/serviço da Amazon, ver amazon.js ordersFromRows
       const seg  = classifySeg(it);
       const type = classifyType(it);
       const qty  = it.qty || 1;
@@ -461,7 +461,10 @@ function aggregateProductsByChannel(orders) {
     c.orders += 1;
     const rf = amazonRevFactor(o);
     o.items.forEach(it => {
-      if (!it.title) return;
+      // "-" é o placeholder que o relatório da Amazon usa em linhas de frete/serviço/ajuste
+      // sem produto de verdade — tratado como ausente, igual título vazio (ver amazon.js
+      // ordersFromRows). Pedidos já gravados antes dessa correção ainda têm isso persistido.
+      if (!it.title || it.title.trim() === '-') return;
       // Produtos legados (combo de N unidades, "- N Pack" ou "Ng" múltiplo de 120g) vendidos
       // como SKU próprio (não via Shopify Bundles) somem da listagem — a venda é atribuída ao
       // produto-base (título normalizado, ver stripComboSuffix), contando como pacotes de combo
