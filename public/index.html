@@ -168,6 +168,12 @@
   .ro-pg-btn{font-size:12px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px 12px;cursor:pointer;transition:background .15s}
   .ro-pg-btn:hover:not(:disabled){background:var(--surface2)}
   .ro-pg-btn:disabled{opacity:.4;cursor:default}
+  .ro-head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .ro-search{display:flex;align-items:center;gap:6px;height:32px;padding:0 11px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);transition:border-color .15s}
+  .ro-search:focus-within{border-color:var(--ink)}
+  .ro-search i{font-size:12px;color:var(--muted)}
+  .ro-search input{border:none;background:transparent;outline:none;font-family:inherit;font-size:12px;color:var(--text);width:190px;max-width:46vw}
+  .ro-search input::placeholder{color:var(--muted)}
   footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
 
   /* ── Sidebar: comportamento de recolher afeta o .main (layout da página) ── */
@@ -468,7 +474,12 @@
       <div class="edit-card" data-card-id="recentOrders" data-title="Pedidos recentes" style="grid-column:span 12">
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card"><div class="card-pad">
-          <div class="card-top"><div><div class="ct-title">Pedidos recentes</div><div class="ct-sub">Mais recentes primeiro</div></div><span style="font-size:11px;color:var(--muted)" id="ordersMeta">—</span></div>
+          <div class="card-top"><div><div class="ct-title">Pedidos recentes</div><div class="ct-sub">Mais recentes primeiro</div></div>
+            <div class="ro-head-right">
+              <div class="ro-search"><i class="bi bi-search"></i><input type="search" id="ordersSearch" placeholder="Buscar cliente, nº, status, canal…" autocomplete="off" aria-label="Buscar pedidos"></div>
+              <span style="font-size:11px;color:var(--muted)" id="ordersMeta">—</span>
+            </div>
+          </div>
           <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Itens</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
           <tbody id="ordersBody"></tbody></table>
           <div id="ordersPager" class="orders-pager"></div>
@@ -841,7 +852,6 @@ function render(d) {
   // Recent orders (paginado — RO_PAGE_SIZE por página; backend devolve até 100)
   _roAll = d.recentOrders || [];
   _roIsAllCh = isAllCh;
-  document.getElementById('ordersMeta').textContent = _roAll.length?`${_roAll.length} pedidos`:'0 pedidos';
   renderOrdersPage();
 
   const now=new Date(), hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
@@ -851,18 +861,37 @@ function render(d) {
   updateCardVisibility();
 }
 
-// ── Pedidos recentes: paginação client-side ──
+// ── Pedidos recentes: paginação + busca client-side ──
 const RO_PAGE_SIZE = 10;
 let _roAll = [];
 let _roPage = 0;
 let _roIsAllCh = true;
+let _roFilter = '';
+
+// Texto pesquisável de um pedido: nº, cliente, status (cru + rótulo pt-BR), canal (id + rótulo) e valor.
+function orderSearchText(o) {
+  const st = statusTag(o);
+  const chLabel = (window.CocoColors && CocoColors.ch[o.channel] && CocoColors.ch[o.channel].label) || o.channel || '';
+  return [o.name, o.customer, o.status, st.label, o.channel, chLabel, o.total]
+    .filter(v => v != null && v !== '').join(' ').toLowerCase();
+}
+// Filtra por termos (todos precisam bater — busca estilo "amazon pendente").
+function filteredRecentOrders() {
+  const q = _roFilter.trim().toLowerCase();
+  if (!q) return _roAll;
+  const terms = q.split(/\s+/);
+  return _roAll.filter(o => { const t = orderSearchText(o); return terms.every(term => t.includes(term)); });
+}
 
 function renderOrdersPage() {
   const body = document.getElementById('ordersBody');
   const pager = document.getElementById('ordersPager');
-  const ro = _roAll;
+  const meta = document.getElementById('ordersMeta');
+  const ro = filteredRecentOrders();
+  const filtering = _roFilter.trim() !== '';
+  if (meta) meta.textContent = filtering ? `${ro.length} de ${_roAll.length} pedidos` : (_roAll.length ? `${_roAll.length} pedidos` : '0 pedidos');
   if (!ro.length) {
-    body.innerHTML = '<tr><td colspan="8" class="muted-state">Nenhum pedido.</td></tr>';
+    body.innerHTML = `<tr><td colspan="7" class="muted-state">${filtering ? 'Nenhum pedido encontrado para a busca.' : 'Nenhum pedido.'}</td></tr>`;
     pager.innerHTML = '';
     return;
   }
@@ -1264,6 +1293,13 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
   setLive('loading','Sincronizando…');
   try { await fetch('/api/sync',{method:'POST'}); } catch(e){}
   loadData();
+});
+
+// ── Busca de pedidos recentes ──
+document.getElementById('ordersSearch').addEventListener('input', e => {
+  _roFilter = e.target.value;
+  _roPage = 0;            // volta pra primeira página a cada busca
+  renderOrdersPage();
 });
 
 // ── Init ──
