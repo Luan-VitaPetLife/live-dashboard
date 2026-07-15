@@ -546,7 +546,11 @@ function ordersFromRows(rows, marketplaceId) {
     if (r['item-status'] === 'Cancelled' || o.cancelled) continue;
 
     o.total += amt;
-    if (r['product-name']) o.items.push({ title: r['product-name'], qty, amount: amt, asin: r['asin'] || null });
+    // Algumas linhas do relatório trazem product-name como "-" (frete/serviço/ajuste, sem
+    // produto de verdade) — não é vazio, então passava batido e virava um produto fantasma
+    // "-" agregando dezenas de pedidos com receita 0. Trata como ausente, igual string vazia.
+    const name = (r['product-name'] || '').trim();
+    if (name && name !== '-') o.items.push({ title: name, qty, amount: amt, asin: r['asin'] || null });
   }
 
   for (const o of byOrder.values()) o.total = Math.round(o.total * 100) / 100;
