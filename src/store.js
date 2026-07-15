@@ -36,6 +36,8 @@ const EMPTY = {
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
   amazonCursors: {},
+  amazonProductImages: {}, // { asin: url } — cache do Catalog Items API, ver amazon.js fetchProductImages
+  amazonImagesJob: null,   // progresso do job em background que preenche o cache acima
   // ── Autenticação (login/usuários) ──
   users: [],          // [{ id, username, name, role, salt, hash, pages:[], createdAt }]
   authConfig: null,   // { enabled: bool } — null = ainda não inicializado (initAuth semeia)
@@ -77,6 +79,8 @@ export async function initStore() {
       if (r.key === 'amazonBRBackoffCount')  cache.amazonBRBackoffCount  = Number(r.value);
       if (r.key === 'amazonCursors')         cache.amazonCursors         = r.value;
       if (r.key === 'amazonBackfill')        cache.amazonBackfill        = r.value;
+      if (r.key === 'amazonProductImages')   cache.amazonProductImages   = r.value;
+      if (r.key === 'amazonImagesJob')       cache.amazonImagesJob       = r.value;
       if (r.key === 'users')                 cache.users                 = r.value;
       if (r.key === 'authConfig')            cache.authConfig            = r.value;
       if (r.key === 'authSessions')          cache.authSessions          = r.value;
@@ -309,6 +313,21 @@ export function setAmazonBackfill(state) {
   if (USE_PG) pgKv('amazonBackfill', state);
 }
 export function getAmazonBackfill() { return load().amazonBackfill || null; }
+
+// ── Cache de imagem de produto Amazon por ASIN (Catalog Items API) ──
+// Preenchido pelo job de POST /api/amazon/images — a Orders API e o relatório de
+// backfill não trazem imagem, só o Catalog Items API por ASIN. Ver amazon.js.
+export function getAmazonProductImages() { return load().amazonProductImages || {}; }
+export function setAmazonProductImages(map) {
+  const db = load(); db.amazonProductImages = map; saveJson();
+  if (USE_PG) pgKv('amazonProductImages', map);
+}
+
+export function setAmazonImagesJob(state) {
+  const db = load(); db.amazonImagesJob = state; saveJson();
+  if (USE_PG) pgKv('amazonImagesJob', state);
+}
+export function getAmazonImagesJob() { return load().amazonImagesJob || null; }
 
 // ── Autenticação (login/usuários/sessões) ─────
 // Toda a lógica (hash, sessão, permissão) vive em src/auth.js; aqui só a persistência,

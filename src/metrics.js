@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, load } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getAmazonProductImages, load } from './store.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -420,6 +420,11 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 function aggregateProductsByChannel(orders) {
   const seenBundleIds = new Set();
   const byChannel = {};
+  // Amazon não traz imagem nem na Orders API nem no relatório de backfill — só o
+  // Catalog Items API por ASIN (job separado, POST /api/amazon/images). `it.asin` só
+  // existe em itens Amazon vindos do backfill; nos demais canais fica undefined e o
+  // lookup abaixo simplesmente não bate em nada.
+  const amazonImages = getAmazonProductImages();
   orders.forEach(o => {
     if (!byChannel[o.channel]) byChannel[o.channel] = { revenue: 0, orders: 0, products: {} };
     const c = byChannel[o.channel];
@@ -439,6 +444,7 @@ function aggregateProductsByChannel(orders) {
       p.revenue += it.amount || 0;
       if (!p.type) p.type = classifyType(it);
       if (!p.image && it.image) p.image = it.image;
+      if (!p.image && it.asin && amazonImages[it.asin]) p.image = amazonImages[it.asin];
 
       if (taggedSize) {
         const packages = qty; // aqui o item É o produto-combo: qty = nº de pacotes comprados

@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock } from './src/metrics.js';
 import { runSync } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, upsertOrders, load } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -286,6 +286,52 @@ app.post('/api/amazon/backfill', (req, res) => {
   res.json({ ok: true, message: `Backfill de ${days} dias (${market.toUpperCase()}) iniciado. Acompanhe em GET /api/status.` });
 });
 
+// Preenche o cache de imagem de produto Amazon (Catalog Items API por ASIN — nem a
+// Orders API nem o relatório de backfill trazem imagem). Roda em background (um ASIN
+// por vez, throttled) e responde na hora. Progresso em GET /api/status → amazon.images.
+// Só encontra ASIN em pedidos que já passaram pelo backfill (ver CLAUDE.md 4.7.5/4.7.6);
+// pedidos só do sync contínuo não têm asin/título e continuam sem imagem até serem
+// reconciliados por um novo backfill.
+let imagesJobRunning = false;
+app.post('/api/amazon/images', (req, res) => {
+  if (imagesJobRunning) return res.status(409).json({ error: 'Busca de imagens já em andamento.' });
+
+  const market = req.query.market === 'br' ? 'br' : 'us';
+  const channel = market === 'br' ? 'amazon' : 'amazon_us';
+  const cached = getAmazonProductImages();
+  const asins = [...new Set(
+    getOrders({ channel, market })
+      .filter(o => !o.cancelled)
+      .flatMap(o => o.items)
+      .map(it => it.asin)
+      .filter(asin => asin && !cached[asin])
+  )];
+
+  if (!asins.length) {
+    return res.json({ ok: true, message: 'Nenhum ASIN novo para buscar (já cacheado, ou pedidos ainda sem ASIN — rode o backfill primeiro).' });
+  }
+
+  imagesJobRunning = true;
+  setAmazonImagesJob({ status: 'running', market, total: asins.length, found: 0, message: 'iniciando', startedAt: new Date().toISOString() });
+
+  (async () => {
+    try {
+      const found = await amazon.fetchProductImages(asins, market, message =>
+        setAmazonImagesJob({ status: 'running', market, total: asins.length, found: 0, message, startedAt: new Date().toISOString() })
+      );
+      setAmazonProductImages({ ...getAmazonProductImages(), ...Object.fromEntries(found) });
+      setAmazonImagesJob({ status: 'done', market, total: asins.length, found: found.size, message: `concluído — ${found.size}/${asins.length} imagens encontradas`, finishedAt: new Date().toISOString() });
+    } catch (e) {
+      setAmazonImagesJob({ status: 'error', market, total: asins.length, found: 0, message: e.message, finishedAt: new Date().toISOString() });
+      console.error('Busca de imagens Amazon falhou:', e.message);
+    } finally {
+      imagesJobRunning = false;
+    }
+  })();
+
+  res.json({ ok: true, message: `Buscando imagem de ${asins.length} ASINs (${market.toUpperCase()}). Acompanhe em GET /api/status.` });
+});
+
 // Forçar uma sincronização manual (protegido por token)
 app.post('/api/sync', async (req, res) => {
   const secret = process.env.SYNC_SECRET;
@@ -371,6 +417,7 @@ app.get('/api/status', (_req, res) => {
       backoffUntil:  backoffActive ? new Date(backoffUntil).toISOString() : null,
       nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
       backfill:      getAmazonBackfill(),
+      images:        getAmazonImagesJob(),
     },
     amazon_br: {
       // US e BR usam o mesmo app/token e o mesmo balde de cota (chamada combinada).
