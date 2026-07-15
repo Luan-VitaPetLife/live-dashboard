@@ -546,7 +546,7 @@ function ordersFromRows(rows, marketplaceId) {
     if (r['item-status'] === 'Cancelled' || o.cancelled) continue;
 
     o.total += amt;
-    if (r['product-name']) o.items.push({ title: r['product-name'], qty, amount: amt });
+    if (r['product-name']) o.items.push({ title: r['product-name'], qty, amount: amt, asin: r['asin'] || null });
   }
 
   for (const o of byOrder.values()) o.total = Math.round(o.total * 100) / 100;
@@ -710,7 +710,7 @@ export async function fetchOrderItems(orderId, { market = 'br' } = {}) {
       const title = it.Title || '';
       const qty   = Number(it.QuantityOrdered || 0);
       const amount = Number(it.ItemPrice?.Amount || 0); // preço da LINHA (não por unidade)
-      if (title) items.push({ title, qty, amount });
+      if (title) items.push({ title, qty, amount, asin: it.ASIN || null });
     }
     nextToken = data.payload?.NextToken || null;
   } while (nextToken);
@@ -789,5 +789,56 @@ export async function probeOrder(orderId, market = 'br') {
     }
   } catch (e) { out.rdtError = e.message; }
 
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Catalog Items API — imagem de produto por ASIN
+//
+//  Nem a Orders API nem o relatório de backfill trazem imagem — só o Catalog Items
+//  API, um lookup por ASIN. Balde de cota PRÓPRIO (não compete com /orders nem
+//  /reports). Mesmo assim, dado o histórico de 429 desta conta (ver CLAUDE.md
+//  4.7.2/4.7.4), o throttle abaixo é deliberadamente conservador em vez de tentar
+//  espremer o limite documentado da Amazon para esse endpoint.
+// ═══════════════════════════════════════════════════════════════════════════════
+const CATALOG_THROTTLE_MS = 600;
+const CATALOG_MAX_TRIES   = 3;
+
+async function fetchCatalogImage(getLwa, asin, marketplaceId) {
+  for (let attempt = 1; attempt <= CATALOG_MAX_TRIES; attempt++) {
+    try {
+      const data = await spGet(getLwa, `/catalog/2022-04-01/items/${asin}`, {
+        marketplaceIds: marketplaceId, includedData: 'images',
+      });
+      const imgs = data.images?.find(g => g.marketplaceId === marketplaceId)?.images
+                 || data.images?.[0]?.images || [];
+      const main = imgs.find(i => i.variant === 'MAIN') || imgs[0];
+      return main?.link || null;
+    } catch (e) {
+      if (e.isRateLimit && attempt < CATALOG_MAX_TRIES) { await sleep(2000); continue; }
+      return null; // ASIN inválido, sem imagem cadastrada, ou erro — não trava o lote inteiro
+    }
+  }
+  return null;
+}
+
+// Busca a imagem de cada ASIN da lista (um por vez, com throttle fixo). Devolve um
+// Map asin → url só com os que resolveram. Chamado pelo job de POST /api/amazon/images.
+export async function fetchProductImages(asins, market = 'us', onProgress) {
+  const out = new Map();
+  if (!hasAwsCreds()) return out;
+  const isUs = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  if (isUs ? !isConfigured() : !isConfiguredBR()) return out;
+
+  let done = 0;
+  for (const asin of asins) {
+    const url = await fetchCatalogImage(getLwa, asin, marketplaceId);
+    if (url) out.set(asin, url);
+    done++;
+    if (done % 20 === 0 || done === asins.length) onProgress?.(`${done}/${asins.length} ASINs consultados (${out.size} com imagem)`);
+    await sleep(CATALOG_THROTTLE_MS);
+  }
   return out;
 }

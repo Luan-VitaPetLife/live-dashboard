@@ -563,7 +563,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - Shopify (BR/US): `LineItem.image.url` já vem na mesma query GraphQL de pedidos — sem custo extra.
   - Shopee: `item_list[].image_info.image_url` já vem no `get_order_detail` — sem custo extra.
   - Mercado Livre: **não** vem no pedido. `fetchOrders()` faz uma chamada em lote extra (`GET /items?ids=...`, multiget de até 20 ids) para resolver `thumbnail` por `item.id`, mesmo padrão já usado para resolver `state` via `/shipments/{id}`. Falha graciosamente (sem imagem) se o item não for encontrado. **Esse mesmo lote também resolve `o.listingType`** (Clássico/Destaque, ver 4.6) a partir de `listing_type_id` do recurso do item — campo que não existe na resposta de `/orders/search`.
-  - Amazon (BR/US): **sem imagem, tipo ou nome real do produto** — ver item 6 do backlog (seção 9): itens do pedido nunca são buscados.
+  - Amazon (BR/US): nome real já vem do backfill (ver 4.7.5), mas **imagem nunca vinha de nenhum lugar** — nem a Orders API nem o relatório de backfill trazem URL de imagem. **Implementado 15/07/2026:** `fetchProductImages(asins, market, onProgress)` em `amazon.js` consulta o **Catalog Items API** (`GET /catalog/2022-04-01/items/{asin}?includedData=images`), um lookup por ASIN — balde de cota próprio, não concorre com `/orders` nem `/reports`. Throttle fixo de 600ms entre chamadas (deliberadamente conservador dado o histórico de 429 desta conta, ver 4.7.2/4.7.4) e até 3 tentativas por ASIN em caso de 429. Resultado cacheado em `kv.amazonProductImages` (`{ asin: url }`), consultado por `aggregateProductsByChannel()` em `metrics.js` via `it.asin` (fallback quando `it.image` não veio). **Pré-requisito:** `ordersFromRows()` (backfill) agora também captura `asin` por item (coluna `asin` do relatório) — pedidos que vieram só do sync contínuo (Orders API) não têm `asin`/título (ver 4.7.6) e continuam sem imagem até passarem por um backfill. **Endpoint:** `POST /api/amazon/images?market=us|br` — roda em background (um ASIN por vez), responde na hora, progresso em `GET /api/status` → `amazon.images`. Não dispara backfill sozinho: se não houver ASIN novo pra buscar, retorna aviso pedindo pra rodar o backfill primeiro.
 - **Tipo de produto:** reaproveita `classifyType()` já usada em Segmentos (productType do Shopify como fonte autoritativa, fallback por palavras-chave no título para os demais canais).
 
 #### 4.13.1 Colunas financeiras editáveis (implementado 02/07/2026; frete adicionado 06/07/2026)
@@ -782,7 +782,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   customer,
   state,                  // código de estado do endereço de entrega ('SP', 'RJ', 'CA', 'TX', ...)
   listingType,            // ML only: 'organic' (Clássico/free) | 'premium' (Destaque/gold) | null
-  items: [{ title, qty, amount }]
+  items: [{ title, qty, amount, asin? }]  // asin só em itens Amazon vindos do backfill, ver 4.13
 }
 ```
 
@@ -854,6 +854,9 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `POST /api/amazon/force-sync` — zera backoff + executa sync atomicamente
   - `POST /api/amazon/backfill?days=90&market=us` — backfill histórico via Reports API, em background.
     Responde na hora; progresso em `GET /api/status` → `amazon.backfill`. Ver 4.7.5.
+  - `POST /api/amazon/images?market=us|br` — preenche o cache de imagem de produto (Catalog Items
+    API por ASIN), em background. Responde na hora; progresso em `GET /api/status` → `amazon.images`.
+    Só acha ASIN em pedidos que já passaram pelo backfill. Ver 4.13.
   - `POST /api/amazon/sync-names?market=us|br` — reconcilia nomes de produto (Reports API), em background,
     ignorando o throttle. Sem `market` → US e BR. Ver 4.7.6.
   - `POST /api/amazon/cleanup-market-leak` — remove pedidos US que foram gravados como Amazon BR (vazamento
