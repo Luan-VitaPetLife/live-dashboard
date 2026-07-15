@@ -688,7 +688,7 @@ function cardHTML(ch) {
   const products = data?.products || [];
   const rows = products.length
     ? products.map(p => rowHTML(p, ch)).join('')
-    : '<tr><td colspan="10" class="prod-empty">Sem vendas no período</td></tr>';
+    : '<tr><td colspan="10" class="prod-empty">Nenhum produto encontrado</td></tr>';
   const collapsed = collapsedState[ch] ? ' collapsed' : '';
   const expanded = expandedState[ch] ? ' expanded' : '';
   const expandIcon = expandedState[ch] ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand';
