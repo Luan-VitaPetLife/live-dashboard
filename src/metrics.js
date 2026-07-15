@@ -429,6 +429,38 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   };
 }
 
+// ── Busca geral de pedidos (histórico inteiro do mercado, todo o período) ──
+// Usada pelo campo de busca do card "Pedidos Recentes" (index.html) quando há termo digitado.
+// Diferente do `recentOrders` do dashboard, que só traz os mais recentes do período/canal: aqui
+// varremos TODOS os pedidos do mercado (todos os canais, sem janela de data). Escopo por mercado
+// para não misturar BRL/USD. Devolve o mesmo formato normalizado do `recentOrders`.
+const CH_LABEL = { shopify: 'Shopify', shopify_us: 'Shopify US', shopee: 'Shopee', mercadolivre: 'Mercado Livre', amazon: 'Amazon BR', amazon_us: 'Amazon US' };
+function statusLabelPt(o) {
+  if (o.cancelled) return 'Cancelado';
+  const s = (o.status || '').toUpperCase();
+  if (['PAID', 'COMPLETED', 'SHIPPED', 'TO_CONFIRM_RECEIVE', 'READY_TO_SHIP'].includes(s)) return 'OK';
+  return 'Pendente';
+}
+export function searchOrders({ market = 'br', q = '', limit = 200 } = {}) {
+  const terms = String(q).trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return { market, q, total: 0, results: [], limited: false };
+  const all = getOrders({ channel: 'todos', market });
+  const matched = [];
+  for (const o of all) {
+    // Mesmos campos pesquisáveis do front: nº, cliente, status (cru + rótulo pt-BR), canal (id + rótulo), valor.
+    const text = [o.name, o.customer, o.status, statusLabelPt(o), o.channel, CH_LABEL[o.channel], o.total]
+      .filter(v => v != null && v !== '').join(' ').toLowerCase();
+    if (terms.every(t => text.includes(t))) matched.push(o);
+  }
+  matched.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const total = matched.length;
+  const results = matched.slice(0, limit).map(o => ({
+    name: o.name, channel: o.channel, customer: o.customer, items: o.items.length,
+    createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled,
+  }));
+  return { market, q, total, results, limited: total > limit };
+}
+
 // Agrupa itens de uma lista de pedidos por canal → por título de produto (com quebra avulso x
 // combo, Shopify Bundles, tipo e imagem). Compartilhado por computeProducts e computeStock —
 // mesma regra de agrupamento usada em Top Produtos/Segmentos.

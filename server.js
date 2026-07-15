@@ -5,7 +5,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { computeDashboard, computeProducts, computeStock } from './src/metrics.js';
+import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak } from './src/store.js';
 import * as shopee from './src/shopee.js';
@@ -118,6 +118,17 @@ app.get('/api/products', (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const { since = today, until = today, market = 'br' } = req.query;
     res.json(computeProducts({ market, since, until }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Busca geral de pedidos (histórico inteiro do mercado) — usado pelo campo de busca do card "Pedidos Recentes".
+app.get('/api/orders/search', (req, res) => {
+  try {
+    const { q = '', market = 'br' } = req.query;
+    const limit = Math.min(Number(req.query.limit || 200), 500);
+    res.json(searchOrders({ market, q, limit }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -434,7 +434,13 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - Frequência de atualização persistida em `localStorage('coco_refresh')`, padrão 5 min.
 - `lastData` armazena último payload da API para re-render ao trocar cores sem nova requisição.
 - Top Produtos: quando canal = `todos`, exibe badge de canal + soma total no rodapé.
-- Pedidos Recentes: linha de resumo com total dos pedidos válidos.
+- Pedidos Recentes: linha de resumo com total dos pedidos válidos. Tem **campo de busca GERAL** (implementado
+  15/07/2026): digitar consulta `GET /api/orders/search?market=&q=` (`searchOrders()` em `metrics.js`), que varre
+  **todo o histórico do mercado** (todos os canais, sem janela de data) — não só os recentes carregados no card.
+  Busca por termos (AND) em nº, cliente, status (cru + rótulo pt-BR), canal (id + rótulo) e valor; **não** busca
+  nome de produto (o card mostra só a contagem de itens). Escopo por mercado (não mistura BRL/USD). Debounce de
+  300ms, resposta fora de ordem descartada por sequência, teto de 200 resultados (`limited`). Campo vazio volta
+  a exibir os recentes do `/api/dashboard`.
 - **Card Orgânico x Campanha (`#cardSalesSplit`, alterado 02/07/2026):** uma **pizza por canal** (não é mais um único donut agregado nem gráfico de linha) — grid `.ss-grid` com uma célula por canal do mercado atual (BR: Shopify/Shopee/ML/Amazon; US: Shopify US/Amazon US). Dados vêm de `salesSplitByChannel` (`{ [channel]: { campaign, organic, campaignOrders, organicOrders } }`) calculado em `computeDashboard()` a partir de **todos** os pedidos do mercado (independente do filtro de canal selecionado na tela — por isso sempre mostra as 4/2 pizzas). Canais sem tracking de origem/listing type (Shopee, Amazon) sempre caem 100% em orgânico, naturalmente (não é caso especial no código — `isCampaignOrder()` nunca retorna `true` pra esses canais). Canal sem nenhum pedido no período mostra o anel cinza "sem dados" do `drawDonut()` (não confundir com "100% orgânico"). Agrupado em `.right-col-stack` com `#cardMarketing`.
 - **KPI strip principal (alterado 02/07/2026):** 5 células — Receita Total, Pedidos, Ticket Médio, **ROAS**, **ACOS** (`#kpiRoas`/`#kpiAcos`). O KPI "Conversão" foi removido daqui (a métrica de conversão de sessão→compra continua existindo no card de Tráfego, `#mConv`, que é outro contexto). ROAS = `kpis.roas` (metaRevenue ÷ adCost, já calculado no backend). ACOS = `100/roas` (gasto ÷ vendas atribuídas, em %) — a grade CSS do `.kpi-strip` já era `repeat(5,1fr)` antes dessa mudança (pensada pra isso).
 - Paleta/design: tema "earthy" com variáveis CSS no `:root`. Manter visual.
@@ -855,6 +861,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/dashboard?channel=&metric=&since=YYYY-MM-DD&until=YYYY-MM-DD&market=br|us`
   - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta + Google Ads. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
   - `GET /api/products?market=br|us&since=&until=` — catálogo completo de produtos por canal (sem cache, direto do store). Usado pela tela de Produtos (`produtos.html`).
+  - `GET /api/orders/search?market=br|us&q=&limit=` — busca geral de pedidos em todo o histórico do mercado (`searchOrders()`), sem janela de data. Usado pelo campo de busca do card "Pedidos Recentes" (`index.html`). Ver 4.9b.
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `GET /api/stock?market=br|us` — estoque + produção por canal (`channels`) e por família de produto somando todos os canais (`agg`), janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
   - `POST /api/stock/finance` — salva/edita estoque ou recebendo de um produto, por canal (`{ channel, title, stock?, incoming? }`), persistido em `kv.productStock`. Ver 4.14.
