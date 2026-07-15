@@ -36,7 +36,7 @@ do repositório `https://github.com/Luan-VitaPetLife/live-dashboard.git`).
 - Shopify US: **vita-pet-life.myshopify.com** · ~99 pedidos/30 dias confirmados.
 - Amazon US: SP-API configurado com LWA + AWS SigV4 via IAM AssumeRole. Conta de vendedor **VITA PET LIFE**.
   - IAM User: `arn:aws:iam::354674816862:user/usdashboard`
-  - IAM Role: `arn:aws:iam::354674816862:role/SellingPartnerAPIRole`
+  - IAM Role: `arn:aws:iam::354674816862:role/SellingPartnerAPIRole` — política `SPAPIInvokePolicy` (`execute-api:Invoke` em `*`); trust policy inclui o user `usdashboard`.
   - Marketplace ID: `ATVPDKIKX0DER` (Amazon.com US)
   - Volume: **~1.000 pedidos/dia** — muito acima dos demais canais. Ver 4.7.3 (sync incremental).
 - Meta Ads EUA: conta `826249215807271` (Vita Pet Life) — separada da BR (Coco and Luna).
@@ -86,7 +86,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - Variável `DATABASE_URL` presente → usa Postgres (Railway). Ausente → JSON em `data/db.json`.
 - `initStore()` é async e DEVE ser chamado com `await` antes de `app.listen()`.
 - Tabelas Postgres: `orders` (id TEXT PK, data JSONB), `sessions_daily` (date TEXT PK, data JSONB), `kv` (key TEXT PK, value JSONB).
-- `kv` guarda: `shopeeTokens`, `mlTokens`, `metaInsightsDaily`, `metaUSInsightsDaily`, `mlAdCosts`, `amazonBackoff`, `amazonBRBackoff`, `lastSync`.
+- `kv` guarda: `shopeeTokens`, `mlTokens`, `mlAdCosts`, `googleAdsTokens`, `productFinance`, `productStock`, `productStockAgg`, `metaInsightsDaily`, `metaUSInsightsDaily`, `lastSync`, `amazonBackoff`(+`Count`), `amazonBRBackoff`(+`Count`), `amazonCursors`, `amazonBackfill`, `amazonProductImages`, `amazonImagesJob`, `users`, `authConfig`, `authSessions`.
 - `getOrders({ channel, since, until, market })` — filtra por mercado. Pedidos legados sem campo `market` são inferidos como `'br'` (exceto `channel === 'shopify_us'` → `'us'`, e `channel === 'amazon'` com id `amazon-us:` → `'us'`).
 - **Índice em memória do `getOrders` (10/07/2026):** para aguentar centenas de milhares de pedidos (backfills grandes), o `getOrders` não faz mais `Object.values()` + `.filter()` encadeado a cada chamada. Mantém, por mercado (`ordersByMarket`), um array de pedidos ordenado por timestamp + um array paralelo dos timestamps parseados (`tsByMarket`), e recorta a janela de datas por **busca binária** (`lowerBound`/`upperBound`), filtrando o canal numa única passada. O índice é reconstruído **preguiçosamente** — `upsertOrders` só marca `indexDirty = true`; a reconstrução (`rebuildOrdersIndex`) roda na próxima leitura, então um backfill que faz muitos upserts em lote paga uma reconstrução só. A inferência de mercado (`inferMarket`) é a mesma de antes. Interface pública **inalterada** (continua síncrona). Ver seção 9, item 9.
 
@@ -123,7 +123,8 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - Usar **Open Platform API v2** direto (`src/shopee.js`). Host: `https://partner.shopeemobile.com`.
 - Assinatura: `HMAC_SHA256(partner_key, partner_id + path + timestamp [+ access_token + shop_id])` em hex.
 - OAuth: `/shopee/connect` → autoriza → callback troca `code` por tokens. Token renovado automaticamente.
-- **Pendente:** cadastrar `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY`, `SHOPEE_SHOP_ID` no Railway e autorizar via `/shopee/connect`. `SHOPEE_PRODUCTION=0` até aprovação.
+- **Ativa ✅** — credenciais de produção configuradas: `SHOPEE_PARTNER_ID` 2037711, `SHOPEE_SHOP_ID` 1502160212 (+ `SHOPEE_PARTNER_KEY`). Chunking de 15 dias em `src/shopee.js`.
+- **Analytics da Shopee (tráfego, insights) não disponível via API** — só no Seller Center; os endpoints retornam `error_not_found`.
 
 ### 4.6 Mercado Livre
 - Implementado em `src/mercadolivre.js`. OAuth 2.0 com refresh_token automático.
@@ -211,6 +212,31 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - Sync típico depois da 1ª carga: ~10 pedidos, **1 requisição, ~1s**.
 - **`AMAZON_BACKFILL_DAYS`** (padrão `2`) — janela só da primeira carga, dimensionada para caber no burst.
 
+#### 4.7.4 Detalhes operacionais
+- **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
+- **Pedidos `Pending` vêm com `total: 0`** — a SP-API omite `OrderTotal` enquanto o pagamento não é capturado.
+  Não é bug nosso. O valor entra sozinho num sync incremental posterior, via `LastUpdatedAfter`.
+- **RDT (nome do comprador):** desativado por padrão — o app não tem o papel PII (retornava 403 e gastava requisição).
+  Reative com `AMAZON_FETCH_PII=1` só se o papel for aprovado. Na tela de roles do app, a opção "delegate access
+  to PII to another developer's application" **não** é isso — é para delegar a apps de terceiros; manter em "No".
+- **Restrição SP-API:** `CreatedBefore` ≥ 2 min antes de agora — código aplica margem de 3 min.
+- **Backoff:** só dispara em 429 que esgotou as tentativas; degraus 15→30→60→120 min; contador zera após sucesso.
+  Reset/force via `POST /api/amazon/{reset-backoff,force-sync}`.
+  - **⚠️ A cota é da CONTA, não do processo.** Um teste local paginando muitas páginas drena o mesmo balde que a
+    produção usa. Em 09/07/2026 um teste local às 20:55 fez o primeiro sync do deploy (21:00) levar 429 e recuar
+    30 min. **Não rodar teste local e sync de produção colados**, e não usar force-sync em loop — deixar o backoff agir.
+- Sem `AMAZON_AWS_ACCESS_KEY` / `SECRET_KEY` → retorna `[]` com aviso, nada quebra.
+- **IDs de pedido:** `amazon-us:` (EUA) e `amazon-br:` (BR) — evita colisão.
+- **Variável fantasma:** `AMAZON_RESET_BACKOFF` já existiu como variável no Railway mas **nunca foi lida por nenhum
+  código** (nem hoje, nem no histórico do git) — não faz nada, pode remover. O reset real é o endpoint
+  `POST /api/amazon/reset-backoff`.
+- **`byState` da Amazon US traz grafias inconsistentes** (`"California"`, `"CALIFORNIA"`, `"CA"`, `"CA."`, `"N.Y."`,
+  `"PUERTO RICO"`... como chaves distintas), porque `ShippingAddress.StateOrRegion` / `ship-state` não são
+  normalizados pela Amazon. **Resolvido 10/07/2026** — `src/us-states.js` (`normalizeUsState`) reduz qualquer variante
+  ao código de 2 letras. Aplicado (a) na agregação, em `metrics.js` ao montar `byState` quando `market==='us'` (conserta
+  os 359 mil pedidos já gravados sem re-gravar nada) e (b) na gravação, em `amazon.js` (`fetchOrders`/`ordersFromRows`),
+  para dado novo já entrar limpo. Ver 4.10.
+
 #### 4.7.5 Backfill histórico via Reports API (implementado 09/07/2026)
 - **Por que não paginar `/orders` para trás:** 100 pedidos/página a 1 req/min. Com ~890 pedidos/dia na conta US,
   90 dias seriam ~840 requisições ≈ 14 h, disputando a cota com o sync. Inviável.
@@ -243,7 +269,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **O problema (era):** o backfill (Reports API) preenche `items[{ title, qty, amount }]`, mas o **sync contínuo**
   (`fetchOrders`, Orders API) cria `items` com `title: ''` — a Orders API nunca devolve o título do item. Pedidos da
   Amazon posteriores ao backfill entravam sem nome, e Top Produtos/Produtos/Estoque desatualizavam com o tempo.
-- **Correção (backlog item 8):** um **job separado** (`reconcileAmazonNames` em `sync.js`, agendado em `server.js`)
+- **Correção:** um **job separado** (`reconcileAmazonNames` em `sync.js`, agendado em `server.js`)
   busca um relatório curto dos últimos `AMAZON_NAMES_DAYS` dias (padrão 2) via `amazon.fetchRecentNamedOrders()` —
   a Reports API tem **balde de cota próprio**, então não concorre com o sync de pedidos nem provoca 429 — e preenche
   os títulos por id com `store.patchOrderItems()`.
@@ -280,7 +306,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   já filtra os segmentos pelo `channel` do `/api/dashboard`) e **"ver mais/ver menos"** nos top produtos (o backend
   passou a devolver a lista completa em `segments[k].topProducts`, a tela mostra 5 e expande).
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
-  é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog item 10).
+  é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 
 #### 4.7.7 ⚠️ INCIDENTE 10/07/2026 — disco do Postgres cheio (recuperado via resize)
 - **O que aconteceu:** o backfill de **365 dias** trouxe **359.626 pedidos** US. O `upsertOrders` fazia **um `INSERT`
@@ -338,7 +364,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
      campo `market` não cai mais em BR).
   4. **Limpeza do já gravado:** `POST /api/amazon/cleanup-market-leak` (`removeAmazonMarketLeak`) remove
      `channel:'amazon'` + `market:'br'` por dois sinais, ambos exclusivos da Reports API (o Amazon BR nunca
-     passou por ela — nenhum backfill BR rodado, backlog item 11): **(a) item titulado** (pedido US enviado/
+     passou por ela — nenhum backfill BR rodado, backlog aberto 3): **(a) item titulado** (pedido US enviado/
      pendente vazado) e **(b) `status === 'Cancelled'` com R$ 0 e sem item** — a grafia com DOIS L que só o
      relatório grava (a Orders API grava `'Canceled'`, um L); pega o pedido US cancelado, que no relatório não
      vira linha de item (fica sem título/R$ 0) e escaparia do sinal (a). **Cuidado:** casar `'Canceled'` (um L)
@@ -347,7 +373,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
      grafia de relatório).
 
 #### 4.7.9 Nome de produto do Amazon BR: caminho getOrderItems + o 400 nos pedidos 701-/702- (13/07/2026)
-- **Contexto:** tentativa de obter os nomes de produto do Amazon BR (backlog item 11). O relatório (Reports API)
+- **Contexto:** tentativa de obter os nomes de produto do Amazon BR (backlog aberto 3). O relatório (Reports API)
   NÃO serve pro BR: `inspectReport?market=br` (2 dias) devolveu 1815 linhas, **1811 US / 0 BR** — o relatório do
   marketplace BR vem dominado por pedidos US (`ship-country=US`, `sales-channel="Non-Amazon US"`). Por isso o
   caminho passou a ser o `getOrderItems` (por-pedido).
@@ -372,31 +398,6 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   amazon.items`. Trava `ABORT_AFTER=15` (aborta a rodada se muitas chamadas seguidas falham, pra não desperdiçar).
   Funciona para os pedidos que o getOrderItems aceita; os `701-/702-` ficam pendentes até entendermos o 400.
 
-#### 4.7.4 Detalhes operacionais
-- **Funções exportadas:** `fetchOrders(since, until)` devolve US+BR juntos (combinado ou não). `fetchOrdersBR()` é no-op (compat).
-- **Pedidos `Pending` vêm com `total: 0`** — a SP-API omite `OrderTotal` enquanto o pagamento não é capturado.
-  Não é bug nosso. O valor entra sozinho num sync incremental posterior, via `LastUpdatedAfter`.
-- **RDT (nome do comprador):** desativado por padrão — o app não tem o papel PII (retornava 403 e gastava requisição).
-  Reative com `AMAZON_FETCH_PII=1` só se o papel for aprovado. Na tela de roles do app, a opção "delegate access
-  to PII to another developer's application" **não** é isso — é para delegar a apps de terceiros; manter em "No".
-- **Restrição SP-API:** `CreatedBefore` ≥ 2 min antes de agora — código aplica margem de 3 min.
-- **Backoff:** só dispara em 429 que esgotou as tentativas; degraus 15→30→60→120 min; contador zera após sucesso.
-  Reset/force via `POST /api/amazon/{reset-backoff,force-sync}`.
-  - **⚠️ A cota é da CONTA, não do processo.** Um teste local paginando muitas páginas drena o mesmo balde que a
-    produção usa. Em 09/07/2026 um teste local às 20:55 fez o primeiro sync do deploy (21:00) levar 429 e recuar
-    30 min. **Não rodar teste local e sync de produção colados**, e não usar force-sync em loop — deixar o backoff agir.
-- Sem `AMAZON_AWS_ACCESS_KEY` / `SECRET_KEY` → retorna `[]` com aviso, nada quebra.
-- **IDs de pedido:** `amazon-us:` (EUA) e `amazon-br:` (BR) — evita colisão.
-- **Variável fantasma:** `AMAZON_RESET_BACKOFF` já existiu como variável no Railway mas **nunca foi lida por nenhum
-  código** (nem hoje, nem no histórico do git) — não faz nada, pode remover. O reset real é o endpoint
-  `POST /api/amazon/reset-backoff`.
-- **`byState` da Amazon US traz grafias inconsistentes** (`"California"`, `"CALIFORNIA"`, `"CA"`, `"CA."`, `"N.Y."`,
-  `"PUERTO RICO"`... como chaves distintas), porque `ShippingAddress.StateOrRegion` / `ship-state` não são
-  normalizados pela Amazon. **Resolvido 10/07/2026** — `src/us-states.js` (`normalizeUsState`) reduz qualquer variante
-  ao código de 2 letras. Aplicado (a) na agregação, em `metrics.js` ao montar `byState` quando `market==='us'` (conserta
-  os 359 mil pedidos já gravados sem re-gravar nada) e (b) na gravação, em `amazon.js` (`fetchOrders`/`ordersFromRows`),
-  para dado novo já entrar limpo. Ver 4.10.
-
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
 - Pedidos legados no banco (sem campo `market`) são inferidos como `'br'`.
@@ -412,7 +413,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Sidebar ocultável:** botão `☰` (`#sidebarToggle`) dentro da própria sidebar. Desktop: toggle com animação + `localStorage('coco_sidebar')`. Mobile (≤768px): sidebar começa oculta, abre como overlay com `#sidebarOverlay`. Classe `body.sidebar-hidden` oculta no desktop; `body.sidebar-mobile-open` abre como drawer no mobile.
 - **Responsivo:** breakpoint 768px — KPIs em 2 colunas (5º ocupa linha inteira), charts em coluna única, padding reduzido. Breakpoint 520px — labels dos filtros e texto dos botões de mercado ocultos.
 
-### 4.9b (original)
+### 4.9b Seletor de mercado, canais e cards
 - **Seletor de mercado:** dois botões toggle no canto esquerdo do topbar com imagens das bandeiras reais
   (`bandeira_brasil.webp`, `bandeira_eua.svg`). Botão ativo tem fundo escuro (estilo do botão Período).
   Persiste em `localStorage('coco_market')`. Troca de mercado reseta canal para `'todos'`.
@@ -564,6 +565,16 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - Shopee: `item_list[].image_info.image_url` já vem no `get_order_detail` — sem custo extra.
   - Mercado Livre: **não** vem no pedido. `fetchOrders()` faz uma chamada em lote extra (`GET /items?ids=...`, multiget de até 20 ids) para resolver `thumbnail` por `item.id`, mesmo padrão já usado para resolver `state` via `/shipments/{id}`. Falha graciosamente (sem imagem) se o item não for encontrado. **Esse mesmo lote também resolve `o.listingType`** (Clássico/Destaque, ver 4.6) a partir de `listing_type_id` do recurso do item — campo que não existe na resposta de `/orders/search`.
   - Amazon (BR/US): nome real já vem do backfill (ver 4.7.5), mas **imagem nunca vinha de nenhum lugar** — nem a Orders API nem o relatório de backfill trazem URL de imagem. **Implementado 15/07/2026:** `fetchProductImages(asins, market, onProgress)` em `amazon.js` consulta o **Catalog Items API** (`GET /catalog/2022-04-01/items/{asin}?includedData=images`), um lookup por ASIN — balde de cota próprio, não concorre com `/orders` nem `/reports`. Throttle fixo de 600ms entre chamadas (deliberadamente conservador dado o histórico de 429 desta conta, ver 4.7.2/4.7.4) e até 3 tentativas por ASIN em caso de 429. Resultado cacheado em `kv.amazonProductImages` (`{ asin: url }`), consultado por `aggregateProductsByChannel()` em `metrics.js` via `it.asin` (fallback quando `it.image` não veio). **Pré-requisito:** `ordersFromRows()` (backfill) agora também captura `asin` por item (coluna `asin` do relatório) — pedidos que vieram só do sync contínuo (Orders API) não têm `asin`/título (ver 4.7.6) e continuam sem imagem até passarem por um backfill. **Endpoint:** `POST /api/amazon/images?market=us|br` — roda em background (um ASIN por vez), responde na hora, progresso em `GET /api/status` → `amazon.images`. Não dispara backfill sozinho: se não houver ASIN novo pra buscar, retorna aviso pedindo pra rodar o backfill primeiro. **Só funciona depois de rodar um backfill/re-backfill após esse deploy** (para os pedidos já existentes ganharem `asin`) — merge sozinho não faz nada aparecer, é preciso chamar `POST /api/amazon/backfill?days=90&market=us` e depois `POST /api/amazon/images?market=us` em produção.
+  - **⚠️ BLOQUEIO (confirmado em produção 15/07/2026) — Catalog Items API dá 403:** rodar
+    `POST /api/amazon/images` retornou "0 de 35 imagens". O diagnóstico `GET /api/amazon/probe-image?market=us`
+    devolveu **HTTP 403 "Access to requested resource is denied"** para todo ASIN. Causa: o app SP-API
+    "Dashboard Amazon" só tem os roles de **Orders** e **Reports** — a Catalog Items API exige o role
+    **"Product Listing"** (destrava Catalog Items + Listings Items), que o app não tem. **Não é código.**
+    Correção (só no portal, feita pelo Luan): Solution Provider Portal → app "Dashboard Amazon" → Edit App →
+    marcar role **"Product Listing"** → salvar → **re-autorizar** o app (o refresh token atual não carrega o
+    novo escopo) e atualizar `AMAZON_REFRESH_TOKEN` (US) / `AMAZON_BR_REFRESH_TOKEN` (BR) no Railway. Depois,
+    sem mudar código: `POST /api/amazon/images?market=us` preenche as imagens. Endpoint de diagnóstico
+    `GET /api/amazon/probe-image?asin=&market=` mostra a resposta crua do Catalog Items API.
   - **Bug corrigido no mesmo dia — produto fantasma "-" com receita 0:** algumas linhas do relatório da Amazon trazem `product-name` como o literal `"-"` (frete/serviço/ajuste, sem produto de verdade) — não é vazio, então passava batido pelo filtro `if (r['product-name'])` e virava um "produto" chamado "-" agregando dezenas/centenas de unidades com receita R$0/US$0 (confirmado pelo Luan: linha "-" com 156 unidades, $0). Corrigido em dois pontos: `ordersFromRows()` em `amazon.js` agora descarta `product-name` igual a `"-"` na origem (novos backfills não geram mais essa linha), e `aggregateProductsByChannel()`/o loop de Segmentos em `metrics.js` também tratam `it.title.trim() === '-'` como ausente (mesmo efeito de `!it.title`) — isso corrige a exibição imediatamente para pedidos **já gravados** em produção, sem precisar rodar backfill de novo.
 - **Tipo de produto:** reaproveita `classifyType()` já usada em Segmentos (productType do Shopify como fonte autoritativa, fallback por palavras-chave no título para os demais canais).
 
@@ -672,15 +683,12 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   urgente"), **3 a <7 meses → `atencao`** (badge âmbar, "Atenção"), **>= 7 meses → `aguardar`**
   (badge verde, "Aguardar"). `null` (sem venda no período) não mostra badge, só "—". Calculado
   também para a linha de Total do card agregado.
-- **Amazon (BR/US) — placeholder "Produto TESTE":** hoje os pedidos da Amazon não trazem título de
-  item (ver backlog item 6 — `fetchOrders()` em `src/amazon.js` só lê quantidade, nunca busca
-  `/orders/v0/orders/{id}/orderItems`), então a tabela de Amazon em Estoque ficaria vazia como já
-  acontece em Produtos. Pra não bloquear o controle manual de estoque enquanto isso não é resolvido
-  (deliberadamente adiado pelo risco de 429 documentado em 4.7), `computeStock()` injeta uma linha
-  sintética `"Produto TESTE"` (métricas de venda zeradas) nos canais `amazon`/`amazon_us` sempre que
-  não há nenhum produto real agregado — editável manualmente como qualquer outro produto, mas
-  excluída do card agregado (ver acima). Remover esse placeholder é consequência natural de
-  resolver o backlog item 6 (quando `byChannel[amazonCh].products` deixar de vir vazio).
+- **Amazon — placeholder "Produto TESTE":** o **US já tem nome de produto** (Reports API, ver 4.7.6), mas o
+  **BR ainda vem incompleto** (só via `getOrderItems`; pedidos `701-/702-` dão 400 — ver 4.7.9 / backlog aberto 3).
+  Quando `byChannel[amazonCh].products` fica vazio (Amazon BR sem itens), `computeStock()` injeta uma linha
+  sintética `"Produto TESTE"` (métricas de venda zeradas) nesse canal pra não bloquear o controle manual de
+  estoque — editável como qualquer produto, mas excluída do card agregado (ver acima). Some sozinho quando o
+  canal passa a ter produto real agregado.
 - Fora de escopo por ora (não pedido, evitar scope creep): canais que só existem no Monday e não no
   nosso sistema (Chewy, Walmart, Website separado, Wholesale) e qualquer chamada à API do Monday.
 
@@ -768,7 +776,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   base** (`.sidebar`, `.brand`, `.brand-logo`, `.brand-name`, `.nav-group`, `.nav-label`, `.nav-item`,
   `.nav-icon`, `.sidebar-header`, `.sidebar-close-btn`). Resultado visual: logo em tamanho natural
   (gigante) e menu como uma lista de links sem estilo nenhum. Corrigido copiando o bloco exato de
-  `produtos.html`. Isso expôs um problema estrutural do projeto — ver backlog item 12.
+  `produtos.html`. Isso expôs um problema estrutural do projeto — ver backlog aberto 5.
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -851,7 +859,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `POST /api/stock/agg-finance` — salva/edita ordem projetada, ordem nova ou ordem em andamento de uma família de produto, somando todos os canais (`{ market, title, orderInProgress?, orderNew?, projected? }`), persistido em `kv.productStockAgg`. Ver 4.14.
   - `POST /api/sync`
   - `GET /api/status` — diagnóstico: credenciais configuradas, backoff Amazon, último sync
-  - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente
+  - `POST /api/amazon/reset-backoff` — zera o backoff da Amazon manualmente (`?delay=N` define um backoff de N minutos)
   - `POST /api/amazon/force-sync` — zera backoff + executa sync atomicamente
   - `POST /api/amazon/backfill?days=90&market=us` — backfill histórico via Reports API, em background.
     Responde na hora; progresso em `GET /api/status` → `amazon.backfill`. Ver 4.7.5.
@@ -873,60 +881,38 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     - `POST /api/me/password` — troca a própria senha (qualquer usuário logado), `{ current, next }`.
     - `GET /login.html`, `GET /configuracoes.html`
 
-## 8. Status das integrações (09/07/2026)
+## 8. Status das integrações
 
-### Amazon US + BR SP-API — ativo ✅ (US destravada em 09/07/2026)
-- **Um app** ("Dashboard Amazon", `AMAZON_CLIENT_ID/SECRET`), **dois tokens** — um por conta de vendedor:
-  VITA PET LIFE (US, `ATVPDKIKX0DER`) e CocoandLuna (BR, `A2Q3Y263D00KWC`). Ver 4.7.1.
-- **Endpoint:** `sellingpartnerapi-na.amazon.com` (região NA) serve os dois marketplaces.
-- **IAM Role `SellingPartnerAPIRole`**: política `SPAPIInvokePolicy` com `execute-api:Invoke` em `*`. Trust policy inclui `usdashboard` user. ✅
-- **Rate limit:** 0.0167 req/s = 1 req/min (burst 20). O bug histórico de `amazon_us` sempre 0 era a paginação
-  pedindo a página seguinte 2s depois — ver 4.7.2. Corrigido; produção gravou 2.353 pedidos US em 09/07/2026.
-- **Sync incremental por cursor** (`kv.amazonCursors`) — ver 4.7.3. Sync típico: 1 requisição, ~1s.
-- **Endpoint `POST /api/amazon/reset-backoff?delay=N`:** aceita `delay` em minutos para backoff customizado.
+Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na seção 4.x indicada.
 
-### Shopee — ativa ✅
-- Credenciais de produção configuradas: Partner ID 2037711, Shop ID 1502160212.
-- 83 pedidos confirmados no banco. Chunking de 15 dias implementado em `src/shopee.js`.
-- Analytics da Shopee (tráfego, insights) **não disponível via API** — só no Seller Center. Endpoints retornam `error_not_found`.
+| Canal | Estado | Detalhes-chave | Ver |
+|---|---|---|---|
+| Shopify BR/US | ✅ | Admin API 2026-04; pedidos GraphQL + sessões ShopifyQL | 4.1, 4.2 |
+| Shopee | ✅ | Partner ID 2037711, Shop ID 1502160212; analytics indisponível via API | 4.5 |
+| Mercado Livre | ✅ | OAuth (re-autorizar após deploy); ML Ads ativo (escopo `write:product_ads`) | 4.6 |
+| Amazon US | ✅ | `ATVPDKIKX0DER`, token conta VITA PET LIFE; sync por cursor + backfill Reports API | 4.7 |
+| Amazon BR | ✅ parcial | `A2Q3Y263D00KWC`, token conta CocoandLuna; valor/qtd ok, nome de produto só via getOrderItems | 4.7.9, backlog aberto 3 |
+| Meta Ads BR/US | ✅ | contas separadas (`META_AD_ACCOUNT_ID` / `META_US_AD_ACCOUNT_ID`) | 4.4 |
+| Google Ads | ✅ | só EUA, Customer ID `1344114329`; aparece na tela de Campanhas (US) | 4.12 |
 
-### Mercado Livre — ativo ✅
-- OAuth autorizado. Tokens persistidos no Postgres. Re-autorizar após deploy via `/mercadolivre/connect`.
-- 140 pedidos no banco.
-- **ML Ads:** dados de gasto por campanha confirmados (~R$ 1.937 no período testado). `fetchCampaigns()` e `fetchAdCosts()` operacionais. Escopo `write:product_ads` já habilitado no token atual.
+- **Amazon — um app** ("Dashboard Amazon", `AMAZON_CLIENT_ID/SECRET`), **dois tokens** (um por conta de vendedor,
+  nunca iguais — ver 4.7.1); endpoint `sellingpartnerapi-na.amazon.com` serve os dois marketplaces.
 
-### Google Ads (EUA) — ativo ✅ (autorizado em 09/07/2026)
-- Implementado em `src/googleads.js` (ver 4.12). OAuth autorizado via `/googleads/connect`. Token persistido no Postgres (`kv.googleAdsTokens`).
-- Só EUA (conta "Coco and Luna", Customer ID `1344114329`, roda campanhas apenas nos EUA hoje).
-- Dados aparecem na tela de Campanhas → mercado US → card Google Ads.
+## 9. Próximos passos (backlog)
 
-## 9. Próximos passos (backlog priorizado)
-
-1. Decidir tratamento de **PENDING** (contar só pagos?) — ver 4.1.
-2. ~~**Google Ads:** falta configurar credenciais e autorizar via `/googleads/connect`.~~ **Resolvido 09/07/2026** — ativo ✅.
-3. ~~**ML Ads ROAS por campanha:** verificar se `listing_type_id` nos pedidos ML está preenchido corretamente.~~ **Resolvido 07/07/2026** — ver 4.6: o campo nunca vinha de `/orders/search` mesmo, foi movido pra ler do recurso `/items`.
-4. ~~Login/usuários se mais pessoas precisarem acessar.~~ **Implementado 14/07/2026** — branch
-   `feat/auth-usuarios` aguardando merge em `master`. Ver 4.16.
-5. ~~**Amazon US na produção.**~~ **Resolvido 09/07/2026** — ver 4.7.2. Era paginação, não cota/autorização.
-6. ~~**Amazon — backfill histórico dos EUA.**~~ **Resolvido 09/07/2026** — ver 4.7.5. 83.897 pedidos (90 dias) em 4min40s.
-7. ~~**Amazon — `byState` com grafia inconsistente.**~~ **Resolvido 09/07/2026** — `ship-state`/`StateOrRegion` normalizados para maiúsculas.
-8. ~~**Amazon — sync contínuo não traz nome de produto.**~~ **Resolvido 10/07/2026** — ver 4.7.6. Job separado
-   (`reconcileAmazonNames`) busca um relatório curto (últimos 2 dias, Reports API, balde de cota próprio) e preenche
-   `items[].title` por id via `patchOrderItems`, sem tocar em `total`/`status`. Roda a cada 6h com throttle de 12h por
-   mercado; disparo manual em `POST /api/amazon/sync-names`.
-9. ~~**Performance do `store.js` com volume alto.**~~ **Resolvido 10/07/2026** — ver 3 (índice em memória do
-   `getOrders`). Era `Object.values()` + várias passadas de `.filter()` reparsando `Date.parse()` a cada request
-   (~6×/dashboard). Trocado por índice por mercado ordenado por timestamp + busca binária na janela de datas.
-   Benchmark local (300 mil pedidos, dataset sintético maior que o alvo de 365 dias): ~288ms → ~4,7ms por request
-   (~60×), com os 9 cenários de filtro batendo exatamente contra a lógica antiga. Pré-requisito do backfill de
-   365 dias da Amazon US (ver 4.7.5).
-10. **Amazon — nome do comprador (PII):** hoje `customer` vem vazio. Exige o papel PII aprovado pela Amazon no
-   Solution Provider Portal; depois é só ligar `AMAZON_FETCH_PII=1` no Railway (código já pronto). Ver 4.7.4.
-   (O relatório de backfill também não traz o nome — é dado restrito nos dois caminhos.)
-11. **Amazon BR — sem itens:** o backfill/Reports foi rodado só para `market=us`. A Amazon BR continua sem
-   `items[].title`, e por isso a tela de Estoque ainda injeta o placeholder "Produto TESTE" nela (ver 4.14).
-   Rodar `POST /api/amazon/backfill?days=90&market=br` resolve — não foi feito por ora (volume BR é baixo).
-12. **⚠️ PENDENTE — CSS da sidebar duplicado por página:** cada HTML repete o CSS **base** da sidebar
+### Abertos
+1. **Decisão PENDING** — pedidos Pix/boleto aguardando contam hoje; Luan decide se quer só pagos. Ver 4.1.
+2. **Amazon — nome do comprador (PII):** `customer` vem vazio nos dois caminhos (Orders API e Reports) — dado
+   restrito. Exige o papel PII aprovado no Solution Provider Portal; depois é só `AMAZON_FETCH_PII=1` no Railway
+   (código pronto). Ver 4.7.4.
+3. **Amazon BR — nome de produto incompleto:** valor/qtd/pedidos ok; os nomes vêm via `getOrderItems`
+   (`enrichAmazonItems`, `POST /api/amazon/fetch-items?market=br`), mas os pedidos `701-/702-` dão 400 (limitação de
+   autorização do app no marketplace BR — resolver no portal). Enquanto faltam itens, Estoque injeta o placeholder
+   "Produto TESTE". Ver 4.7.9 / 4.14.
+4. **Amazon — imagem de produto bloqueada (403):** Catalog Items API retorna 403 — o app não tem o role
+   "Product Listing". Habilitar no portal + re-autorizar (novo refresh token); depois `POST /api/amazon/images`.
+   Código pronto. Ver 4.13.
+5. **⚠️ CSS da sidebar duplicado por página:** cada HTML repete o CSS **base** da sidebar
    (`.sidebar`, `.brand`, `.brand-logo`, `.brand-name`, `.nav-group`, `.nav-label`, `.nav-item`,
    `.nav-icon`, `.sidebar-header`, `.sidebar-close-btn`, mais o CSS do toggle/responsivo) no próprio
    `<style>`, em vez de vir só do `sidebar.js`. Foi exatamente essa duplicação que causou o bug de
@@ -942,6 +928,16 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
    num valor só sem quebrar o mapa (ou manter um override pontual nessas duas páginas) antes de remover a
    duplicata delas. Investigação começou em 14/07/2026 e foi pausada a pedido do Luan para não atrasar o
    registro desta atualização — retomar quando for mexer nisso.
+
+### Resolvidos (referência rápida — o detalhe está na seção citada)
+- **Google Ads** (09/07) — ativo, só EUA. Ver 4.12.
+- **ML Ads ROAS por campanha** (07/07) — `listing_type_id` movido pra ler do recurso `/items`. Ver 4.6.
+- **Login/usuários** (14/07) — branch `feat/auth-usuarios`. Ver 4.16.
+- **Amazon US em produção** (09/07) — era paginação, não cota. Ver 4.7.2.
+- **Amazon backfill histórico US** (09/07) — Reports API, 83.897 pedidos/90 dias. Ver 4.7.5.
+- **Amazon `byState` grafia inconsistente** (10/07) — `normalizeUsState`. Ver 4.7.4.
+- **Amazon sync sem nome de produto (US)** (10/07) — job `reconcileAmazonNames`. Ver 4.7.6.
+- **Performance do `store.js`** (10/07) — índice em memória + busca binária (~60×). Ver seção 3.
 
 ## 10. Convenções
 
