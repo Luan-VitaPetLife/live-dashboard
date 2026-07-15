@@ -35,9 +35,37 @@
 </nav>
 <button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-layout-sidebar"></i></button>`;
 
-  // CSS próprio do componente (bandeiras do menu). Fica aqui para a sidebar ser
-  // autossuficiente — páginas sem essa regra renderizavam a bandeira em tamanho natural.
-  const css = '.sidebar .nav-flag{width:15px;height:auto;vertical-align:middle;border-radius:2px;margin-left:3px;position:relative;top:-1px}'
+  // CSS do componente sidebar — vive AQUI (fonte única), não duplicado em cada .html.
+  // As páginas só cuidam do próprio layout (.main/.topbar/.content). Usa as variáveis
+  // de tema (--side-*, --border2, etc.) definidas no :root de cada página. As páginas de
+  // Geografia sobrescrevem só o z-index (`body .sidebar{z-index:3000}`, maior especificidade)
+  // por causa das camadas do Leaflet. Ver CLAUDE.md (backlog "CSS da sidebar duplicado").
+  const baseCss = `
+.sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
+.brand-logo{width:72px;height:auto}
+.brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
+.nav-group{margin-bottom:24px}
+.nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
+.nav-item:hover{background:var(--side-hover);color:var(--side-text)}
+.nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
+.nav-icon{font-size:15px;width:16px;text-align:center;flex-shrink:0;line-height:1;opacity:.75}
+.sidebar-header{display:flex;justify-content:flex-end;padding:6px 10px 0}
+.sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(240,235,224,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
+.sidebar-close-btn:hover{background:rgba(240,235,224,.12);color:rgba(240,235,224,.9)}
+.sidebar-open-btn{display:none;position:fixed;left:12px;top:11px;z-index:300;width:36px;height:32px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(30,28,24,.1);transition:all .15s}
+.sidebar-open-btn:hover{border-color:var(--ink);color:var(--text)}
+body.sidebar-hidden .sidebar-open-btn{display:flex}
+body.sidebar-mobile-open .sidebar-open-btn{display:none!important}
+.sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;opacity:0;pointer-events:none;transition:opacity .25s}
+body.sidebar-mobile-open .sidebar-overlay{opacity:1;pointer-events:auto}
+body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
+body.sidebar-hidden .sidebar{transform:translateX(-100%)}
+@media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar-open-btn{display:flex}}
+`;
+  const css = baseCss
+    + '.sidebar .nav-flag{width:15px;height:auto;vertical-align:middle;border-radius:2px;margin-left:3px;position:relative;top:-1px}'
     // Bloco de usuário no rodapé da sidebar (alimentado por /api/me)
     + '.sidebar .side-user{margin-top:auto;padding:12px 14px;border-top:1px solid rgba(240,235,224,0.08);display:flex;align-items:center;gap:9px}'
     + '.sidebar .side-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}'

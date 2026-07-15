@@ -409,7 +409,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - `getOrders({ market })` em store.js filtra corretamente legacy + novos pedidos.
 
 ### 4.9 Canais e UI — `public/index.html`
-- **Sidebar compartilhada (`public/sidebar.js`):** IIFE auto-executável que injeta o markup da sidebar, o CSS (incluindo `.nav-flag { width:15px }`) e o comportamento em qualquer página com `<script src="sidebar.js"></script>`. Idempotente — checa `nav.sidebar` existente antes de montar. Marca o item ativo via `location.pathname` vs `data-page`. **NÃO duplicar o markup da sidebar por página — sempre usar o script.**
+- **Sidebar compartilhada (`public/sidebar.js`):** IIFE auto-executável que injeta o markup, **todo o CSS do componente** (`.sidebar`, `.brand*`, `.nav-*`, toggle, overlay, botão de abrir, transforms `body.sidebar-*` + `.nav-flag`/`.side-user`) via `<style id="sidebarComponentStyle">`, e o comportamento — em qualquer página com `<script src="sidebar.js"></script>`. Idempotente — checa `nav.sidebar` existente antes de montar. Marca o item ativo via `location.pathname` vs `data-page`. **Desde 15/07/2026 o CSS da sidebar vive SÓ aqui** (fonte única, não mais duplicado por página, ver Resolvidos na seção 9): cada página cuida apenas do próprio layout (`.main`/`.content`/`.topbar`). As páginas de Geografia sobrescrevem só o z-index (`body .sidebar{z-index:3000}`, maior especificidade que a regra injetada, por causa do Leaflet). O CSS injetado usa as variáveis de tema (`--side-*` etc.) do `:root` de cada página, que resolvem normalmente por herança. **NÃO duplicar o markup nem o CSS da sidebar por página — sempre usar o script.**
 - **Sidebar ocultável:** botão `☰` (`#sidebarToggle`) dentro da própria sidebar. Desktop: toggle com animação + `localStorage('coco_sidebar')`. Mobile (≤768px): sidebar começa oculta, abre como overlay com `#sidebarOverlay`. Classe `body.sidebar-hidden` oculta no desktop; `body.sidebar-mobile-open` abre como drawer no mobile.
 - **Responsivo:** breakpoint 768px — KPIs em 2 colunas (5º ocupa linha inteira), charts em coluna única, padding reduzido. Breakpoint 520px — labels dos filtros e texto dos botões de mercado ocultos.
 
@@ -776,7 +776,9 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   base** (`.sidebar`, `.brand`, `.brand-logo`, `.brand-name`, `.nav-group`, `.nav-label`, `.nav-item`,
   `.nav-icon`, `.sidebar-header`, `.sidebar-close-btn`). Resultado visual: logo em tamanho natural
   (gigante) e menu como uma lista de links sem estilo nenhum. Corrigido copiando o bloco exato de
-  `produtos.html`. Isso expôs um problema estrutural do projeto — ver backlog aberto 5.
+  `produtos.html`. Isso expôs um problema estrutural do projeto — **resolvido em 15/07/2026** movendo
+  todo o CSS da sidebar para o `sidebar.js` (ver 4.9 e Resolvidos na seção 9); esse tipo de bug não
+  pode mais acontecer, já que a página não declara mais o CSS da sidebar.
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -912,24 +914,15 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 4. **Amazon — imagem de produto bloqueada (403):** Catalog Items API retorna 403 — o app não tem o role
    "Product Listing". Habilitar no portal + re-autorizar (novo refresh token); depois `POST /api/amazon/images`.
    Código pronto. Ver 4.13.
-5. **⚠️ CSS da sidebar duplicado por página:** cada HTML repete o CSS **base** da sidebar
-   (`.sidebar`, `.brand`, `.brand-logo`, `.brand-name`, `.nav-group`, `.nav-label`, `.nav-item`,
-   `.nav-icon`, `.sidebar-header`, `.sidebar-close-btn`, mais o CSS do toggle/responsivo) no próprio
-   `<style>`, em vez de vir só do `sidebar.js`. Foi exatamente essa duplicação que causou o bug de
-   `configuracoes.html` sem estilo nenhum (logo gigante, menu como links soltos) — ver 4.16. Ideia:
-   mover esse bloco pro `<style id="sidebarComponentStyle">` que `sidebar.js` já injeta sozinho (mesmo
-   mecanismo hoje usado só pro `.nav-flag`), e então remover a duplicata de cada página (`index.html`,
-   `segmentos.html`, `geografia.html`, `geografia-us.html`, `produtos.html`, `estoque.html`,
-   `campanhas.html`, `configuracoes.html`).
-   **Cuidado antes de mexer — já detectada uma divergência real entre páginas:** `geografia.html` e
-   `geografia-us.html` usam `.sidebar{z-index:3000}` **sem** a `transition` de slide, enquanto as demais
-   usam `z-index:200` **com** `transition:transform .25s cubic-bezier(.4,0,.2,1)` — provavelmente por
-   causa das camadas do Leaflet (mapa) competindo em z-index com a sidebar. Confirmar se dá pra unificar
-   num valor só sem quebrar o mapa (ou manter um override pontual nessas duas páginas) antes de remover a
-   duplicata delas. Investigação começou em 14/07/2026 e foi pausada a pedido do Luan para não atrasar o
-   registro desta atualização — retomar quando for mexer nisso.
-
 ### Resolvidos (referência rápida — o detalhe está na seção citada)
+- **CSS da sidebar duplicado por página** (15/07) — o CSS do componente (`.sidebar`, `.brand*`, `.nav-*`,
+  toggle, overlay, botão de abrir, transforms `body.sidebar-*`) foi movido para `sidebar.js`
+  (injetado em `<style id="sidebarComponentStyle">`); cada página perdeu a duplicata e mantém só o
+  layout próprio (`.main`/`.content`/`.topbar`, incluindo `body.sidebar-hidden .main{margin-left:0}`).
+  A divergência de z-index das Geografias foi resolvida com um override de MAIOR ESPECIFICIDADE nelas —
+  `body .sidebar{z-index:3000}` (vence a regra `.sidebar` injetada mesmo carregando depois), por causa
+  das camadas do Leaflet. Ver 4.9.
+- **Google Ads** (09/07) — ativo, só EUA. Ver 4.12.
 - **Google Ads** (09/07) — ativo, só EUA. Ver 4.12.
 - **ML Ads ROAS por campanha** (07/07) — `listing_type_id` movido pra ler do recurso `/items`. Ver 4.6.
 - **Login/usuários** (14/07) — branch `feat/auth-usuarios`. Ver 4.16.
