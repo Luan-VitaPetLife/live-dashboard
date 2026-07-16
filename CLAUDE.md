@@ -391,6 +391,35 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     (`.geo-prod-thumb`/`.geo-prod-thumb-ph`, mesmo padrão visual — inclusive o fallback via `onerror`
     — de `produtos.html`/`estoque.html`). Sem imagem (Amazon, hoje) mostra o placeholder de ícone,
     igual às outras telas — nunca quebra o layout.
+- **Correções de tipo/combo fragmentados + busca (16/07/2026, 5ª rodada — "Tablet 120"/"3 Pack - Tablet"
+  aparecendo como pills separadas de "Tablets" em Por tipo de produto):**
+  - **⚠️ Bug 1 — `classifyType()` confiava cegamente no `productType` cru do Shopify.** Produtos
+    cadastrados com grafias diferentes do mesmo tipo ("Tablets", "Tablet 120", "3 Pack - Tablet")
+    viravam 3 pills distintas em vez de uma. **Correção:** `classifyType()` (`metrics.js`, usada tanto
+    em Segmentos quanto em `aggregateProductsByChannel`/Produtos/Estoque) agora roda o `productType`
+    pelas mesmas palavras-chave (`TYPE_KW`) já usadas no fallback por título, em vez de devolver o
+    valor cru — "Tablet 120"/"3 Pack - Tablet" viram "Tablets". Tipo sem palavra-chave reconhecida
+    (ex: "Pó") continua devolvendo o valor cru, sem regressão — "Pó" (BR) e "Powder" (US) seguem
+    distintos de propósito (nunca aparecem juntos, sempre filtrado por mercado).
+  - **⚠️ Bug 2 — o loop de segmentos/`productGeo` não reaproveitava a normalização de combo legado.**
+    `aggregateProductsByChannel()` (Produtos/Estoque/Top Produtos) já sabia, desde 4.13.1, que um item
+    "- 3 Pack" vendido como SKU próprio representa N unidades do produto-base (`legacyComboSize` +
+    `stripComboSuffix` + `canonicalTitle`) — mas o loop que monta `segments`/`productGeo` (adicionado
+    nesta mesma branch) fazia sua própria agregação simples, sem essas funções: contava "3 Pack" como
+    **1 título próprio com `qty=nº de pacotes`**, não como N unidades do produto-base. Resultado: 16
+    vendas de "3 Pack" apareciam como 16 un. de um tipo à parte, em vez de somarem 48 un. de Tablets
+    ao produto certo. **Correção:** o loop agora chama as mesmas três funções antes de agrupar — grupo
+    por `title` canônico, `qty = pacotes × tamanho` quando é combo legado (`comboQty`/`comboBySize`
+    preenchidos igual a `aggregateProductsByChannel`). Testado localmente: 4 pacotes de "3 Pack"
+    (productType "3 Pack - Tablet") + 10 un. "Tablet 120" + 5 un. "Tablets" → `byType.Tablets = 27`
+    (10 + 4×3 + 5), confirmando os dois bugs corrigidos juntos.
+  - **Campo de busca no card** (pedido do Luan, "semelhante ao campo de busca de Top Produtos" — na
+    prática o único campo de busca existente hoje é o de Pedidos Recentes, `index.html #ordersSearch`;
+    reaproveitado o mesmo estilo visual `.geo-search`): filtra `lastProductGeo` **no cliente** por
+    título (substring, case-insensitive) — sem endpoint novo, os dados do card já estão carregados
+    inteiros pra o período/canal/mercado atual (diferente da busca de Pedidos Recentes, que precisa de
+    backend porque só os pedidos recentes ficam carregados). Com busca ativa, mostra **todos** os
+    resultados de cada segmento (ignora o corte de 5 + "ver mais"). Reseta ao trocar mercado/canal.
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 

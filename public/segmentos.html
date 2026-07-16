@@ -155,9 +155,17 @@
 
   /* ── Onde os produtos vendem (mapa + ranking por estado) ── */
   .geo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px 14px;margin-top:16px}
-  .geo-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .geo-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .geo-card-title{font-size:15px;font-weight:700;color:var(--ink)}
   .geo-card-sub{font-size:11px;color:var(--sub);margin-top:2px;margin-bottom:14px}
+  .geo-card-tools{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  /* Mesmo estilo do campo de busca de Pedidos Recentes (index.html #ordersSearch) — filtra
+     `lastProductGeo` no cliente (já carregado, sem endpoint novo). */
+  .geo-search{display:flex;align-items:center;gap:6px;height:32px;padding:0 11px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);transition:border-color .15s}
+  .geo-search:focus-within{border-color:var(--ink)}
+  .geo-search i{font-size:12px;color:var(--muted)}
+  .geo-search input{border:none;background:transparent;outline:none;font-family:inherit;font-size:12px;color:var(--text);width:170px;max-width:40vw}
+  .geo-search input::placeholder{color:var(--muted)}
   .geo-layout-toggle{display:flex;border:1px solid var(--border2);border-radius:20px;overflow:hidden;flex-shrink:0}
   .geo-layout-toggle button{font-size:13px;padding:6px 11px;border:0;background:var(--surface);color:var(--sub);cursor:pointer;transition:all .12s}
   .geo-layout-toggle button+button{border-left:1px solid var(--border2)}
@@ -362,9 +370,12 @@
           <div class="geo-card-title">Onde os produtos vendem</div>
           <div class="geo-card-sub">Ranking de estados e canal de venda por produto — clique num produto para expandir</div>
         </div>
-        <div class="geo-layout-toggle" id="geoLayoutToggle">
-          <button data-layout="rows" title="Linhas"><i class="bi bi-list-ul"></i></button>
-          <button data-layout="columns" title="Colunas"><i class="bi bi-grid-3x3-gap"></i></button>
+        <div class="geo-card-tools">
+          <div class="geo-search"><i class="bi bi-search"></i><input type="search" id="geoSearchInput" placeholder="Buscar produto…" autocomplete="off" aria-label="Buscar produto"></div>
+          <div class="geo-layout-toggle" id="geoLayoutToggle">
+            <button data-layout="rows" title="Linhas"><i class="bi bi-list-ul"></i></button>
+            <button data-layout="columns" title="Colunas"><i class="bi bi-grid-3x3-gap"></i></button>
+          </div>
         </div>
       </div>
       <div id="geoBlocks"></div>
@@ -767,6 +778,8 @@ let geoModalMode = 'choropleth';                                                
 let geoViewMode = localStorage.getItem('coco_seg_geoview') || 'ranking';        // 'ranking' | 'table' | 'chart'
 let geoMapHidden = localStorage.getItem('coco_seg_geohide') === '1';
 let geoLayoutMode = localStorage.getItem('coco_seg_geolayout') || 'rows';       // 'rows' | 'columns'
+let geoSearchQuery = '';                                                        // filtro por título, client-side (não persiste entre sessões)
+function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 const GEO_CHART_MAX = 12; // nº de estados no modo Gráfico (o resto continua em Ranking/Tabela)
 
 function destroyGeoMap() {
@@ -1058,14 +1071,22 @@ function renderGeoBlocks() {
   destroyGeoMap();
   destroyGeoBarChart();
   const container = document.getElementById('geoBlocks');
-  const segsPresent = ['cat','dog','other'].filter(k => lastProductGeo.some(p => p.seg === k));
-  if (!segsPresent.length) { container.innerHTML = '<div class="geo-empty">Sem dados de produto/estado no período</div>'; return; }
+  const q = geoSearchQuery.trim().toLowerCase();
+  const source = q ? lastProductGeo.filter(p => p.title.toLowerCase().includes(q)) : lastProductGeo;
+  const segsPresent = ['cat','dog','other'].filter(k => source.some(p => p.seg === k));
+  if (!segsPresent.length) {
+    container.innerHTML = q
+      ? `<div class="geo-empty">Nenhum produto encontrado para "${escHtml(geoSearchQuery.trim())}"</div>`
+      : '<div class="geo-empty">Sem dados de produto/estado no período</div>';
+    return;
+  }
   container.innerHTML = segsPresent.map(seg => {
-    const prods = lastProductGeo.filter(p => p.seg === seg);
-    const exp = geoExpanded[seg];
+    const prods = source.filter(p => p.seg === seg);
+    // com busca ativa mostra todos os resultados (sem o corte de 5 + "ver mais")
+    const exp = q || geoExpanded[seg];
     const shown = exp ? prods : prods.slice(0, 5);
     const rows = shown.map((p, i) => geoProdRowHtml(p, i)).join('');
-    const moreBtn = prods.length > 5
+    const moreBtn = !q && prods.length > 5
       ? `<button class="seg-more" onclick="toggleGeoExpand('${seg}')">${exp ? 'Ver menos' : 'Ver mais (' + (prods.length - 5) + ')'}</button>`
       : '';
     return `
@@ -1115,6 +1136,11 @@ document.getElementById('geoLayoutToggle').addEventListener('click', e => {
   document.querySelectorAll('#geoLayoutToggle button').forEach(x => x.classList.toggle('active', x === b));
   renderGeoBlocks();
 });
+document.getElementById('geoSearchInput').addEventListener('input', e => {
+  geoSearchQuery = e.target.value;
+  openProduct = null;
+  renderGeoBlocks();
+});
 
 // ── Render ──
 function render(d) {
@@ -1160,6 +1186,8 @@ document.querySelectorAll('.mkt-btn').forEach(btn => {
     segExpanded.cat = segExpanded.dog = segExpanded.other = false;
     geoExpanded.cat = geoExpanded.dog = geoExpanded.other = false;
     openProduct = null;
+    geoSearchQuery = '';
+    document.getElementById('geoSearchInput').value = '';
     buildChannelDropdown();
     loadData();
   });
@@ -1187,6 +1215,10 @@ document.getElementById('channelPop').addEventListener('click', e => {
   if (!b) return;
   channel = b.dataset.ch;
   segExpanded.cat = segExpanded.dog = segExpanded.other = false;
+  geoExpanded.cat = geoExpanded.dog = geoExpanded.other = false;
+  openProduct = null;
+  geoSearchQuery = '';
+  document.getElementById('geoSearchInput').value = '';
   buildChannelDropdown();
   document.getElementById('channelPop').classList.remove('open');
   document.getElementById('channelPill').classList.remove('open');
