@@ -329,13 +329,10 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     principal (+%), Maior estado (+%) — tudo derivado do `productGeo` já recebido, nenhuma chamada nova.
   - **Botão "⤢" no mini-mapa abre um modal** (`.geo-modal-overlay`/`.geo-modal`, mesmo padrão estrutural do
     modal de estado de `geografia.html` — overlay fixo + modal fixo centralizado, `z-index` 4000/4001) com o
-    mapa grande (65vh), **tile de fundo** (CartoDB Voyager) e toggle **Coroplético/Calor** (`geoModalMode`, não
-    persistido, sempre abre em Coroplético). **Os dois modos pintam o polígono do estado** — só troca a rampa
-    de cor (`geoChoroColor` terrosa vs `geoHeatColor` verde→amarelo→vermelho, cores do `HEAT_DEFAULTS` de
-    `geografia.html`). **Diferença deliberada da tela de Geografia completa:** lá o modo Calor usa manchas
-    (círculos por sub-região, `SUB_REGIONS`); aqui não — reproduzir isso exigiria duplicar ~40 linhas de
-    coordenadas de sub-região por país só pra um modal secundário. Mantido simples de propósito; dá pra
-    comparar as duas paletas, que era o pedido. Fecha no ✕, clique fora ou Esc.
+    mapa grande, **tile de fundo** (CartoDB Voyager) e toggle **Coroplético/Calor** (`geoModalMode`, não
+    persistido, sempre abre em Coroplético). Fecha no ✕, clique fora ou Esc. **Modo Calor no MESMO estilo das
+    páginas de Geografia completas** (pedido do Luan, ver correção abaixo — a 1ª versão simplificava pra só
+    trocar a paleta do polígono, ele preferiu o estilo de mancha de verdade).
 - **Correções do modal + layout (16/07/2026, mesmo dia, 2ª rodada de feedback):**
   - **⚠️ Bug: mapa ampliado abria em branco.** Causa: `.geo-modal` tinha só `max-height` (sem `height`
     definido) e era `display:flex;flex-direction:column`; o filho `.geo-modal-map` usava `flex:1`
@@ -364,6 +361,18 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     cards de produto (fechados) ficam lado a lado em vez de empilhados. **Cuidado pra não "bugar" ao
     expandir:** o card aberto ganha `grid-column:1/-1` (ocupa a largura toda da grade), senão o painel
     de mapa+dados ficaria espremido numa coluna estreita.
+- **Modo Calor do modal no MESMO estilo da Geografia completa (16/07/2026, 3ª rodada — o Luan confirmou que
+  prefere as manchas de calor de verdade, não só uma paleta diferente no polígono):** `drawModalHeat()` replica
+  fielmente `drawHeatmap()` de `geografia.html`/`geografia-us.html` — bordas finas dos estados (sem preenchimento)
+  + **manchas de calor** (múltiplos círculos `L.circle` por estado, dispersos pelas coordenadas de
+  `SUB_REGIONS_BR`/`SUB_REGIONS_US`, raio escalado por `√(qty/maxQty)`, cor via `geoHeatColor`) + **pill** de
+  rótulo (UF + unidades) no centróide (`CENTROIDS_BR`/`CENTROIDS_US`), cor laranja (`HEAT_PILL_COLOR #f97316`,
+  mesma cor de `HEAT_DEFAULTS.pillColor`). Tabelas de coordenadas **copiadas** das páginas de Geografia (mesma
+  duplicação deliberada de tabela estática já aceita em outros pontos do arquivo, ver GeoJSON/STATE_NAMES acima).
+  Território/militar/`INTL` sem centróide cadastrado não desenha mancha (mesmo comportamento das páginas
+  completas — segue disponível no Ranking/Tabela). Modo Coroplético continua preenchendo o polígono inteiro
+  (`drawGeoPolygons`, inalterado). Clique numa mancha ou na pill abre o mesmo popup usado no coroplético
+  (`geoStatePopupHtml`, extraído como helper único pra não duplicar o HTML do popup 3 vezes).
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 
