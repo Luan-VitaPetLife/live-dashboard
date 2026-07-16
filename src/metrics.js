@@ -295,6 +295,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const segAcc = {};
   const productGeoAcc = {};
   const seenBundleIdsSeg = new Set();
+  const geoAmazonImages = getAmazonProductImages(); // Shopify/Shopee/ML trazem it.image direto; Amazon só via cache de ASIN (ver 4.13)
   valid.forEach(o => {
     const rf = amazonRevFactor(o); // escala receita ao total capturado (Amazon); ver 4.7.6
     // mesma normalização de estado usada em byState (ver acima): reduz grafias da Amazon e agrupa
@@ -328,10 +329,12 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       }
 
       // geografia + canal por produto
-      if (!productGeoAcc[it.title]) productGeoAcc[it.title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {} };
+      if (!productGeoAcc[it.title]) productGeoAcc[it.title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {}, image: null };
       const g = productGeoAcc[it.title];
       g.qty += qty;
       g.revenue += amount;
+      if (!g.image && it.image) g.image = it.image;
+      if (!g.image && it.asin && geoAmazonImages[it.asin]) g.image = geoAmazonImages[it.asin];
       if (!g.byChannel[o.channel]) g.byChannel[o.channel] = { qty: 0, revenue: 0 };
       g.byChannel[o.channel].qty += qty;
       g.byChannel[o.channel].revenue += amount;
@@ -345,7 +348,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   });
   const productGeo = Object.entries(productGeoAcc)
     .map(([title, g]) => ({
-      title, seg: g.seg, qty: g.qty, revenue: g.revenue,
+      title, seg: g.seg, qty: g.qty, revenue: g.revenue, image: g.image,
       byChannel: Object.entries(g.byChannel).map(([channel, c]) => ({ channel, qty: c.qty, revenue: c.revenue })).sort((a, b) => b.qty - a.qty),
       byState: Object.entries(g.byState).map(([state, s]) => ({ state, qty: s.qty, revenue: s.revenue, orders: s.orderIds.size })).sort((a, b) => b.qty - a.qty),
     }))

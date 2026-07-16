@@ -373,6 +373,24 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   completas — segue disponível no Ranking/Tabela). Modo Coroplético continua preenchendo o polígono inteiro
   (`drawGeoPolygons`, inalterado). Clique numa mancha ou na pill abre o mesmo popup usado no coroplético
   (`geoStatePopupHtml`, extraído como helper único pra não duplicar o HTML do popup 3 vezes).
+- **Correções da Tabela + imagem do produto (16/07/2026, 4ª rodada):**
+  - **⚠️ Bug: cabeçalho e dado desalinhados no modo Tabela.** `.geo-table` usava `table-layout:auto`
+    (padrão) sem larguras fixas — o navegador sobra espaço e distribui entre as colunas de forma
+    imprevisível; como o cabeçalho das colunas numéricas era `text-align:left` mas o dado era
+    `text-align:right`, cada um ficava numa ponta de uma coluna larga demais, parecendo "fora do
+    lugar". **Correção:** `table-layout:fixed` + `<colgroup>` com largura fixa por coluna (Estado
+    flexível, UF/Unidades/Receita/% com largura definida) — cabeçalho e dado sempre caem exatamente
+    no mesmo lugar, independente do conteúdo — e o cabeçalho das colunas numéricas passou a ser
+    `text-align:right` também (`th.num`), igual ao dado.
+  - **Imagem do produto:** `productGeo` (`metrics.js`) ganhou o campo `image` — capturado na mesma
+    passada que já monta a geografia por produto, reaproveitando exatamente a mesma fonte de
+    `aggregateProductsByChannel()` (ver 4.13): `it.image` (Shopify/Shopee/Mercado Livre já vêm com
+    isso no pedido) com fallback pro cache `amazonProductImages[it.asin]` (Amazon, hoje vazio por
+    causa do bloqueio de role "Product Listing", ver backlog aberto 4 — quando for destravado, entra
+    sozinho aqui também, sem mudança de código). Miniatura de 28px em cada linha de produto
+    (`.geo-prod-thumb`/`.geo-prod-thumb-ph`, mesmo padrão visual — inclusive o fallback via `onerror`
+    — de `produtos.html`/`estoque.html`). Sem imagem (Amazon, hoje) mostra o placeholder de ícone,
+    igual às outras telas — nunca quebra o layout.
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 
