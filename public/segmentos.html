@@ -256,6 +256,8 @@
   /* ── "Unificar" — agrupamento manual de produtos entre canais ── */
   .geo-select-check{width:15px;height:15px;flex-shrink:0;accent-color:var(--ink);cursor:pointer}
   .geo-unify-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
+  /* Modo Selecionar: avisa que esse produto já pertence a um grupo, pra não criar unificação duplicada/conflitante */
+  .geo-select-warn{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--amber);background:rgba(155,122,42,.1);border:1px solid rgba(155,122,42,.35);border-radius:10px;padding:2px 7px;flex-shrink:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .geo-select-bar{display:none;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--sub)}
   .geo-select-bar button{font-size:11px;font-weight:600;padding:7px 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;transition:all .12s}
   .geo-select-bar button:hover:not(:disabled){border-color:var(--ink);color:var(--text)}
@@ -896,6 +898,15 @@ function updateGeoSelectBar() {
   document.getElementById('geoSelectConfirmBtn').disabled = geoSelected.size < 2;
 }
 
+// Em qual grupo (se algum) um título cru já está — usado no modo Selecionar pra avisar antes de
+// unificar de novo (produto já unificado noutro grupo, ver aviso em geoProdRowHtml).
+function findGroupForTitle(title) {
+  for (const [name, members] of Object.entries(geoGroups)) {
+    if (members.includes(title)) return name;
+  }
+  return null;
+}
+
 function suggestGroupName(titles) {
   return titles.reduce((shortest, t) => (t.length < shortest.length ? t : shortest), titles[0]);
 }
@@ -1204,6 +1215,10 @@ function geoProdRowHtml(p, i) {
   const badge = (!geoSelectMode && p._grouped)
     ? `<span class="geo-unify-badge" title="${escHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>`
     : '';
+  const existingGroup = geoSelectMode ? findGroupForTitle(p.title) : null;
+  const warn = existingGroup
+    ? `<span class="geo-select-warn" title="Já faz parte do grupo &quot;${escHtml(existingGroup)}&quot;">⚠ faz parte de "${escHtml(existingGroup)}"</span>`
+    : '';
   return `
     <div class="geo-prod-card${isOpen ? ' open' : ''}">
       <div class="geo-prod-row" data-title="${encodeURIComponent(p.title)}">
@@ -1212,6 +1227,7 @@ function geoProdRowHtml(p, i) {
         ${thumb}
         <span class="geo-prod-name" title="${p.title}">${p.title}</span>
         ${badge}
+        ${warn}
         <span class="geo-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
         <span class="geo-prod-rev">${fmtMoney(p.revenue)}</span>
         <span class="geo-prod-chevron">▸</span>
