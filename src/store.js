@@ -32,6 +32,7 @@ const EMPTY = {
   productFinance: {},
   productStock: {},
   productStockAgg: {},
+  productGroups: {}, // { [market]: { [nomeDoGrupo]: [tituloBruto,...] } } — unificação manual de produtos entre canais, ver Segmentos "Unificar"
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
@@ -122,6 +123,7 @@ export async function initStore() {
       if (r.key === 'productFinance')       cache.productFinance       = r.value;
       if (r.key === 'productStock')         cache.productStock         = r.value;
       if (r.key === 'productStockAgg')      cache.productStockAgg      = r.value;
+      if (r.key === 'productGroups')        cache.productGroups        = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -439,6 +441,49 @@ export function setProductStockAgg(key, patch) {
   if (USE_PG) pgKv('productStockAgg', db.productStockAgg);
 }
 export function getProductStockAgg() { return load().productStockAgg || {}; }
+
+// ── Unificação manual de produtos entre canais ("Unificar" em Segmentos) ──
+// Um título pertence a no máximo um grupo por mercado. Ver CLAUDE.md sobre "Unificar".
+export function getProductGroups() { return load().productGroups || {}; }
+export function upsertProductGroup(market, name, members) {
+  const db = load();
+  if (!db.productGroups) db.productGroups = {};
+  const mkt = db.productGroups[market] || (db.productGroups[market] = {});
+  // Une aos membros já existentes no grupo (reusar o mesmo nome = adicionar a ele).
+  const merged = Array.from(new Set([...(mkt[name] || []), ...members]));
+  // Um título nunca fica em dois grupos: some de qualquer outro grupo do mesmo mercado.
+  for (const [gName, gMembers] of Object.entries(mkt)) {
+    if (gName === name) continue;
+    const kept = gMembers.filter(t => !merged.includes(t));
+    if (kept.length) mkt[gName] = kept; else delete mkt[gName];
+  }
+  if (merged.length) mkt[name] = merged; else delete mkt[name];
+  saveJson();
+  if (USE_PG) pgKv('productGroups', db.productGroups);
+  return mkt;
+}
+export function deleteProductGroup(market, name) {
+  const db = load();
+  if (!db.productGroups) db.productGroups = {};
+  const mkt = db.productGroups[market] || (db.productGroups[market] = {});
+  delete mkt[name];
+  saveJson();
+  if (USE_PG) pgKv('productGroups', db.productGroups);
+  return mkt;
+}
+// Tira só UM título do grupo (diferente de upsertProductGroup, que só une membros — nunca tira).
+export function removeFromProductGroup(market, name, title) {
+  const db = load();
+  if (!db.productGroups) db.productGroups = {};
+  const mkt = db.productGroups[market] || (db.productGroups[market] = {});
+  if (mkt[name]) {
+    const kept = mkt[name].filter(t => t !== title);
+    if (kept.length) mkt[name] = kept; else delete mkt[name];
+  }
+  saveJson();
+  if (USE_PG) pgKv('productGroups', db.productGroups);
+  return mkt;
+}
 
 // ── Meta Insights ─────────────────────────────
 export function setMetaInsightsDaily(data) {

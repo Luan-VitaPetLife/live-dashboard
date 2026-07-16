@@ -420,6 +420,42 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     inteiros pra o período/canal/mercado atual (diferente da busca de Pedidos Recentes, que precisa de
     backend porque só os pedidos recentes ficam carregados). Com busca ativa, mostra **todos** os
     resultados de cada segmento (ignora o corte de 5 + "ver mais"). Reseta ao trocar mercado/canal.
+- **"Unificar" — agrupamento manual de produtos entre canais (16/07/2026, 6ª rodada):** o mesmo produto
+  físico (ex: Lysine em pó) aparece fragmentado em várias linhas porque cada canal nomeia diferente —
+  Shopify usa o nome oficial, Mercado Livre/Shopee às vezes descrevem por ingrediente, Amazon usa
+  título de marketing; no mercado US, muitos produtos existem tanto no Shopify quanto na Amazon com
+  nomes completamente distintos. **Decisão deliberada: nenhum matching automático por nome** — o risco
+  de juntar produtos diferentes (sabores/tamanhos parecidos) foi levantado e o Luan confirmou que quer
+  **100% manual, pela tela** (mesmo espírito do `TITLE_ALIASES` que já existe em `metrics.js`, só que
+  generalizado, persistido e editável pela UI em vez de hardcoded).
+  - **Modelo de dados** (`kv.productGroups`, `store.js`): `{ [market]: { [nomeDoGrupo]: [tituloBruto,...] } }`.
+    Um título pertence a **no máximo um grupo** por mercado (BR e US nunca se misturam, mesma regra de
+    todo o resto do app). `upsertProductGroup(market, name, members)` **une** os membros novos aos já
+    existentes do grupo (reusar o mesmo nome = adicionar a ele) e **remove** cada membro de qualquer
+    outro grupo do mesmo mercado onde estivesse antes — nunca duplica. `removeFromProductGroup` tira só
+    um título (operação de subtração, diferente do upsert que só une). `deleteProductGroup` apaga o
+    grupo inteiro ("desfazer unificação"). Mesmo padrão de persistência de `getProductFinance`/
+    `setProductFinance` (`load()` → muta → `saveJson()` → `pgKv` se Postgres).
+  - **Endpoints** (`server.js`): `GET /api/product-groups?market=` (lê os grupos do mercado),
+    `POST /api/product-groups` (`{market,name,members}`, cria/adiciona), `POST
+    /api/product-groups/remove-member` (`{market,name,title}`, tira um membro),
+    `DELETE /api/product-groups?market=&name=` (apaga o grupo).
+  - **`productGeo`/`metrics.js` não mudou** — continua devolvendo dado cru por título. A junção
+    acontece **no cliente** (`mergeProductGroups()`, função pura em `segmentos.html`, soma qty/receita
+    e re-soma `byChannel`/`byState` por chave, primeira `image` não-nula entre os membros vence — é o
+    "fotos unificadas" que o Luan mencionou como benefício colateral), então o toggle **Unificar**
+    liga/desliga na hora, sem round-trip, e a mesma função é reaproveitável em Produtos/Estoque depois
+    sem mexer no backend de novo (só essa rodada mexeu na UI, o modelo já nasceu genérico).
+  - **UI:** botão "Unificar" (🔗, persistido `coco_seg_unify`) alterna entre ver produtos crus ou
+    agrupados. Botão "Selecionar" (☑) mostra checkbox em cada linha e **força a visão crua** enquanto
+    ativo (senão não dá pra escolher membros que já estão dentro de um grupo); com 2+ selecionados,
+    "Unificar selecionados" abre um modal pequeno pra nomear o grupo (sugere o título mais curto dos
+    selecionados; digitar um nome já existente adiciona a esse grupo). Confirmar liga "Unificar"
+    automaticamente. Uma linha agrupada mostra um badge (🔗 N) e, expandida, uma seção "Produtos
+    unificados" listando os membros com "✕" pra tirar um específico e "Desfazer unificação" pra apagar
+    o grupo inteiro.
+  - **Escopo desta rodada:** só o card "Onde os produtos vendem". Reaproveitar em Produtos/Estoque é um
+    próximo passo natural (o Luan sinalizou isso), mas não foi pedido ainda.
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 
@@ -977,6 +1013,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta + Google Ads. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
   - `GET /api/products?market=br|us&since=&until=` — catálogo completo de produtos por canal (sem cache, direto do store). Usado pela tela de Produtos (`produtos.html`).
   - `GET /api/orders/search?market=br|us&q=&limit=` — busca geral de pedidos em todo o histórico do mercado (`searchOrders()`), sem janela de data. Usado pelo campo de busca do card "Pedidos Recentes" (`index.html`). Ver 4.9b.
+  - `GET /api/product-groups?market=br|us` — grupos de unificação manual de produtos do mercado. `POST /api/product-groups` (`{market,name,members}`) cria/adiciona a um grupo. `POST /api/product-groups/remove-member` (`{market,name,title}`) tira um membro. `DELETE /api/product-groups?market=&name=` apaga o grupo. Persistido em `kv.productGroups`. Usado pelo botão "Unificar" em Segmentos.
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `GET /api/stock?market=br|us` — estoque + produção por canal (`channels`) e por família de produto somando todos os canais (`agg`), janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
   - `POST /api/stock/finance` — salva/edita estoque ou recebendo de um produto, por canal (`{ channel, title, stock?, incoming? }`), persistido em `kv.productStock`. Ver 4.14.

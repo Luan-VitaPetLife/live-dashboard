@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -132,6 +132,37 @@ app.get('/api/orders/search', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Unificação manual de produtos entre canais ("Unificar" em Segmentos) — grupos por mercado,
+// um título pertence a no máximo um grupo. Ver CLAUDE.md.
+app.get('/api/product-groups', (req, res) => {
+  try {
+    const { market = 'br' } = req.query;
+    res.json({ groups: getProductGroups()[market] || {} });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post('/api/product-groups', (req, res) => {
+  const { market, name, members } = req.body || {};
+  if (!market || !name || !Array.isArray(members) || !members.length) {
+    return res.status(400).json({ error: 'market, name e members (array não vazio) são obrigatórios.' });
+  }
+  const groups = upsertProductGroup(market, name, members);
+  res.json({ groups });
+});
+app.post('/api/product-groups/remove-member', (req, res) => {
+  const { market, name, title } = req.body || {};
+  if (!market || !name || !title) return res.status(400).json({ error: 'market, name e title são obrigatórios.' });
+  const groups = removeFromProductGroup(market, name, title);
+  res.json({ groups });
+});
+app.delete('/api/product-groups', (req, res) => {
+  const { market, name } = req.query;
+  if (!market || !name) return res.status(400).json({ error: 'market e name são obrigatórios.' });
+  const groups = deleteProductGroup(market, name);
+  res.json({ groups });
 });
 
 // Salva/edita dados financeiros de um produto (COG, frete, % imposto, % comissão) — usado pela tela de Produtos.

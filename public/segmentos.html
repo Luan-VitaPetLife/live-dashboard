@@ -211,6 +211,7 @@
   .geo-view-toggle button.active{background:var(--ink);color:var(--side-text)}
   .geo-map-toggle{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:600;color:var(--sub);background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:6px 12px;cursor:pointer;transition:all .12s}
   .geo-map-toggle:hover{border-color:var(--ink);color:var(--text)}
+  .geo-map-toggle.active{background:var(--ink);color:var(--side-text);border-color:var(--ink)}
 
   .geo-detail-body{display:grid;grid-template-columns:220px 1fr;gap:16px}
   .geo-detail-body.no-map{grid-template-columns:1fr}
@@ -251,6 +252,36 @@
   .leaflet-container{font-family:inherit}
   .geo-state-tooltip{background:rgba(28,26,22,.88)!important;border:none!important;border-radius:5px!important;color:#f0ebe0!important;font-size:10px!important;font-weight:600!important;padding:4px 7px!important;white-space:nowrap!important;box-shadow:0 2px 8px rgba(0,0,0,.25)!important;pointer-events:none!important}
   .geo-state-tooltip::before{display:none!important}
+
+  /* ── "Unificar" — agrupamento manual de produtos entre canais ── */
+  .geo-select-check{width:15px;height:15px;flex-shrink:0;accent-color:var(--ink);cursor:pointer}
+  .geo-unify-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
+  .geo-select-bar{display:none;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--sub)}
+  .geo-select-bar button{font-size:11px;font-weight:600;padding:7px 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;transition:all .12s}
+  .geo-select-bar button:hover:not(:disabled){border-color:var(--ink);color:var(--text)}
+  .geo-select-bar button:disabled{opacity:.45;cursor:not-allowed}
+  .geo-select-bar button.primary{background:var(--ink);color:var(--side-text);border-color:var(--ink)}
+  .geo-select-bar button.primary:disabled{background:var(--border2);border-color:var(--border2);color:var(--muted)}
+  .geo-unified-members{padding:10px 12px;margin-bottom:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)}
+  .geo-unified-list{display:flex;flex-direction:column;gap:5px;margin:8px 0}
+  .geo-unified-item{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--text)}
+  .geo-unified-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .geo-unified-remove{flex-shrink:0;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 5px;border-radius:4px}
+  .geo-unified-remove:hover{background:var(--border2);color:var(--red)}
+
+  /* Modal pequeno pra nomear o grupo unificado — mesmo padrão do modal do mapa, menor */
+  .geo-name-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4100;display:none;backdrop-filter:blur(2px)}
+  .geo-name-modal-overlay.open{display:block}
+  .geo-name-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:380px;max-width:92vw;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4101;display:none;flex-direction:column;padding:20px}
+  .geo-name-modal.open{display:flex}
+  .geo-name-modal-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:3px}
+  .geo-name-modal-sub{font-size:11px;color:var(--sub);margin-bottom:14px}
+  .geo-name-modal input{font-size:13px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none;font-family:inherit;color:var(--text)}
+  .geo-name-modal input:focus{border-color:var(--ink)}
+  .geo-name-modal-err{font-size:10px;color:var(--red);min-height:14px;margin-top:5px}
+  .geo-name-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+  .geo-name-modal-actions button{font-size:12px;font-weight:600;padding:8px 16px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer}
+  .geo-name-modal-actions .primary{background:var(--ink);color:var(--side-text);border-color:var(--ink)}
 
   /* Modal do mapa ampliado */
   .geo-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4000;display:none;backdrop-filter:blur(2px)}
@@ -372,11 +403,18 @@
         </div>
         <div class="geo-card-tools">
           <div class="geo-search"><i class="bi bi-search"></i><input type="search" id="geoSearchInput" placeholder="Buscar produto…" autocomplete="off" aria-label="Buscar produto"></div>
+          <button class="geo-map-toggle" id="geoUnifyBtn" title="Mostra produtos unificados manualmente como uma linha só"><i class="bi bi-link-45deg"></i> Unificar</button>
+          <button class="geo-map-toggle" id="geoSelectBtn" title="Selecionar produtos pra unificar"><i class="bi bi-check2-square"></i> Selecionar</button>
           <div class="geo-layout-toggle" id="geoLayoutToggle">
             <button data-layout="rows" title="Linhas"><i class="bi bi-list-ul"></i></button>
             <button data-layout="columns" title="Colunas"><i class="bi bi-grid-3x3-gap"></i></button>
           </div>
         </div>
+      </div>
+      <div class="geo-select-bar" id="geoSelectBar">
+        <span id="geoSelectCount">0 selecionados</span>
+        <button class="primary" id="geoSelectConfirmBtn" disabled>Unificar selecionados</button>
+        <button id="geoSelectCancelBtn">Cancelar</button>
       </div>
       <div id="geoBlocks"></div>
     </div>
@@ -399,6 +437,19 @@
     </div>
   </div>
   <div class="geo-modal-map" id="geoModalMap"></div>
+</div>
+
+<!-- Modal pra nomear o grupo unificado -->
+<div class="geo-name-modal-overlay" id="geoNameModalOverlay"></div>
+<div class="geo-name-modal" id="geoNameModal">
+  <div class="geo-name-modal-title">Nome do produto unificado</div>
+  <div class="geo-name-modal-sub">Reusar um nome já existente adiciona os selecionados a esse grupo.</div>
+  <input type="text" id="geoNameInput" placeholder="Ex: Lisina 120g" autocomplete="off">
+  <div class="geo-name-modal-err" id="geoNameError"></div>
+  <div class="geo-name-modal-actions">
+    <button id="geoNameCancelBtn">Cancelar</button>
+    <button class="primary" id="geoNameConfirmBtn">Unificar</button>
+  </div>
 </div>
 
 <script>
@@ -780,6 +831,87 @@ let geoMapHidden = localStorage.getItem('coco_seg_geohide') === '1';
 let geoLayoutMode = localStorage.getItem('coco_seg_geolayout') || 'rows';       // 'rows' | 'columns'
 let geoSearchQuery = '';                                                        // filtro por título, client-side (não persiste entre sessões)
 function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ── "Unificar" — agrupamento manual de produtos entre canais (sem matching automático: só o que
+// o Luan selecionar pela tela). Grupos são por mercado, buscados à parte de /api/dashboard. ──
+let geoUnifyOn = localStorage.getItem('coco_seg_unify') === '1';
+let geoSelectMode = false;
+let geoSelected = new Set();
+let geoGroups = {}; // { [nomeDoGrupo]: [tituloBruto,...] } — grupos do mercado atual
+
+async function loadProductGroups() {
+  try {
+    const r = await fetch('/api/product-groups?market=' + market, { credentials: 'same-origin' });
+    const d = await r.json();
+    geoGroups = d.groups || {};
+  } catch (e) { geoGroups = {}; }
+}
+
+// Junta os grupos definidos em `groups` dentro da lista `list` (productGeo) — soma qty/receita,
+// soma byChannel/byState por chave e reordena, primeira imagem não-nula entre os membros vence.
+// Produtos fora de qualquer grupo passam direto. Função pura, reaproveitável em outras páginas.
+function mergeProductGroups(list, groups) {
+  if (!groups || !Object.keys(groups).length) return list;
+  const byTitle = {};
+  list.forEach(p => { byTitle[p.title] = p; });
+  const usedTitles = new Set();
+  const mergedRows = [];
+  for (const [name, members] of Object.entries(groups)) {
+    const found = members.map(t => byTitle[t]).filter(Boolean);
+    if (!found.length) continue;
+    found.forEach(p => usedTitles.add(p.title));
+    let qty = 0, revenue = 0, image = null;
+    const chanAcc = {}, stateAcc = {};
+    found.forEach(p => {
+      qty += p.qty;
+      revenue += p.revenue;
+      if (!image && p.image) image = p.image;
+      p.byChannel.forEach(c => {
+        if (!chanAcc[c.channel]) chanAcc[c.channel] = { channel: c.channel, qty: 0, revenue: 0 };
+        chanAcc[c.channel].qty += c.qty;
+        chanAcc[c.channel].revenue += c.revenue;
+      });
+      p.byState.forEach(s => {
+        if (!stateAcc[s.state]) stateAcc[s.state] = { state: s.state, qty: 0, revenue: 0, orders: 0 };
+        stateAcc[s.state].qty += s.qty;
+        stateAcc[s.state].revenue += s.revenue;
+        stateAcc[s.state].orders += s.orders;
+      });
+    });
+    mergedRows.push({
+      title: name, seg: found[0].seg, qty, revenue, image,
+      byChannel: Object.values(chanAcc).sort((a, b) => b.qty - a.qty),
+      byState: Object.values(stateAcc).sort((a, b) => b.qty - a.qty),
+      _grouped: true, _members: found.map(p => p.title),
+    });
+  }
+  const passthrough = list.filter(p => !usedTitles.has(p.title));
+  return [...mergedRows, ...passthrough].sort((a, b) => b.qty - a.qty);
+}
+
+function updateGeoSelectBar() {
+  const bar = document.getElementById('geoSelectBar');
+  bar.style.display = geoSelectMode ? 'flex' : 'none';
+  document.getElementById('geoSelectCount').textContent = `${geoSelected.size} selecionado${geoSelected.size === 1 ? '' : 's'}`;
+  document.getElementById('geoSelectConfirmBtn').disabled = geoSelected.size < 2;
+}
+
+function suggestGroupName(titles) {
+  return titles.reduce((shortest, t) => (t.length < shortest.length ? t : shortest), titles[0]);
+}
+function openGeoNameModal(titles) {
+  const input = document.getElementById('geoNameInput');
+  input.value = suggestGroupName(titles);
+  document.getElementById('geoNameError').textContent = '';
+  document.getElementById('geoNameModal').dataset.titles = JSON.stringify(titles);
+  document.getElementById('geoNameModalOverlay').classList.add('open');
+  document.getElementById('geoNameModal').classList.add('open');
+  input.focus(); input.select();
+}
+function closeGeoNameModal() {
+  document.getElementById('geoNameModalOverlay').classList.remove('open');
+  document.getElementById('geoNameModal').classList.remove('open');
+}
 const GEO_CHART_MAX = 12; // nº de estados no modo Gráfico (o resto continua em Ranking/Tabela)
 
 function destroyGeoMap() {
@@ -875,6 +1007,18 @@ function geoDetailHtml(p) {
   const dataHtml = geoViewMode === 'table' ? geoTableHtml(p) : geoViewMode === 'chart' ? geoChartHtml(p) : geoRankingHtml(p);
   const chanItems = p.byChannel.map(c => `
       <div class="geo-chan-pill"><span class="geo-chan-name">${CH_LABELS[c.channel] || c.channel}</span><span class="geo-chan-qty">${c.qty.toLocaleString('pt-BR')} un</span></div>`).join('');
+  const unifiedSection = p._grouped ? `
+    <div class="geo-unified-members">
+      <div class="geo-rank-title">Produtos unificados</div>
+      <div class="geo-unified-list">
+        ${p._members.map(t => `
+          <div class="geo-unified-item">
+            <span title="${escHtml(t)}">${escHtml(t)}</span>
+            <button class="geo-unified-remove" data-group="${encodeURIComponent(p.title)}" data-member="${encodeURIComponent(t)}" title="Tirar do grupo">✕</button>
+          </div>`).join('')}
+      </div>
+      <button class="seg-more" data-ungroup="${encodeURIComponent(p.title)}">Desfazer unificação</button>
+    </div>` : '';
   return `
     <div class="geo-detail-toolbar">
       <div class="geo-view-toggle" id="geoViewToggle">
@@ -885,6 +1029,7 @@ function geoDetailHtml(p) {
       <button class="geo-map-toggle" id="geoMapHideBtn">${showMap ? '🗺 Ocultar mapa' : '🗺 Mostrar mapa'}</button>
     </div>
     ${geoStatsHtml(p)}
+    ${unifiedSection}
     <div class="geo-detail-body${showMap ? '' : ' no-map'}">
       ${mapHtml}
       <div class="geo-rank-col">
@@ -1053,12 +1198,20 @@ function geoProdRowHtml(p, i) {
   const thumb = p.image
     ? `<img class="geo-prod-thumb" src="${p.image}" alt="" loading="lazy" draggable="false" onerror="this.outerHTML='<div class=&quot;geo-prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
     : `<div class="geo-prod-thumb-ph"><i class="bi bi-image"></i></div>`;
+  const checkbox = geoSelectMode
+    ? `<input type="checkbox" class="geo-select-check" ${geoSelected.has(p.title) ? 'checked' : ''}>`
+    : '';
+  const badge = (!geoSelectMode && p._grouped)
+    ? `<span class="geo-unify-badge" title="${escHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>`
+    : '';
   return `
     <div class="geo-prod-card${isOpen ? ' open' : ''}">
       <div class="geo-prod-row" data-title="${encodeURIComponent(p.title)}">
+        ${checkbox}
         <span class="geo-prod-rank">${i + 1}.</span>
         ${thumb}
         <span class="geo-prod-name" title="${p.title}">${p.title}</span>
+        ${badge}
         <span class="geo-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
         <span class="geo-prod-rev">${fmtMoney(p.revenue)}</span>
         <span class="geo-prod-chevron">▸</span>
@@ -1071,8 +1224,10 @@ function renderGeoBlocks() {
   destroyGeoMap();
   destroyGeoBarChart();
   const container = document.getElementById('geoBlocks');
+  // Modo Selecionar sempre mostra a lista crua (senão não dá pra escolher membros já unificados).
+  const base = (geoUnifyOn && !geoSelectMode) ? mergeProductGroups(lastProductGeo, geoGroups) : lastProductGeo;
   const q = geoSearchQuery.trim().toLowerCase();
-  const source = q ? lastProductGeo.filter(p => p.title.toLowerCase().includes(q)) : lastProductGeo;
+  const source = q ? base.filter(p => p.title.toLowerCase().includes(q)) : base;
   const segsPresent = ['cat','dog','other'].filter(k => source.some(p => p.seg === k));
   if (!segsPresent.length) {
     container.innerHTML = q
@@ -1082,11 +1237,11 @@ function renderGeoBlocks() {
   }
   container.innerHTML = segsPresent.map(seg => {
     const prods = source.filter(p => p.seg === seg);
-    // com busca ativa mostra todos os resultados (sem o corte de 5 + "ver mais")
-    const exp = q || geoExpanded[seg];
+    // com busca ou seleção ativa mostra todos os resultados (sem o corte de 5 + "ver mais")
+    const exp = q || geoSelectMode || geoExpanded[seg];
     const shown = exp ? prods : prods.slice(0, 5);
     const rows = shown.map((p, i) => geoProdRowHtml(p, i)).join('');
-    const moreBtn = !q && prods.length > 5
+    const moreBtn = !q && !geoSelectMode && prods.length > 5
       ? `<button class="seg-more" onclick="toggleGeoExpand('${seg}')">${exp ? 'Ver menos' : 'Ver mais (' + (prods.length - 5) + ')'}</button>`
       : '';
     return `
@@ -1096,8 +1251,8 @@ function renderGeoBlocks() {
         ${moreBtn}
       </div>`;
   }).join('');
-  if (openProduct) {
-    const p = lastProductGeo.find(x => x.title === openProduct);
+  if (openProduct && !geoSelectMode) {
+    const p = base.find(x => x.title === openProduct);
     if (p) {
       if (!geoMapHidden) initGeoMap(p);
       if (geoViewMode === 'chart') geoRenderBarChart(p);
@@ -1121,9 +1276,33 @@ document.getElementById('geoBlocks').addEventListener('click', e => {
     renderGeoBlocks();
     return;
   }
+  // Gerenciar um grupo já unificado (painel expandido de uma linha agrupada).
+  const removeBtn = e.target.closest('.geo-unified-remove');
+  if (removeBtn) {
+    const name = decodeURIComponent(removeBtn.dataset.group);
+    const member = decodeURIComponent(removeBtn.dataset.member);
+    fetch('/api/product-groups/remove-member', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ market, name, title: member }),
+    }).then(r => r.json()).then(d => { geoGroups = d.groups || {}; renderGeoBlocks(); });
+    return;
+  }
+  const ungroupBtn = e.target.closest('[data-ungroup]');
+  if (ungroupBtn) {
+    const name = decodeURIComponent(ungroupBtn.dataset.ungroup);
+    fetch(`/api/product-groups?market=${encodeURIComponent(market)}&name=${encodeURIComponent(name)}`, { method: 'DELETE', credentials: 'same-origin' })
+      .then(r => r.json()).then(d => { geoGroups = d.groups || {}; openProduct = null; renderGeoBlocks(); });
+    return;
+  }
   const row = e.target.closest('.geo-prod-row');
   if (!row) return;
   const title = decodeURIComponent(row.dataset.title);
+  if (geoSelectMode) {
+    if (geoSelected.has(title)) geoSelected.delete(title); else geoSelected.add(title);
+    updateGeoSelectBar();
+    renderGeoBlocks();
+    return;
+  }
   openProduct = openProduct === title ? null : title;
   renderGeoBlocks();
 });
@@ -1140,6 +1319,61 @@ document.getElementById('geoSearchInput').addEventListener('input', e => {
   geoSearchQuery = e.target.value;
   openProduct = null;
   renderGeoBlocks();
+});
+document.getElementById('geoUnifyBtn').classList.toggle('active', geoUnifyOn);
+document.getElementById('geoUnifyBtn').addEventListener('click', () => {
+  geoUnifyOn = !geoUnifyOn;
+  localStorage.setItem('coco_seg_unify', geoUnifyOn ? '1' : '0');
+  document.getElementById('geoUnifyBtn').classList.toggle('active', geoUnifyOn);
+  openProduct = null;
+  renderGeoBlocks();
+});
+document.getElementById('geoSelectBtn').addEventListener('click', () => {
+  geoSelectMode = !geoSelectMode;
+  geoSelected.clear();
+  document.getElementById('geoSelectBtn').classList.toggle('active', geoSelectMode);
+  openProduct = null;
+  updateGeoSelectBar();
+  renderGeoBlocks();
+});
+document.getElementById('geoSelectCancelBtn').addEventListener('click', () => {
+  geoSelectMode = false;
+  geoSelected.clear();
+  document.getElementById('geoSelectBtn').classList.remove('active');
+  updateGeoSelectBar();
+  renderGeoBlocks();
+});
+document.getElementById('geoSelectConfirmBtn').addEventListener('click', () => {
+  if (geoSelected.size < 2) return;
+  openGeoNameModal([...geoSelected]);
+});
+document.getElementById('geoNameModalOverlay').addEventListener('click', closeGeoNameModal);
+document.getElementById('geoNameCancelBtn').addEventListener('click', closeGeoNameModal);
+document.getElementById('geoNameConfirmBtn').addEventListener('click', async () => {
+  const name = document.getElementById('geoNameInput').value.trim();
+  const errEl = document.getElementById('geoNameError');
+  if (!name) { errEl.textContent = 'Digite um nome.'; return; }
+  const titles = JSON.parse(document.getElementById('geoNameModal').dataset.titles || '[]');
+  try {
+    const r = await fetch('/api/product-groups', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ market, name, members: titles }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    geoGroups = d.groups || {};
+    closeGeoNameModal();
+    geoSelectMode = false;
+    geoSelected.clear();
+    document.getElementById('geoSelectBtn').classList.remove('active');
+    geoUnifyOn = true;
+    localStorage.setItem('coco_seg_unify', '1');
+    document.getElementById('geoUnifyBtn').classList.add('active');
+    updateGeoSelectBar();
+    renderGeoBlocks();
+  } catch (e) {
+    errEl.textContent = 'Erro ao salvar. Tente de novo.';
+  }
 });
 
 // ── Render ──
@@ -1164,7 +1398,7 @@ async function loadData() {
   setLive('loading','Atualizando…');
   try {
     const p = new URLSearchParams({ channel, metric:'receita', since:sinceDate, until:untilDate, market });
-    const r = await fetch('/api/dashboard?' + p);
+    const [r] = await Promise.all([fetch('/api/dashboard?' + p), loadProductGroups()]);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     render(d);
@@ -1188,6 +1422,9 @@ document.querySelectorAll('.mkt-btn').forEach(btn => {
     openProduct = null;
     geoSearchQuery = '';
     document.getElementById('geoSearchInput').value = '';
+    geoSelectMode = false;
+    geoSelected.clear();
+    document.getElementById('geoSelectBtn').classList.remove('active');
     buildChannelDropdown();
     loadData();
   });
@@ -1219,6 +1456,9 @@ document.getElementById('channelPop').addEventListener('click', e => {
   openProduct = null;
   geoSearchQuery = '';
   document.getElementById('geoSearchInput').value = '';
+  geoSelectMode = false;
+  geoSelected.clear();
+  document.getElementById('geoSelectBtn').classList.remove('active');
   buildChannelDropdown();
   document.getElementById('channelPop').classList.remove('open');
   document.getElementById('channelPill').classList.remove('open');
