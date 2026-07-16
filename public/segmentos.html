@@ -7,6 +7,8 @@
 <link rel="icon" href="favicon.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -151,12 +153,48 @@
   .other-card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:10px;display:flex;align-items:center;gap:8px}
   .other-note{font-size:11px;color:var(--muted)}
 
+  /* ── Onde os produtos vendem (mapa + ranking por estado) ── */
+  .geo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px 8px;margin-top:16px}
+  .geo-card-title{font-size:15px;font-weight:700;color:var(--ink)}
+  .geo-card-sub{font-size:11px;color:var(--sub);margin-top:2px;margin-bottom:14px}
+  .geo-seg-block{margin-bottom:8px}
+  .geo-seg-head{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+  .geo-seg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .geo-prod-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-radius:var(--radius-sm);cursor:pointer;transition:background .12s}
+  .geo-prod-row:hover{background:var(--surface2)}
+  .geo-prod-row.open{background:var(--surface2)}
+  .geo-prod-rank{font-size:11px;font-weight:700;color:var(--muted);width:14px;text-align:right;flex-shrink:0}
+  .geo-prod-name{flex:1;min-width:0;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .geo-prod-qty{font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0}
+  .geo-prod-rev{font-size:10px;color:var(--sub);min-width:64px;text-align:right;flex-shrink:0}
+  .geo-prod-chevron{font-size:10px;color:var(--muted);transition:transform .15s;flex-shrink:0}
+  .geo-prod-row.open .geo-prod-chevron{transform:rotate(90deg)}
+  .geo-detail{display:grid;grid-template-columns:220px 1fr;gap:16px;padding:6px 4px 18px;margin-bottom:6px;border-bottom:1px solid var(--border)}
+  .geo-map{height:220px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border2);background:var(--surface2)}
+  .geo-rank-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .geo-rank-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub)}
+  .geo-rank-list{display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto}
+  .geo-rank-item{display:flex;align-items:center;gap:8px;font-size:11px}
+  .geo-rank-uf{font-weight:700;color:var(--ink);width:26px;flex-shrink:0}
+  .geo-rank-name{flex:1;min-width:0;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .geo-rank-qty{font-weight:700;color:var(--text);flex-shrink:0}
+  .geo-rank-pct{color:var(--muted);width:40px;text-align:right;flex-shrink:0}
+  .geo-chans{display:flex;flex-wrap:wrap;gap:6px}
+  .geo-chan-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);font-size:10px}
+  .geo-chan-name{color:var(--sub);font-weight:500}
+  .geo-chan-qty{color:var(--ink);font-weight:700}
+  .geo-empty{font-size:11px;color:var(--muted);font-style:italic;padding:8px 4px}
+  .leaflet-container{font-family:inherit}
+  .geo-state-tooltip{background:rgba(28,26,22,.88)!important;border:none!important;border-radius:5px!important;color:#f0ebe0!important;font-size:10px!important;font-weight:600!important;padding:4px 7px!important;white-space:nowrap!important;box-shadow:0 2px 8px rgba(0,0,0,.25)!important;pointer-events:none!important}
+  .geo-state-tooltip::before{display:none!important}
+
   /* ── Footer ── */
   .footer{font-size:10px;color:var(--muted);padding:12px 28px;border-top:1px solid var(--border);background:var(--surface)}
 
   @media(max-width:768px){
     .seg-overview{grid-template-columns:1fr}
     .seg-cards{grid-template-columns:1fr}
+    .geo-detail{grid-template-columns:1fr}
   }
 </style>
 </head>
@@ -241,6 +279,13 @@
         <span class="other-note">— títulos sem palavras-chave de espécie</span>
       </div>
       <div class="seg-prod-list" id="otherList"></div>
+    </div>
+
+    <!-- Onde os produtos vendem -->
+    <div class="geo-card" id="geoCard">
+      <div class="geo-card-title">Onde os produtos vendem</div>
+      <div class="geo-card-sub">Ranking de estados e canal de venda por produto — clique num produto para expandir</div>
+      <div id="geoBlocks"></div>
     </div>
   </div>
 
@@ -431,6 +476,215 @@ function renderOther(segs) {
   document.getElementById('otherList').innerHTML = prodListHtml(other.topProducts, 'other');
 }
 
+// ── Onde os produtos vendem (mapa + ranking por estado, por produto) ──
+const STATE_NAMES_BR = {
+  AC:'Acre',AL:'Alagoas',AM:'Amazonas',AP:'Amapá',BA:'Bahia',
+  CE:'Ceará',DF:'Distrito Federal',ES:'Espírito Santo',GO:'Goiás',
+  MA:'Maranhão',MG:'Minas Gerais',MS:'Mato Grosso do Sul',MT:'Mato Grosso',
+  PA:'Pará',PB:'Paraíba',PE:'Pernambuco',PI:'Piauí',PR:'Paraná',
+  RJ:'Rio de Janeiro',RN:'Rio Grande do Norte',RO:'Rondônia',RR:'Roraima',
+  RS:'Rio Grande do Sul',SC:'Santa Catarina',SE:'Sergipe',SP:'São Paulo',TO:'Tocantins',
+};
+const IBGE_UF = {
+  '11':'RO','12':'AC','13':'AM','14':'RR','15':'PA','16':'AP','17':'TO',
+  '21':'MA','22':'PI','23':'CE','24':'RN','25':'PB','26':'PE','27':'AL','28':'SE','29':'BA',
+  '31':'MG','32':'ES','33':'RJ','35':'SP',
+  '41':'PR','42':'SC','43':'RS',
+  '50':'MS','51':'MT','52':'GO','53':'DF',
+};
+const STATE_NAMES_US = {
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',
+  CO:'Colorado',CT:'Connecticut',DC:'Washington D.C.',DE:'Delaware',FL:'Florida',
+  GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',
+  IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',
+  MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',
+  MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',
+  NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',
+  NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',
+  PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',
+  TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',
+  WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',
+  PR:'Porto Rico',VI:'Ilhas Virgens',GU:'Guam',AS:'Samoa Americana',MP:'Marianas',
+  AA:'Militar (Américas)',AE:'Militar (Europa)',AP:'Militar (Pacífico)',
+  INTL:'Outros (internacional)',
+};
+const FIPS_UF = {
+  '01':'AL','02':'AK','04':'AZ','05':'AR','06':'CA','08':'CO','09':'CT',
+  '10':'DE','11':'DC','12':'FL','13':'GA','15':'HI','16':'ID','17':'IL',
+  '18':'IN','19':'IA','20':'KS','21':'KY','22':'LA','23':'ME','24':'MD',
+  '25':'MA','26':'MI','27':'MN','28':'MS','29':'MO','30':'MT','31':'NE',
+  '32':'NV','33':'NH','34':'NJ','35':'NM','36':'NY','37':'NC','38':'ND',
+  '39':'OH','40':'OK','41':'OR','42':'PA','44':'RI','45':'SC','46':'SD',
+  '47':'TN','48':'TX','49':'UT','50':'VT','51':'VA','53':'WA','54':'WV',
+  '55':'WI','56':'WY',
+};
+const NAME_TO_UF_US = {};
+for (const [uf, name] of Object.entries(STATE_NAMES_US)) NAME_TO_UF_US[name] = uf;
+NAME_TO_UF_US['District of Columbia'] = 'DC';
+
+const MAP_BOUNDS = {
+  br: { fit:[[-33.75,-73.99],[5.26,-28.84]], center:[-15,-52] },
+  us: { fit:[[24,-125],[49.5,-66.5]], center:[38,-97] },
+};
+
+function hexToRGB(hex) { const h = hex.replace('#',''); return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]; }
+function lerpRGB(c1,c2,t) { return c1.map((v,i)=>Math.round(v+(c2[i]-v)*t)); }
+function geoChoroColor(t) {
+  const s = Math.max(0, Math.min(1, t));
+  const c0 = hexToRGB('#e8e3d8'), c1 = hexToRGB('#c49568'), c2 = hexToRGB('#8c3a20');
+  const [r,g,b] = s < 0.5 ? lerpRGB(c0,c1,s*2) : lerpRGB(c1,c2,(s-0.5)*2);
+  return `rgb(${r},${g},${b})`;
+}
+
+const geoJsonCache = {};
+async function loadGeoJSONFor(mkt) {
+  if (geoJsonCache[mkt]) return geoJsonCache[mkt];
+  try {
+    if (mkt === 'br') {
+      const res = await fetch('https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intrarregiao=UF&formato=application/vnd.geo+json&qualidade=minima');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      data.features.forEach(f => { const code = f.properties?.codarea; f.properties._uf = IBGE_UF[String(code)] || null; });
+      geoJsonCache[mkt] = data;
+    } else {
+      const res = await fetch('https://cdn.jsdelivr.net/gh/PublicaMundi/MappingAPI/data/geojson/us-states.json');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      data.features.forEach(f => {
+        const fips = String(f.properties?.id ?? '').padStart(2, '0');
+        const name = f.properties?.name || '';
+        f.properties._uf = FIPS_UF[fips] || NAME_TO_UF_US[name] || null;
+      });
+      geoJsonCache[mkt] = data;
+    }
+  } catch(e) {
+    console.error('GeoJSON load failed:', e);
+    return null;
+  }
+  return geoJsonCache[mkt];
+}
+
+let lastProductGeo = [];
+const geoExpanded = { cat:false, dog:false, other:false };
+let openProduct = null;
+let geoMapInst = null;
+
+function destroyGeoMap() {
+  if (geoMapInst) { try { geoMapInst.remove(); } catch(e) {} geoMapInst = null; }
+}
+
+function stateLabel(uf) { return market === 'us' ? (STATE_NAMES_US[uf] || uf) : (STATE_NAMES_BR[uf] || uf); }
+
+function geoDetailHtml(p) {
+  const totalQty = p.qty || 1;
+  const rankItems = p.byState.length
+    ? p.byState.map(s => `
+      <div class="geo-rank-item">
+        <span class="geo-rank-uf">${s.state}</span>
+        <span class="geo-rank-name" title="${stateLabel(s.state)}">${stateLabel(s.state)}</span>
+        <span class="geo-rank-qty">${s.qty.toLocaleString('pt-BR')} un</span>
+        <span class="geo-rank-pct">${(s.qty / totalQty * 100).toFixed(1)}%</span>
+      </div>`).join('')
+    : '<div class="geo-empty">Sem estado de entrega registrado</div>';
+  const chanItems = p.byChannel.map(c => `
+    <div class="geo-chan-pill"><span class="geo-chan-name">${CH_LABELS[c.channel] || c.channel}</span><span class="geo-chan-qty">${c.qty.toLocaleString('pt-BR')} un</span></div>`).join('');
+  return `
+    <div class="geo-map" id="geoMap"></div>
+    <div class="geo-rank-col">
+      <div class="geo-rank-title">Por estado · unidades</div>
+      <div class="geo-rank-list">${rankItems}</div>
+      ${chanItems ? `<div class="geo-rank-title">Por canal</div><div class="geo-chans">${chanItems}</div>` : ''}
+    </div>`;
+}
+
+async function initGeoMap(p) {
+  const geo = await loadGeoJSONFor(market);
+  // o usuário pode ter fechado/trocado de produto ou mercado enquanto o GeoJSON carregava
+  if (!document.getElementById('geoMap') || openProduct !== p.title) return;
+  destroyGeoMap();
+  const bounds = MAP_BOUNDS[market];
+  const map = L.map('geoMap', {
+    center: bounds.center, zoom: 3, minZoom: 2, maxZoom: 6,
+    zoomControl: false, attributionControl: false,
+    dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, touchZoom: false,
+  });
+  geoMapInst = map;
+  map.fitBounds(bounds.fit);
+  if (!geo) return; // sem GeoJSON, fica só o fundo — nunca quebra a tela
+  const stateMap = {};
+  p.byState.forEach(s => { stateMap[s.state] = s; });
+  const maxQty = Math.max(1, ...p.byState.map(s => s.qty));
+  L.geoJSON(geo, {
+    style: feature => {
+      const uf = feature.properties._uf;
+      const s = uf ? stateMap[uf] : null;
+      const t = s ? s.qty / maxQty : 0;
+      return { fillColor: s ? geoChoroColor(t) : '#e0dbd2', fillOpacity: s ? 0.82 : 0.3, color: '#bbb5aa', weight: 0.6, opacity: 1 };
+    },
+    onEachFeature: (feature, layer) => {
+      const uf = feature.properties._uf;
+      const s = uf ? stateMap[uf] : null;
+      if (s) {
+        layer.bindTooltip(
+          `<div style="text-align:center;line-height:1.4"><div style="font-size:10px;font-weight:700">${uf}</div><div style="font-size:9px;opacity:.85">${s.qty.toLocaleString('pt-BR')} un</div></div>`,
+          { permanent: true, direction: 'center', className: 'geo-state-tooltip', offset: [0, 0] }
+        );
+      }
+    },
+  }).addTo(map);
+}
+
+function geoProdRowHtml(p, i) {
+  const isOpen = openProduct === p.title;
+  return `
+    <div class="geo-prod-row${isOpen ? ' open' : ''}" data-title="${encodeURIComponent(p.title)}">
+      <span class="geo-prod-rank">${i + 1}.</span>
+      <span class="geo-prod-name" title="${p.title}">${p.title}</span>
+      <span class="geo-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
+      <span class="geo-prod-rev">${fmtMoney(p.revenue)}</span>
+      <span class="geo-prod-chevron">▸</span>
+    </div>
+    ${isOpen ? `<div class="geo-detail">${geoDetailHtml(p)}</div>` : ''}`;
+}
+
+function renderGeoBlocks() {
+  destroyGeoMap();
+  const container = document.getElementById('geoBlocks');
+  const segsPresent = ['cat','dog','other'].filter(k => lastProductGeo.some(p => p.seg === k));
+  if (!segsPresent.length) { container.innerHTML = '<div class="geo-empty">Sem dados de produto/estado no período</div>'; return; }
+  container.innerHTML = segsPresent.map(seg => {
+    const prods = lastProductGeo.filter(p => p.seg === seg);
+    const exp = geoExpanded[seg];
+    const shown = exp ? prods : prods.slice(0, 5);
+    const rows = shown.map((p, i) => geoProdRowHtml(p, i)).join('');
+    const moreBtn = prods.length > 5
+      ? `<button class="seg-more" onclick="toggleGeoExpand('${seg}')">${exp ? 'Ver menos' : 'Ver mais (' + (prods.length - 5) + ')'}</button>`
+      : '';
+    return `
+      <div class="geo-seg-block">
+        <div class="geo-seg-head"><span class="geo-seg-dot" style="background:${SEG_COLORS[seg]}"></span>${SEG_LABELS[seg]}</div>
+        ${rows}
+        ${moreBtn}
+      </div>`;
+  }).join('');
+  if (openProduct) {
+    const p = lastProductGeo.find(x => x.title === openProduct);
+    if (p) initGeoMap(p);
+  }
+}
+function toggleGeoExpand(seg) {
+  geoExpanded[seg] = !geoExpanded[seg];
+  openProduct = null;
+  renderGeoBlocks();
+}
+document.getElementById('geoBlocks').addEventListener('click', e => {
+  const row = e.target.closest('.geo-prod-row');
+  if (!row) return;
+  const title = decodeURIComponent(row.dataset.title);
+  openProduct = openProduct === title ? null : title;
+  renderGeoBlocks();
+});
+
 // ── Render ──
 function render(d) {
   const segs = d.segments || {};
@@ -439,6 +693,8 @@ function render(d) {
   renderLegend(segs);
   renderCards(segs);
   renderOther(segs);
+  lastProductGeo = d.productGeo || [];
+  renderGeoBlocks();
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   const chLbl = CH_LABELS[channel] || channel;
   document.getElementById('pageSub').textContent = `Gato vs Cão · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · última sincronização: ${up}`;
@@ -471,6 +727,8 @@ document.querySelectorAll('.mkt-btn').forEach(btn => {
     document.querySelectorAll('.mkt-btn').forEach(b => b.classList.toggle('active', b.dataset.market === market));
     channel = 'todos';            // troca de mercado reseta o canal (canais diferem por mercado)
     segExpanded.cat = segExpanded.dog = segExpanded.other = false;
+    geoExpanded.cat = geoExpanded.dog = geoExpanded.other = false;
+    openProduct = null;
     buildChannelDropdown();
     loadData();
   });

@@ -290,24 +290,32 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   });
 
   // segmentos por espécie (gato vs cão) + tipo de produto
+  // productGeoAcc: mesma passada, agrupa por título de produto (não por segmento) para saber
+  // ONDE (estado) e por qual CANAL cada produto vendeu — ver card "Onde os produtos vendem" em Segmentos.
   const segAcc = {};
+  const productGeoAcc = {};
   const seenBundleIdsSeg = new Set();
   valid.forEach(o => {
     const rf = amazonRevFactor(o); // escala receita ao total capturado (Amazon); ver 4.7.6
+    // mesma normalização de estado usada em byState (ver acima): reduz grafias da Amazon e agrupa
+    // endereços fora dos EUA em 'INTL' quando market==='us'.
+    let geoState = o.state;
+    if (market === 'us') { geoState = normalizeUsState(geoState); if (geoState && !isUsRegionCode(geoState)) geoState = 'INTL'; }
     o.items.forEach(it => {
       if (!it.title || it.title.trim() === '-') return; // placeholder de frete/serviço da Amazon, ver amazon.js ordersFromRows
       const seg  = classifySeg(it);
       const type = classifyType(it);
       const qty  = it.qty || 1;
+      const amount = (it.amount || 0) * rf;
       if (!segAcc[seg]) segAcc[seg] = { revenue: 0, units: 0, orderIds: new Set(), products: {}, byType: {} };
-      segAcc[seg].revenue += (it.amount || 0) * rf;
+      segAcc[seg].revenue += amount;
       segAcc[seg].units  += qty;
       segAcc[seg].orderIds.add(o.id);
       if (type) segAcc[seg].byType[type] = (segAcc[seg].byType[type] || 0) + qty;
       const p = segAcc[seg].products;
       if (!p[it.title]) p[it.title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {} };
       p[it.title].qty     += qty;
-      p[it.title].revenue += (it.amount || 0) * rf;
+      p[it.title].revenue += amount;
       if (it.bundle) {
         p[it.title].comboQty += qty;
         const size = comboSize(it.bundle);
@@ -318,8 +326,30 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       } else {
         p[it.title].avulsoQty += qty;
       }
+
+      // geografia + canal por produto
+      if (!productGeoAcc[it.title]) productGeoAcc[it.title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {} };
+      const g = productGeoAcc[it.title];
+      g.qty += qty;
+      g.revenue += amount;
+      if (!g.byChannel[o.channel]) g.byChannel[o.channel] = { qty: 0, revenue: 0 };
+      g.byChannel[o.channel].qty += qty;
+      g.byChannel[o.channel].revenue += amount;
+      if (geoState) {
+        if (!g.byState[geoState]) g.byState[geoState] = { qty: 0, revenue: 0, orderIds: new Set() };
+        g.byState[geoState].qty += qty;
+        g.byState[geoState].revenue += amount;
+        g.byState[geoState].orderIds.add(o.id);
+      }
     });
   });
+  const productGeo = Object.entries(productGeoAcc)
+    .map(([title, g]) => ({
+      title, seg: g.seg, qty: g.qty, revenue: g.revenue,
+      byChannel: Object.entries(g.byChannel).map(([channel, c]) => ({ channel, qty: c.qty, revenue: c.revenue })).sort((a, b) => b.qty - a.qty),
+      byState: Object.entries(g.byState).map(([state, s]) => ({ state, qty: s.qty, revenue: s.revenue, orders: s.orderIds.size })).sort((a, b) => b.qty - a.qty),
+    }))
+    .sort((a, b) => b.qty - a.qty);
   const totalSegUnits = Object.values(segAcc).reduce((a, s) => a + s.units, 0);
   const segments = {};
   for (const [k, v] of Object.entries(segAcc)) {
@@ -422,6 +452,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     topProducts,
     topProductsAll: allProducts,
     segments,
+    productGeo,
     byState,
     recentOrders: recent,
     mlBreakdown,
