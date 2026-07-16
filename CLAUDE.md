@@ -305,6 +305,17 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Tela de Segmentos (`segmentos.html`, 10/07/2026):** ganhou **seletor de canal** (dropdown por mercado — o backend
   já filtra os segmentos pelo `channel` do `/api/dashboard`) e **"ver mais/ver menos"** nos top produtos (o backend
   passou a devolver a lista completa em `segments[k].topProducts`, a tela mostra 5 e expande).
+- **Card "Onde os produtos vendem" (`segmentos.html`, 16/07/2026):** abaixo dos cards de Gato/Cão, lista os produtos
+  do período **separados por segmento**, ranqueados por unidades; clicar num produto expande (accordion, só um
+  aberto por vez) um painel com **mini-mapa Leaflet coroplético + ranking de estados** e a **quebra por canal**.
+  Dado vem de `productGeo` (novo campo do payload de `/api/dashboard`, `metrics.js`): mesma passada que já monta
+  `segments` (mesmo `amazonRevFactor`, mesma normalização de estado do `byState` — `normalizeUsState` + bucket
+  `INTL` para endereço não-EUA quando `market==='us'`), agrupando por **título de produto** em vez de por segmento:
+  `{ title, seg, qty, revenue, byChannel:[{channel,qty,revenue}], byState:[{state,qty,revenue,orders}] }`, ambos
+  ordenados desc por `qty`. O mini-mapa reaproveita as tabelas de referência (`IBGE_UF`/`STATE_NAMES`/`FIPS_UF` etc.)
+  e a rampa `choroColor` das páginas de Geografia (ver 4.10), mas **copiadas inline** (sem tile, sem interação,
+  `dragging:false`/`zoomControl:false`) — é um widget leve por produto, não a tela de Geografia completa; GeoJSON
+  carregado sob demanda no primeiro expand de cada mercado e cacheado em memória (`geoJsonCache`).
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 
