@@ -68,14 +68,18 @@ const TYPE_KW = {
   'Liquid':     ['liquid'],
 };
 function classifyType(item) {
-  // productType do Shopify é a fonte autoritativa ("Pó", "Powder", "Soft Chews"…)
-  if (item.productType) return item.productType;
-  // Fallback por palavras-chave no título (Amazon e outros sem productType)
-  const t = (item.title || '').toLowerCase();
+  // productType do Shopify é a fonte autoritativa, mas alguns produtos foram cadastrados com
+  // grafias diferentes do mesmo tipo ("Tablets", "Tablet 120", "3 Pack - Tablet") — normaliza por
+  // palavra-chave em vez de usar o valor cru, senão a mesma categoria fragmenta em várias pills
+  // (bug reportado 16/07/2026, Segmentos). "Pó" (BR) e "Powder" (US) continuam distintos de
+  // propósito (grafias por mercado, nunca aparecem juntas no mesmo cálculo — sempre filtrado por
+  // market); productType sem palavra-chave reconhecida mantém o valor cru (ex: "Pó").
+  const raw = item.productType || item.title || '';
+  const t = raw.toLowerCase();
   for (const [type, kws] of Object.entries(TYPE_KW)) {
     if (kws.some(k => t.includes(k))) return type;
   }
-  return null;
+  return item.productType || null;
 }
 
 function aggregateSessions(since, until, market = 'br') {
@@ -306,31 +310,42 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       if (!it.title || it.title.trim() === '-') return; // placeholder de frete/serviço da Amazon, ver amazon.js ordersFromRows
       const seg  = classifySeg(it);
       const type = classifyType(it);
-      const qty  = it.qty || 1;
       const amount = (it.amount || 0) * rf;
+      // Mesma normalização de combo legado usada em aggregateProductsByChannel (ver 4.13.1): um
+      // item "3 Pack"/"Combo de N unidades" vendido como SKU próprio (não Shopify Bundles) conta
+      // N unidades do produto-base, não 1 — e a venda entra na linha do produto-base, não numa
+      // linha própria minúscula ("3 Pack" reportado 16/07/2026 — 16 pacotes viravam "16 un" de um
+      // tipo/produto separado em vez de 48 un de Tablets).
+      const taggedSize = legacyComboSize(it);
+      const title = canonicalTitle(taggedSize ? stripComboSuffix(it.title) : it.title);
+      const rawQty = it.qty || 1;
+      const qty = taggedSize ? rawQty * taggedSize : rawQty;
       if (!segAcc[seg]) segAcc[seg] = { revenue: 0, units: 0, orderIds: new Set(), products: {}, byType: {} };
       segAcc[seg].revenue += amount;
       segAcc[seg].units  += qty;
       segAcc[seg].orderIds.add(o.id);
       if (type) segAcc[seg].byType[type] = (segAcc[seg].byType[type] || 0) + qty;
       const p = segAcc[seg].products;
-      if (!p[it.title]) p[it.title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {} };
-      p[it.title].qty     += qty;
-      p[it.title].revenue += amount;
-      if (it.bundle) {
-        p[it.title].comboQty += qty;
+      if (!p[title]) p[title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {} };
+      p[title].qty     += qty;
+      p[title].revenue += amount;
+      if (taggedSize) {
+        p[title].comboQty += qty; // qty já é pacotes × tamanho aqui
+        p[title].comboBySize[taggedSize] = (p[title].comboBySize[taggedSize] || 0) + rawQty;
+      } else if (it.bundle) {
+        p[title].comboQty += qty;
         const size = comboSize(it.bundle);
         if (size && !seenBundleIdsSeg.has(it.bundle.id)) {
           seenBundleIdsSeg.add(it.bundle.id);
-          p[it.title].comboBySize[size] = (p[it.title].comboBySize[size] || 0) + (it.bundle.qty || 1);
+          p[title].comboBySize[size] = (p[title].comboBySize[size] || 0) + (it.bundle.qty || 1);
         }
       } else {
-        p[it.title].avulsoQty += qty;
+        p[title].avulsoQty += qty;
       }
 
       // geografia + canal por produto
-      if (!productGeoAcc[it.title]) productGeoAcc[it.title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {}, image: null };
-      const g = productGeoAcc[it.title];
+      if (!productGeoAcc[title]) productGeoAcc[title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {}, image: null };
+      const g = productGeoAcc[title];
       g.qty += qty;
       g.revenue += amount;
       if (!g.image && it.image) g.image = it.image;
