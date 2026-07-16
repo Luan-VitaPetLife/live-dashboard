@@ -155,11 +155,23 @@
 
   /* ── Onde os produtos vendem (mapa + ranking por estado) ── */
   .geo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px 14px;margin-top:16px}
+  .geo-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
   .geo-card-title{font-size:15px;font-weight:700;color:var(--ink)}
   .geo-card-sub{font-size:11px;color:var(--sub);margin-top:2px;margin-bottom:14px}
+  .geo-layout-toggle{display:flex;border:1px solid var(--border2);border-radius:20px;overflow:hidden;flex-shrink:0}
+  .geo-layout-toggle button{font-size:13px;padding:6px 11px;border:0;background:var(--surface);color:var(--sub);cursor:pointer;transition:all .12s}
+  .geo-layout-toggle button+button{border-left:1px solid var(--border2)}
+  .geo-layout-toggle button:hover{color:var(--text)}
+  .geo-layout-toggle button.active{background:var(--ink);color:var(--side-text)}
   .geo-seg-block{margin-bottom:14px}
   .geo-seg-head{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:8px}
   .geo-seg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+  /* Lista de produtos — modo linhas (padrão) ou colunas (grid responsivo) */
+  .geo-prod-list{display:flex;flex-direction:column}
+  .geo-prod-list.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px;align-items:start}
+  .geo-prod-list.cols .geo-prod-card{margin-bottom:0}
+  .geo-prod-list.cols .geo-prod-card.open{grid-column:1/-1}
 
   /* Card por produto — delimita visualmente cada um (pedido do Luan: ficavam todos misturados) */
   .geo-prod-card{border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden;background:var(--surface)}
@@ -197,8 +209,11 @@
   .geo-map-expand:hover{color:var(--text);border-color:var(--ink)}
   .geo-rank-col{display:flex;flex-direction:column;gap:8px;min-width:0}
   .geo-rank-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub)}
-  .geo-rank-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
-  .geo-rank-item{display:flex;align-items:center;gap:8px;font-size:11px}
+  /* Grid responsivo em vez de coluna única — evita o espaçamento gigante entre nome e valor
+     quando o painel fica largo (mapa oculto ou tela grande): cada estado ganha uma célula compacta
+     (~200px) e o nome/qty/% ficam colados, mais estados por linha em vez de um vão enorme no meio. */
+  .geo-rank-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 20px;max-height:320px;overflow-y:auto}
+  .geo-rank-item{display:flex;align-items:center;gap:8px;font-size:11px;min-width:0}
   .geo-rank-uf{font-weight:700;color:var(--ink);width:26px;flex-shrink:0}
   .geo-rank-name{flex:1;min-width:0;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .geo-rank-qty{font-weight:700;color:var(--text);flex-shrink:0}
@@ -226,14 +241,18 @@
   /* Modal do mapa ampliado */
   .geo-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4000;display:none;backdrop-filter:blur(2px)}
   .geo-modal-overlay.open{display:block}
-  .geo-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:900px;max-width:94vw;max-height:88vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4001;display:none;flex-direction:column;overflow:hidden}
+  /* altura FIXA (não max-height) — com display:flex + flex-direction:column, um filho com flex:1 e sem
+     altura definida no pai colapsa pra ~0 (o pai vira "hug content"); o mapa Leaflet então inicializa
+     num container de altura zero e fica em branco. Head com altura própria + mapa com height fixo em vh
+     somam uma altura previsível, sem depender de flex-grow. */
+  .geo-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:900px;max-width:94vw;height:min(640px,88vh);background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4001;display:none;flex-direction:column;overflow:hidden}
   .geo-modal.open{display:flex}
-  .geo-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .geo-modal-head{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
   .geo-modal-title{font-size:14px;font-weight:700;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .geo-modal-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
   .geo-modal-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s}
   .geo-modal-close:hover{background:var(--surface2);color:var(--text)}
-  .geo-modal-map{flex:1;min-height:0;height:65vh;background:var(--surface2)}
+  .geo-modal-map{flex:1 1 auto;min-height:0;background:var(--surface2)}
 
   /* ── Footer ── */
   .footer{font-size:10px;color:var(--muted);padding:12px 28px;border-top:1px solid var(--border);background:var(--surface)}
@@ -242,7 +261,8 @@
     .seg-overview{grid-template-columns:1fr}
     .seg-cards{grid-template-columns:1fr}
     .geo-detail-body{grid-template-columns:1fr}
-    .geo-modal-map{height:52vh}
+    .geo-prod-list.cols{grid-template-columns:1fr}
+    .geo-modal{height:min(560px,82vh)}
   }
 </style>
 </head>
@@ -331,8 +351,16 @@
 
     <!-- Onde os produtos vendem -->
     <div class="geo-card" id="geoCard">
-      <div class="geo-card-title">Onde os produtos vendem</div>
-      <div class="geo-card-sub">Ranking de estados e canal de venda por produto — clique num produto para expandir</div>
+      <div class="geo-card-head">
+        <div>
+          <div class="geo-card-title">Onde os produtos vendem</div>
+          <div class="geo-card-sub">Ranking de estados e canal de venda por produto — clique num produto para expandir</div>
+        </div>
+        <div class="geo-layout-toggle" id="geoLayoutToggle">
+          <button data-layout="rows" title="Linhas"><i class="bi bi-list-ul"></i></button>
+          <button data-layout="columns" title="Colunas"><i class="bi bi-grid-3x3-gap"></i></button>
+        </div>
+      </div>
       <div id="geoBlocks"></div>
     </div>
   </div>
@@ -639,10 +667,12 @@ const geoExpanded = { cat:false, dog:false, other:false };
 let openProduct = null;
 let geoMapInst = null;
 let geoModalMapInst = null;
+let geoModalLayerInst = null;    // camada colorida do modal — trocada ao alternar Coroplético/Calor sem recriar o mapa/tile
 let geoBarChartInst = null;
 let geoModalMode = 'choropleth';                                                // não persistido — sempre abre em Coroplético
 let geoViewMode = localStorage.getItem('coco_seg_geoview') || 'ranking';        // 'ranking' | 'table' | 'chart'
 let geoMapHidden = localStorage.getItem('coco_seg_geohide') === '1';
+let geoLayoutMode = localStorage.getItem('coco_seg_geolayout') || 'rows';       // 'rows' | 'columns'
 const GEO_CHART_MAX = 12; // nº de estados no modo Gráfico (o resto continua em Ranking/Tabela)
 
 function destroyGeoMap() {
@@ -653,6 +683,7 @@ function destroyGeoBarChart() {
 }
 function destroyGeoModalMap() {
   if (geoModalMapInst) { try { geoModalMapInst.remove(); } catch(e) {} geoModalMapInst = null; }
+  geoModalLayerInst = null;
 }
 
 function stateLabel(uf) { return market === 'us' ? (STATE_NAMES_US[uf] || uf) : (STATE_NAMES_BR[uf] || uf); }
@@ -808,9 +839,17 @@ async function initGeoMap(p) {
 }
 
 // ── Modal do mapa ampliado (coroplético/calor, com tile de fundo e popup ao clicar) ──
-async function drawModalMap(p) {
+// Mapa + tile são criados UMA vez por abertura; trocar Coroplético/Calor só substitui a camada
+// colorida (renderModalLayer), sem recriar mapa/tiles — bem mais leve que recarregar tudo a cada clique.
+async function renderModalLayer(p) {
+  if (!geoModalMapInst) return;
   const geo = await loadGeoJSONFor(market);
-  if (openProduct !== p.title || !document.getElementById('geoModal').classList.contains('open')) return;
+  if (!geoModalMapInst || openProduct !== p.title) return; // fechou/trocou de produto enquanto carregava
+  if (geoModalLayerInst) { geoModalMapInst.removeLayer(geoModalLayerInst); geoModalLayerInst = null; }
+  if (!geo) return;
+  geoModalLayerInst = drawGeoPolygons(geoModalMapInst, geo, p, geoModalMode, true);
+}
+function initModalMap(p) {
   destroyGeoModalMap();
   const bounds = MAP_BOUNDS[market];
   const map = L.map('geoModalMap', { center: bounds.center, zoom: 4, minZoom: 3, maxZoom: 8, zoomControl: true, zoomSnap: 0.5 });
@@ -819,8 +858,10 @@ async function drawModalMap(p) {
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19,
   }).addTo(map);
   map.fitBounds(bounds.fit);
-  if (!geo) return;
-  drawGeoPolygons(map, geo, p, geoModalMode, true);
+  // O modal acabou de ficar visível (display:none → flex) — o Leaflet precisa recalcular o
+  // tamanho do container depois que o layout se assenta, senão os tiles ficam em branco/cortados.
+  requestAnimationFrame(() => { if (geoModalMapInst === map) map.invalidateSize(); });
+  renderModalLayer(p);
 }
 function openMapModal(p) {
   geoModalMode = 'choropleth';
@@ -828,7 +869,7 @@ function openMapModal(p) {
   document.querySelectorAll('#geoModalModeToggle button').forEach(b => b.classList.toggle('active', b.dataset.mode === geoModalMode));
   document.getElementById('geoModalOverlay').classList.add('open');
   document.getElementById('geoModal').classList.add('open');
-  drawModalMap(p);
+  initModalMap(p);
 }
 function closeMapModal() {
   document.getElementById('geoModalOverlay').classList.remove('open');
@@ -844,7 +885,7 @@ document.getElementById('geoModalModeToggle').addEventListener('click', e => {
   geoModalMode = b.dataset.mode;
   document.querySelectorAll('#geoModalModeToggle button').forEach(x => x.classList.toggle('active', x === b));
   const p = lastProductGeo.find(x => x.title === openProduct);
-  if (p) drawModalMap(p);
+  if (p) renderModalLayer(p);
 });
 
 function geoProdRowHtml(p, i) {
@@ -879,7 +920,7 @@ function renderGeoBlocks() {
     return `
       <div class="geo-seg-block">
         <div class="geo-seg-head"><span class="geo-seg-dot" style="background:${SEG_COLORS[seg]}"></span>${SEG_LABELS[seg]}</div>
-        ${rows}
+        <div class="geo-prod-list${geoLayoutMode === 'columns' ? ' cols' : ''}">${rows}</div>
         ${moreBtn}
       </div>`;
   }).join('');
@@ -912,6 +953,15 @@ document.getElementById('geoBlocks').addEventListener('click', e => {
   if (!row) return;
   const title = decodeURIComponent(row.dataset.title);
   openProduct = openProduct === title ? null : title;
+  renderGeoBlocks();
+});
+document.querySelectorAll('#geoLayoutToggle button').forEach(b => b.classList.toggle('active', b.dataset.layout === geoLayoutMode));
+document.getElementById('geoLayoutToggle').addEventListener('click', e => {
+  const b = e.target.closest('button[data-layout]');
+  if (!b) return;
+  geoLayoutMode = b.dataset.layout;
+  localStorage.setItem('coco_seg_geolayout', geoLayoutMode);
+  document.querySelectorAll('#geoLayoutToggle button').forEach(x => x.classList.toggle('active', x === b));
   renderGeoBlocks();
 });
 

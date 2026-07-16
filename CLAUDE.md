@@ -336,6 +336,34 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     (círculos por sub-região, `SUB_REGIONS`); aqui não — reproduzir isso exigiria duplicar ~40 linhas de
     coordenadas de sub-região por país só pra um modal secundário. Mantido simples de propósito; dá pra
     comparar as duas paletas, que era o pedido. Fecha no ✕, clique fora ou Esc.
+- **Correções do modal + layout (16/07/2026, mesmo dia, 2ª rodada de feedback):**
+  - **⚠️ Bug: mapa ampliado abria em branco.** Causa: `.geo-modal` tinha só `max-height` (sem `height`
+    definido) e era `display:flex;flex-direction:column`; o filho `.geo-modal-map` usava `flex:1`
+    (que zera o `flex-basis`). Sem altura definida no pai, o container flex "abraça" o conteúdo em vez
+    de esticar até o `max-height`, então o mapa nascia com altura ~0 e o Leaflet inicializava num
+    container sem tamanho — mapa em branco (clássico gotcha de Leaflet dentro de modal/aba escondida).
+    **Correção:** `.geo-modal` ganhou `height:min(640px,88vh)` (definida, não só máxima) — com isso
+    `flex:1` no mapa passa a ter espaço real pra crescer. Reforço: `map.invalidateSize()` via
+    `requestAnimationFrame` logo após criar o mapa, garantindo que o Leaflet recalcule o tamanho depois
+    que o layout se assenta (defesa adicional, prática recomendada pela própria doc do Leaflet pra
+    mapas dentro de elementos que trocam de `display:none` pra visível).
+  - **Otimização — parar de recriar mapa/tiles a cada clique em Coroplético/Calor:** antes, alternar o
+    modo dentro do modal já aberto recriava o `L.map` inteiro (incluindo re-baixar os tiles) — pesado e
+    lento. Agora `initModalMap()` cria o mapa+tile **uma vez** por abertura; alternar o modo só troca a
+    camada de polígonos coloridos (`renderModalLayer()`, remove a camada antiga e desenha a nova com a
+    rampa de cor certa), sem tocar no mapa/tile. Bem mais leve.
+  - **Ranking de estados com espaço gigante entre nome e valor:** `.geo-rank-list` era uma coluna única
+    (`flex-direction:column`) — quando o painel ficava largo (mapa oculto, ou tela grande), o
+    `flex:1` do nome do estado esticava até o fim, empurrando unidades/% pra beira direita com um vão
+    enorme no meio. **Correção:** virou um grid responsivo (`repeat(auto-fill,minmax(200px,1fr))`) —
+    cada estado ocupa uma célula compacta (~200px) e nome/valor ficam colados; o espaço extra vira mais
+    estados por linha, não um vão maior.
+  - **Nova opção "Linhas / Colunas" pra lista de produtos** (botões com ícone no cabeçalho do card,
+    `geoLayoutMode`, persistido em `localStorage('coco_seg_geolayout')`): modo Colunas usa
+    `.geo-prod-list.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}` — os
+    cards de produto (fechados) ficam lado a lado em vez de empilhados. **Cuidado pra não "bugar" ao
+    expandir:** o card aberto ganha `grid-column:1/-1` (ocupa a largura toda da grade), senão o painel
+    de mapa+dados ficaria espremido numa coluna estreita.
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 
