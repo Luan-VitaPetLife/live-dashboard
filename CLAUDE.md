@@ -316,6 +316,26 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   e a rampa `choroColor` das páginas de Geografia (ver 4.10), mas **copiadas inline** (sem tile, sem interação,
   `dragging:false`/`zoomControl:false`) — é um widget leve por produto, não a tela de Geografia completa; GeoJSON
   carregado sob demanda no primeiro expand de cada mercado e cacheado em memória (`geoJsonCache`).
+- **Ajustes visuais do card (16/07/2026, mesmo dia, feedback do Luan olhando produção):** primeira versão ficou
+  confusa (mapa minúsculo com UFs sobrepostas, produtos sem separação visual). Correções, todas client-side:
+  - **Cada produto vira um card com borda** (`.geo-prod-card`) em vez de linha solta numa lista corrida.
+  - **3 modos pro "Por estado"** — Ranking (pills, como antes, `max-height` maior: 320px em vez de 150px),
+    **Tabela** (`<table>` Estado/UF/Unidades/Receita/%, sem limite de altura) e **Gráfico** (barra horizontal
+    Chart.js, top 12 estados — a lib já está carregada nesta página pro donut de segmentos). Toggle
+    (`geoViewMode`) é **global** (persistido em `localStorage('coco_seg_geoview')`), não por produto.
+  - **Botão "Ocultar/Mostrar mapa"** (`geoMapHidden`, global, persistido em `coco_seg_geohide`) — some com a
+    coluna do mini-mapa, a coluna de dados ocupa a largura toda (`.geo-detail-body.no-map`).
+  - **Faixa de estatísticas** no topo do painel expandido (`.geo-detail-stats`): Estados alcançados, Canal
+    principal (+%), Maior estado (+%) — tudo derivado do `productGeo` já recebido, nenhuma chamada nova.
+  - **Botão "⤢" no mini-mapa abre um modal** (`.geo-modal-overlay`/`.geo-modal`, mesmo padrão estrutural do
+    modal de estado de `geografia.html` — overlay fixo + modal fixo centralizado, `z-index` 4000/4001) com o
+    mapa grande (65vh), **tile de fundo** (CartoDB Voyager) e toggle **Coroplético/Calor** (`geoModalMode`, não
+    persistido, sempre abre em Coroplético). **Os dois modos pintam o polígono do estado** — só troca a rampa
+    de cor (`geoChoroColor` terrosa vs `geoHeatColor` verde→amarelo→vermelho, cores do `HEAT_DEFAULTS` de
+    `geografia.html`). **Diferença deliberada da tela de Geografia completa:** lá o modo Calor usa manchas
+    (círculos por sub-região, `SUB_REGIONS`); aqui não — reproduzir isso exigiria duplicar ~40 linhas de
+    coordenadas de sub-região por país só pra um modal secundário. Mantido simples de propósito; dá pra
+    comparar as duas paletas, que era o pedido. Fecha no ✕, clique fora ou Esc.
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 

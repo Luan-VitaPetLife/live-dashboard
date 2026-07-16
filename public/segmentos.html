@@ -154,31 +154,66 @@
   .other-note{font-size:11px;color:var(--muted)}
 
   /* ── Onde os produtos vendem (mapa + ranking por estado) ── */
-  .geo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px 8px;margin-top:16px}
+  .geo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px 14px;margin-top:16px}
   .geo-card-title{font-size:15px;font-weight:700;color:var(--ink)}
   .geo-card-sub{font-size:11px;color:var(--sub);margin-top:2px;margin-bottom:14px}
-  .geo-seg-block{margin-bottom:8px}
-  .geo-seg-head{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+  .geo-seg-block{margin-bottom:14px}
+  .geo-seg-head{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:8px}
   .geo-seg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-  .geo-prod-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-radius:var(--radius-sm);cursor:pointer;transition:background .12s}
+
+  /* Card por produto — delimita visualmente cada um (pedido do Luan: ficavam todos misturados) */
+  .geo-prod-card{border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden;background:var(--surface)}
+  .geo-prod-card.open{border-color:var(--border2);box-shadow:0 2px 10px rgba(30,28,24,.07)}
+  .geo-prod-row{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;transition:background .12s}
   .geo-prod-row:hover{background:var(--surface2)}
-  .geo-prod-row.open{background:var(--surface2)}
+  .geo-prod-card.open .geo-prod-row{background:var(--surface2);border-bottom:1px solid var(--border)}
   .geo-prod-rank{font-size:11px;font-weight:700;color:var(--muted);width:14px;text-align:right;flex-shrink:0}
   .geo-prod-name{flex:1;min-width:0;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .geo-prod-qty{font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0}
   .geo-prod-rev{font-size:10px;color:var(--sub);min-width:64px;text-align:right;flex-shrink:0}
   .geo-prod-chevron{font-size:10px;color:var(--muted);transition:transform .15s;flex-shrink:0}
   .geo-prod-row.open .geo-prod-chevron{transform:rotate(90deg)}
-  .geo-detail{display:grid;grid-template-columns:220px 1fr;gap:16px;padding:6px 4px 18px;margin-bottom:6px;border-bottom:1px solid var(--border)}
-  .geo-map{height:220px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border2);background:var(--surface2)}
+
+  /* Painel expandido */
+  .geo-detail{padding:14px 14px 16px}
+  .geo-detail-stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .geo-stat{display:flex;flex-direction:column;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;min-width:120px}
+  .geo-stat-lbl{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+  .geo-stat-val{font-size:12px;font-weight:700;color:var(--ink)}
+
+  .geo-detail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .geo-view-toggle{display:flex;border:1px solid var(--border2);border-radius:20px;overflow:hidden}
+  .geo-view-toggle button{font-size:10px;font-weight:600;padding:6px 12px;border:0;background:var(--surface);color:var(--sub);cursor:pointer;transition:all .12s}
+  .geo-view-toggle button+button{border-left:1px solid var(--border2)}
+  .geo-view-toggle button:hover{color:var(--text)}
+  .geo-view-toggle button.active{background:var(--ink);color:var(--side-text)}
+  .geo-map-toggle{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:600;color:var(--sub);background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:6px 12px;cursor:pointer;transition:all .12s}
+  .geo-map-toggle:hover{border-color:var(--ink);color:var(--text)}
+
+  .geo-detail-body{display:grid;grid-template-columns:220px 1fr;gap:16px}
+  .geo-detail-body.no-map{grid-template-columns:1fr}
+  .geo-map{position:relative;height:220px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border2);background:var(--surface2)}
+  .geo-map-expand{position:absolute;top:6px;right:6px;z-index:450;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:rgba(250,248,244,.92);border:1px solid var(--border2);border-radius:6px;color:var(--sub);cursor:pointer;font-size:12px;transition:all .12s}
+  .geo-map-expand:hover{color:var(--text);border-color:var(--ink)}
   .geo-rank-col{display:flex;flex-direction:column;gap:8px;min-width:0}
   .geo-rank-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub)}
-  .geo-rank-list{display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto}
+  .geo-rank-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
   .geo-rank-item{display:flex;align-items:center;gap:8px;font-size:11px}
   .geo-rank-uf{font-weight:700;color:var(--ink);width:26px;flex-shrink:0}
   .geo-rank-name{flex:1;min-width:0;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .geo-rank-qty{font-weight:700;color:var(--text);flex-shrink:0}
   .geo-rank-pct{color:var(--muted);width:40px;text-align:right;flex-shrink:0}
+
+  /* Tabela */
+  .geo-table{width:100%;border-collapse:collapse;font-size:11px}
+  .geo-table th{text-align:left;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border2)}
+  .geo-table td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text)}
+  .geo-table td.num{text-align:right;font-weight:600}
+  .geo-table tr:last-child td{border-bottom:0}
+
+  /* Gráfico */
+  .geo-chart-wrap{position:relative;width:100%}
+
   .geo-chans{display:flex;flex-wrap:wrap;gap:6px}
   .geo-chan-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);font-size:10px}
   .geo-chan-name{color:var(--sub);font-weight:500}
@@ -188,13 +223,26 @@
   .geo-state-tooltip{background:rgba(28,26,22,.88)!important;border:none!important;border-radius:5px!important;color:#f0ebe0!important;font-size:10px!important;font-weight:600!important;padding:4px 7px!important;white-space:nowrap!important;box-shadow:0 2px 8px rgba(0,0,0,.25)!important;pointer-events:none!important}
   .geo-state-tooltip::before{display:none!important}
 
+  /* Modal do mapa ampliado */
+  .geo-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4000;display:none;backdrop-filter:blur(2px)}
+  .geo-modal-overlay.open{display:block}
+  .geo-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:900px;max-width:94vw;max-height:88vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4001;display:none;flex-direction:column;overflow:hidden}
+  .geo-modal.open{display:flex}
+  .geo-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .geo-modal-title{font-size:14px;font-weight:700;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .geo-modal-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .geo-modal-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s}
+  .geo-modal-close:hover{background:var(--surface2);color:var(--text)}
+  .geo-modal-map{flex:1;min-height:0;height:65vh;background:var(--surface2)}
+
   /* ── Footer ── */
   .footer{font-size:10px;color:var(--muted);padding:12px 28px;border-top:1px solid var(--border);background:var(--surface)}
 
   @media(max-width:768px){
     .seg-overview{grid-template-columns:1fr}
     .seg-cards{grid-template-columns:1fr}
-    .geo-detail{grid-template-columns:1fr}
+    .geo-detail-body{grid-template-columns:1fr}
+    .geo-modal-map{height:52vh}
   }
 </style>
 </head>
@@ -290,6 +338,22 @@
   </div>
 
   <div class="footer" id="footerDate"></div>
+</div>
+
+<!-- Modal do mapa ampliado (Onde os produtos vendem) -->
+<div class="geo-modal-overlay" id="geoModalOverlay"></div>
+<div class="geo-modal" id="geoModal">
+  <div class="geo-modal-head">
+    <div class="geo-modal-title" id="geoModalTitle"></div>
+    <div class="geo-modal-actions">
+      <div class="geo-view-toggle" id="geoModalModeToggle">
+        <button data-mode="choropleth" class="active">Coroplético</button>
+        <button data-mode="heat">Calor</button>
+      </div>
+      <button class="geo-modal-close" id="geoModalClose">✕</button>
+    </div>
+  </div>
+  <div class="geo-modal-map" id="geoModalMap"></div>
 </div>
 
 <script>
@@ -535,6 +599,12 @@ function geoChoroColor(t) {
   const [r,g,b] = s < 0.5 ? lerpRGB(c0,c1,s*2) : lerpRGB(c1,c2,(s-0.5)*2);
   return `rgb(${r},${g},${b})`;
 }
+function geoHeatColor(t) {
+  const s = Math.max(0, Math.min(1, t));
+  const c0 = hexToRGB('#22c55e'), c1 = hexToRGB('#eab308'), c2 = hexToRGB('#ef4444');
+  const [r,g,b] = s < 0.5 ? lerpRGB(c0,c1,s*2) : lerpRGB(c1,c2,(s-0.5)*2);
+  return `rgb(${r},${g},${b})`;
+}
 
 const geoJsonCache = {};
 async function loadGeoJSONFor(mkt) {
@@ -568,39 +638,162 @@ let lastProductGeo = [];
 const geoExpanded = { cat:false, dog:false, other:false };
 let openProduct = null;
 let geoMapInst = null;
+let geoModalMapInst = null;
+let geoBarChartInst = null;
+let geoModalMode = 'choropleth';                                                // não persistido — sempre abre em Coroplético
+let geoViewMode = localStorage.getItem('coco_seg_geoview') || 'ranking';        // 'ranking' | 'table' | 'chart'
+let geoMapHidden = localStorage.getItem('coco_seg_geohide') === '1';
+const GEO_CHART_MAX = 12; // nº de estados no modo Gráfico (o resto continua em Ranking/Tabela)
 
 function destroyGeoMap() {
   if (geoMapInst) { try { geoMapInst.remove(); } catch(e) {} geoMapInst = null; }
 }
+function destroyGeoBarChart() {
+  if (geoBarChartInst) { try { geoBarChartInst.destroy(); } catch(e) {} geoBarChartInst = null; }
+}
+function destroyGeoModalMap() {
+  if (geoModalMapInst) { try { geoModalMapInst.remove(); } catch(e) {} geoModalMapInst = null; }
+}
 
 function stateLabel(uf) { return market === 'us' ? (STATE_NAMES_US[uf] || uf) : (STATE_NAMES_BR[uf] || uf); }
 
-function geoDetailHtml(p) {
+// ── Faixa de estatísticas do produto expandido (pedido do Luan: mais informação por produto) ──
+function geoStatsHtml(p) {
   const totalQty = p.qty || 1;
-  const rankItems = p.byState.length
-    ? p.byState.map(s => `
+  const stats = [`<div class="geo-stat"><span class="geo-stat-lbl">Estados alcançados</span><span class="geo-stat-val">${p.byState.length}</span></div>`];
+  if (p.byChannel.length) {
+    const top = p.byChannel[0];
+    stats.push(`<div class="geo-stat"><span class="geo-stat-lbl">Canal principal</span><span class="geo-stat-val">${CH_LABELS[top.channel] || top.channel} · ${(top.qty / totalQty * 100).toFixed(0)}%</span></div>`);
+  }
+  if (p.byState.length) {
+    const top = p.byState[0];
+    stats.push(`<div class="geo-stat"><span class="geo-stat-lbl">Maior estado</span><span class="geo-stat-val">${stateLabel(top.state)} · ${(top.qty / totalQty * 100).toFixed(0)}%</span></div>`);
+  }
+  return `<div class="geo-detail-stats">${stats.join('')}</div>`;
+}
+
+// ── Modo Ranking (lista de pills, como antes) ──
+function geoRankingHtml(p) {
+  const totalQty = p.qty || 1;
+  if (!p.byState.length) return '<div class="geo-empty">Sem estado de entrega registrado</div>';
+  return `<div class="geo-rank-list">${p.byState.map(s => `
       <div class="geo-rank-item">
         <span class="geo-rank-uf">${s.state}</span>
         <span class="geo-rank-name" title="${stateLabel(s.state)}">${stateLabel(s.state)}</span>
         <span class="geo-rank-qty">${s.qty.toLocaleString('pt-BR')} un</span>
         <span class="geo-rank-pct">${(s.qty / totalQty * 100).toFixed(1)}%</span>
-      </div>`).join('')
-    : '<div class="geo-empty">Sem estado de entrega registrado</div>';
+      </div>`).join('')}</div>`;
+}
+
+// ── Modo Tabela ──
+function geoTableHtml(p) {
+  const totalQty = p.qty || 1;
+  if (!p.byState.length) return '<div class="geo-empty">Sem estado de entrega registrado</div>';
+  const rows = p.byState.map(s => `
+      <tr>
+        <td>${stateLabel(s.state)}</td>
+        <td>${s.state}</td>
+        <td class="num">${s.qty.toLocaleString('pt-BR')}</td>
+        <td class="num">${fmtMoney(s.revenue)}</td>
+        <td class="num">${(s.qty / totalQty * 100).toFixed(1)}%</td>
+      </tr>`).join('');
+  return `<table class="geo-table"><thead><tr><th>Estado</th><th>UF</th><th>Unidades</th><th>Receita</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ── Modo Gráfico (barra horizontal, Chart.js já carregado nesta página) ──
+function geoChartHtml(p) {
+  if (!p.byState.length) return '<div class="geo-empty">Sem estado de entrega registrado</div>';
+  return `<div class="geo-chart-wrap"><canvas id="geoBarChart"></canvas></div>`;
+}
+function geoRenderBarChart(p) {
+  const canvas = document.getElementById('geoBarChart');
+  if (!canvas) return;
+  destroyGeoBarChart();
+  const top = p.byState.slice(0, GEO_CHART_MAX);
+  canvas.parentElement.style.height = Math.max(120, top.length * 26) + 'px';
+  geoBarChartInst = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels: top.map(s => s.state), datasets: [{ data: top.map(s => s.qty), backgroundColor: '#c4793a', borderRadius: 4, maxBarThickness: 18 }] },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${stateLabel(ctx.label)}: ${ctx.parsed.x.toLocaleString('pt-BR')} un` } } },
+      scales: { x: { beginAtZero: true, grid: { color: 'rgba(30,28,24,.08)' } }, y: { grid: { display: false } } },
+      animation: { duration: 300 },
+    },
+  });
+}
+
+// ── Painel expandido: toolbar (ver mapa/tabela/gráfico + esconder mapa) + estatísticas + corpo ──
+function geoDetailHtml(p) {
+  const showMap = !geoMapHidden;
+  const mapHtml = showMap ? `
+      <div class="geo-map" id="geoMap">
+        <button class="geo-map-expand" id="geoMapExpandBtn" title="Ampliar mapa"><i class="bi bi-arrows-angle-expand"></i></button>
+      </div>` : '';
+  const dataHtml = geoViewMode === 'table' ? geoTableHtml(p) : geoViewMode === 'chart' ? geoChartHtml(p) : geoRankingHtml(p);
   const chanItems = p.byChannel.map(c => `
-    <div class="geo-chan-pill"><span class="geo-chan-name">${CH_LABELS[c.channel] || c.channel}</span><span class="geo-chan-qty">${c.qty.toLocaleString('pt-BR')} un</span></div>`).join('');
+      <div class="geo-chan-pill"><span class="geo-chan-name">${CH_LABELS[c.channel] || c.channel}</span><span class="geo-chan-qty">${c.qty.toLocaleString('pt-BR')} un</span></div>`).join('');
   return `
-    <div class="geo-map" id="geoMap"></div>
-    <div class="geo-rank-col">
-      <div class="geo-rank-title">Por estado · unidades</div>
-      <div class="geo-rank-list">${rankItems}</div>
-      ${chanItems ? `<div class="geo-rank-title">Por canal</div><div class="geo-chans">${chanItems}</div>` : ''}
+    <div class="geo-detail-toolbar">
+      <div class="geo-view-toggle" id="geoViewToggle">
+        <button data-mode="ranking" class="${geoViewMode === 'ranking' ? 'active' : ''}">Ranking</button>
+        <button data-mode="table" class="${geoViewMode === 'table' ? 'active' : ''}">Tabela</button>
+        <button data-mode="chart" class="${geoViewMode === 'chart' ? 'active' : ''}">Gráfico</button>
+      </div>
+      <button class="geo-map-toggle" id="geoMapHideBtn">${showMap ? '🗺 Ocultar mapa' : '🗺 Mostrar mapa'}</button>
+    </div>
+    ${geoStatsHtml(p)}
+    <div class="geo-detail-body${showMap ? '' : ' no-map'}">
+      ${mapHtml}
+      <div class="geo-rank-col">
+        <div class="geo-rank-title">Por estado · unidades</div>
+        ${dataHtml}
+        ${chanItems ? `<div class="geo-rank-title">Por canal</div><div class="geo-chans">${chanItems}</div>` : ''}
+      </div>
     </div>`;
+}
+
+// Desenha os polígonos coloridos por unidades vendidas — reaproveitado pelo mini-mapa (sempre
+// coroplético, sem interação) e pelo modal ampliado (coroplético OU calor, com popup ao clicar).
+function drawGeoPolygons(map, geo, p, mode, interactive) {
+  const stateMap = {};
+  p.byState.forEach(s => { stateMap[s.state] = s; });
+  const maxQty = Math.max(1, ...p.byState.map(s => s.qty));
+  const totalQty = p.qty || 1;
+  const colorFn = mode === 'heat' ? geoHeatColor : geoChoroColor;
+  return L.geoJSON(geo, {
+    style: feature => {
+      const uf = feature.properties._uf;
+      const s = uf ? stateMap[uf] : null;
+      const t = s ? s.qty / maxQty : 0;
+      return { fillColor: s ? colorFn(t) : '#e0dbd2', fillOpacity: s ? 0.82 : 0.3, color: '#bbb5aa', weight: 0.6, opacity: 1 };
+    },
+    onEachFeature: (feature, layer) => {
+      const uf = feature.properties._uf;
+      const s = uf ? stateMap[uf] : null;
+      if (!s) return;
+      layer.bindTooltip(
+        `<div style="text-align:center;line-height:1.4"><div style="font-size:10px;font-weight:700">${uf}</div><div style="font-size:9px;opacity:.85">${s.qty.toLocaleString('pt-BR')} un</div></div>`,
+        { permanent: true, direction: 'center', className: 'geo-state-tooltip', offset: [0, 0] }
+      );
+      if (interactive) {
+        layer.on('click', () => {
+          layer.bindPopup(`
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px;border-bottom:1px solid rgba(30,28,24,.1);padding-bottom:5px">📍 ${stateLabel(uf)} · ${uf}</div>
+            <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6b6760"><span>Unidades</span><strong style="color:#1a1916">${s.qty.toLocaleString('pt-BR')}</strong></div>
+            <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6b6760"><span>Receita</span><strong style="color:#1a1916">${fmtMoney(s.revenue)}</strong></div>
+            <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6b6760"><span>% do produto</span><strong style="color:#1a1916">${(s.qty / totalQty * 100).toFixed(1)}%</strong></div>
+          `).openPopup();
+        });
+      }
+    },
+  }).addTo(map);
 }
 
 async function initGeoMap(p) {
   const geo = await loadGeoJSONFor(market);
-  // o usuário pode ter fechado/trocado de produto ou mercado enquanto o GeoJSON carregava
-  if (!document.getElementById('geoMap') || openProduct !== p.title) return;
+  // o usuário pode ter fechado/trocado de produto, mercado ou ocultado o mapa enquanto o GeoJSON carregava
+  if (!document.getElementById('geoMap') || openProduct !== p.title || geoMapHidden) return;
   destroyGeoMap();
   const bounds = MAP_BOUNDS[market];
   const map = L.map('geoMap', {
@@ -611,44 +804,67 @@ async function initGeoMap(p) {
   geoMapInst = map;
   map.fitBounds(bounds.fit);
   if (!geo) return; // sem GeoJSON, fica só o fundo — nunca quebra a tela
-  const stateMap = {};
-  p.byState.forEach(s => { stateMap[s.state] = s; });
-  const maxQty = Math.max(1, ...p.byState.map(s => s.qty));
-  L.geoJSON(geo, {
-    style: feature => {
-      const uf = feature.properties._uf;
-      const s = uf ? stateMap[uf] : null;
-      const t = s ? s.qty / maxQty : 0;
-      return { fillColor: s ? geoChoroColor(t) : '#e0dbd2', fillOpacity: s ? 0.82 : 0.3, color: '#bbb5aa', weight: 0.6, opacity: 1 };
-    },
-    onEachFeature: (feature, layer) => {
-      const uf = feature.properties._uf;
-      const s = uf ? stateMap[uf] : null;
-      if (s) {
-        layer.bindTooltip(
-          `<div style="text-align:center;line-height:1.4"><div style="font-size:10px;font-weight:700">${uf}</div><div style="font-size:9px;opacity:.85">${s.qty.toLocaleString('pt-BR')} un</div></div>`,
-          { permanent: true, direction: 'center', className: 'geo-state-tooltip', offset: [0, 0] }
-        );
-      }
-    },
-  }).addTo(map);
+  drawGeoPolygons(map, geo, p, 'choropleth', false);
 }
+
+// ── Modal do mapa ampliado (coroplético/calor, com tile de fundo e popup ao clicar) ──
+async function drawModalMap(p) {
+  const geo = await loadGeoJSONFor(market);
+  if (openProduct !== p.title || !document.getElementById('geoModal').classList.contains('open')) return;
+  destroyGeoModalMap();
+  const bounds = MAP_BOUNDS[market];
+  const map = L.map('geoModalMap', { center: bounds.center, zoom: 4, minZoom: 3, maxZoom: 8, zoomControl: true, zoomSnap: 0.5 });
+  geoModalMapInst = map;
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19,
+  }).addTo(map);
+  map.fitBounds(bounds.fit);
+  if (!geo) return;
+  drawGeoPolygons(map, geo, p, geoModalMode, true);
+}
+function openMapModal(p) {
+  geoModalMode = 'choropleth';
+  document.getElementById('geoModalTitle').textContent = p.title;
+  document.querySelectorAll('#geoModalModeToggle button').forEach(b => b.classList.toggle('active', b.dataset.mode === geoModalMode));
+  document.getElementById('geoModalOverlay').classList.add('open');
+  document.getElementById('geoModal').classList.add('open');
+  drawModalMap(p);
+}
+function closeMapModal() {
+  document.getElementById('geoModalOverlay').classList.remove('open');
+  document.getElementById('geoModal').classList.remove('open');
+  destroyGeoModalMap();
+}
+document.getElementById('geoModalOverlay').addEventListener('click', closeMapModal);
+document.getElementById('geoModalClose').addEventListener('click', closeMapModal);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMapModal(); });
+document.getElementById('geoModalModeToggle').addEventListener('click', e => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b || !openProduct) return;
+  geoModalMode = b.dataset.mode;
+  document.querySelectorAll('#geoModalModeToggle button').forEach(x => x.classList.toggle('active', x === b));
+  const p = lastProductGeo.find(x => x.title === openProduct);
+  if (p) drawModalMap(p);
+});
 
 function geoProdRowHtml(p, i) {
   const isOpen = openProduct === p.title;
   return `
-    <div class="geo-prod-row${isOpen ? ' open' : ''}" data-title="${encodeURIComponent(p.title)}">
-      <span class="geo-prod-rank">${i + 1}.</span>
-      <span class="geo-prod-name" title="${p.title}">${p.title}</span>
-      <span class="geo-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
-      <span class="geo-prod-rev">${fmtMoney(p.revenue)}</span>
-      <span class="geo-prod-chevron">▸</span>
-    </div>
-    ${isOpen ? `<div class="geo-detail">${geoDetailHtml(p)}</div>` : ''}`;
+    <div class="geo-prod-card${isOpen ? ' open' : ''}">
+      <div class="geo-prod-row" data-title="${encodeURIComponent(p.title)}">
+        <span class="geo-prod-rank">${i + 1}.</span>
+        <span class="geo-prod-name" title="${p.title}">${p.title}</span>
+        <span class="geo-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
+        <span class="geo-prod-rev">${fmtMoney(p.revenue)}</span>
+        <span class="geo-prod-chevron">▸</span>
+      </div>
+      ${isOpen ? `<div class="geo-detail">${geoDetailHtml(p)}</div>` : ''}
+    </div>`;
 }
 
 function renderGeoBlocks() {
   destroyGeoMap();
+  destroyGeoBarChart();
   const container = document.getElementById('geoBlocks');
   const segsPresent = ['cat','dog','other'].filter(k => lastProductGeo.some(p => p.seg === k));
   if (!segsPresent.length) { container.innerHTML = '<div class="geo-empty">Sem dados de produto/estado no período</div>'; return; }
@@ -669,7 +885,12 @@ function renderGeoBlocks() {
   }).join('');
   if (openProduct) {
     const p = lastProductGeo.find(x => x.title === openProduct);
-    if (p) initGeoMap(p);
+    if (p) {
+      if (!geoMapHidden) initGeoMap(p);
+      if (geoViewMode === 'chart') geoRenderBarChart(p);
+      const expandBtn = document.getElementById('geoMapExpandBtn');
+      if (expandBtn) expandBtn.addEventListener('click', e => { e.stopPropagation(); openMapModal(p); });
+    }
   }
 }
 function toggleGeoExpand(seg) {
@@ -678,6 +899,15 @@ function toggleGeoExpand(seg) {
   renderGeoBlocks();
 }
 document.getElementById('geoBlocks').addEventListener('click', e => {
+  // Toolbar do painel expandido (modo de visualização / esconder mapa) não deve fechar o produto.
+  const viewBtn = e.target.closest('.geo-view-toggle button[data-mode]');
+  if (viewBtn) { geoViewMode = viewBtn.dataset.mode; localStorage.setItem('coco_seg_geoview', geoViewMode); renderGeoBlocks(); return; }
+  if (e.target.closest('#geoMapHideBtn')) {
+    geoMapHidden = !geoMapHidden;
+    localStorage.setItem('coco_seg_geohide', geoMapHidden ? '1' : '0');
+    renderGeoBlocks();
+    return;
+  }
   const row = e.target.closest('.geo-prod-row');
   if (!row) return;
   const title = decodeURIComponent(row.dataset.title);
