@@ -456,6 +456,11 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     o grupo inteiro.
   - **Escopo desta rodada:** só o card "Onde os produtos vendem". Reaproveitar em Produtos/Estoque é um
     próximo passo natural (o Luan sinalizou isso), mas não foi pedido ainda.
+  - **Aviso de grupo já existente no modo Selecionar (mesmo dia):** ao marcar um produto que já
+    pertence a outro grupo, a linha dele mostra um badge âmbar `⚠ faz parte de "Nome do grupo"`
+    (`findGroupForTitle()`, busca reversa em `geoGroups`) — evita clicar "Unificar" sem perceber que
+    aquele produto já estava em outro lugar (o `upsertProductGroup` já tira ele do grupo antigo
+    automaticamente, mas o aviso deixa isso visível *antes* de confirmar, não só depois).
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 
