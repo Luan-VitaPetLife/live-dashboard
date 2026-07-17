@@ -847,10 +847,24 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   também para a linha de Total do card agregado.
 - **Amazon — placeholder "Produto TESTE":** o **US já tem nome de produto** (Reports API, ver 4.7.6), mas o
   **BR ainda vem incompleto** (só via `getOrderItems`; pedidos `701-/702-` dão 400 — ver 4.7.9 / backlog aberto 3).
-  Quando `byChannel[amazonCh].products` fica vazio (Amazon BR sem itens), `computeStock()` injeta uma linha
-  sintética `"Produto TESTE"` (métricas de venda zeradas) nesse canal pra não bloquear o controle manual de
-  estoque — editável como qualquer produto, mas excluída do card agregado (ver acima). Some sozinho quando o
-  canal passa a ter produto real agregado.
+  Quando `catalogByChannel[amazonCh].products` fica vazio (Amazon BR sem itens em TODO o histórico, não só nos
+  últimos 30 dias — ver merge de catálogo abaixo), `computeStock()` injeta uma linha sintética `"Produto TESTE"`
+  (métricas de venda zeradas) nesse canal pra não bloquear o controle manual de estoque — editável como qualquer
+  produto, mas excluída do card agregado (ver acima). Some sozinho quando o canal passa a ter produto real.
+- **⚠️ Bug corrigido (17/07/2026) — Estoque mostrava muito menos produtos que Produtos (144 vs 33 no EUA):**
+  `computeStock()` só agregava pedidos da **janela fixa de 30 dias** — um produto sem NENHUMA venda nesse período
+  simplesmente não gerava linha, mesmo tendo `stock`/`incoming` cadastrados manualmente em `kv.productStock` (o
+  dado continuava salvo, só ficava inacessível pela UI). `computeProducts()` (Produtos) já mesclava com o catálogo
+  completo do canal (todo o histórico, sem filtro de data — ver 4.13) desde 15/07; `computeStock()` nunca ganhou
+  esse merge. No EUA a diferença ficava enorme porque a Amazon US foi populada por um **backfill de 365 dias**
+  (ver 4.7.5/4.7.7) — muitos ASINs venderam alguma vez no ano mas não nos últimos 30 dias. **Mesmo mecanismo
+  válido pra BR e qualquer canal** (código é `market`-agnóstico), só que com magnitude menor lá por causa do
+  catálogo/histórico bem menor. **Correção:** `computeStock()` agora também busca `catalogByChannel` (todo o
+  histórico, mesmo padrão de `computeProducts`) e mescla com a janela de 30 dias — produto sem venda recente
+  continua aparecendo, com `salesDaily`/`salesMonth` zerados mas `stock`/`incoming` preservados. O card "Estoque"
+  agregado (por família) passou a reaproveitar essa mesma lista já mesclada em vez de reagregar só a janela de
+  30 dias, então ganha a correção também. Testado localmente: produto com pedido só há 6+ meses e `stock`/
+  `incoming` cadastrados manualmente aparece na tabela com vendas zeradas e o estoque intacto (antes, sumia).
 - Fora de escopo por ora (não pedido, evitar scope creep): canais que só existem no Monday e não no
   nosso sistema (Chewy, Walmart, Website separado, Wholesale) e qualquer chamada à API do Monday.
 
