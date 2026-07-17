@@ -108,9 +108,11 @@
   .sp-reset:hover{border-color:var(--ink);color:var(--text)}
 
   /* ── Content ── */
-  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
+  .content{padding:28px;display:flex;flex-direction:column;gap:24px;flex:1}
   .period-wrap{position:relative}
-  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-head{display:flex;align-items:flex-start;gap:12px}
+  .page-head::before{content:'';width:4px;align-self:stretch;min-height:34px;background:linear-gradient(180deg,var(--rust),var(--sage));border-radius:2px;flex-shrink:0}
+  .page-title{font-size:24px;font-weight:300;letter-spacing:-.5px;line-height:1.15}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
   /* ── KPIs ── */
@@ -122,10 +124,13 @@
   .delta-val.up{background:rgba(61,122,82,.1);color:var(--green)} .delta-val.down{background:rgba(155,58,58,.09);color:var(--red)} .delta-val.flat{background:rgba(30,28,24,.06);color:var(--muted)}
 
   /* ── Cards ── */
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative}
+  /* Sombra em duas camadas (contato + ambiente) — dá profundidade real aos cards, que antes
+     eram totalmente planos (só borda de 1px). Esse é o "acessório" visual desta rodada: um
+     único sistema de elevação aplicado em todo lugar, em vez de vários ajustes espalhados. */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative;box-shadow:0 1px 2px rgba(30,28,24,.04),0 6px 20px -6px rgba(30,28,24,.10)}
   .card-pad{padding:16px 24px}
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
-  .ct-title{font-size:12px;font-weight:500} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
+  .ct-title{font-size:12px;font-weight:600} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
   .donut-center-wrap{position:relative;height:160px;margin-bottom:14px}
   .donut-center-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
   .dcl-val{font-size:18px;font-weight:300;letter-spacing:-.5px;line-height:1} .dcl-sub{font-size:9px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px}
@@ -373,9 +378,11 @@
   </div>
 
   <div class="content">
-    <div>
-      <div class="page-title">Visão geral de receita</div>
-      <div class="page-sub" id="pageSub">Coco and Luna · multicanal</div>
+    <div class="page-head">
+      <div>
+        <div class="page-title">Visão geral de receita</div>
+        <div class="page-sub" id="pageSub">Coco and Luna · multicanal</div>
+      </div>
     </div>
 
     <div class="edit-toolbar" id="editToolbar">
