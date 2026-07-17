@@ -125,19 +125,21 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - OAuth: `/shopee/connect` → autoriza → callback troca `code` por tokens. Token renovado automaticamente.
 - **Ativa ✅** — credenciais de produção configuradas: `SHOPEE_PARTNER_ID` 2037711, `SHOPEE_SHOP_ID` 1502160212 (+ `SHOPEE_PARTNER_KEY`). Chunking de 15 dias em `src/shopee.js`.
 - **Analytics da Shopee (tráfego, insights) não disponível via API** — só no Seller Center; os endpoints retornam `error_not_found`.
-- **Investigação em aberto (17/07/2026) — pedidos Shopee não aparecem na Geografia BR:** o código já
-  pede `recipient_address` no `get_order_detail` (`response_optional_fields`) e já mapeia
-  `recipient_address.state` pra UF via `toUF()` (`fetchOrders()`) — então, no papel, o pipeline está
-  pronto. Só que `metrics.js`/`byState` só conta o pedido se `o.state` vier preenchido (`if (s &&
-  o.total > 0)`), e nenhum pedido Shopee parece estar batendo nisso. Hipótese mais provável (não
-  confirmada): a Shopee **mascara/omite `recipient_address` por privacidade (LGPD)** — comum em
-  campos como nome/telefone/endereço completo, mas precisa confirmar se `state` também vem afetado
-  (não é documentado publicamente, varia por região/status do pedido). Adicionado
-  `GET /api/shopee/probe-order` (`probeOrder()` em `shopee.js`) — busca 5 pedidos recentes e devolve
-  o `recipient_address` **cru**, sem normalizar nada, pra inspecionar direto contra produção (exige
-  login, mesma proteção dos demais `/api/*`). Ainda não rodado em produção — próximo passo antes de
-  decidir a correção (se for masking real, não tem o que fazer via código; se for formato/campo
-  inesperado, ajustar `toUF()`/o nome do campo).
+- **Estado do comprador indisponível — confirmado, é limitação da própria Shopee (17/07/2026):**
+  pedidos Shopee nunca aparecem na Geografia BR. O código já pedia `recipient_address` no
+  `get_order_detail` e já mapeava `recipient_address.state` pra UF via `toUF()` — o pipeline sempre
+  esteve pronto. **Confirmado ao vivo em produção** via `GET /api/shopee/probe-order` (`probeOrder()`
+  em `shopee.js`, devolve o `recipient_address` cru de pedidos recentes): a Shopee devolve **TODOS os
+  campos do endereço mascarados como o literal `"****"`** — `name`, `phone`, `town`, `district`,
+  `city`, `state`, `region`, `zipcode`, `full_address` — em pedidos `READY_TO_SHIP`, `SHIPPED` e até
+  `CANCELLED`. Não é um problema de formato nem de status do pedido: é mascaramento de PII do lado da
+  Shopee (política de privacidade da plataforma, não documentada publicamente), e o app não tem (nem
+  parece existir uma forma de solicitar) permissão de decriptação desses campos pela Open Platform API
+  — diferente da Amazon (papel PII aprovável, ver 4.7.4) ou do ML (state vem via `/shipments/{id}`, sem
+  mascaramento). **Não há correção via código.** `toUF("****")` já devolve `null` graciosamente (não
+  quebra nada), então pedidos Shopee simplesmente não entram em `byState`/Geografia BR — comportamento
+  esperado e final, não um bug. `GET /api/shopee/probe-order` fica como diagnóstico caso a Shopee mude
+  essa política no futuro.
 
 ### 4.6 Mercado Livre
 - Implementado em `src/mercadolivre.js`. OAuth 2.0 com refresh_token automático.
@@ -1083,7 +1085,7 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 | Canal | Estado | Detalhes-chave | Ver |
 |---|---|---|---|
 | Shopify BR/US | ✅ | Admin API 2026-04; pedidos GraphQL + sessões ShopifyQL | 4.1, 4.2 |
-| Shopee | ✅ | Partner ID 2037711, Shop ID 1502160212; analytics indisponível via API | 4.5 |
+| Shopee | ✅ | Partner ID 2037711, Shop ID 1502160212; analytics e endereço do comprador (estado) indisponíveis via API | 4.5 |
 | Mercado Livre | ✅ | OAuth (re-autorizar após deploy); ML Ads ativo (escopo `write:product_ads`) | 4.6 |
 | Amazon US | ✅ | `ATVPDKIKX0DER`, token conta VITA PET LIFE; sync por cursor + backfill Reports API | 4.7 |
 | Amazon BR | ✅ parcial | `A2Q3Y263D00KWC`, token conta CocoandLuna; valor/qtd ok, nome de produto só via getOrderItems | 4.7.9, backlog aberto 3 |

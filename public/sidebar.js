@@ -15,22 +15,22 @@
     <button id="sidebarToggle" class="sidebar-close-btn" title="Fechar menu"><i class="bi bi-layout-sidebar-reverse"></i></button>
   </div>
   <div class="brand">
-    <a href="index.html" style="display:block;line-height:0"><img src="Logo2.png" alt="Coco and Luna" class="brand-logo"></a>
+    <a href="/" style="display:block;line-height:0"><img src="Logo2.png" alt="Coco and Luna" class="brand-logo"></a>
     <span class="brand-name">Dashboard<br>Vita Pet Life · Coco and Luna</span>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
-    <a class="nav-item" data-page="index.html" href="index.html"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>
-    <a class="nav-item" data-page="segmentos.html" href="segmentos.html"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
-    <a class="nav-item" data-page="geografia.html" href="geografia.html"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></a>
-    <a class="nav-item" data-page="geografia-us.html" href="geografia-us.html"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></a></div>
+    <a class="nav-item" data-page="index.html" href="/"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>
+    <a class="nav-item" data-page="segmentos.html" href="/segmentos"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
+    <a class="nav-item" data-page="geografia.html" href="/geografia"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></a>
+    <a class="nav-item" data-page="geografia-us.html" href="/geografia-us"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></a></div>
   <div class="nav-group"><div class="nav-label">Operações</div>
-    <a class="nav-item" data-page="produtos.html" href="produtos.html"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
-    <a class="nav-item" data-page="estoque.html" href="estoque.html"><i class="bi bi-layers nav-icon"></i> Estoque</a>
+    <a class="nav-item" data-page="produtos.html" href="/produtos"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
+    <a class="nav-item" data-page="estoque.html" href="/estoque"><i class="bi bi-layers nav-icon"></i> Estoque</a>
     <a class="nav-item"><i class="bi bi-wallet2 nav-icon"></i> Financeiro</a></div>
   <div class="nav-group"><div class="nav-label">Marketing</div>
-    <a class="nav-item" data-page="campanhas.html" href="campanhas.html"><i class="bi bi-megaphone nav-icon"></i> Campanhas</a></div>
+    <a class="nav-item" data-page="campanhas.html" href="/campanhas"><i class="bi bi-megaphone nav-icon"></i> Campanhas</a></div>
   <div class="nav-group" id="navGroupSistema"><div class="nav-label">Sistema</div>
-    <a class="nav-item" data-page="configuracoes.html" href="configuracoes.html" id="navConfig" style="display:none"><i class="bi bi-gear nav-icon"></i> Configurações</a></div>
+    <a class="nav-item" data-page="configuracoes.html" href="/configuracoes" id="navConfig" style="display:none"><i class="bi bi-gear nav-icon"></i> Configurações</a></div>
   <div class="side-user" id="sideUser" style="display:none"></div>
 </nav>
 <button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-layout-sidebar"></i></button>`;
@@ -86,8 +86,16 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
     }
     document.body.insertAdjacentHTML('afterbegin', html);
 
-    // Item ativo conforme o arquivo atual ('/' = index.html)
-    const page = (location.pathname.split('/').pop() || 'index.html').toLowerCase() || 'index.html';
+    // Item ativo conforme a URL limpa atual — mapeia de volta pro identificador de
+    // arquivo (data-page), que é como as páginas sempre foram referenciadas (ver
+    // SLUG_TO_FILE em server.js; o mapa aqui é só o inverso, pro lado do cliente).
+    const SLUG_TO_FILE = {
+      '': 'index.html', segmentos: 'segmentos.html', geografia: 'geografia.html',
+      'geografia-us': 'geografia-us.html', produtos: 'produtos.html', estoque: 'estoque.html',
+      campanhas: 'campanhas.html', configuracoes: 'configuracoes.html', login: 'login.html',
+    };
+    const seg = location.pathname.replace(/\/+$/, '').replace(/^\//, '').replace(/\.html$/i, '').toLowerCase();
+    const page = SLUG_TO_FILE[seg] || seg + '.html';
     const active = document.querySelector('.sidebar .nav-item[data-page="' + page + '"]');
     if (active) active.classList.add('active');
 
@@ -153,18 +161,19 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
     }
     if (!data) return;
 
+    const FILE_TO_SLUG = Object.fromEntries(Object.entries(SLUG_TO_FILE).map(([s, f]) => [f, s ? '/' + s : '/']));
     const managed = new Set((data.pages || []).map(p => String(p.file).toLowerCase()));
     const user = data.user;
 
     // Guard de acesso (defesa no cliente; o servidor também valida)
-    if (data.enabled && !user) { location.href = '/login.html'; return; }
+    if (data.enabled && !user) { location.href = '/login'; return; }
     if (data.enabled && user) {
       const isAdmin = user.role === 'admin';
       const allowed = (user.pages || []).map(f => String(f).toLowerCase());
       if (managed.has(page) && !isAdmin && !allowed.includes(page)) {
-        if (allowed.length) { location.href = allowed[0]; return; }
+        if (allowed.length) { location.href = FILE_TO_SLUG[allowed[0]] || '/'; return; }
       }
-      if (page === 'configuracoes.html' && !isAdmin) { location.href = '/index.html'; return; }
+      if (page === 'configuracoes.html' && !isAdmin) { location.href = '/'; return; }
     }
 
     // Visibilidade dos itens de navegação gerenciados
@@ -209,7 +218,7 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
       logout.innerHTML = '<i class="bi bi-box-arrow-right"></i>';
       logout.addEventListener('click', async () => {
         try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); } catch (e) {}
-        location.href = '/login.html';
+        location.href = '/login';
       });
 
       box.innerHTML = '';
