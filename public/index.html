@@ -92,7 +92,7 @@
   .sp-head-title{font-size:14px;font-weight:600;letter-spacing:-.2px}
   .sp-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px;line-height:1;transition:color .12s}
   .sp-close:hover{color:var(--text)}
-  .sp-body{flex:1;overflow-y:auto;padding:20px}
+  .sp-body{flex:1;overflow-y:auto;padding:24px}
   .sp-section{margin-bottom:24px}
   .sp-section-title{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
   .sp-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)}
@@ -109,6 +109,7 @@
 
   /* ── Content ── */
   .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
+  .period-wrap{position:relative}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
@@ -122,7 +123,7 @@
 
   /* ── Cards ── */
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative}
-  .card-pad{padding:18px 20px}
+  .card-pad{padding:16px 24px}
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
   .ct-title{font-size:12px;font-weight:500} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
   .donut-center-wrap{position:relative;height:160px;margin-bottom:14px}
@@ -142,14 +143,16 @@
   .ss-leg-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
   .ss-cell-total{font-size:11px;font-weight:500;color:var(--muted);margin-top:4px}
   .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
-  .metric-cell{padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)}
+  .metric-cell{padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)}
   .mc-type{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
   .mc-val{font-size:18px;font-weight:300;letter-spacing:-.5px;margin-bottom:3px} .mc-meta{font-size:10px;color:var(--muted)}
+  .mc-val.pos{color:var(--green)}
   .funnel-list{display:flex;flex-direction:column}
   .fl-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)} .fl-row:last-child{border-bottom:none}
   .fl-label{font-size:12px;color:var(--sub);width:130px;flex-shrink:0}
   .fl-track{flex:1;height:2px;background:var(--border);border-radius:1px;overflow:hidden} .fl-fill{height:100%;border-radius:1px;transition:width .4s}
   .fl-val{font-size:12px;font-weight:500;width:60px;text-align:right;flex-shrink:0}
+  .tbl-wrap{overflow-x:auto}
   .tbl{width:100%;border-collapse:collapse}
   .tbl th{font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:0 16px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
   .tbl td{padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle}
@@ -174,7 +177,23 @@
   .ro-search i{font-size:12px;color:var(--muted)}
   .ro-search input{border:none;background:transparent;outline:none;font-family:inherit;font-size:12px;color:var(--text);width:190px;max-width:46vw}
   .ro-search input::placeholder{color:var(--muted)}
+  .ro-summary-row{background:var(--surface2)}
+  .ro-summary-label{padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  .ro-summary-val{padding:10px 16px;font-weight:600;font-size:13px}
   footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
+
+  /* ── Top produtos (lista construída via JS) ── */
+  .tp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+  .tp-info{min-width:0}
+  .tp-name-row{color:var(--sub);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .tp-qty{font-size:10px;color:var(--muted);margin-top:2px}
+  .tp-val{font-weight:500;white-space:nowrap}
+  .tp-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px}
+  .tp-summary-label{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  .tp-summary-val{font-weight:600}
+  .tp-toggle-wrap{text-align:center;padding-top:8px}
+  .tp-toggle-btn{background:none;border:none;color:var(--sub);font-size:11px;cursor:pointer;text-decoration:underline;padding:2px}
+  .tp-list-scroll{max-height:420px;overflow-y:auto}
 
   /* ── Sidebar: comportamento de recolher afeta o .main (layout da página) ── */
   body.sidebar-hidden .main{margin-left:0}
@@ -183,7 +202,7 @@
   @media(max-width:768px){
     .main{margin-left:0}
     .content{padding:16px}
-    .topbar{padding:0 14px;gap:6px}
+    .topbar{padding:8px 14px;gap:6px;height:auto;min-height:54px;flex-wrap:wrap;row-gap:8px}
     .edit-grid>.edit-card{grid-column:1/-1!important}
     .metric-row{grid-template-columns:1fr 1fr}
     .tbl th:nth-child(3),.tbl td:nth-child(3),
@@ -193,6 +212,10 @@
     .filter-pill .lbl{display:none}
     .mkt-btn span{display:none}
     .topbar{gap:4px}
+  }
+  @media(max-width:480px){
+    .kpi-mini{padding:12px 14px}
+    .kc-value{font-size:17px}
   }
   /* ── Trend drilldown ── */
   .trend-drilldown{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-top:8px}
@@ -324,7 +347,7 @@
     </div>
 
     <!-- Period -->
-    <div style="position:relative" id="periodWrap">
+    <div class="period-wrap" id="periodWrap">
       <div class="filter-pill period-pill-active" id="periodPill">
         <span class="lbl">Período</span>
         <span class="val" id="periodValue">Hoje</span>
@@ -351,7 +374,7 @@
 
   <div class="content">
     <div>
-      <div class="page-title">Revenue command center</div>
+      <div class="page-title">Visão geral de receita</div>
       <div class="page-sub" id="pageSub">Coco and Luna · multicanal</div>
     </div>
 
@@ -405,10 +428,10 @@
         </div></div>
       </div>
 
-      <div class="edit-card" data-card-id="channelSplit" data-title="Channel split" style="grid-column:span 5">
+      <div class="edit-card" data-card-id="channelSplit" data-title="Canais" style="grid-column:span 5">
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card" id="cardChannelSplit"><div class="card-pad">
-          <div class="card-top"><div><div class="ct-title">Channel split</div><div class="ct-sub">Receita por canal</div></div></div>
+          <div class="card-top"><div><div class="ct-title">Canais</div><div class="ct-sub">Receita por canal</div></div></div>
           <div class="donut-center-wrap"><canvas id="channelChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="chCenter">—</div><div class="dcl-sub">Total</div></div></div>
           <div class="donut-rows" id="channelRows"></div>
         </div></div>
@@ -422,10 +445,10 @@
             <div class="metric-cell"><div class="mc-type">Sessões</div><div class="mc-val" id="mSessions">—</div><div class="mc-meta" id="mSessionsMeta">&nbsp;</div></div>
             <div class="metric-cell"><div class="mc-type">Visitantes</div><div class="mc-val" id="mVisitors">—</div><div class="mc-meta">únicos</div></div>
             <div class="metric-cell"><div class="mc-type">Add. carrinho</div><div class="mc-val" id="mCart">—</div><div class="mc-meta" id="mCartMeta">&nbsp;</div></div>
-            <div class="metric-cell"><div class="mc-type">Conversão</div><div class="mc-val" id="mConv" style="color:var(--green)">—</div><div class="mc-meta">sessão → compra</div></div>
+            <div class="metric-cell"><div class="mc-type">Conversão</div><div class="mc-val pos" id="mConv">—</div><div class="mc-meta">sessão → compra</div></div>
           </div>
           <div class="ch180"><canvas id="trafficChart"></canvas></div>
-          <div class="legend-row"><div class="legend-item"><div class="legend-sq" style="background:rgba(176,168,152,.55)"></div>Sessões</div><div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Conversão (%)</div></div>
+          <div class="legend-row" id="trafficLegend"></div>
         </div></div>
       </div>
 
@@ -438,16 +461,16 @@
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card" id="cardMlBreakdown"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Mercado Livre · Detalhe</div><div class="ct-sub">Tipo de listagem (Clássico = grátis · Destaque = pago)</div></div></div>
-          <div class="metric-row" style="margin-top:12px">
+          <div class="metric-row">
             <div class="metric-cell"><div class="mc-type">Clássico</div><div class="mc-val" id="mlOrganic">—</div><div class="mc-meta">listagem grátis</div></div>
             <div class="metric-cell"><div class="mc-type">Destaque</div><div class="mc-val" id="mlPremium">—</div><div class="mc-meta">listagem paga (Bronze/Gold)</div></div>
             <div class="metric-cell"><div class="mc-type">Custo ML Ads</div><div class="mc-val" id="mlAdCost">—</div><div class="mc-meta">Product Ads</div></div>
-            <div class="metric-cell"><div class="mc-type">ROAS ML Ads</div><div class="mc-val" id="mlRoas" style="color:var(--green)">—</div><div class="mc-meta">receita / gasto</div></div>
+            <div class="metric-cell"><div class="mc-type">ROAS ML Ads</div><div class="mc-val pos" id="mlRoas">—</div><div class="mc-meta">receita / gasto</div></div>
           </div>
         </div></div>
       </div>
 
-      <div class="edit-card" data-card-id="topProducts" data-title="Top produtos" style="grid-column:span 5">
+      <div class="edit-card" data-card-id="topProducts" data-title="Top produtos" style="grid-column:span 8">
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card"><div class="card-pad"><div class="card-top"><div><div class="ct-title">Top produtos</div><div class="ct-sub">Por receita</div></div></div><div id="topProducts"></div></div></div>
       </div>
@@ -462,7 +485,7 @@
         </div></div>
       </div>
 
-      <div class="edit-card" data-card-id="salesSplit" data-title="Orgânico x Campanha" style="grid-column:span 8">
+      <div class="edit-card" data-card-id="salesSplit" data-title="Orgânico x Campanha" style="grid-column:span 12">
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card" id="cardSalesSplit"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub" id="ssSub">Por canal</div></div></div>
@@ -477,11 +500,13 @@
           <div class="card-top"><div><div class="ct-title">Pedidos recentes</div><div class="ct-sub">Mais recentes primeiro</div></div>
             <div class="ro-head-right">
               <div class="ro-search"><i class="bi bi-search"></i><input type="search" id="ordersSearch" placeholder="Buscar cliente, nº, status, canal…" autocomplete="off" aria-label="Buscar pedidos"></div>
-              <span style="font-size:11px;color:var(--muted)" id="ordersMeta">—</span>
+              <span class="ro-pg-info" id="ordersMeta">—</span>
             </div>
           </div>
-          <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Itens</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
-          <tbody id="ordersBody"></tbody></table>
+          <div class="tbl-wrap">
+            <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Itens</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
+            <tbody id="ordersBody"></tbody></table>
+          </div>
           <div id="ordersPager" class="orders-pager"></div>
         </div></div>
       </div>
@@ -520,11 +545,6 @@
 </div>
 
 <script>
-function chBadgeHTML(chKey) {
-  const c = CocoColors.ch[chKey] || { bg:'#999', text:'#fff', label: chKey || '?' };
-  return `<span style="background:${c.bg};color:${c.text};font-size:10px;padding:2px 7px;border-radius:3px;font-weight:600;white-space:nowrap">${c.label}</span>`;
-}
-
 // ── Settings panel ──
 function buildSettingsPanel() {
   CocoColors.buildSection('sp-ch-colors', CocoColors.DEFAULT_CH, 'ch', k => CocoColors.ch[k].bg, (k, v) => {
@@ -676,10 +696,26 @@ function setLive(s, t) {
   if (t) document.getElementById('lastUpdate').textContent = t;
 }
 
-Chart.defaults.color = '#9c9790';
+// Lê o valor computado de uma variável CSS do :root — fonte única de verdade pras cores usadas
+// dentro de strings de configuração do Chart.js (que não resolvem var() em todo contexto).
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+Chart.defaults.color = cssVar('--muted');
 Chart.defaults.borderColor = 'rgba(30,28,24,0.08)';
 Chart.defaults.font.size = 11;
-const tip = { backgroundColor:'#faf8f4', borderColor:'rgba(30,28,24,0.12)', borderWidth:1, titleColor:'#1a1916', bodyColor:'#6b6760', padding:10, cornerRadius:6 };
+const tip = { backgroundColor:cssVar('--surface'), borderColor:'rgba(30,28,24,0.12)', borderWidth:1, titleColor:cssVar('--text'), bodyColor:cssVar('--sub'), padding:10, cornerRadius:6 };
+
+// Monta uma linha de legenda (.legend-row > .legend-item) a partir de uma lista de itens —
+// reaproveitado pela Tendência e por Tráfego & conversão em vez de cada card montar o markup na mão.
+// items: [{ label, color, sq? }] — sq:true usa o quadrado (.legend-sq), padrão é a linha (.legend-line).
+function renderLegend(containerId, items) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = items.map(it => {
+    const swatch = it.sq ? 'legend-sq' : 'legend-line';
+    return `<div class="legend-item"><div class="${swatch}" style="background:${it.color}"></div>${it.label}</div>`;
+  }).join('');
+}
 
 function drawDonut(id, data, colors) {
   const total = data.reduce((a,b) => a+(Number(b)||0), 0);
@@ -723,8 +759,9 @@ function render(d) {
 
   // Trend
   const t = d.trend, money = t.fmt === 'money';
-  const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:'#2d2a26', borderWidth:1.5, tension:.4, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:'#faf8f4', pointBorderColor:'#2d2a26', pointBorderWidth:1.5, fill:false }];
-  if (d.metric === 'receita') ds.push({ label:'Custo ads', data:t.data.map(()=>0), borderColor:'#b0a898', borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
+  const line1 = cssVar('--line1'), line2 = cssVar('--line2'), surface = cssVar('--surface');
+  const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:line1, borderWidth:1.5, tension:.4, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:surface, pointBorderColor:line1, pointBorderWidth:1.5, fill:false }];
+  if (d.metric === 'receita') ds.push({ label:'Custo ads', data:t.data.map(()=>0), borderColor:line2, borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
   setChart('trendChart', { type:'line', data:{ labels:t.labels, datasets:ds }, options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{ label:c=>' '+c.dataset.label+': '+(money?fmtMoney(c.parsed.y,2):fmtInt(c.parsed.y)) }} }, scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ grid:{color:'rgba(30,28,24,0.06)'}, ticks:{callback:v=>money?fmtMoneyShort(v):fmtInt(v)} } } } });
   // Click → drilldown de canais
   document.getElementById('trendDrilldown').style.display = 'none';
@@ -739,9 +776,9 @@ function render(d) {
   document.getElementById('trendTitle').textContent = 'Tendência · ' + METRIC_LABEL[d.metric];
   document.getElementById('trendSub').textContent = (d.period.grain==='hour'?'Por hora · ':'Por dia · ') + label.toLowerCase();
   document.getElementById('trendVal').textContent = (money?fmtMoney(t.total):fmtInt(t.total)) + ' ' + METRIC_LABEL[d.metric].toUpperCase();
-  document.getElementById('trendLegend').innerHTML = d.metric === 'receita'
-    ? `<div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>Receita</div><div class="legend-item"><div class="legend-line" style="background:var(--line2)"></div>Custo ads</div>`
-    : `<div class="legend-item"><div class="legend-line" style="background:var(--line1)"></div>${METRIC_LABEL[d.metric]}</div>`;
+  renderLegend('trendLegend', d.metric === 'receita'
+    ? [{ label:'Receita', color:'var(--line1)' }, { label:'Custo ads', color:'var(--line2)' }]
+    : [{ label: METRIC_LABEL[d.metric], color:'var(--line1)' }]);
 
   // Channel split
   const cs = d.channelSplit;
@@ -751,11 +788,11 @@ function render(d) {
   const cTotal = chOrder.reduce((a,[k]) => a+(cs[k]||0), 0);
   drawDonut('channelChart', chOrder.map(([k])=>cs[k]||0), chOrder.map(([k])=>CocoColors.ch[k]?.bg||'#999'));
   document.getElementById('chCenter').textContent = fmtMoneyShort(cTotal);
-  document.getElementById('channelRows').innerHTML = chOrder.map(([k,nm]) => {
+  document.getElementById('channelRows').innerHTML = cTotal > 0 ? chOrder.map(([k,nm]) => {
     const v = cs[k]||0;
     const pc = cTotal>0?(v/cTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%';
     return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${CocoColors.ch[k]?.bg||'#999'}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(v)}</span></div></div>`;
-  }).join('');
+  }).join('') : '<div class="muted-state">Sem dados para o período.</div>';
 
   // Marketing
   const mTotal = d.marketing.reduce((a,e)=>a+e.value, 0);
@@ -781,15 +818,17 @@ function render(d) {
       <div class="ss-cell-legend" id="ssLeg-${ch}"></div>
       <div class="ss-cell-total" id="ssTotal-${ch}">—</div>
     </div>`).join('');
+  const ssRust = cssVar('--rust'), ssSage = cssVar('--sage');
   ssChannels.forEach(ch => {
     const s = ssc[ch] || { campaign: 0, organic: 0 };
     const total = s.campaign + s.organic;
-    drawDonut(`ssPie-${ch}`, [s.campaign, s.organic], ['#a05a3a', '#6a8c6e']);
+    drawDonut(`ssPie-${ch}`, [s.campaign, s.organic], [ssRust, ssSage]);
     const campPct = total > 0 ? Math.round(s.campaign / total * 100) : 0;
     const orgPct  = total > 0 ? 100 - campPct : 100;
-    document.getElementById(`ssLeg-${ch}`).innerHTML =
-      `<div class="ss-leg-item"><span class="ss-leg-dot" style="background:#a05a3a"></span>Campanha ${campPct}%</div>` +
-      `<div class="ss-leg-item"><span class="ss-leg-dot" style="background:#6a8c6e"></span>Orgânico ${orgPct}%</div>`;
+    document.getElementById(`ssLeg-${ch}`).innerHTML = total > 0
+      ? `<div class="ss-leg-item"><span class="ss-leg-dot" style="background:${ssRust}"></span>Campanha ${campPct}%</div>` +
+        `<div class="ss-leg-item"><span class="ss-leg-dot" style="background:${ssSage}"></span>Orgânico ${orgPct}%</div>`
+      : `<div class="ss-leg-item">Sem dados</div>`;
     document.getElementById(`ssTotal-${ch}`).textContent = fmtMoney(total);
   });
 
@@ -813,7 +852,8 @@ function render(d) {
   document.getElementById('mCartMeta').textContent = tf.sessions?pctStr(tf.cart/tf.sessions*100)+' das sessões':' ';
   document.getElementById('mConv').textContent = (tf.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
   document.getElementById('trafficVal').textContent = fmtInt(tf.sessions)+' SESSÕES';
-  setChart('trafficChart', { data:{ labels:tf.series.map(p=>p.label), datasets:[ { type:'bar', label:'Sessões', data:tf.series.map(p=>p.sessions), backgroundColor:'rgba(176,168,152,.55)', borderRadius:2, yAxisID:'y', order:2 }, { type:'line', label:'Conversão', data:tf.series.map(p=>p.conv*100), borderColor:'#2d2a26', borderWidth:1.5, tension:.4, pointRadius:2, yAxisID:'y1', order:1, fill:false } ] }, options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{label:c=>c.dataset.label==='Conversão'?' Conversão: '+c.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':' Sessões: '+fmtInt(c.parsed.y)}} }, scales:{ x:{grid:{display:false},ticks:{maxTicksLimit:12}}, y:{position:'left',beginAtZero:true,grid:{color:'rgba(30,28,24,0.06)'}}, y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>v+'%'}} } } });
+  setChart('trafficChart', { data:{ labels:tf.series.map(p=>p.label), datasets:[ { type:'bar', label:'Sessões', data:tf.series.map(p=>p.sessions), backgroundColor:'rgba(176,168,152,.55)', borderRadius:2, yAxisID:'y', order:2 }, { type:'line', label:'Conversão', data:tf.series.map(p=>p.conv*100), borderColor:cssVar('--line1'), borderWidth:1.5, tension:.4, pointRadius:2, yAxisID:'y1', order:1, fill:false } ] }, options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{label:c=>c.dataset.label==='Conversão'?' Conversão: '+c.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':' Sessões: '+fmtInt(c.parsed.y)}} }, scales:{ x:{grid:{display:false},ticks:{maxTicksLimit:12}}, y:{position:'left',beginAtZero:true,grid:{color:'rgba(30,28,24,0.06)'}}, y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>v+'%'}} } } });
+  renderLegend('trafficLegend', [{ label:'Sessões', color:'rgba(176,168,152,.55)', sq:true }, { label:'Conversão (%)', color:'var(--line1)' }]);
 
   // Funnel
   const fn = d.funnel, fmax = fn.sessions||1;
@@ -827,7 +867,7 @@ function render(d) {
   if (prodList.length) {
     const prodRows = prodList.map((p,i) => {
       const {title:name, channel:ch, revenue:v, avulsoQty:avQty, comboBySize} = p;
-      const badge = isAllCh ? ' '+chBadgeHTML(ch) : '';
+      const badge = isAllCh ? ' '+CocoColors.chBadgeHTML(ch) : '';
       const comboParts = Object.entries(comboBySize||{})
         .sort((a,b)=>Number(a[0])-Number(b[0]))
         .map(([size,n])=>`${fmtInt(n)} combo de ${size}`);
@@ -836,14 +876,14 @@ function render(d) {
       bits.push(...comboParts);
       const total = avQty + (p.comboQty || 0);
       const qtyLine = bits.length ? `${fmtInt(total)} un total · ${bits.join(', ')}` : '0 un';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><div style="min-width:0"><div style="color:var(--sub);display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span>${i+1} · ${name}</span>${badge}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${qtyLine}</div></div><span style="font-weight:500;white-space:nowrap">${fmtMoney(v)}</span></div>`;
+      return `<div class="tp-row"><div class="tp-info"><div class="tp-name-row"><span>${i+1} · ${name}</span>${badge}</div><div class="tp-qty">${qtyLine}</div></div><span class="tp-val">${fmtMoney(v)}</span></div>`;
     }).join('');
     const prodTotal = prodList.reduce((a,p)=>a+p.revenue, 0);
     const totalLabel = topProductsExpanded ? `Total geral (${prodList.length})` : `Total top ${prodList.length}`;
     const toggleLabel = topProductsExpanded ? 'Mostrar top 5' : `Ver todos (${allProds.length})`;
     const showToggle = allProds.length > d.topProducts.length;
-    const totalRow = `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px"><span style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">${totalLabel}</span><span style="font-weight:600">${fmtMoney(prodTotal)}</span></div>${showToggle?`<div style="text-align:center;padding-top:8px"><button onclick="toggleTopProducts()" style="background:none;border:none;color:var(--sub);font-size:11px;cursor:pointer;text-decoration:underline;padding:2px">${toggleLabel}</button></div>`:''}`;
-    const listWrap = topProductsExpanded ? `<div style="max-height:420px;overflow-y:auto">${prodRows}</div>` : prodRows;
+    const totalRow = `<div class="tp-summary"><span class="tp-summary-label">${totalLabel}</span><span class="tp-summary-val">${fmtMoney(prodTotal)}</span></div>${showToggle?`<div class="tp-toggle-wrap"><button onclick="toggleTopProducts()" class="tp-toggle-btn">${toggleLabel}</button></div>`:''}`;
+    const listWrap = topProductsExpanded ? `<div class="tp-list-scroll">${prodRows}</div>` : prodRows;
     document.getElementById('topProducts').innerHTML = listWrap + totalRow;
   } else {
     document.getElementById('topProducts').innerHTML = '<div class="muted-state">Sem vendas no período.</div>';
@@ -932,11 +972,11 @@ function renderOrdersPage() {
   const start = _roPage * RO_PAGE_SIZE;
   const pageItems = ro.slice(start, start + RO_PAGE_SIZE);
 
-  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?chBadgeHTML(o.channel):`<span style="font-size:10px;color:var(--muted)">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
   // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
   const roValidCount = ro.filter(o=>!o.cancelled).length;
   const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
-  const summaryRow = `<tr style="background:var(--surface2)"><td colspan="4" style="padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)">Total (${roValidCount} válidos)</td><td></td><td style="padding:10px 16px;font-weight:600;font-size:13px">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
+  const summaryRow = `<tr class="ro-summary-row"><td colspan="4" class="ro-summary-label">Total (${roValidCount} válidos)</td><td></td><td class="ro-summary-val">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
   body.innerHTML = orderRows + summaryRow;
 
   if (pages > 1) {
@@ -1284,6 +1324,16 @@ document.getElementById('periodPill').addEventListener('click', e => {
     fromInp.value=sinceDate; toInp.value=untilDate;
     fromInp.max=todayISO; toInp.max=todayISO;
     document.querySelectorAll('.pp-presets button').forEach(b=>{ const[s,u]=presetRange(b.dataset.preset); b.classList.toggle('active',s===sinceDate&&u===untilDate); });
+    // Clamping de viewport (mesma ideia do CocoColors.openPicker em colors.js): em telas estreitas
+    // o popover (270px) pode vazar pra fora da tela se ancorado só via CSS right:0. Calcula a
+    // posição alvo em coordenadas de viewport, clampa com margem de 8px e converte pra um `left`
+    // relativo ao periodWrap (containing block do position:absolute).
+    const wrapRect = document.getElementById('periodWrap').getBoundingClientRect();
+    const popW = 270;
+    let targetLeft = wrapRect.right - popW;
+    targetLeft = Math.max(8, Math.min(targetLeft, window.innerWidth - popW - 8));
+    pop.style.right = 'auto';
+    pop.style.left = (targetLeft - wrapRect.left) + 'px';
   }
 });
 pop.addEventListener('click', e=>e.stopPropagation());
