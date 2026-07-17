@@ -76,6 +76,20 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
     + '.sidebar .side-logout{background:none;border:none;color:var(--side-muted);cursor:pointer;font-size:14px;padding:4px;line-height:1}'
     + '.sidebar .side-logout:hover{color:var(--side-text)}';
 
+  // Mapa slug <-> arquivo (espelha SLUG_TO_FILE em server.js) — no escopo do IIFE,
+  // não dentro de mount(), porque applyAuth() também precisa dele e é uma função
+  // irmã, não aninhada. Estava declarado dentro de mount() antes: applyAuth() lançava
+  // ReferenceError ao tentar ler SLUG_TO_FILE (fora de escopo), abortando a função bem
+  // no início — antes do trecho que mostra "Configurações" e o bloco de usuário no
+  // rodapé. Como a exceção não tinha try/catch ali (só o fetch tem), o erro nunca
+  // aparecia pra ninguém: os dois elementos simplesmente ficavam presos no
+  // `display:none` padrão do HTML, parecendo terem sido removidos.
+  const SLUG_TO_FILE = {
+    '': 'index.html', segmentos: 'segmentos.html', geografia: 'geografia.html',
+    'geografia-us': 'geografia-us.html', produtos: 'produtos.html', estoque: 'estoque.html',
+    campanhas: 'campanhas.html', configuracoes: 'configuracoes.html', login: 'login.html',
+  };
+
   function mount() {
     if (document.querySelector('nav.sidebar')) return; // idempotente
     if (!document.getElementById('sidebarComponentStyle')) {
@@ -87,13 +101,7 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
     document.body.insertAdjacentHTML('afterbegin', html);
 
     // Item ativo conforme a URL limpa atual — mapeia de volta pro identificador de
-    // arquivo (data-page), que é como as páginas sempre foram referenciadas (ver
-    // SLUG_TO_FILE em server.js; o mapa aqui é só o inverso, pro lado do cliente).
-    const SLUG_TO_FILE = {
-      '': 'index.html', segmentos: 'segmentos.html', geografia: 'geografia.html',
-      'geografia-us': 'geografia-us.html', produtos: 'produtos.html', estoque: 'estoque.html',
-      campanhas: 'campanhas.html', configuracoes: 'configuracoes.html', login: 'login.html',
-    };
+    // arquivo (data-page), que é como as páginas sempre foram referenciadas.
     const seg = location.pathname.replace(/\/+$/, '').replace(/^\//, '').replace(/\.html$/i, '').toLowerCase();
     const page = SLUG_TO_FILE[seg] || seg + '.html';
     const active = document.querySelector('.sidebar .nav-item[data-page="' + page + '"]');
@@ -160,7 +168,6 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
       return; // falhou: não mostra bloco de usuário, não quebra a página
     }
     if (!data) return;
-
     const FILE_TO_SLUG = Object.fromEntries(Object.entries(SLUG_TO_FILE).map(([s, f]) => [f, s ? '/' + s : '/']));
     const managed = new Set((data.pages || []).map(p => String(p.file).toLowerCase()));
     const user = data.user;
