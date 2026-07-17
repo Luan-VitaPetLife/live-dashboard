@@ -23,6 +23,70 @@ const PORT = process.env.PORT || 3000;
 // Detecta se a conexão original (antes do proxy) é HTTPS — usado para o atributo Secure do cookie.
 const isHttps = req => req.secure || req.headers['x-forwarded-proto'] === 'https';
 
+// ── Segurança: cabeçalhos defensivos (sem libs externas) ──
+// CSP construída a partir dos domínios que a interface realmente carrega (CDN do
+// Chart.js/Bootstrap Icons/Leaflet, tile server do mapa, API de GeoJSON do IBGE) —
+// confirmado varrendo todo public/ por "https://", não uma lista genérica.
+// script-src/style-src precisam de 'unsafe-inline' porque toda a lógica das páginas
+// vive em <script>/<style> inline no próprio HTML (arquitetura atual, sem bundler
+// nem build step) — isso ainda bloqueia injeção de script/domínio externo (o vetor
+// mais comum de exfiltração de cookie/dado via XSS refletido), mas não elimina XSS
+// via inline. Migrar pra nonce por requisição é o próximo passo se isso virar
+// prioridade — exigiria trocar o public/*.html de "arquivo estático" pra "renderizado
+// por request", mudança maior, fora do escopo desta rodada.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+  "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+  "img-src 'self' data: https://*.basemaps.cartocdn.com",
+  "font-src 'self' https://cdn.jsdelivr.net data:",
+  "connect-src 'self' https://servicodados.ibge.gov.br https://unpkg.com https://cdn.jsdelivr.net",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join('; ');
+
+app.disable('x-powered-by'); // não anunciar "Express" pra quem for procurar CVE de framework
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('X-Content-Type-Options', 'nosniff');       // trava MIME-sniffing (ex: um upload disfarçado de imagem virando script)
+  res.setHeader('X-Frame-Options', 'DENY');                  // clickjacking — reforça o frame-ancestors acima em navegadores antigos
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=(), payment=()');
+  if (isHttps(req)) res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  next();
+});
+
+// ── Rate limit de login: contra força bruta / credential stuffing em /api/login ──
+// Em memória (processo único no Railway) — chave por IP, sem libs externas, mesmo
+// espírito "dependências mínimas" do resto do projeto (ver CLAUDE.md seção 10). Não
+// precisa sobreviver a restart nem ser distribuído: o objetivo é atrapalhar um script
+// varrendo senhas, não ser à prova de um atacante com múltiplos IPs.
+const LOGIN_MAX_ATTEMPTS = 8;
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const loginAttempts = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of loginAttempts) {
+    if ((rec.lockedUntil || 0) < now && now - rec.firstAt > LOGIN_WINDOW_MS) loginAttempts.delete(ip);
+  }
+}, 30 * 60 * 1000);
+function loginLockedUntil(ip) {
+  const rec = loginAttempts.get(ip);
+  return rec && rec.lockedUntil > Date.now() ? rec.lockedUntil : 0;
+}
+function registerLoginFailure(ip) {
+  const now = Date.now();
+  let rec = loginAttempts.get(ip);
+  if (!rec || now - rec.firstAt > LOGIN_WINDOW_MS) rec = { count: 0, firstAt: now };
+  rec.count++;
+  if (rec.count >= LOGIN_MAX_ATTEMPTS) rec.lockedUntil = now + LOGIN_LOCK_MS;
+  loginAttempts.set(ip, rec);
+}
+function registerLoginSuccess(ip) { loginAttempts.delete(ip); }
+
 // ── Pipeline base (ordem importa) ──
 app.use(express.json());
 
@@ -36,9 +100,15 @@ app.use((req, _res, next) => {
 
 // ── Rotas públicas de autenticação (antes do portão) ──
 app.post('/api/login', (req, res) => {
+  const locked = loginLockedUntil(req.ip);
+  if (locked) {
+    const minutes = Math.ceil((locked - Date.now()) / 60000);
+    return res.status(429).json({ error: `Muitas tentativas de login. Tente de novo em ${minutes} min.` });
+  }
   const { username, password } = req.body || {};
   const result = auth.login(username, password);
-  if (!result) return res.status(401).json({ error: 'Usuário ou senha inválidos.' });
+  if (!result) { registerLoginFailure(req.ip); return res.status(401).json({ error: 'Usuário ou senha inválidos.' }); }
+  registerLoginSuccess(req.ip);
   res.setHeader('Set-Cookie', auth.buildSessionCookie(result.token, { secure: isHttps(req) }));
   res.json({ ok: true, user: result.user });
 });
@@ -57,6 +127,41 @@ app.get('/api/me', (req, res) => {
   });
 });
 
+// ── URLs limpas: mapa slug <-> arquivo. O identificador interno de página CONTINUA
+// sendo o nome do arquivo (compat com kv.users.pages já gravado no banco em produção)
+// — só a URL que o usuário vê e navega perde o ".html". Ver CLAUDE.md.
+const SLUG_TO_FILE = {
+  '': 'index.html',
+  segmentos: 'segmentos.html',
+  geografia: 'geografia.html',
+  'geografia-us': 'geografia-us.html',
+  produtos: 'produtos.html',
+  estoque: 'estoque.html',
+  campanhas: 'campanhas.html',
+  configuracoes: 'configuracoes.html',
+  login: 'login.html',
+};
+const FILE_TO_SLUG = Object.fromEntries(
+  Object.entries(SLUG_TO_FILE).map(([slug, file]) => [file, slug ? '/' + slug : '/'])
+);
+function resolvePageFile(pathname) {
+  const clean = pathname.replace(/\/+$/, '') || '/';
+  if (clean === '/') return SLUG_TO_FILE[''];
+  const seg = clean.slice(1).toLowerCase();
+  return SLUG_TO_FILE[seg.endsWith('.html') ? seg.slice(0, -5) : seg] || null;
+}
+
+// Redireciona (301, permanente) qualquer .html antigo pra URL limpa — bookmarks e
+// links salvos continuam funcionando, mas a URL canônica nunca mais mostra .html.
+app.use((req, res, next) => {
+  if (!/\.html$/i.test(req.path)) return next();
+  const file = req.path.slice(1).toLowerCase();
+  const slug = FILE_TO_SLUG[file];
+  if (slug === undefined) return next(); // .html que não é uma página gerenciada — deixa passar (ex: asset)
+  const qs = req.url.slice(req.path.length);
+  res.redirect(301, slug + qs);
+});
+
 // ── Portão de acesso (antes do static): controla páginas e APIs quando o login está ligado ──
 const STATIC_ASSET_RE = /\.(css|js|png|jpe?g|svg|webp|gif|ico|woff2?|ttf|map|json)$/i;
 app.use((req, res, next) => {
@@ -66,7 +171,7 @@ app.use((req, res, next) => {
 
   // Sempre liberados: health, tela de login, rotas de auth, sync (tem token próprio), assets estáticos e OAuth.
   if (
-    p === '/health' || p === '/login.html' ||
+    p === '/health' || p === '/login' ||
     p === '/api/login' || p === '/api/logout' || p === '/api/me' || p === '/api/sync' ||
     STATIC_ASSET_RE.test(p) ||
     p.startsWith('/shopee/') || p.startsWith('/mercadolivre/') || p.startsWith('/googleads/')
@@ -75,21 +180,28 @@ app.use((req, res, next) => {
   const user = req.authUser;
   if (!user) {
     if (p.startsWith('/api/')) return res.status(401).json({ error: 'Não autenticado.' });
-    return res.redirect('/login.html');
+    return res.redirect('/login');
   }
 
-  // Controle de acesso por página (só para requisições de HTML).
-  if (p === '/' || p.endsWith('.html')) {
-    const file = (p === '/' ? 'index.html' : p.slice(1)).toLowerCase();
-    if (file === 'configuracoes.html' && user.role !== 'admin') return res.redirect('/index.html');
+  // Controle de acesso por página (só quando a URL resolve pra uma página conhecida).
+  const file = resolvePageFile(p);
+  if (file) {
+    if (file === 'configuracoes.html' && user.role !== 'admin') return res.redirect('/');
     if (auth.isManagedPage(file) && !auth.canAccessPage(user, file)) {
       const fp = auth.firstAllowedPage(user);
-      if (fp) return res.redirect('/' + fp);
+      if (fp) return res.redirect(FILE_TO_SLUG[fp] || '/');
       return res.status(403).send('<h2>Sem permissão</h2><p>Seu usuário não tem acesso a nenhuma página. Fale com um administrador.</p>');
     }
   }
 
   next();
+});
+
+// Serve cada página pela URL limpa (o arquivo real continua em public/*.html — só
+// não é mais assim que o navegador chega até ele). '/' fica de fora: já é servido
+// como índice padrão pelo express.static logo abaixo.
+app.get(Object.keys(SLUG_TO_FILE).filter(Boolean).map(s => '/' + s), (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', resolvePageFile(req.path)));
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -617,13 +729,18 @@ app.post('/api/auth/config', requireAdmin, (req, res) => {
   res.json({ ok: true, enabled });
 });
 
-// Troca da própria senha (qualquer usuário logado).
+// Troca da própria senha (qualquer usuário logado). Invalida todas as sessões desse
+// usuário (derruba qualquer sessão roubada/esquecida em outro dispositivo) e emite
+// um cookie novo pra aba atual continuar logada sem pedir senha de novo.
 app.post('/api/me/password', (req, res) => {
   if (!req.authUser) return res.status(401).json({ error: 'Não autenticado.' });
   const { current, next: novo } = req.body || {};
   if (!auth.verifyCredentials(req.authUser.username, current)) return res.status(400).json({ error: 'Senha atual incorreta.' });
-  if (!novo) return res.status(400).json({ error: 'Nova senha obrigatória.' });
+  if (!novo || String(novo).length < 8) return res.status(400).json({ error: 'A nova senha precisa ter pelo menos 8 caracteres.' });
   auth.changePassword(req.authUser.id, novo);
+  auth.invalidateUserSessions(req.authUser.id);
+  const token = auth.createSession(req.authUser.id);
+  res.setHeader('Set-Cookie', auth.buildSessionCookie(token, { secure: isHttps(req) }));
   res.json({ ok: true });
 });
 

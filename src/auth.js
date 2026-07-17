@@ -200,6 +200,37 @@ export function logout(token) {
   }
 }
 
+// Invalida TODAS as sessões de um usuário — usado ao trocar a senha, pra derrubar
+// qualquer sessão roubada/esquecida em outro dispositivo (o cookie sozinho não
+// expira por si só antes dos 30 dias de validade).
+export function invalidateUserSessions(userId) {
+  const sessions = getAuthSessions() || {};
+  let changed = false;
+  for (const [token, s] of Object.entries(sessions)) {
+    if (s && s.userId === userId) {
+      delete sessions[token];
+      changed = true;
+    }
+  }
+  if (changed) setAuthSessions(sessions);
+}
+
+// Cria uma sessão nova pra um usuário já autenticado, sem checar senha — usado
+// depois de invalidar as sessões no fluxo de troca de senha, pra manter a aba atual
+// logada em vez de forçar um novo login imediatamente após o usuário acabou de provar quem é.
+export function createSession(userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  const sessions = pruneSessions(getAuthSessions() || {});
+  sessions[token] = {
+    userId,
+    createdAt: new Date(now).toISOString(),
+    expiresAt: now + SESSION_TTL_MS,
+  };
+  setAuthSessions(sessions);
+  return token;
+}
+
 // Resolve o usuário ARMAZENADO a partir do token de sessão válido e não
 // expirado. Não persiste nada em leitura.
 export function userFromToken(token) {
@@ -260,7 +291,7 @@ export function createUser({ username, name, password, role, pages }) {
   const uname = String(username || '').trim();
   if (!uname) throw new Error('Nome de usuário obrigatório.');
   if (usernameTaken(uname, null)) throw new Error('Usuário já existe.');
-  if (!password) throw new Error('Senha obrigatória.');
+  if (!password || String(password).length < 8) throw new Error('A senha precisa ter pelo menos 8 caracteres.');
 
   const finalRole = role === 'admin' ? 'admin' : 'padrao';
   const finalPages =
@@ -312,6 +343,7 @@ export function updateUser(id, patch = {}) {
   }
 
   if (patch.password) {
+    if (String(patch.password).length < 8) throw new Error('A senha precisa ter pelo menos 8 caracteres.');
     const { salt, hash } = hashPassword(patch.password);
     user.salt = salt;
     user.hash = hash;
@@ -353,7 +385,7 @@ export function deleteUser(id) {
 
 // Redefine a senha de um usuário (sem exigir a senha atual).
 export function changePassword(id, newPassword) {
-  if (!newPassword) throw new Error('Senha obrigatória.');
+  if (!newPassword || String(newPassword).length < 8) throw new Error('A senha precisa ter pelo menos 8 caracteres.');
   const users = getUsers();
   const user = users.find((u) => u.id === id);
   if (!user) throw new Error('Usuário não encontrado.');
