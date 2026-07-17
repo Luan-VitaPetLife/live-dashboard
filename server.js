@@ -38,7 +38,13 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
   "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
-  "img-src 'self' data: https://*.basemaps.cartocdn.com",
+  // Imagem de produto (Shopify BR/US, Shopee, Mercado Livre, e futuramente Amazon) vem de
+  // URL dinâmica de CDN de cada marketplace — nunca é um domínio fixo no código, é campo de
+  // resposta de API (cdn.shopify.com, http2.mlstatic.com, subdomínios de img.susercontent.com
+  // da Shopee que variam...). Travar por domínio aqui viraria uma lista sempre desatualizada
+  // e quebrando imagem sem aviso; liberar https: geral pra img-src é o padrão pragmático (o
+  // vetor de ataque de <img src> é bem mais fraco que script-src/connect-src, que continuam travados).
+  "img-src 'self' data: https:",
   "font-src 'self' https://cdn.jsdelivr.net data:",
   "connect-src 'self' https://servicodados.ibge.gov.br https://unpkg.com https://cdn.jsdelivr.net",
   "frame-ancestors 'none'",
