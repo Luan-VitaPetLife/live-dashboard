@@ -494,6 +494,13 @@ app.get('/shopee/callback', async (req, res) => {
   }
 });
 
+// Diagnóstico: mostra o recipient_address cru de pedidos recentes da Shopee (sem normalizar),
+// pra confirmar se a API está mandando o estado ou mascarando por privacidade. Ver CLAUDE.md 4.5.
+app.get('/api/shopee/probe-order', async (req, res) => {
+  try { res.json(await shopee.probeOrder()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Mercado Livre OAuth ──
 app.get('/mercadolivre/connect', (req, res) => {
   try { res.redirect(ml.buildAuthUrl()); }

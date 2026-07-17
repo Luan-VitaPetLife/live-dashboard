@@ -130,6 +130,35 @@ async function shopCall(path, extraParams = {}, method = 'GET', body = null) {
 }
 
 
+// Diagnóstico: devolve o `recipient_address` cru de um pedido recente, sem normalizar nada —
+// pra confirmar se a Shopee está de fato mascarando/omitindo o estado (LGPD) ou se o dado vem
+// normal e o problema é nosso. Usado por GET /api/shopee/probe-order. Ver CLAUDE.md 4.5.
+export async function probeOrder() {
+  if (!isConfigured() || !getShopeeTokens()) return { error: 'Shopee não configurada/autorizada.' };
+  const untilMs = Date.now();
+  const sinceMs = untilMs - 15 * 24 * 60 * 60 * 1000;
+  const r = await shopCall('/api/v2/order/get_order_list', {
+    time_range_field: 'create_time',
+    time_from: String(Math.floor(sinceMs / 1000)),
+    time_to:   String(Math.floor(untilMs / 1000)),
+    page_size: '5',
+  });
+  const orderList = r.response?.order_list || [];
+  if (!orderList.length) return { error: 'Nenhum pedido nos últimos 15 dias pra testar.' };
+  const sns = orderList.map(o => o.order_sn);
+  const d = await shopCall('/api/v2/order/get_order_detail', {
+    order_sn_list: sns.join(','),
+    response_optional_fields: 'order_status,recipient_address',
+  });
+  return {
+    orders: (d.response?.order_list || []).map(o => ({
+      order_sn: o.order_sn,
+      order_status: o.order_status,
+      recipient_address: o.recipient_address || null,
+    })),
+  };
+}
+
 // Lista pedidos no intervalo e devolve normalizados (mesmo formato da Shopify).
 // A Shopee limita cada chamada a 15 dias — a janela é fatiada em chunks.
 export async function fetchOrders(sinceISO, untilISO) {
