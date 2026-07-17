@@ -79,16 +79,20 @@
   .prod-grid{display:flex;flex-direction:column;gap:12px}
   .prod-grid.layout-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));align-items:start}
   .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:box-shadow .18s ease,transform .18s ease,opacity .18s ease}
-  .prod-card.dragging{opacity:.5;transform:scale(1.02) rotate(-.6deg);box-shadow:0 0 0 3px var(--sage),0 18px 30px rgba(0,0,0,.2);cursor:grabbing;z-index:6}
   .prod-card.drop-bounce{animation:prodDropBounce .32s cubic-bezier(.34,1.56,.64,1)}
   @keyframes prodDropBounce{0%{transform:scale(1.035)}60%{transform:scale(.985)}100%{transform:scale(1)}}
   .prod-card-ghost{border:2px dashed var(--sage);border-radius:var(--radius);background:rgba(106,140,110,.08);animation:prodGhostPulse 1.1s ease-in-out infinite}
   @keyframes prodGhostPulse{0%,100%{opacity:.5;background:rgba(106,140,110,.06)}50%{opacity:.95;background:rgba(106,140,110,.14)}}
+  /* Clone que segue o cursor durante o arraste (ver attachDragHandlers) — o card real some
+     da grade enquanto isso (só o placeholder tracejado acima fica no lugar), então nunca há
+     duas cópias visíveis ao mesmo tempo. */
+  .prod-card-floating{position:fixed;top:0;left:0;margin:0;pointer-events:none;z-index:9999;max-height:70vh;overflow:hidden;box-shadow:0 22px 40px rgba(0,0,0,.28),0 0 0 3px var(--sage);transform:rotate(-1.1deg) scale(1.02);opacity:.97;transition:none}
+  body.dragging-active{cursor:grabbing!important;user-select:none}
+  body.dragging-active *{cursor:grabbing!important}
   .prod-card-head{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:relative}
   .drag-handle{cursor:grab;color:var(--muted);font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;width:26px;height:26px;margin:-5px -4px -5px -6px;transition:color .15s ease,transform .15s ease}
   .drag-handle:hover{color:var(--sage);transform:scale(1.2)}
   .drag-handle:active{cursor:grabbing}
-  .prod-card.dragging .drag-handle{color:var(--sage)}
   .camp-logo{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;letter-spacing:-.5px}
   .camp-logo-img{background:#fff;border:1px solid var(--border);padding:5px}
   .camp-logo-img img{width:100%;height:100%;object-fit:contain;display:block}
@@ -371,11 +375,25 @@ function toggleCollapse(ch) {
   document.getElementById(`prod-card-${ch}`)?.classList.toggle('collapsed', collapsedState[ch]);
 }
 
-// ── Drag and drop (reordenar cards de canal) ───────────────
+// ── Drag and drop (reordenar cards de canal) — arraste customizado por ponteiro,
+// não usa a Drag and Drop API nativa do HTML5. A API nativa deixa o elemento de
+// origem no DOM (é dele que o navegador tira a "imagem fantasma" que acompanha o
+// cursor, fora do nosso controle) — na prática dava a sensação de duas cópias do
+// card: uma parada no lugar original e outra "puxando" em outro ponto da lista.
+// Aqui o card real é removido da grade assim que o arraste começa (só sobra o
+// placeholder tracejado indicando onde ele vai cair) e um clone dele, em
+// position:fixed, segue o cursor de verdade a cada mousemove — só uma cópia
+// visível a qualquer momento, sempre grudada no mouse.
 let dragCard = null;
 let dragGhost = null;
+let dragClone = null;
+let dragGrabX = 0, dragGrabY = 0;
+let dragStartX = 0, dragStartY = 0;
+let dragStarted = false;
+const DRAG_MOVE_THRESHOLD = 4; // px — evita iniciar o arraste num simples clique na alça
+
 function getDragAfterElement(container, x, y) {
-  const els = [...container.querySelectorAll('.prod-card:not(.dragging)')];
+  const els = [...container.querySelectorAll('.prod-card')];
   let closest = null, closestDist = Infinity;
   for (const el of els) {
     const box = el.getBoundingClientRect();
@@ -394,58 +412,70 @@ function persistOrder() {
   applyDefaultCollapse(channelOrder[market]);
   document.querySelectorAll('.prod-card').forEach(c => c.classList.toggle('collapsed', collapsedState[c.dataset.ch]));
 }
+function beginDrag() {
+  dragStarted = true;
+  const card = dragCard;
+  const rect = card.getBoundingClientRect();
+  dragGrabX = dragStartX - rect.left;
+  dragGrabY = dragStartY - rect.top;
+
+  dragGhost = document.createElement('div');
+  dragGhost.className = 'prod-card-ghost';
+  dragGhost.style.height = rect.height + 'px';
+  card.after(dragGhost);
+
+  dragClone = card.cloneNode(true);
+  dragClone.classList.add('prod-card-floating');
+  dragClone.style.width = rect.width + 'px';
+  dragClone.style.left = rect.left + 'px';
+  dragClone.style.top = rect.top + 'px';
+  document.body.appendChild(dragClone);
+
+  card.remove();
+  document.body.classList.add('dragging-active');
+}
+function dragPointerMove(e) {
+  if (!dragStarted) {
+    if (Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY) < DRAG_MOVE_THRESHOLD) return;
+    beginDrag();
+  }
+  dragClone.style.left = (e.clientX - dragGrabX) + 'px';
+  dragClone.style.top = (e.clientY - dragGrabY) + 'px';
+  const grid = document.getElementById('prodGrid');
+  const afterEl = getDragAfterElement(grid, e.clientX, e.clientY);
+  if (afterEl == null) grid.appendChild(dragGhost);
+  else if (afterEl !== dragGhost) grid.insertBefore(dragGhost, afterEl);
+}
+function dragPointerUp() {
+  document.removeEventListener('mousemove', dragPointerMove);
+  document.removeEventListener('mouseup', dragPointerUp);
+  const card = dragCard;
+  if (dragStarted && card) {
+    const grid = document.getElementById('prodGrid');
+    grid.insertBefore(card, dragGhost);
+    card.classList.add('drop-bounce');
+    setTimeout(() => card.classList.remove('drop-bounce'), 320);
+    persistOrder();
+  }
+  if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+  if (dragClone) { dragClone.remove(); dragClone = null; }
+  document.body.classList.remove('dragging-active');
+  dragCard = null;
+  dragStarted = false;
+}
 function attachDragHandlers() {
   const grid = document.getElementById('prodGrid');
   grid.querySelectorAll('.prod-card').forEach(card => {
-    // O card só vira draggable no mousedown da alça (nunca por padrão). Checar
-    // e.target.closest('.drag-handle') dentro do dragstart não é confiável: quando
-    // draggable=true está no ancestral e o gesto começa num filho, o navegador pode
-    // resolver o alvo do dragstart como o próprio ancestral, não o filho — a checagem
-    // nunca bate e todo arraste é cancelado. Ativar/desativar draggable dinamicamente
-    // evita essa ambiguidade por completo: só a alça pode iniciar o gesto.
-    card.querySelector('.drag-handle')?.addEventListener('mousedown', () => { card.draggable = true; });
-    card.addEventListener('dragstart', e => {
+    card.querySelector('.drag-handle')?.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
       dragCard = card;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', card.dataset.ch || '');
-      dragGhost = document.createElement('div');
-      dragGhost.className = 'prod-card-ghost';
-      dragGhost.style.height = card.offsetHeight + 'px';
-      card.after(dragGhost);
-      // Adiar a classe "dragging" pro próximo tick: se aplicada agora (síncrono),
-      // o Chrome/Edge captura a imagem fantasma que segue o cursor já com a opacidade
-      // reduzida, deixando o card arrastado e o que fica pra trás visualmente
-      // idênticos — parece que nada está acontecendo.
-      setTimeout(() => card.classList.add('dragging'), 0);
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragStarted = false;
+      document.addEventListener('mousemove', dragPointerMove);
+      document.addEventListener('mouseup', dragPointerUp);
     });
-    card.addEventListener('dragend', () => {
-      card.draggable = false;
-      card.classList.remove('dragging');
-      if (dragGhost) {
-        grid.insertBefore(card, dragGhost);
-        dragGhost.remove();
-        dragGhost = null;
-      }
-      dragCard = null;
-      card.classList.add('drop-bounce');
-      setTimeout(() => card.classList.remove('drop-bounce'), 320);
-      persistOrder();
-    });
-  });
-  if (grid.dataset.dragBound) return;
-  grid.dataset.dragBound = '1';
-  // Se o usuário só clicou na alça sem chegar a arrastar, desfaz o draggable=true
-  // pra não deixar o card "preso" arrastável até o próximo render.
-  document.addEventListener('mouseup', () => {
-    grid.querySelectorAll('.prod-card[draggable="true"]').forEach(c => { c.draggable = false; });
-  });
-  grid.addEventListener('dragenter', e => e.preventDefault());
-  grid.addEventListener('dragover', e => {
-    e.preventDefault();
-    if (!dragGhost) return;
-    const afterEl = getDragAfterElement(grid, e.clientX, e.clientY);
-    if (afterEl == null) grid.appendChild(dragGhost);
-    else if (afterEl !== dragGhost) grid.insertBefore(dragGhost, afterEl);
   });
 }
 
