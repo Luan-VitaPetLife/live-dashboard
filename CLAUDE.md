@@ -125,6 +125,19 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - OAuth: `/shopee/connect` → autoriza → callback troca `code` por tokens. Token renovado automaticamente.
 - **Ativa ✅** — credenciais de produção configuradas: `SHOPEE_PARTNER_ID` 2037711, `SHOPEE_SHOP_ID` 1502160212 (+ `SHOPEE_PARTNER_KEY`). Chunking de 15 dias em `src/shopee.js`.
 - **Analytics da Shopee (tráfego, insights) não disponível via API** — só no Seller Center; os endpoints retornam `error_not_found`.
+- **Investigação em aberto (17/07/2026) — pedidos Shopee não aparecem na Geografia BR:** o código já
+  pede `recipient_address` no `get_order_detail` (`response_optional_fields`) e já mapeia
+  `recipient_address.state` pra UF via `toUF()` (`fetchOrders()`) — então, no papel, o pipeline está
+  pronto. Só que `metrics.js`/`byState` só conta o pedido se `o.state` vier preenchido (`if (s &&
+  o.total > 0)`), e nenhum pedido Shopee parece estar batendo nisso. Hipótese mais provável (não
+  confirmada): a Shopee **mascara/omite `recipient_address` por privacidade (LGPD)** — comum em
+  campos como nome/telefone/endereço completo, mas precisa confirmar se `state` também vem afetado
+  (não é documentado publicamente, varia por região/status do pedido). Adicionado
+  `GET /api/shopee/probe-order` (`probeOrder()` em `shopee.js`) — busca 5 pedidos recentes e devolve
+  o `recipient_address` **cru**, sem normalizar nada, pra inspecionar direto contra produção (exige
+  login, mesma proteção dos demais `/api/*`). Ainda não rodado em produção — próximo passo antes de
+  decidir a correção (se for masking real, não tem o que fazer via código; se for formato/campo
+  inesperado, ajustar `toUF()`/o nome do campo).
 
 ### 4.6 Mercado Livre
 - Implementado em `src/mercadolivre.js`. OAuth 2.0 com refresh_token automático.
@@ -1052,6 +1065,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `POST /api/amazon/cleanup-market-leak` — remove pedidos US que foram gravados como Amazon BR (vazamento
     de mercado). Idempotente; rodar uma vez após o deploy da correção. Ver 4.7.8.
   - `GET /shopee/connect` e `GET /shopee/callback`
+  - `GET /api/shopee/probe-order` — diagnóstico: `recipient_address` cru de pedidos recentes, sem normalizar. Ver 4.5.
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /googleads/connect` e `GET /googleads/callback`
   - `GET /health`
