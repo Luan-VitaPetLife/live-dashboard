@@ -661,21 +661,41 @@ export function computeStock({ market = 'br' } = {}) {
   const orders = getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o));
   const byChannel = aggregateProductsByChannel(orders);
 
+  // Catálogo completo (todo o histórico do canal, sem filtro de data) — mesmo critério de
+  // computeProducts (ver 4.13): um produto que não vendeu nos últimos 30 dias continua listado,
+  // só com vendas zeradas, em vez de sumir da tela. Sem isso, um produto que para de vender por
+  // mais de 30 dias sumia do Estoque e o estoque/recebendo cadastrado manualmente pra ele ficava
+  // inacessível pela UI (o dado continuava salvo em kv.productStock, só não tinha como editar).
+  const allOrders = getOrders({ channel: 'todos', market }).filter(o => !isCancelled(o));
+  const catalogByChannel = aggregateProductsByChannel(allOrders);
+
   // Amazon (BR/US) não traz título de item nos pedidos hoje (ver backlog item 6 do CLAUDE.md) —
   // sem isso a tabela ficaria vazia, então entra um produto placeholder editável manualmente
   // até a busca de itens da Amazon ser resolvida à parte (evitar mexer nisso agora por causa do
-  // histórico de 429 da SP-API).
+  // histórico de 429 da SP-API). Checado contra o CATÁLOGO completo, não só a janela de 30 dias —
+  // senão o placeholder reapareceria toda vez que o canal não vende nada num mês.
   const amazonCh = market === 'us' ? 'amazon_us' : 'amazon';
-  if (!byChannel[amazonCh]) byChannel[amazonCh] = { revenue: 0, orders: 0, products: {} };
-  if (Object.keys(byChannel[amazonCh].products).length === 0) {
-    byChannel[amazonCh].products['Produto TESTE'] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
+  if (!catalogByChannel[amazonCh]) catalogByChannel[amazonCh] = { revenue: 0, orders: 0, products: {} };
+  if (Object.keys(catalogByChannel[amazonCh].products).length === 0) {
+    catalogByChannel[amazonCh].products['Produto TESTE'] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
   }
 
   const stockData = getProductStock();
   const channels = {};
-  for (const [ch, c] of Object.entries(byChannel)) {
-    const products = Object.entries(c.products)
-      .map(([title, p]) => {
+  const empty = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
+  const chKeys = new Set([...Object.keys(byChannel), ...Object.keys(catalogByChannel)]);
+  const aggMap = {};
+
+  for (const ch of chKeys) {
+    const c = byChannel[ch] || { revenue: 0, orders: 0, products: {} };
+    const catalogProducts = catalogByChannel[ch]?.products || {};
+    const titles = new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)]);
+    const products = [...titles]
+      .map(title => {
+        const cat = catalogProducts[title];
+        const p = c.products[title] || { ...empty, type: cat?.type ?? null, image: cat?.image ?? null };
+        if (!p.type && cat?.type) p.type = cat.type;
+        if (!p.image && cat?.image) p.image = cat.image;
         const salesMonth = p.avulsoQty + p.comboQty;
         const salesDaily = salesMonth / STOCK_WINDOW_DAYS;
         const ov = stockData[`${ch}|||${title}`] || {};
@@ -699,17 +719,14 @@ export function computeStock({ market = 'br' } = {}) {
     totals.monthsOfStock = totals.salesMonth > 0 ? (totals.stock + totals.incoming) / totals.salesMonth : null;
 
     channels[ch] = { products, totals };
-  }
 
-  // Panorama geral do produto (soma de todos os canais do mercado) — agrupado por família física
-  // do produto (ex: BR = Lysine/Daily), já que o pedido de reposição ao laboratório não é por
-  // canal (o mesmo lote de produção abastece todos eles). Ordem Projetada/Nova/Em Andamento e as
-  // colunas derivadas delas (Tempo de Estoque Total, Sugestão) vivem só aqui agora.
-  const aggMap = {};
-  for (const [ch, c] of Object.entries(byChannel)) {
-    for (const [title, p] of Object.entries(c.products)) {
-      if (title === 'Produto TESTE') continue; // placeholder sintético da Amazon, não é produto real
-      const family = classifyFamily(title) || title;
+    // Panorama geral do produto (soma de todos os canais do mercado) — agrupado por família física
+    // do produto (ex: BR = Lysine/Daily), já que o pedido de reposição ao laboratório não é por
+    // canal (o mesmo lote de produção abastece todos eles). Reaproveita a mesma lista `products`
+    // já mesclada com o catálogo acima, pra não duplicar a lógica de merge catálogo x período.
+    for (const p of products) {
+      if (p.title === 'Produto TESTE') continue; // placeholder sintético da Amazon, não é produto real
+      const family = classifyFamily(p.title) || p.title;
       if (!aggMap[family]) aggMap[family] = { avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null, stock: 0, incoming: 0 };
       const a = aggMap[family];
       a.avulsoQty += p.avulsoQty;
@@ -717,9 +734,8 @@ export function computeStock({ market = 'br' } = {}) {
       for (const [size, n] of Object.entries(p.comboBySize || {})) a.comboBySize[size] = (a.comboBySize[size] || 0) + n;
       if (!a.type) a.type = p.type;
       if (!a.image && p.image) a.image = p.image;
-      const ov = stockData[`${ch}|||${title}`] || {};
-      a.stock += ov.stock != null ? Number(ov.stock) : 0;
-      a.incoming += ov.incoming != null ? Number(ov.incoming) : 0;
+      a.stock += p.stock;
+      a.incoming += p.incoming;
     }
   }
 
