@@ -34,7 +34,9 @@ export function isConfigured() {
 }
 
 // URL para o Luan autorizar o app (só precisa ser feito uma vez).
-export function buildAuthUrl() {
+// `state` (opcional) é usado pela proteção CSRF (double-submit cookie, ver server.js) — OAuth2
+// padrão do Google, o parâmetro é suportado e devolvido de volta no callback.
+export function buildAuthUrl(state) {
   if (!CLIENT_ID || !REDIRECT) throw new Error('Google Ads não configurado (.env: GOOGLE_ADS_CLIENT_ID / GOOGLE_ADS_REDIRECT_URL).');
   const params = new URLSearchParams({
     client_id:     CLIENT_ID,
@@ -44,6 +46,7 @@ export function buildAuthUrl() {
     access_type:   'offline', // necessário para receber refresh_token
     prompt:        'consent', // força novo refresh_token mesmo se já autorizado antes
   });
+  if (state) params.set('state', state);
   return `${AUTH_URL}?${params}`;
 }
 

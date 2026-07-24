@@ -4,6 +4,7 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems } from './src/sync.js';
@@ -14,6 +15,7 @@ import * as amazon from './src/amazon.js';
 import * as meta from './src/meta.js';
 import * as googleads from './src/googleads.js';
 import * as auth from './src/auth.js';
+import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -62,6 +64,33 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=(), payment=()');
   if (isHttps(req)) res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
   next();
+});
+
+// ── Rate limiting geral (24/07/2026, a pedido do Luan: nenhuma rota pode ser inundada de
+// requisições) — via express-rate-limit, camada separada do limitador de login logo abaixo
+// (esse é hand-rolled de propósito, específico pra tentativa de senha; este aqui é genérico
+// pra qualquer flood, incluindo em cima de rotas que já têm outra proteção). Duas camadas:
+// 1. Rede de segurança geral (todo o servidor, inclusive estáticos) — limite bem alto, nunca
+//    deveria ser atingido em uso normal, só existe pra barrar um flood de verdade.
+// 2. Limite apertado (compartilhado) nas rotas que disparam chamada real a uma API externa
+//    com cota compartilhada e frágil (Amazon SP-API — ver CLAUDE.md 4.7, um 429 real que já
+//    perdeu pedidos por martelar essa API). Aplicado direto em cada rota mais abaixo.
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: req => req.path === '/health',
+  message: { error: 'Muitas requisições. Aguarde um momento.' },
+});
+app.use(globalLimiter);
+
+const syncLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de sincronização em pouco tempo. Aguarde um minuto.' },
 });
 
 // ── Rate limit de login: contra força bruta / credential stuffing em /api/login ──
@@ -211,6 +240,15 @@ app.get(Object.keys(SLUG_TO_FILE).filter(Boolean).map(s => '/' + s), (req, res) 
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições à API em pouco tempo. Aguarde alguns minutos.' },
+});
+app.use('/api', apiLimiter);
 
 // Exige admin em rotas de gestão. Modo aberto quando o login está desligado (permite configuração inicial).
 function requireAdmin(req, res, next) {
@@ -369,6 +407,12 @@ app.get('/api/campaigns', async (req, res) => {
   campaignCache.set(key, { ts: Date.now(), data });
   res.json(data);
 });
+
+// Todas as rotas /api/amazon* e /api/amazon-br* (força-sync, backfill, imagens, os vários
+// diagnósticos probe-*) disparam chamada real à Amazon SP-API, cota compartilhada e frágil
+// entre elas — nunca deixar alguém disparar isso em loop (ver syncLimiter, definido no topo
+// do arquivo junto com o rate limit geral).
+app.use(['/api/amazon', '/api/amazon-br'], syncLimiter);
 
 // Reset do backoff da Amazon. ?delay=N define um novo backoff de N minutos a partir de agora.
 app.post('/api/amazon/reset-backoff', (req, res) => {
@@ -587,20 +631,56 @@ app.get('/api/amazon/report-columns', async (req, res) => {
 });
 
 // Forçar uma sincronização manual (protegido por token)
-app.post('/api/sync', async (req, res) => {
+app.post('/api/sync', syncLimiter, async (req, res) => {
   const secret = process.env.SYNC_SECRET;
   if (secret && req.headers['x-sync-token'] !== secret) return res.status(401).json({ error: 'Não autorizado.' });
   try { res.json(await runSync()); }
   catch (e) { res.status(500).json({ error: 'Sync falhou.' }); }
 });
 
+// ── Proteção CSRF do OAuth (double-submit cookie) ──
+// Nenhuma das 3 integrações validava que o /callback realmente veio de um /connect disparado
+// pelo mesmo visitante — sem isso, qualquer pessoa que soubesse a URL de /connect podia
+// autorizar o app com a PRÓPRIA conta Shopee/ML/Google Ads dela, e o servidor gravaria esse
+// token como se fosse da empresa (sequestro da integração). /connect gera um `state`
+// aleatório, grava num cookie httpOnly de curta duração (10min) e manda como parâmetro pro
+// provedor; /callback exige o cookie de volta antes de trocar o code por token, e confere
+// contra o `state` devolvido pelo provedor quando ele devolve (Mercado Livre e Google Ads
+// devolvem; a Shopee pode não devolver, por isso o cookie sozinho já basta nos 3 casos, não
+// depende do provedor ecoar o parâmetro). Sem cookie-parser (dependências mínimas do
+// projeto) — lê o header Cookie manualmente.
+function readCookie(req, name) {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  const match = header.split(';').map(s => s.trim()).find(s => s.startsWith(name + '='));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
+}
+function requireOauthState(req, res, cookieName) {
+  const cookieState = readCookie(req, cookieName);
+  res.clearCookie(cookieName);
+  if (!cookieState) {
+    res.status(400).send('Sessão de autorização expirada ou inválida. Volte à dashboard e tente conectar de novo.');
+    return null;
+  }
+  if (req.query.state && req.query.state !== cookieState) {
+    res.status(400).send('Parâmetro state inválido. Volte à dashboard e tente conectar de novo.');
+    return null;
+  }
+  return cookieState;
+}
+
 // ── Shopee OAuth ──
 app.get('/shopee/connect', (req, res) => {
-  try { res.redirect(shopee.buildAuthUrl()); }
-  catch (e) { res.status(400).send(e.message); }
+  try {
+    const state = crypto.randomBytes(24).toString('hex');
+    const url = shopee.buildAuthUrl(state); // pode lançar (não configurada) — não seta cookie nesse caso
+    res.cookie('oauth_state_shopee', state, { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000, secure: isHttps(req) });
+    res.redirect(url);
+  } catch (e) { res.status(400).send(e.message); }
 });
 
 app.get('/shopee/callback', async (req, res) => {
+  if (!requireOauthState(req, res, 'oauth_state_shopee')) return;
   try {
     const { code, shop_id } = req.query;
     if (!code) return res.status(400).send('Faltou o parâmetro "code" da Shopee.');
@@ -621,11 +701,16 @@ app.get('/api/shopee/probe-order', async (req, res) => {
 
 // ── Mercado Livre OAuth ──
 app.get('/mercadolivre/connect', (req, res) => {
-  try { res.redirect(ml.buildAuthUrl()); }
-  catch (e) { res.status(400).send(e.message); }
+  try {
+    const state = crypto.randomBytes(24).toString('hex');
+    const url = ml.buildAuthUrl(state); // pode lançar (não configurado) — não seta cookie nesse caso
+    res.cookie('oauth_state_ml', state, { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000, secure: isHttps(req) });
+    res.redirect(url);
+  } catch (e) { res.status(400).send(e.message); }
 });
 
 app.get('/mercadolivre/callback', async (req, res) => {
+  if (!requireOauthState(req, res, 'oauth_state_ml')) return;
   try {
     const { code } = req.query;
     if (!code) return res.status(400).send('Faltou o parâmetro "code" do Mercado Livre.');
@@ -639,11 +724,16 @@ app.get('/mercadolivre/callback', async (req, res) => {
 
 // ── Google Ads OAuth ──
 app.get('/googleads/connect', (req, res) => {
-  try { res.redirect(googleads.buildAuthUrl()); }
-  catch (e) { res.status(400).send(e.message); }
+  try {
+    const state = crypto.randomBytes(24).toString('hex');
+    const url = googleads.buildAuthUrl(state); // pode lançar (não configurado) — não seta cookie nesse caso
+    res.cookie('oauth_state_google', state, { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000, secure: isHttps(req) });
+    res.redirect(url);
+  } catch (e) { res.status(400).send(e.message); }
 });
 
 app.get('/googleads/callback', async (req, res) => {
+  if (!requireOauthState(req, res, 'oauth_state_google')) return;
   try {
     const { code } = req.query;
     if (!code) return res.status(400).send('Faltou o parâmetro "code" do Google Ads.');

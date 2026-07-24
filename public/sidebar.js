@@ -7,6 +7,71 @@
 //  O componente injeta o markup, marca o item ativo pela URL atual e liga
 //  o comportamento de abrir/fechar (desktop e mobile). Nada mais é necessário.
 // ─────────────────────────────────────────────
+
+// Escapa texto vindo de dado externo (nome de cliente, título de produto etc.) antes de
+// interpolar em innerHTML — evita XSS armazenado a partir de pedido/produto malicioso.
+// Compartilhado globalmente porque sidebar.js é a única coisa carregada por todas as páginas.
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+window.escapeHtml = escapeHtml;
+
+// pageLoaderHtml() — anel colorido animado (4 círculos), substitui texto estático tipo
+// "carregando..." em qualquer lugar que espera uma resposta de verdade (ex: campanhas.html
+// esperando /api/campaigns, que chama Meta/Mercado Ads/Google Ads ao vivo). Peças de
+// uiverse.io/Nawsome, mesmo componente já usado na dashboard de social media. Concatenado
+// com + (não template literal com crase) de propósito — um comentário com crase dentro de
+// um template literal já quebrou o mount() inteiro da sidebar uma vez, nesse mesmo arquivo
+// em outro projeto irmão; nunca mais correr esse risco aqui.
+function pageLoaderHtml() {
+  return '<div class="page-loader"><svg class="pl" viewBox="0 0 240 240">'
+    + '<circle class="pl__ring pl__ring--a" cx="120" cy="120" r="105" fill="none" stroke="#000" stroke-width="20" stroke-dasharray="0 660" stroke-dashoffset="-330" stroke-linecap="round"></circle>'
+    + '<circle class="pl__ring pl__ring--b" cx="120" cy="120" r="35" fill="none" stroke="#000" stroke-width="20" stroke-dasharray="0 220" stroke-dashoffset="-110" stroke-linecap="round"></circle>'
+    + '<circle class="pl__ring pl__ring--c" cx="85" cy="120" r="70" fill="none" stroke="#000" stroke-width="20" stroke-dasharray="0 440" stroke-linecap="round"></circle>'
+    + '<circle class="pl__ring pl__ring--d" cx="155" cy="120" r="70" fill="none" stroke="#000" stroke-width="20" stroke-dasharray="0 440" stroke-linecap="round"></circle>'
+    + '</svg></div>';
+}
+window.pageLoaderHtml = pageLoaderHtml;
+
+// initCollapsibleNotice({ noteId, collapseBtnId, fabId, storageKey }) — liga o botão "x" de um
+// aviso fixo (encolhe com animação) a uma bolinha (fab) que fica no canto da tela e reabre o
+// aviso ao clicar. Estado (aberto/fechado) persistido em localStorage por storageKey. Cada
+// página que usar isso ainda precisa do próprio CSS de .limit-note/.notice-collapse-btn/
+// .notice-fab no <style> dela (não centralizado aqui) — só a lógica é compartilhada.
+function initCollapsibleNotice(opts) {
+  const noteId = opts.noteId, collapseBtnId = opts.collapseBtnId, fabId = opts.fabId, storageKey = opts.storageKey;
+  const note = document.getElementById(noteId);
+  const collapseBtn = document.getElementById(collapseBtnId);
+  const fab = document.getElementById(fabId);
+  if (!note || !collapseBtn || !fab) return;
+
+  function collapse(persist) {
+    if (persist) localStorage.setItem(storageKey, '1');
+    note.classList.add('is-collapsing');
+    note.addEventListener('transitionend', function onEnd(e) {
+      if (e.target !== note) return;
+      note.removeEventListener('transitionend', onEnd);
+      note.style.display = 'none';
+      fab.classList.add('show');
+      requestAnimationFrame(() => requestAnimationFrame(() => fab.classList.add('in')));
+    });
+  }
+
+  function expand() {
+    localStorage.removeItem(storageKey);
+    fab.classList.remove('in');
+    setTimeout(() => fab.classList.remove('show'), 200);
+    note.style.display = '';
+    void note.offsetWidth; // força reflow pra a transição de volta rodar
+    note.classList.remove('is-collapsing');
+  }
+
+  collapseBtn.addEventListener('click', () => collapse(true));
+  fab.addEventListener('click', expand);
+  if (localStorage.getItem(storageKey) === '1') collapse(false);
+}
+window.initCollapsibleNotice = initCollapsibleNotice;
+
 (function () {
   const html = `
 <div id="sidebarOverlay" class="sidebar-overlay"></div>
@@ -74,7 +139,59 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
     + '.sidebar .side-user-role{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--side-muted);margin-top:1px}'
     + '.sidebar .side-user-role.admin{color:var(--side-text)}'
     + '.sidebar .side-logout{background:none;border:none;color:var(--side-muted);cursor:pointer;font-size:14px;padding:4px;line-height:1}'
-    + '.sidebar .side-logout:hover{color:var(--side-text)}';
+    + '.sidebar .side-logout:hover{color:var(--side-text)}'
+    // pageLoaderHtml() — anel colorido animado (ver função no topo do arquivo).
+    + '.page-loader{display:flex;align-items:center;justify-content:center;padding:18px 0}'
+    + '.page-loader .pl{width:48px;height:48px}'
+    + '.page-loader .pl__ring{animation:pageLoaderRingA 2s linear infinite}'
+    + '.page-loader .pl__ring--a{stroke:#ee2a7b}'
+    + '.page-loader .pl__ring--b{animation-name:pageLoaderRingB;stroke:#f9ce34}'
+    + '.page-loader .pl__ring--c{animation-name:pageLoaderRingC;stroke:#4776e6}'
+    + '.page-loader .pl__ring--d{animation-name:pageLoaderRingD;stroke:#6228d7}'
+    + '@keyframes pageLoaderRingA{'
+    + 'from,4%{stroke-dasharray:0 660;stroke-width:20;stroke-dashoffset:-330}'
+    + '12%{stroke-dasharray:60 600;stroke-width:30;stroke-dashoffset:-335}'
+    + '32%{stroke-dasharray:60 600;stroke-width:30;stroke-dashoffset:-595}'
+    + '40%,54%{stroke-dasharray:0 660;stroke-width:20;stroke-dashoffset:-660}'
+    + '62%{stroke-dasharray:60 600;stroke-width:30;stroke-dashoffset:-665}'
+    + '82%{stroke-dasharray:60 600;stroke-width:30;stroke-dashoffset:-925}'
+    + '90%,to{stroke-dasharray:0 660;stroke-width:20;stroke-dashoffset:-990}}'
+    + '@keyframes pageLoaderRingB{'
+    + 'from,12%{stroke-dasharray:0 220;stroke-width:20;stroke-dashoffset:-110}'
+    + '20%{stroke-dasharray:20 200;stroke-width:30;stroke-dashoffset:-115}'
+    + '40%{stroke-dasharray:20 200;stroke-width:30;stroke-dashoffset:-195}'
+    + '48%,62%{stroke-dasharray:0 220;stroke-width:20;stroke-dashoffset:-220}'
+    + '70%{stroke-dasharray:20 200;stroke-width:30;stroke-dashoffset:-225}'
+    + '90%{stroke-dasharray:20 200;stroke-width:30;stroke-dashoffset:-305}'
+    + '98%,to{stroke-dasharray:0 220;stroke-width:20;stroke-dashoffset:-330}}'
+    + '@keyframes pageLoaderRingC{'
+    + 'from{stroke-dasharray:0 440;stroke-width:20;stroke-dashoffset:0}'
+    + '8%{stroke-dasharray:40 400;stroke-width:30;stroke-dashoffset:-5}'
+    + '28%{stroke-dasharray:40 400;stroke-width:30;stroke-dashoffset:-175}'
+    + '36%,58%{stroke-dasharray:0 440;stroke-width:20;stroke-dashoffset:-220}'
+    + '66%{stroke-dasharray:40 400;stroke-width:30;stroke-dashoffset:-225}'
+    + '86%{stroke-dasharray:40 400;stroke-width:30;stroke-dashoffset:-395}'
+    + '94%,to{stroke-dasharray:0 440;stroke-width:20;stroke-dashoffset:-440}}'
+    + '@keyframes pageLoaderRingD{'
+    + 'from,8%{stroke-dasharray:0 440;stroke-width:20;stroke-dashoffset:0}'
+    + '16%{stroke-dasharray:40 400;stroke-width:30;stroke-dashoffset:-5}'
+    + '36%{stroke-dasharray:40 400;stroke-width:30;stroke-dashoffset:-175}'
+    + '44%,50%{stroke-dasharray:0 440;stroke-width:20;stroke-dashoffset:-220}'
+    + '58%{stroke-dasharray:40 400;stroke-width:30;stroke-dashoffset:-225}'
+    + '78%{stroke-dasharray:40 400;stroke-width:30;stroke-dashoffset:-395}'
+    + '86%,to{stroke-dasharray:0 440;stroke-width:20;stroke-dashoffset:-440}}'
+    // Avisos minimizáveis (initCollapsibleNotice, ver topo do arquivo) — botão "x" e a bolinha
+    // que fica no canto quando o aviso está minimizado. A caixa em si (.limit-note) ainda
+    // precisa do próprio CSS visual em cada página que a usar (cor de fundo, borda etc.).
+    + '.notice-collapse-btn{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;'
+    + 'border:none;cursor:pointer;font-size:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}'
+    + '.notice-fab{display:none;position:fixed;bottom:26px;right:26px;width:46px;height:46px;border-radius:50%;'
+    + 'border:none;color:#fff;font-size:18px;cursor:pointer;align-items:center;justify-content:center;'
+    + 'box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:250;transform:scale(0);opacity:0;'
+    + 'transition:transform .28s cubic-bezier(.34,1.56,.64,1),opacity .2s}'
+    + '.notice-fab.show{display:flex}'
+    + '.notice-fab.show.in{transform:scale(1);opacity:1}'
+    + '@media(max-width:768px){.notice-fab{right:18px;bottom:18px}}';
 
   // Mapa slug <-> arquivo (espelha SLUG_TO_FILE em server.js) — no escopo do IIFE,
   // não dentro de mount(), porque applyAuth() também precisa dele e é uma função

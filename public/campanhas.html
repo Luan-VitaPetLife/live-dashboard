@@ -924,7 +924,11 @@ async function loadCampaigns() {
   return data;
 }
 
-const escapeHtml = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+// escapeHtml agora vem de sidebar.js (window.escapeHtml, carregado antes deste script) —
+// definição local removida porque colidia com a global (SyntaxError: identificador já
+// declarado, já que scripts clássicos no mesmo documento compartilham o mesmo escopo léxico
+// de top-level para const/function). Comportamento idêntico (a global também escapa aspas
+// simples, um superconjunto seguro do que já era feito aqui).
 const pct = (v, dec = 1) => (v || 0).toFixed(dec).replace('.', ',') + '%';
 
 function campaignCardHTML(c, chKey) {
@@ -957,7 +961,7 @@ async function renderCampaigns(key) {
   const chKey = CH_OF_KEY[key];
   if (!chKey) { box.innerHTML = `<div class="cmp-empty">Este canal não expõe campanhas via API (gasto não disponível).</div>`; return; }
 
-  box.innerHTML = `<div class="cmp-loading">Carregando campanhas…</div>`;
+  box.innerHTML = `<div class="cmp-loading">${pageLoaderHtml()}</div>`;
   let data;
   try { data = await loadCampaigns(); }
   catch (e) { box.innerHTML = `<div class="cmp-empty">Falha ao carregar campanhas.</div>`; return; }

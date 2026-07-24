@@ -672,7 +672,7 @@ function rowHTML(p, ch) {
       <div class="prod-name-wrap">
         ${thumb}
         <div class="prod-name-col">
-          <div class="prod-name-line"><span class="prod-name" title="${p.title}">${p.title}</span>${typeTag}</div>
+          <div class="prod-name-line"><span class="prod-name" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</span>${typeTag}</div>
           ${combo ? `<div class="prod-combo">${combo}</div>` : ''}
         </div>
       </div>

@@ -549,7 +549,7 @@ function prodItemHtml(p, i) {
         <div class="seg-prod-item">
           <span class="seg-prod-rank">${i+1}.</span>
           <div class="seg-prod-main">
-            <div class="seg-prod-name" title="${p.title}">${p.title}</div>
+            <div class="seg-prod-name" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</div>
             ${comboBits(p) ? `<div class="seg-prod-combo">${comboBits(p)}</div>` : ''}
           </div>
           <span class="seg-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>
@@ -1225,7 +1225,7 @@ function geoProdRowHtml(p, i) {
         ${checkbox}
         <span class="geo-prod-rank">${i + 1}.</span>
         ${thumb}
-        <span class="geo-prod-name" title="${p.title}">${p.title}</span>
+        <span class="geo-prod-name" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</span>
         ${badge}
         ${warn}
         <span class="geo-prod-qty">${p.qty.toLocaleString('pt-BR')} un</span>

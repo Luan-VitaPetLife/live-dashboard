@@ -153,10 +153,13 @@
   .mc-val{font-size:18px;font-weight:300;letter-spacing:-.5px;margin-bottom:3px} .mc-meta{font-size:10px;color:var(--muted)}
   .mc-val.pos{color:var(--green)}
   .funnel-list{display:flex;flex-direction:column}
-  .fl-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)} .fl-row:last-child{border-bottom:none}
-  .fl-label{font-size:12px;color:var(--sub);width:130px;flex-shrink:0}
-  .fl-track{flex:1;height:2px;background:var(--border);border-radius:1px;overflow:hidden} .fl-fill{height:100%;border-radius:1px;transition:width .4s}
-  .fl-val{font-size:12px;font-weight:500;width:60px;text-align:right;flex-shrink:0}
+  .fl-row{padding:13px 0;border-bottom:1px solid var(--border)} .fl-row:last-child{border-bottom:none}
+  .fl-row-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .fl-label{font-size:12.5px;color:var(--sub);font-weight:500}
+  .fl-val{font-size:16px;font-weight:600;color:var(--text)}
+  .fl-track{height:7px;background:var(--border);border-radius:4px;overflow:hidden}
+  .fl-fill{height:100%;border-radius:4px;transition:width .4s}
+  .fl-meta{font-size:11px;color:var(--muted);margin-top:7px}
   .tbl-wrap{overflow-x:auto}
   .tbl{width:100%;border-collapse:collapse}
   .tbl th{font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:0 16px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
@@ -862,10 +865,19 @@ function render(d) {
   setChart('trafficChart', { data:{ labels:tf.series.map(p=>p.label), datasets:[ { type:'bar', label:'Sessões', data:tf.series.map(p=>p.sessions), backgroundColor:'rgba(176,168,152,.55)', borderRadius:2, yAxisID:'y', order:2 }, { type:'line', label:'Conversão', data:tf.series.map(p=>p.conv*100), borderColor:cssVar('--line1'), borderWidth:1.5, tension:.4, pointRadius:2, yAxisID:'y1', order:1, fill:false } ] }, options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{label:c=>c.dataset.label==='Conversão'?' Conversão: '+c.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':' Sessões: '+fmtInt(c.parsed.y)}} }, scales:{ x:{grid:{display:false},ticks:{maxTicksLimit:12}}, y:{position:'left',beginAtZero:true,grid:{color:'rgba(30,28,24,0.06)'}}, y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>v+'%'}} } } });
   renderLegend('trafficLegend', [{ label:'Sessões', color:'rgba(176,168,152,.55)', sq:true }, { label:'Conversão (%)', color:'var(--line1)' }]);
 
-  // Funnel
-  const fn = d.funnel, fmax = fn.sessions||1;
+  // Funnel — mostra % do total de sessões e queda vs. a etapa anterior em cada degrau, além da
+  // barra (antes só tinha rótulo+barra+valor bruto, ficava curto demais ao lado de "Tráfego &
+  // conversão" no grid de 12 colunas, sobrando espaço vazio; isso resolve preenchendo com dado
+  // de verdade — % e queda — em vez de só esticar o card).
+  const fn = d.funnel, hasSessions = fn.sessions>0, fmax = fn.sessions||1;
   const steps = [['Sessões',fn.sessions,'var(--ink)'],['Adicionou carrinho',fn.cart,'var(--ink)'],['Iniciou checkout',fn.checkout,'var(--tan)'],['Concluiu compra',fn.completed,'var(--sage)']];
-  document.getElementById('funnelList').innerHTML = steps.map(([l,v,c])=>{ const w=Math.max((v/fmax)*100,v>0?1.5:0); return `<div class="fl-row"><span class="fl-label">${l}</span><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><span class="fl-val">${fmtInt(v)}</span></div>`; }).join('');
+  document.getElementById('funnelList').innerHTML = steps.map(([l,v,c],i)=>{
+    const w = Math.max((v/fmax)*100, v>0?1.5:0);
+    const ofTotal = hasSessions ? pctStr(v/fmax*100) + ' do total' : '—';
+    const prev = i>0 ? steps[i-1][1] : null;
+    const drop = (hasSessions && prev>0) ? '· queda de ' + pctStr(Math.max(0,(1-v/prev)*100)) + ' vs. etapa anterior' : '';
+    return `<div class="fl-row"><div class="fl-row-top"><span class="fl-label">${l}</span><span class="fl-val">${fmtInt(v)}</span></div><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><div class="fl-meta">${ofTotal}${drop ? ' '+drop : ''}</div></div>`;
+  }).join('');
 
   // Top products
   const isAllCh = d.channel === 'todos';
@@ -979,7 +991,7 @@ function renderOrdersPage() {
   const start = _roPage * RO_PAGE_SIZE;
   const pageItems = ro.slice(start, start + RO_PAGE_SIZE);
 
-  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${o.name||''}</td><td>${chBadge}</td><td class="dim">${o.customer||'—'}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${escapeHtml(o.name||'')}</td><td>${chBadge}</td><td class="dim">${escapeHtml(o.customer||'—')}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
   // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
   const roValidCount = ro.filter(o=>!o.cancelled).length;
   const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);

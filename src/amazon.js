@@ -37,7 +37,7 @@ async function safeFetch(url, opts = {}) {
   try {
     return await fetch(url, { ...opts, signal: ctrl.signal });
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Amazon: timeout após ${FETCH_TIMEOUT_MS / 1000}s em ${url}`);
+    if (e.name === 'AbortError') throw new Error(`Amazon: timeout após ${FETCH_TIMEOUT_MS / 1000}s em ${url.split('?')[0]}`);
     throw e;
   } finally {
     clearTimeout(timer);

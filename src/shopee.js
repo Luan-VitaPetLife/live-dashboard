@@ -52,13 +52,18 @@ export function isConfigured() {
 }
 
 // URL para o lojista autorizar o app.
-export function buildAuthUrl() {
+// `state` (opcional) é usado só pela proteção CSRF (double-submit cookie, ver server.js) — a
+// assinatura HMAC (`sign`) é calculada só sobre partner_id+path+timestamp, então acrescentar esse
+// parâmetro extra não invalida o "sign" nem precisa ser levado em conta por ele.
+export function buildAuthUrl(state) {
   if (!isConfigured()) throw new Error('Shopee não configurada (.env: SHOPEE_PARTNER_ID / SHOPEE_PARTNER_KEY).');
   const path = '/api/v2/shop/auth_partner';
   const ts = now();
   const s = sign(path, ts);
   const redirect = encodeURIComponent(REDIRECT);
-  return `${HOST}${path}?partner_id=${PARTNER_ID}&timestamp=${ts}&sign=${s}&redirect=${redirect}`;
+  let url = `${HOST}${path}?partner_id=${PARTNER_ID}&timestamp=${ts}&sign=${s}&redirect=${redirect}`;
+  if (state) url += `&state=${encodeURIComponent(state)}`;
+  return url;
 }
 
 // Troca o "code" (do callback) por access_token + refresh_token.

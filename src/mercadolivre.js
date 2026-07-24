@@ -25,9 +25,12 @@ export function isConfigured() {
 }
 
 // URL para o lojista autorizar o app.
-export function buildAuthUrl() {
+// `state` (opcional) é usado pela proteção CSRF (double-submit cookie, ver server.js) — OAuth2
+// padrão do Mercado Livre, o parâmetro é suportado e devolvido de volta no callback.
+export function buildAuthUrl(state) {
   if (!isConfigured()) throw new Error('Mercado Livre não configurado (.env: ML_CLIENT_ID / ML_CLIENT_SECRET).');
   const params = new URLSearchParams({ response_type: 'code', client_id: CLIENT_ID, redirect_uri: REDIRECT });
+  if (state) params.set('state', state);
   return `${AUTH_URL}?${params}`;
 }
 
