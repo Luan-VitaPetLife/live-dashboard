@@ -291,7 +291,11 @@ function localOrderId(channel, numeroLoja) {
 }
 
 export async function reconcileGeoFromBling({ market = 'br', force = false } = {}) {
-  const out = { seen: 0, unmapped: 0, alreadyHadState: 0, notFoundLocally: 0, addressFetched: 0, patched: 0, errors: [] };
+  const out = { seen: 0, unmapped: 0, alreadyHadState: 0, notFoundLocally: 0, addressFetched: 0, patched: 0, errors: [],
+    // Diagnóstico: distribuição de `unmapped` por loja.id real (pra saber se é Amazon BR/
+    // Yucaloo/PETLOVE/etc, sem precisar adivinhar) e amostra de `notFoundLocally` (pra
+    // confirmar se o casamento de id está mesmo certo, não só assumir).
+    unmappedByLoja: {}, notFoundExamples: [] };
   if (!bling.isConfigured()) { out.errors.push('bling: não configurado'); return out; }
   if (!force && !geoDue()) { out.skipped = 'throttle'; return out; }
 
@@ -315,10 +319,21 @@ export async function reconcileGeoFromBling({ market = 'br', force = false } = {
     for (const o of orders) {
       out.seen++;
       const info = bling.KNOWN_CHANNELS[o.loja?.id];
-      if (!info) { out.unmapped++; continue; }
+      if (!info) {
+        out.unmapped++;
+        const key = `${o.loja?.id ?? 'sem-loja'}`;
+        out.unmappedByLoja[key] = (out.unmappedByLoja[key] || 0) + 1;
+        continue;
+      }
       const localId = localOrderId(info.channel, o.numeroLoja);
       const localOrder = localId ? localMaps[info.channel]?.get(localId) : null;
-      if (!localOrder) { out.notFoundLocally++; continue; }
+      if (!localOrder) {
+        out.notFoundLocally++;
+        if (out.notFoundExamples.length < 8) {
+          out.notFoundExamples.push({ channel: info.channel, lojaId: o.loja?.id, numeroLoja: o.numeroLoja, triedLocalId: localId, blingNumero: o.numero, blingData: o.data });
+        }
+        continue;
+      }
       if (localOrder.state) { out.alreadyHadState++; continue; }
       queue.push({ blingId: o.id, localId });
     }
