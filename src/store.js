@@ -29,6 +29,7 @@ const EMPTY = {
   mlTokens: null,
   mlAdCosts: null,
   googleAdsTokens: null,
+  blingTokens: null,
   productFinance: {},
   productStock: {},
   productStockAgg: {},
@@ -120,6 +121,7 @@ export async function initStore() {
       if (r.key === 'mlTokens')             cache.mlTokens             = r.value;
       if (r.key === 'mlAdCosts')            cache.mlAdCosts            = r.value;
       if (r.key === 'googleAdsTokens')      cache.googleAdsTokens      = r.value;
+      if (r.key === 'blingTokens')           cache.blingTokens           = r.value;
       if (r.key === 'productFinance')       cache.productFinance       = r.value;
       if (r.key === 'productStock')         cache.productStock         = r.value;
       if (r.key === 'productStockAgg')      cache.productStockAgg      = r.value;
@@ -406,6 +408,13 @@ export function setGoogleAdsTokens(tokens) {
   if (USE_PG) pgKv('googleAdsTokens', tokens);
 }
 export function getGoogleAdsTokens() { return load().googleAdsTokens; }
+
+// ── Tokens Bling (exploratório, ver src/bling.js) ─────
+export function setBlingTokens(tokens) {
+  const db = load(); db.blingTokens = tokens; saveJson();
+  if (USE_PG) pgKv('blingTokens', tokens);
+}
+export function getBlingTokens() { return load().blingTokens; }
 
 // ── Dados financeiros editáveis por produto (COG, impostos, comissão) ──
 // Chave: "canal|||título do produto" (mesma chave usada no agrupamento de Top Produtos/Produtos).
