@@ -290,7 +290,7 @@ function localOrderId(channel, numeroLoja) {
   return null;
 }
 
-export async function reconcileGeoFromBling({ market = 'br', force = false } = {}) {
+export async function reconcileGeoFromBling({ market = 'br', force = false, days = GEO_DAYS } = {}) {
   const out = { seen: 0, unmapped: 0, alreadyHadState: 0, notFoundLocally: 0, addressFetched: 0, patched: 0, errors: [],
     // Diagnóstico: distribuição de `unmapped` por loja.id real (pra saber se é Amazon BR/
     // Yucaloo/PETLOVE/etc, sem precisar adivinhar) e amostra de `notFoundLocally` (pra
@@ -308,7 +308,7 @@ export async function reconcileGeoFromBling({ market = 'br', force = false } = {
   }
 
   const today = new Date();
-  const since = new Date(today); since.setDate(since.getDate() - GEO_DAYS);
+  const since = new Date(today); since.setDate(since.getDate() - days);
   const iso = d => d.toISOString().slice(0, 10);
 
   const queue = []; // [{ blingId, localId }]
