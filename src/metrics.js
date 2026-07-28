@@ -14,12 +14,30 @@ function isoUTC(d) { return d.toISOString().slice(0, 10); }
 function addDays(d, n) { const x = new Date(d); x.setUTCDate(x.getUTCDate() + n); return x; }
 function daySpan(s, u) { return Math.round((parseISO(u) - parseISO(s)) / 86400000) + 1; }
 
-function localParts(iso) {
-  const l = new Date(Date.parse(iso) + OFFSET * 60000);
+// Offset (minutos) do horário do Pacífico num instante exato — fuso que a Amazon Seller
+// Central usa nos relatórios da conta US (confirmado ao vivo: Sales Snapshot mostra "taken
+// at ... PDT"). Diferente do BR (OFFSET fixo, -180min, sem horário de verão), os EUA trocam
+// de fuso 2x por ano — calculado por instante em vez de fixo.
+function usOffsetMinutes(date) {
+  const part = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', timeZoneName: 'shortOffset' })
+    .formatToParts(date).find(p => p.type === 'timeZoneName')?.value || 'GMT-8';
+  const m = part.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  const h = m ? parseInt(m[1], 10) : -8;
+  const mm = m && m[2] ? parseInt(m[2], 10) : 0;
+  return (h < 0 ? -1 : 1) * (Math.abs(h) * 60 + mm);
+}
+// Bug corrigido (28/07/2026): usava sempre OFFSET (o fuso do BR, -180min) pra decidir de
+// qual "dia" um pedido é no gráfico de tendência — inclusive pra pedidos da Amazon US, que
+// deviam usar o fuso americano. Fazia o "diário" da Amazon US não bater com o Seller
+// Central (confirmado comparando um dia real, ver store.js getOrders/usOffsetForDate).
+function localParts(iso, market) {
+  const instant = Date.parse(iso);
+  const offsetMin = market === 'us' ? usOffsetMinutes(new Date(instant)) : OFFSET;
+  const l = new Date(instant + offsetMin * 60000);
   return { y: l.getUTCFullYear(), m: l.getUTCMonth() + 1, d: l.getUTCDate(), h: l.getUTCHours() };
 }
-function bucketKey(iso, grain) {
-  const p = localParts(iso);
+function bucketKey(iso, grain, market) {
+  const p = localParts(iso, market);
   const dk = `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
   return grain === 'hour' ? `${dk} ${String(p.h).padStart(2, '0')}` : dk;
 }
@@ -230,7 +248,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     const series = buckets.map(() => 0);
     const byChannelBuckets = buckets.map(() => ({}));
     valid.forEach(o => {
-      const i = idx.get(bucketKey(o.createdAt, grain));
+      const i = idx.get(bucketKey(o.createdAt, grain, market));
       if (i != null) {
         const v = metric === 'pedidos' ? 1 : o.total;
         series[i] += v;

@@ -381,6 +381,27 @@ export function fixUnpaidOrders() {
   return toPersist.length;
 }
 
+// Offset UTC do horário do Pacífico (fuso que a Amazon Seller Central usa nos relatórios
+// da conta US — confirmado ao vivo: Sales Snapshot mostra "taken at ... PDT") pra uma data
+// específica. Diferente do BR (fixo -03:00, sem horário de verão), os EUA trocam de fuso
+// 2x por ano (PDT -07:00 no verão, PST -08:00 no resto) — calculado por data em vez de
+// fixo. Bug corrigido (28/07/2026): antes usava 'Z' (UTC puro) pra cortar o dia da Amazon
+// US — UTC fica até 8h à frente do Pacífico, então "hoje" no nosso sistema pegava um pedaço
+// da noite anterior (horário local) e perdia um pedaço do fim do dia atual, fazendo
+// receita/pedidos "diários" da Amazon US não baterem com o Seller Central (confirmado
+// comparando um dia real: nossa dashboard vinha ~5% acima do Seller Central nesse dia).
+// Ref ao meio-dia UTC daquele dia — sempre depois da 1h da manhã (o horário em que a troca
+// de horário de verão acontece), então nunca cai do lado errado da transição.
+function usOffsetForDate(dateStr) {
+  const ref = new Date(dateStr + 'T12:00:00Z');
+  const part = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', timeZoneName: 'shortOffset' })
+    .formatToParts(ref).find(p => p.type === 'timeZoneName')?.value || 'GMT-8';
+  const m = part.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  const h = m ? parseInt(m[1], 10) : -8;
+  const mm = m && m[2] ? parseInt(m[2], 10) : 0;
+  return (h < 0 ? '-' : '+') + String(Math.abs(h)).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+
 export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {
   load();
   if (indexDirty) rebuildOrdersIndex();
@@ -389,9 +410,12 @@ export function getOrders({ channel = 'todos', since = null, until = null, marke
   // Pedidos sem campo market são legados e são inferidos por inferMarket().
   const markets = market ? [market] : Object.keys(ordersByMarket);
   // Fuso da loja para converter a data (YYYY-MM-DD) da janela em instante absoluto.
-  const tz = market === 'us' ? 'Z' : '-03:00';
-  const lo = since ? Date.parse(since + 'T00:00:00' + tz) : -Infinity;
-  const hi = until ? Date.parse(until + 'T23:59:59' + tz) :  Infinity;
+  // since/until podem cair em lados opostos de uma troca de horário de verão (raro), por
+  // isso o offset é calculado pra cada ponta separadamente, não uma vez só pra janela toda.
+  const loTz = market === 'us' ? (since ? usOffsetForDate(since) : '-07:00') : '-03:00';
+  const hiTz = market === 'us' ? (until ? usOffsetForDate(until) : '-07:00') : '-03:00';
+  const lo = since ? Date.parse(since + 'T00:00:00' + loTz) : -Infinity;
+  const hi = until ? Date.parse(until + 'T23:59:59' + hiTz) :  Infinity;
   const byChannel = channel && channel !== 'todos';
 
   const out = [];
