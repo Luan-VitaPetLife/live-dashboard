@@ -1,0 +1,177 @@
+// ─────────────────────────────────────────────
+//  bling.js — integração exploratória com o Bling ERP (API v3)
+//
+//  Diferente das demais integrações deste arquivo, o Bling NÃO é um canal de
+//  venda — é o ERP que já recebe (via importação própria) os pedidos de todos
+//  os canais (Shopify, Shopee, Mercado Livre, Amazon). Por isso, por enquanto,
+//  isso aqui é só uma sonda de leitura (probeOrders) para ver o formato real do
+//  dado — nunca usado para montar receita/pedido no dashboard, pra não contar
+//  a mesma venda duas vezes (uma via canal, outra via Bling).
+//
+//  OAuth 2.0 (authorization_code), confirmado via documentação/implementações
+//  de referência do Bling (developer.bling.com.br não expõe a URL completa em
+//  texto simples, por isso confirmado contra código de terceiros que já
+//  funciona em produção):
+//   - Autorizar:      GET  https://www.bling.com.br/Api/v3/oauth/authorize
+//   - Trocar token:   POST https://www.bling.com.br/Api/v3/oauth/token
+//     (Basic auth no header: base64(client_id:client_secret); body
+//     application/x-www-form-urlencoded)
+//   - Chamadas de recurso: https://api.bling.com.br/Api/v3/...
+//
+//  Passos (uma vez, feito pelo próprio usuário no painel do Bling — precisa
+//  cadastrar o app lá, isso não dá pra automatizar):
+//   1. developer.bling.com.br → cadastrar aplicativo, marcar escopo de
+//      leitura de "Pedidos de Venda" (e "Contatos"/"Produtos" se quiser
+//      explorar depois), configurar Redirect URI = BLING_REDIRECT_URL.
+//   2. Preencher BLING_CLIENT_ID/BLING_CLIENT_SECRET/BLING_REDIRECT_URL no
+//      .env (ou nas env vars do Railway em produção).
+//   3. Acessar GET /bling/connect → autoriza → troca o code por token
+//      automaticamente (salvo no store, mesmo padrão do Mercado Livre).
+//   Depois disso, fetchOrdersList/fetchOrderDetail/probeOrders funcionam e o
+//   token se renova sozinho (refresh_token, válido por 30 dias segundo a
+//   documentação — se ficar 30 dias sem nenhuma chamada, precisa reconectar).
+// ─────────────────────────────────────────────
+import 'dotenv/config';
+import { getBlingTokens, setBlingTokens } from './store.js';
+
+const CLIENT_ID     = process.env.BLING_CLIENT_ID;
+const CLIENT_SECRET = process.env.BLING_CLIENT_SECRET;
+const REDIRECT      = process.env.BLING_REDIRECT_URL;
+const AUTH_URL       = 'https://www.bling.com.br/Api/v3/oauth/authorize';
+const TOKEN_URL      = 'https://www.bling.com.br/Api/v3/oauth/token';
+const API_BASE       = 'https://api.bling.com.br/Api/v3';
+
+function now() { return Math.floor(Date.now() / 1000); }
+
+export function isConfigured() {
+  return Boolean(CLIENT_ID && CLIENT_SECRET && REDIRECT);
+}
+
+// URL para o lojista autorizar o app. `state` é usado pela proteção CSRF
+// (double-submit cookie, ver server.js) — o Bling ecoa o parâmetro de volta
+// no callback (confirmado em implementação de referência), mas o cookie
+// sozinho já basta mesmo se não ecoasse.
+export function buildAuthUrl(state) {
+  if (!isConfigured()) throw new Error('Bling não configurado (.env: BLING_CLIENT_ID / BLING_CLIENT_SECRET / BLING_REDIRECT_URL).');
+  const params = new URLSearchParams({ response_type: 'code', client_id: CLIENT_ID, redirect_uri: REDIRECT });
+  if (state) params.set('state', state);
+  return `${AUTH_URL}?${params}`;
+}
+
+function basicAuthHeader() {
+  return 'Basic ' + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+}
+
+async function tokenRequest(body) {
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+      Authorization: basicAuthHeader(),
+    },
+    body: new URLSearchParams(body).toString(),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error('Bling token: ' + json.error + ' ' + (json.error_description || ''));
+  return json;
+}
+
+function saveTokens(json) {
+  setBlingTokens({
+    access_token:  json.access_token,
+    refresh_token: json.refresh_token,
+    expires_at:    now() + (json.expires_in || 21600) - 120, // margem de 2 min
+  });
+}
+
+// Troca o "code" (do callback) por access_token + refresh_token.
+export async function exchangeCode(code) {
+  const json = await tokenRequest({
+    grant_type:   'authorization_code',
+    code,
+    redirect_uri: REDIRECT,
+  });
+  saveTokens(json);
+  return json;
+}
+
+// Renova o access_token usando o refresh_token.
+async function refreshToken() {
+  const tk = getBlingTokens();
+  if (!tk) throw new Error('Bling ainda não autorizado (use /bling/connect).');
+  const json = await tokenRequest({
+    grant_type:    'refresh_token',
+    refresh_token: tk.refresh_token,
+  });
+  saveTokens(json);
+  return getBlingTokens();
+}
+
+async function validToken() {
+  let tk = getBlingTokens();
+  if (!tk) throw new Error('Bling ainda não autorizado (use /bling/connect).');
+  if (now() >= tk.expires_at) tk = await refreshToken();
+  return tk;
+}
+
+// GET autenticado na API do Bling.
+async function apiGet(path, params = {}) {
+  const tk = await validToken();
+  const url = new URL(API_BASE + path);
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${tk.access_token}`, Accept: 'application/json' },
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(`Bling ${path}: ${json.error.type || ''} ${json.error.message || JSON.stringify(json.error)}`);
+  return json;
+}
+
+// Lista pedidos de venda no intervalo (resumo — sem dado de transporte, que só
+// vem no detalhe de cada pedido). GET /pedidos/vendas.
+export async function fetchOrdersList(sinceISO, untilISO, { pagina = 1, limite = 100 } = {}) {
+  if (!isConfigured() || !getBlingTokens()) return { data: [] };
+  return apiGet('/pedidos/vendas', {
+    dataInicial: sinceISO,
+    dataFinal:   untilISO,
+    pagina,
+    limite,
+  });
+}
+
+// Detalhe completo de um pedido (traz o bloco de transporte/transportadora,
+// que a listagem não traz). GET /pedidos/vendas/:id.
+export async function fetchOrderDetail(idPedidoVenda) {
+  return apiGet(`/pedidos/vendas/${idPedidoVenda}`);
+}
+
+// Sonda de exploração: pega a 1ª página de pedidos do intervalo + o detalhe
+// completo dos primeiros `sampleSize` pedidos, pra inspecionar ao vivo o
+// formato real do dado (nomes de campo, se vem transportadora/rastreio, se dá
+// pra casar com o pedido do canal original via numeroPedidoCompra/loja etc.)
+// antes de decidir o que vale a pena trazer pro dashboard. Nunca chamado pelo
+// sync automático — só sob demanda (ver GET /api/bling/probe-orders).
+export async function probeOrders(sinceISO, untilISO, sampleSize = 3) {
+  if (!isConfigured()) throw new Error('Bling não configurado (.env: BLING_CLIENT_ID / BLING_CLIENT_SECRET / BLING_REDIRECT_URL).');
+  if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
+
+  const list = await fetchOrdersList(sinceISO, untilISO, { pagina: 1, limite: 100 });
+  const orders = list.data || [];
+
+  const details = [];
+  for (const o of orders.slice(0, sampleSize)) {
+    try {
+      const d = await fetchOrderDetail(o.id);
+      details.push(d.data || d);
+    } catch (e) {
+      details.push({ id: o.id, error: e.message });
+    }
+  }
+
+  return {
+    totalNaPagina: orders.length,
+    listaResumo:   orders,
+    detalhesAmostra: details,
+  };
+}

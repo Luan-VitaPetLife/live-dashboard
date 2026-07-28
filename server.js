@@ -14,6 +14,7 @@ import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
 import * as meta from './src/meta.js';
 import * as googleads from './src/googleads.js';
+import * as bling from './src/bling.js';
 import * as auth from './src/auth.js';
 import rateLimit from 'express-rate-limit';
 
@@ -209,7 +210,7 @@ app.use((req, res, next) => {
     p === '/health' || p === '/login' ||
     p === '/api/login' || p === '/api/logout' || p === '/api/me' || p === '/api/sync' ||
     STATIC_ASSET_RE.test(p) ||
-    p.startsWith('/shopee/') || p.startsWith('/mercadolivre/') || p.startsWith('/googleads/')
+    p.startsWith('/shopee/') || p.startsWith('/mercadolivre/') || p.startsWith('/googleads/') || p.startsWith('/bling/')
   ) return next();
 
   const user = req.authUser;
@@ -744,6 +745,43 @@ app.get('/googleads/callback', async (req, res) => {
   }
 });
 
+// ── Bling OAuth (exploratório — ver src/bling.js) ──
+app.get('/bling/connect', (req, res) => {
+  try {
+    const state = crypto.randomBytes(24).toString('hex');
+    const url = bling.buildAuthUrl(state); // pode lançar (não configurado) — não seta cookie nesse caso
+    res.cookie('oauth_state_bling', state, { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000, secure: isHttps(req) });
+    res.redirect(url);
+  } catch (e) { res.status(400).send(e.message); }
+});
+
+app.get('/bling/callback', async (req, res) => {
+  if (!requireOauthState(req, res, 'oauth_state_bling')) return;
+  try {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('Faltou o parâmetro "code" do Bling.');
+    await bling.exchangeCode(code);
+    res.send('<h2>Bling conectado com sucesso!</h2><p>Pode fechar esta aba e voltar à dashboard.</p>');
+  } catch (e) {
+    res.status(500).send('Erro ao conectar o Bling: ' + e.message);
+  }
+});
+
+// Sonda de exploração (não é usada em nenhum cálculo do dashboard ainda — ver src/bling.js):
+// mostra o formato real de pedidos de venda do Bling num intervalo, incluindo o detalhe
+// completo (com bloco de transporte/transportadora) dos primeiros pedidos da página.
+// Sob o mesmo syncLimiter das rotas Amazon: dispara chamada real à API do Bling, que também
+// tem cota própria e apertada (3 req/s, 120k/dia, confirmado na documentação) — nunca martelar.
+app.get('/api/bling/probe-orders', syncLimiter, async (req, res) => {
+  try {
+    const { since, until } = req.query;
+    if (!since || !until) return res.status(400).json({ error: 'Parâmetros since/until obrigatórios (YYYY-MM-DD).' });
+    res.json(await bling.probeOrders(since, until));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -794,6 +832,12 @@ app.get('/api/status', (_req, res) => {
     shopify: {
       br: { configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') },
       us: { configured: has('SHOPIFY_US_STORE') && has('SHOPIFY_US_ADMIN_TOKEN') },
+    },
+    bling: {
+      // Exploratório (ver src/bling.js) — nunca usado em cálculo de receita ainda.
+      configured: bling.isConfigured(),
+      hasCreds:   has('BLING_CLIENT_ID') && has('BLING_CLIENT_SECRET') && has('BLING_REDIRECT_URL'),
+      authorized: Boolean(db.blingTokens),
     },
     lastSync: db.lastSync || null,
   });
