@@ -176,6 +176,33 @@ export async function fetchSalesChannels() {
   return apiGet('/canais-venda');
 }
 
+// ── Canais de venda conhecidos (BR) ───────────────────────────────────────
+// Mapeia loja.id (Bling) → nosso channel/market. Hardcoded de propósito, NÃO
+// descoberto em runtime via /canais-venda: a conta Bling tem canais que não
+// são pedido Coco and Luna — PETLOVE (205506010, descontinuado), Yucaloo
+// (206156145, segunda marca da Vita Pet Life, integração ainda não decidida)
+// e TikTok Shop (206171502, em configuração, sem pedidos ainda) — e nenhum
+// deles pode entrar na reconciliação de geografia por engano. Confirmado ao
+// vivo via GET /canais-venda em 28/07/2026 (ver CLAUDE.md, seção Bling).
+export const KNOWN_CHANNELS = {
+  205761639: { channel: 'shopify',      market: 'br' }, // Coco and Luna - Brasil
+  205370623: { channel: 'shopee',       market: 'br' },
+  205355406: { channel: 'mercadolivre', market: 'br' },
+  // Amazon Brasil = 205355413, deixado de fora até confirmar que o
+  // numeroLoja do Bling preserva o formato do AmazonOrderId (com traço) —
+  // sem amostra ainda. Amazon BR já tem `state` funcionando pela própria
+  // Orders API, não é o canal que mais precisa disso.
+};
+
+// UF de entrega de um pedido, extraído do detalhe (transporte.etiqueta —  só
+// vem no detalhe, a listagem não traz). Retorna null se o pedido não tiver
+// bloco de transporte (retirada em loja, etc.) — o chamador decide o que fazer.
+export async function fetchOrderAddress(idPedidoVenda) {
+  const d = await fetchOrderDetail(idPedidoVenda);
+  const data = d.data || d;
+  return data?.transporte?.etiqueta?.uf || null;
+}
+
 // Sonda de exploração: pega a 1ª página de pedidos do intervalo + o detalhe
 // completo dos primeiros `sampleSize` pedidos, pra inspecionar ao vivo o
 // formato real do dado (nomes de campo, se vem transportadora/rastreio, se dá

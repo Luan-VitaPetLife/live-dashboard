@@ -7,7 +7,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
-import { runSync, reconcileAmazonNames, enrichAmazonItems } from './src/sync.js';
+import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
@@ -567,6 +567,9 @@ app.post('/api/amazon/cleanup-market-leak', (req, res) => {
 // GET /api/status → amazon.items. Padrão market=br (o US usa a Reports API, seria inviável aqui).
 let itemsRunning = false;
 let itemsStatus  = null;
+
+let geoRunning = false;
+let geoStatus  = null; // último resultado de reconcileGeoFromBling, ver GET /api/status → bling.geo
 app.post('/api/amazon/fetch-items', (req, res) => {
   if (itemsRunning) return res.status(409).json({ error: 'Busca de itens já em andamento.' });
   const market = req.query.market === 'us' ? 'us' : 'br';
@@ -794,6 +797,21 @@ app.get('/api/bling/canais-venda', syncLimiter, async (req, res) => {
   }
 });
 
+// Dispara a reconciliação de geografia (preenche `state` de pedidos existentes com o
+// endereço do Bling) manualmente, ignorando o throttle — mesmo padrão de
+// /api/amazon/sync-names. Progresso em GET /api/status → bling.geo. Nunca cria pedido,
+// só enriquece state vazio (ver src/sync.js reconcileGeoFromBling).
+app.post('/api/bling/sync-geo', syncLimiter, async (req, res) => {
+  if (geoRunning) return res.status(409).json({ error: 'Reconciliação de geografia já em andamento.' });
+  geoRunning = true;
+  geoStatus = { status: 'running', startedAt: new Date().toISOString() };
+  reconcileGeoFromBling({ market: req.query.market || 'br', force: true })
+    .then(r => { geoStatus = { status: 'done', result: r, finishedAt: new Date().toISOString() }; })
+    .catch(e => { geoStatus = { status: 'error', message: e.message, finishedAt: new Date().toISOString() }; })
+    .finally(() => { geoRunning = false; });
+  res.json({ started: true });
+});
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Diagnóstico de integrações — mostra o que está configurado e o estado do Amazon
@@ -848,6 +866,7 @@ app.get('/api/status', (_req, res) => {
       configured: bling.isConfigured(),
       hasCreds:   has('BLING_CLIENT_ID') && has('BLING_CLIENT_SECRET') && has('BLING_REDIRECT_URL'),
       authorized: Boolean(db.blingTokens),
+      geo: geoStatus, // última rodada de reconcileGeoFromBling (preenche state via Bling)
     },
     lastSync: db.lastSync || null,
   });
@@ -929,4 +948,19 @@ app.listen(PORT, () => {
   };
   setTimeout(runAmazonNames, 3 * 60 * 1000);        // 3 min após subir
   setInterval(runAmazonNames, 6 * 60 * 60 * 1000);  // a cada 6h (throttle interno limita a 12h)
+
+  // Geografia via Bling (preenche state vazio — hoje só afeta Shopee, ver src/sync.js).
+  // Job próprio, fora do runSync — não disputa a cota do sync principal. A própria função
+  // só roda de fato se já passou BLING_GEO_EVERY_HOURS desde a última vez (throttle interno).
+  const runBlingGeo = () => {
+    if (geoRunning) return;
+    geoRunning = true;
+    geoStatus = { status: 'running', startedAt: new Date().toISOString(), auto: true };
+    reconcileGeoFromBling({ market: 'br' })
+      .then(r => { geoStatus = { status: 'done', result: r, finishedAt: new Date().toISOString(), auto: true }; if (r.patched || r.errors.length) console.log('Bling geo:', r); })
+      .catch(e => { geoStatus = { status: 'error', message: e.message, finishedAt: new Date().toISOString(), auto: true }; console.error('Bling geo falhou:', e.message); })
+      .finally(() => { geoRunning = false; });
+  };
+  setTimeout(runBlingGeo, 4 * 60 * 1000);       // 4 min após subir (depois do job de nomes)
+  setInterval(runBlingGeo, 6 * 60 * 60 * 1000); // a cada 6h (throttle interno também limita)
 });

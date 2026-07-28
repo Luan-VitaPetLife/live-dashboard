@@ -285,6 +285,29 @@ export function patchOrderItems(orders, { allowInsert = false } = {}) {
   return { patched, inserted };
 }
 
+// Preenche o `state` (UF de entrega) de pedidos que JÁ EXISTEM, usando o endereço mais
+// completo do Bling — mesmo cuidado do patchOrderItems: nunca insere pedido novo, nunca
+// mexe em total/status/items. Só sobrescreve quando o pedido ainda não tem `state`
+// (Shopify/Mercado Livre/Amazon BR já preenchem sozinhos — só sobra a Shopee, que mascara
+// o endereço na própria API, ver CLAUDE.md 4.5). `patches`: [{ id, state }].
+export function patchOrderState(patches) {
+  const db = load();
+  let patched = 0, skipped = 0;
+  const toPersist = [];
+  for (const p of patches) {
+    const existing = db.orders[p.id];
+    if (!existing || existing.state || !p.state) { skipped++; continue; }
+    existing.state = p.state;
+    patched++;
+    toPersist.push(existing);
+  }
+  if (!toPersist.length) return { patched, skipped };
+  indexDirty = true;
+  saveJson();
+  if (USE_PG) pgUpsertOrders(toPersist);
+  return { patched, skipped };
+}
+
 // Limpeza pontual do vazamento de mercado da Amazon (ver patchOrderItems / CLAUDE.md
 // 4.7.8): remove pedidos US que um relatório cego-tagueado gravou como Amazon BR.
 // Dois sinais, ambos seguros porque o canal Amazon BR nunca passou pela Reports API

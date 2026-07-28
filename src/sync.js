@@ -10,7 +10,8 @@ import * as shopee from './shopee.js';
 import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders } from './store.js';
+import * as bling from './bling.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -257,6 +258,96 @@ export async function enrichAmazonItems({ market = 'br', limit = 1000, onProgres
     await sleep(ITEMS_RATE_MS);
   }
   onProgress?.(`${market}: concluído — ${out.patched} nomeados, ${out.empty} sem item, ${out.errors.length} erros`);
+  return out;
+}
+
+// ── Geografia via Bling: preenche `state` de pedidos que já existem ────────────
+//  O Bling (ERP que recebe pedidos de todos os canais) traz o endereço de entrega
+//  completo (transporte.etiqueta), sem máscara — inclusive de pedidos Shopee, que a
+//  própria API da Shopee mascara (ver CLAUDE.md 4.5). Isolado de propósito: nunca cria
+//  pedido, nunca mexe em total/status/items — só o campo `state`, e só quando ele ainda
+//  está vazio (patchOrderState já garante isso). Só processa canais em
+//  bling.KNOWN_CHANNELS — qualquer outro loja.id (Yucaloo, PETLOVE, TikTok Shop) é
+//  ignorado, nunca vira pedido nem enriquece nada.
+const GEO_DAYS      = Number(process.env.BLING_GEO_DAYS || 14);
+const GEO_EVERY_MS  = Number(process.env.BLING_GEO_EVERY_HOURS || 6) * 60 * 60 * 1000;
+const GEO_ABORT_AFTER = 15; // mesma cautela do enrichAmazonItems: para se muitas chamadas seguidas falharem
+
+// getAmazonCursor/setAmazonCursor são genéricos (chave arbitrária em kv.amazonCursors,
+// apesar do nome) — reaproveitados aqui em vez de criar um cursor store só pro Bling.
+function geoDue() {
+  const last = getAmazonCursor('bling-geo-br');
+  return !last || (Date.now() - Date.parse(last)) >= GEO_EVERY_MS;
+}
+
+// Reconstrói o nosso `o.id` a partir do numeroLoja do Bling, por canal — mesmo formato
+// que shopify.js/shopee.js/mercadolivre.js já usam pra gravar o pedido (ver CLAUDE.md).
+function localOrderId(channel, numeroLoja) {
+  if (!numeroLoja) return null;
+  if (channel === 'shopify')      return `gid://shopify/Order/${numeroLoja}`;
+  if (channel === 'shopee')       return `shopee:${numeroLoja}`;
+  if (channel === 'mercadolivre') return `mercadolivre:${numeroLoja}`;
+  return null;
+}
+
+export async function reconcileGeoFromBling({ market = 'br', force = false } = {}) {
+  const out = { seen: 0, unmapped: 0, alreadyHadState: 0, notFoundLocally: 0, addressFetched: 0, patched: 0, errors: [] };
+  if (!bling.isConfigured()) { out.errors.push('bling: não configurado'); return out; }
+  if (!force && !geoDue()) { out.skipped = 'throttle'; return out; }
+
+  // Mapa por canal: id local → pedido (só os canais conhecidos, mercado BR).
+  const localMaps = {};
+  for (const info of Object.values(bling.KNOWN_CHANNELS)) {
+    if (!localMaps[info.channel]) {
+      localMaps[info.channel] = new Map(getOrders({ channel: info.channel, market: info.market }).map(o => [o.id, o]));
+    }
+  }
+
+  const today = new Date();
+  const since = new Date(today); since.setDate(since.getDate() - GEO_DAYS);
+  const iso = d => d.toISOString().slice(0, 10);
+
+  const queue = []; // [{ blingId, localId }]
+  let pagina = 1;
+  for (;;) {
+    const page = await bling.fetchOrdersList(iso(since), iso(today), { pagina, limite: 100 });
+    const orders = page.data || [];
+    for (const o of orders) {
+      out.seen++;
+      const info = bling.KNOWN_CHANNELS[o.loja?.id];
+      if (!info) { out.unmapped++; continue; }
+      const localId = localOrderId(info.channel, o.numeroLoja);
+      const localOrder = localId ? localMaps[info.channel]?.get(localId) : null;
+      if (!localOrder) { out.notFoundLocally++; continue; }
+      if (localOrder.state) { out.alreadyHadState++; continue; }
+      queue.push({ blingId: o.id, localId });
+    }
+    if (orders.length < 100) break;
+    pagina++;
+  }
+
+  const patches = [];
+  let consecFails = 0;
+  for (const item of queue) {
+    try {
+      const state = await bling.fetchOrderAddress(item.blingId);
+      if (state) { patches.push({ id: item.localId, state }); out.addressFetched++; }
+      consecFails = 0;
+    } catch (e) {
+      out.errors.push(`${item.blingId}: ${e.message}`);
+      consecFails++;
+      if (consecFails >= GEO_ABORT_AFTER) {
+        out.aborted = `${consecFails} falhas seguidas — abortando o resto da fila`;
+        break;
+      }
+    }
+  }
+
+  if (patches.length) {
+    const r = patchOrderState(patches);
+    out.patched = r.patched;
+  }
+  setAmazonCursor('bling-geo-br', new Date().toISOString());
   return out;
 }
 
