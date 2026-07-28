@@ -55,6 +55,16 @@ function buildBuckets(since, until, grain) {
 const isCancelled = o => o.cancelled;
 const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
 
+// Toggle "Receita da Amazon" (ver CLAUDE.md): mode 'product' usa o.productSales (Ordered
+// Product Sales — só o valor do produto, sem imposto/frete/embrulho, igual o Seller Central
+// mostra) pra pedidos Amazon que já têm esse dado (só chega via relatório — ver amazon.js
+// ordersFromRows). Pedido ainda não reconciliado ou qualquer outro canal cai no o.total
+// cheio — nunca mostra 0 por falta de dado.
+function orderRevenue(o, mode) {
+  if (mode === 'product' && o.channel?.startsWith('amazon') && o.productSales != null) return o.productSales;
+  return o.total;
+}
+
 // Vendas orgânicas x campanha (pagas): campanha = origem Meta (IG/FB) OU listagem ML "Destaque" (premium).
 // Canais sem esse tipo de atribuição (Shopee, Amazon) sempre caem em "orgânico" — não é omissão, é porque
 // não há como saber se uma venda ali veio de anúncio (sem tracking de origem/listing type nesses canais).
@@ -212,7 +222,7 @@ const DEFAULT_COMMISSION_PCT = {
 // extremo do amazon_us em janelas longas, evitando um payload gigante.
 const RECENT_MAX = 5000;
 
-export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br' }) {
+export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br', amazonRevenueMode = 'total' }) {
   const span = daySpan(since, until);
   const grain = span <= 2 ? 'hour' : 'day';
 
@@ -225,8 +235,8 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const valid = curAll.filter(o => !isCancelled(o));
   const prevValid = prevAll.filter(o => !isCancelled(o));
 
-  const revenue = sum(valid, o => o.total), count = valid.length, aov = count ? revenue / count : 0;
-  const pRev = sum(prevValid, o => o.total), pCount = prevValid.length, pAov = pCount ? pRev / pCount : 0;
+  const revenue = sum(valid, o => orderRevenue(o, amazonRevenueMode)), count = valid.length, aov = count ? revenue / count : 0;
+  const pRev = sum(prevValid, o => orderRevenue(o, amazonRevenueMode)), pCount = prevValid.length, pAov = pCount ? pRev / pCount : 0;
   const delta = (cur, prev) => (prev === 0 ? null : ((cur - prev) / prev) * 100);
 
   // tendência
@@ -250,7 +260,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     valid.forEach(o => {
       const i = idx.get(bucketKey(o.createdAt, grain, market));
       if (i != null) {
-        const v = metric === 'pedidos' ? 1 : o.total;
+        const v = metric === 'pedidos' ? 1 : orderRevenue(o, amazonRevenueMode);
         series[i] += v;
         byChannelBuckets[i][o.channel] = (byChannelBuckets[i][o.channel] || 0) + v;
       }
@@ -265,7 +275,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const byChannel = market === 'us'
     ? { shopify_us: 0, amazon_us: 0 }
     : { shopify: 0, shopee: 0, amazon: 0, mercadolivre: 0 };
-  getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o)).forEach(o => { byChannel[o.channel] = (byChannel[o.channel] || 0) + o.total; });
+  getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o)).forEach(o => { byChannel[o.channel] = (byChannel[o.channel] || 0) + orderRevenue(o, amazonRevenueMode); });
 
   // marketing por origem (apenas pedidos válidos do recorte atual)
   const mkt = {};
