@@ -325,8 +325,21 @@ export async function reconcileGeoFromBling({ market = 'br', force = false } = {
         out.unmappedByLoja[key] = (out.unmappedByLoja[key] || 0) + 1;
         continue;
       }
-      const localId = localOrderId(info.channel, o.numeroLoja);
-      const localOrder = localId ? localMaps[info.channel]?.get(localId) : null;
+      let localId = localOrderId(info.channel, o.numeroLoja);
+      let localOrder = localId ? localMaps[info.channel]?.get(localId) : null;
+
+      // Mercado Livre: o Bling reporta o pack_id do envio, não o order.id que a gente
+      // grava (confirmado via probeOrderOrPack — sempre o caso, não só às vezes). Se o
+      // casamento direto falhou, resolve o pack e tenta cada order.id de dentro dele.
+      if (!localOrder && info.channel === 'mercadolivre' && o.numeroLoja) {
+        const orderIds = await ml.fetchPackOrderIds(o.numeroLoja);
+        for (const oid of orderIds) {
+          const candidateId = `mercadolivre:${oid}`;
+          const candidate = localMaps.mercadolivre?.get(candidateId);
+          if (candidate) { localOrder = candidate; localId = candidateId; break; }
+        }
+      }
+
       if (!localOrder) {
         out.notFoundLocally++;
         if (out.notFoundExamples.length < 8) {
