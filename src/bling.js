@@ -194,6 +194,29 @@ export const KNOWN_CHANNELS = {
   // Orders API, não é o canal que mais precisa disso.
 };
 
+// Sonda de exploração: pagina a listagem (barata — sem detalhe por pedido) procurando
+// pedidos de um `loja.id` específico, pra confirmar o formato do numeroLoja de um canal
+// antes de adicioná-lo a KNOWN_CHANNELS (ex.: Amazon Brasil, ver CLAUDE.md). Para assim
+// que achar `limit` pedidos ou esgotar a janela.
+export async function probeChannelOrders(sinceISO, untilISO, lojaId, limit = 5) {
+  if (!isConfigured()) throw new Error('Bling não configurado.');
+  if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
+  const found = [];
+  let pagina = 1;
+  for (;;) {
+    const page = await fetchOrdersList(sinceISO, untilISO, { pagina, limite: 100 });
+    const orders = page.data || [];
+    for (const o of orders) {
+      if (String(o.loja?.id) === String(lojaId)) {
+        found.push({ id: o.id, numero: o.numero, numeroLoja: o.numeroLoja, data: o.data });
+        if (found.length >= limit) return { found, paginasVarridas: pagina };
+      }
+    }
+    if (orders.length < 100) return { found, paginasVarridas: pagina };
+    pagina++;
+  }
+}
+
 // UF de entrega de um pedido, extraído do detalhe (transporte.etiqueta —  só
 // vem no detalhe, a listagem não traz). Retorna null se o pedido não tiver
 // bloco de transporte (retirada em loja, etc.) — o chamador decide o que fazer.

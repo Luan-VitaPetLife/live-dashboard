@@ -797,6 +797,19 @@ app.get('/api/bling/canais-venda', syncLimiter, async (req, res) => {
   }
 });
 
+// Sonda: procura pedidos de um loja.id específico numa janela (barato, só lista, sem
+// detalhe por pedido) — usado pra confirmar o formato do numeroLoja de um canal antes de
+// habilitá-lo em bling.KNOWN_CHANNELS (ex.: Amazon Brasil).
+app.get('/api/bling/probe-channel', syncLimiter, async (req, res) => {
+  try {
+    const { since, until, lojaId } = req.query;
+    if (!since || !until || !lojaId) return res.status(400).json({ error: 'Parâmetros since/until/lojaId obrigatórios.' });
+    res.json(await bling.probeChannelOrders(since, until, lojaId));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Diagnóstico pontual: confirma se um número que o Bling reporta como "numeroLoja" de um
 // pedido Mercado Livre é o order.id de verdade ou o pack_id de um envio agrupado (ver
 // ml.probeOrderOrPack) — usado pra investigar por que alguns pedidos ML não casam na
@@ -819,7 +832,8 @@ app.post('/api/bling/sync-geo', syncLimiter, async (req, res) => {
   if (geoRunning) return res.status(409).json({ error: 'Reconciliação de geografia já em andamento.' });
   geoRunning = true;
   geoStatus = { status: 'running', startedAt: new Date().toISOString() };
-  reconcileGeoFromBling({ market: req.query.market || 'br', force: true })
+  const days = req.query.days ? Number(req.query.days) : undefined;
+  reconcileGeoFromBling({ market: req.query.market || 'br', force: true, ...(days ? { days } : {}) })
     .then(r => { geoStatus = { status: 'done', result: r, finishedAt: new Date().toISOString() }; })
     .catch(e => { geoStatus = { status: 'error', message: e.message, finishedAt: new Date().toISOString() }; })
     .finally(() => { geoRunning = false; });
