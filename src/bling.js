@@ -167,6 +167,15 @@ export async function fetchOrderDetail(idPedidoVenda) {
   return apiGet(`/pedidos/vendas/${idPedidoVenda}`);
 }
 
+// Lista os canais de venda cadastrados no Bling (cada integração de
+// marketplace/loja virtual vira um canal aqui, com nome/tipo). É o que
+// permite traduzir o `loja.unidadeNegocio.id` de cada pedido pro nome real
+// do canal (Shopee, Mercado Livre, Shopify, Amazon...). GET /canais-venda.
+export async function fetchSalesChannels() {
+  if (!isConfigured() || !getBlingTokens()) return { data: [] };
+  return apiGet('/canais-venda');
+}
+
 // Sonda de exploração: pega a 1ª página de pedidos do intervalo + o detalhe
 // completo dos primeiros `sampleSize` pedidos, pra inspecionar ao vivo o
 // formato real do dado (nomes de campo, se vem transportadora/rastreio, se dá
