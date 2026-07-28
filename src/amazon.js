@@ -340,7 +340,13 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
           name:      '#' + o.AmazonOrderId,
           createdAt: o.PurchaseDate,
           status:    o.OrderStatus,
-          cancelled: ['Canceled', 'PendingAvailability'].includes(o.OrderStatus),
+          // Bug corrigido (28/07/2026): 'PendingAvailability' NÃO é cancelamento — é status
+          // de pré-venda (pedido feito, pagamento ainda não autorizado, aguardando data de
+          // lançamento do produto; confirmado na doc oficial da SP-API). Tratar como
+          // cancelado fazia o pedido sumir de toda métrica (receita/unidades/canal/produto/
+          // geografia, via isCancelled em metrics.js) até o status mudar — contribuía pra
+          // receita/unidades da Amazon US aparecerem menores que o real.
+          cancelled: o.OrderStatus === 'Canceled',
           total:     Number(o.OrderTotal?.Amount || 0),
           source:    'Amazon',
           customer:  o.BuyerInfo?.BuyerName || '',
@@ -382,6 +388,9 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
 // autorizada com um token PRÓPRIO e diferente (ver CLAUDE.md 4.7), viram duas contas
 // reais com cotas reais independentes — aí sim compensa manter as duas chamadas.
 const SAME_TOKEN = Boolean(REFRESH_TOKEN) && REFRESH_TOKEN === REFRESH_TOKEN_BR;
+// Exposto pra diagnóstico (GET /api/status) — sem isso não dá pra confirmar de fora se o
+// sync está usando a chamada combinada (uma conta) ou as duas separadas (duas contas).
+export function isSameToken() { return SAME_TOKEN; }
 const ALL_MARKETPLACE_IDS = `${MARKETPLACE_ID},${MARKETPLACE_ID_BR}`;
 
 export async function fetchOrders(sinceISO, untilISO) {
