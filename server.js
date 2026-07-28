@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor, fixAmazonPendingAvailability } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -556,6 +556,18 @@ app.post('/api/amazon/cleanup-market-leak', (req, res) => {
   try {
     const removed = removeAmazonMarketLeak();
     res.json({ ok: true, removed, message: `${removed} pedidos US vazados no mercado BR removidos.` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Correção pontual: 'PendingAvailability' (pré-venda) não é cancelamento — pedido já
+// gravado com esse status ficou marcado cancelled:true por engano (bug corrigido em
+// amazon.js). Corrige o flag local de quem já está no banco, sem chamar a API de novo.
+app.post('/api/amazon/fix-pending-availability', (req, res) => {
+  try {
+    const fixed = fixAmazonPendingAvailability();
+    res.json({ ok: true, fixed, message: `${fixed} pedidos corrigidos (não estavam cancelados de verdade).` });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

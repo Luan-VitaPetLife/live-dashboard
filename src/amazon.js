@@ -340,7 +340,13 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
           name:      '#' + o.AmazonOrderId,
           createdAt: o.PurchaseDate,
           status:    o.OrderStatus,
-          cancelled: ['Canceled', 'PendingAvailability'].includes(o.OrderStatus),
+          // Bug corrigido (28/07/2026): 'PendingAvailability' NÃO é cancelamento — é status
+          // de pré-venda (pedido feito, pagamento ainda não autorizado, aguardando data de
+          // lançamento do produto; confirmado na doc oficial da SP-API). Tratar como
+          // cancelado fazia o pedido sumir de toda métrica (receita/unidades/canal/produto/
+          // geografia, via isCancelled em metrics.js) até o status mudar — contribuía pra
+          // receita/unidades da Amazon US aparecerem menores que o real.
+          cancelled: o.OrderStatus === 'Canceled',
           total:     Number(o.OrderTotal?.Amount || 0),
           source:    'Amazon',
           customer:  o.BuyerInfo?.BuyerName || '',

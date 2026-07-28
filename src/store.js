@@ -341,6 +341,29 @@ export function removeAmazonMarketLeak() {
   return ids.length;
 }
 
+// Correção pontual (28/07/2026): 'PendingAvailability' (pré-venda, Amazon) era tratado
+// como cancelamento (bug em amazon.js, corrigido no código — ver ali). Pedido já gravado
+// com esse status continua com cancelled:true até ser re-sincronizado (o sync incremental
+// só busca quem mudou de status recentemente) — sem re-chamar a API, só corrige o flag
+// local de quem já está no banco com esse status específico. Rodar uma vez após o deploy.
+export function fixAmazonPendingAvailability() {
+  const db = load();
+  const toPersist = [];
+  for (const o of Object.values(db.orders)) {
+    if (!o.channel?.startsWith('amazon')) continue;
+    if (o.status === 'PendingAvailability' && o.cancelled === true) {
+      o.cancelled = false;
+      toPersist.push(o);
+    }
+  }
+  if (toPersist.length) {
+    indexDirty = true;
+    saveJson();
+    if (USE_PG) pgUpsertOrders(toPersist);
+  }
+  return toPersist.length;
+}
+
 export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {
   load();
   if (indexDirty) rebuildOrdersIndex();
