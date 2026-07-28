@@ -249,6 +249,27 @@
   input:checked+.sp-switch-slider{background:var(--ink)}
   input:checked+.sp-switch-slider::before{transform:translateX(14px)}
 
+  /* ── Switch "Receita da Amazon" (Total cobrado × Vendas de produto) ── */
+  .arev-switch{ --switch_width:2em; --switch_height:1em; --thumb_color:var(--surface2);
+    --track_color:var(--border2); --track_active_color:var(--ink); --outline_color:var(--ink);
+    font-size:17px; position:relative; display:inline-block; width:var(--switch_width); height:var(--switch_height); flex-shrink:0; }
+  .arev-switch input{ opacity:0; width:0; height:0; }
+  .arev-slider{ box-sizing:border-box; border:2px solid var(--outline_color); position:absolute; cursor:pointer;
+    top:0; left:0; right:0; bottom:0; background-color:var(--track_color); transition:.15s; border-radius:var(--switch_height); }
+  .arev-slider::before{ box-sizing:border-box; position:absolute; content:''; height:var(--switch_height); width:var(--switch_height);
+    border:2px solid var(--outline_color); border-radius:100%; left:-2px; bottom:-2px; background-color:var(--thumb_color);
+    transform:translateY(-0.2em); box-shadow:0 0.2em 0 var(--outline_color); transition:.15s; }
+  .arev-switch input:checked+.arev-slider{ background-color:var(--track_active_color); }
+  .arev-switch input:focus-visible+.arev-slider{ box-shadow:0 0 0 2px var(--track_active_color); }
+  .arev-switch input:hover+.arev-slider::before{ transform:translateY(-0.3em); box-shadow:0 0.3em 0 var(--outline_color); }
+  .arev-switch input:checked+.arev-slider::before{ transform:translateX(calc(var(--switch_width) - var(--switch_height))) translateY(-0.2em); }
+  .arev-switch input:hover:checked+.arev-slider::before{ transform:translateX(calc(var(--switch_width) - var(--switch_height))) translateY(-0.3em); box-shadow:0 0.3em 0 var(--outline_color); }
+  .arev-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); }
+  .arev-row:last-child{ border-bottom:none; }
+  .arev-labels{ font-size:12px; color:var(--sub); }
+  .arev-labels b{ color:var(--text); }
+  .arev-caption{ font-size:11px; color:var(--muted); line-height:1.5; padding-top:6px; }
+
   /* ── Modo de edição / grid reordenável ── */
   .edit-toolbar{display:none;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--sub)}
   body.edit-mode .edit-toolbar{display:flex}
@@ -548,6 +569,19 @@
         <label class="sp-switch"><input type="checkbox" id="toggleChanChart"><span class="sp-switch-slider"></span></label>
       </label>
     </div>
+    <div class="sp-section">
+      <div class="sp-section-title">Receita da Amazon</div>
+      <div class="arev-row">
+        <span class="arev-labels"><b>Total cobrado</b> / Vendas de produto</span>
+        <label class="arev-switch"><input type="checkbox" id="toggleAmazonRev"><span class="arev-slider"></span></label>
+      </div>
+      <div class="arev-caption">
+        Desligado: receita = total cobrado do cliente (produto + imposto + frete), igual aos
+        outros canais. Ligado: só o valor do produto, sem imposto/frete — a métrica "Ordered
+        Product Sales" que aparece no Seller Central da Amazon. Pedido muito recente (ainda
+        sem esse dado) continua mostrando o total cheio até ser reconciliado.
+      </div>
+    </div>
   </div>
   <div class="sp-foot">
     <button class="sp-reset" id="spReset">↺ Redefinir para os padrões</button>
@@ -596,6 +630,18 @@ document.getElementById('spReset').addEventListener('click', () => {
   tog.addEventListener('change', () => {
     localStorage.setItem('coco_chan_detail', tog.checked ? '1' : '0');
     if (!tog.checked) document.getElementById('trendDrilldown').style.display = 'none';
+  });
+})();
+
+// Toggle "Receita da Amazon": total cobrado × Ordered Product Sales (ver CLAUDE.md)
+function isAmazonProductRev() { return localStorage.getItem('coco_amazon_rev_mode') === 'product'; }
+(function() {
+  const tog = document.getElementById('toggleAmazonRev');
+  if (!tog) return;
+  tog.checked = isAmazonProductRev();
+  tog.addEventListener('change', () => {
+    localStorage.setItem('coco_amazon_rev_mode', tog.checked ? 'product' : 'total');
+    loadData();
   });
 })();
 
@@ -1270,7 +1316,7 @@ function syncControls() {
 async function loadData() {
   setLive('loading','Atualizando…');
   try {
-    const p = new URLSearchParams({ channel, metric, since:sinceDate, until:untilDate, market });
+    const p = new URLSearchParams({ channel, metric, since:sinceDate, until:untilDate, market, amazonRevenueMode: isAmazonProductRev() ? 'product' : 'total' });
     const r = await fetch('/api/dashboard?'+p);
     const d = await r.json();
     if (d.error) throw new Error(d.error);

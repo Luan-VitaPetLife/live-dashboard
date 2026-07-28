@@ -262,8 +262,8 @@ function requireAdmin(req, res, next) {
 app.get('/api/dashboard', (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const { channel = 'todos', metric = 'receita', since = today, until = today, market = 'br' } = req.query;
-    res.json(computeDashboard({ channel, metric, since, until, market }));
+    const { channel = 'todos', metric = 'receita', since = today, until = today, market = 'br', amazonRevenueMode = 'total' } = req.query;
+    res.json(computeDashboard({ channel, metric, since, until, market, amazonRevenueMode }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

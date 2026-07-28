@@ -485,6 +485,16 @@ function rowAmount(r) {
        - n('item-promotion-discount') - n('ship-promotion-discount');
 }
 
+// Só o valor do PRODUTO — sem imposto, frete ou embrulho. É o que a Amazon chama de
+// "Ordered Product Sales" no Seller Central (Sales Snapshot/Business Reports), métrica
+// diferente do `OrderTotal`/rowAmount() acima (que é o total cobrado do cliente). Usado
+// pro toggle "Receita da Amazon" (ver CLAUDE.md) — só disponível pra pedido que passou
+// pelo relatório (a API de pedidos ao vivo não separa produto de imposto/frete).
+function rowProductAmount(r) {
+  const n = k => Number(r[k] || 0);
+  return n('item-price') - n('item-promotion-discount');
+}
+
 function parseTsv(text) {
   const lines = text.split('\n').filter(l => l.trim());
   if (!lines.length) return [];
@@ -544,6 +554,7 @@ function ordersFromRows(rows, marketplaceId) {
         // ver CLAUDE.md 4.7.8).
         cancelled: ['Cancelled', 'Canceled', 'Pending', 'PendingAvailability'].includes(status),
         total:     0,
+        productSales: 0, // Ordered Product Sales — ver rowProductAmount() acima
         source:    'Amazon',
         customer:  '',
         // A Amazon não normaliza a grafia: vem "UT"/"Ut"/"Utah"/"CA."/"N.Y." para o
@@ -563,6 +574,7 @@ function ordersFromRows(rows, marketplaceId) {
     if (r['item-status'] === 'Cancelled' || o.cancelled) continue;
 
     o.total += amt;
+    o.productSales += rowProductAmount(r);
     // Algumas linhas do relatório trazem product-name como "-" (frete/serviço/ajuste, sem
     // produto de verdade) — não é vazio, então passava batido e virava um produto fantasma
     // "-" agregando dezenas de pedidos com receita 0. Trata como ausente, igual string vazia.
@@ -570,7 +582,10 @@ function ordersFromRows(rows, marketplaceId) {
     if (name && name !== '-') o.items.push({ title: name, qty, amount: amt, asin: r['asin'] || null });
   }
 
-  for (const o of byOrder.values()) o.total = Math.round(o.total * 100) / 100;
+  for (const o of byOrder.values()) {
+    o.total = Math.round(o.total * 100) / 100;
+    o.productSales = Math.round(o.productSales * 100) / 100;
+  }
   return [...byOrder.values()];
 }
 

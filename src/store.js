@@ -266,12 +266,19 @@ export function patchOrderItems(orders, { allowInsert = false } = {}) {
   for (const o of orders) {
     const existing = db.orders[o.id];
     if (existing) {
+      let changed = false;
       // Só sobrescreve se o relatório trouxe itens com título (não apagar por engano).
       if (o.items && o.items.length && o.items.some(it => it.title)) {
         existing.items = o.items;
-        patched++;
-        toPersist.push(existing);
+        changed = true;
       }
+      // "Ordered Product Sales" (ver amazon.js ordersFromRows) — só o relatório traz esse
+      // valor separado; copia pro pedido já existente sem mexer em total/status.
+      if (o.productSales != null && o.productSales !== existing.productSales) {
+        existing.productSales = o.productSales;
+        changed = true;
+      }
+      if (changed) { patched++; toPersist.push(existing); }
     } else if (allowInsert) {
       db.orders[o.id] = o;
       inserted++;
