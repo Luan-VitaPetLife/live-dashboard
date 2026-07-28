@@ -782,7 +782,17 @@ app.get('/api/bling/probe-orders', syncLimiter, async (req, res) => {
   }
 });
 
-
+// Sonda de exploração: lista os canais de venda cadastrados no Bling (nome/tipo de
+// cada integração de marketplace), pra traduzir o `loja.unidadeNegocio.id` dos
+// pedidos pro canal real (Shopee, Mercado Livre, Shopify, Amazon...). Mesmo cuidado
+// de cota do probe-orders acima (syncLimiter).
+app.get('/api/bling/canais-venda', syncLimiter, async (req, res) => {
+  try {
+    res.json(await bling.fetchSalesChannels());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 

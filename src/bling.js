@@ -115,16 +115,37 @@ async function validToken() {
   return tk;
 }
 
-// GET autenticado na API do Bling.
-async function apiGet(path, params = {}) {
+// Limite real da API (confirmado em developer.bling.com.br/limites): 3 req/s e
+// 120 mil/dia. Espaçar as chamadas em ~400ms (margem sobre os 333ms de 3 req/s)
+// evita 429 — sonda inicial já bateu no limite disparando 3 chamadas seguidas
+// sem pausa (mesma lição da Amazon, ver CLAUDE.md 4.7.2: nunca martelar a API).
+const MIN_INTERVAL_MS = 400;
+let lastCallAt = 0;
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// GET autenticado na API do Bling, com espaçamento entre chamadas e uma
+// retentativa (com pausa maior) se ainda assim vier 429.
+async function apiGet(path, params = {}, _isRetry = false) {
   const tk = await validToken();
   const url = new URL(API_BASE + path);
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+
+  const wait = MIN_INTERVAL_MS - (Date.now() - lastCallAt);
+  if (wait > 0) await sleep(wait);
+  lastCallAt = Date.now();
+
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${tk.access_token}`, Accept: 'application/json' },
   });
   const json = await res.json();
-  if (json.error) throw new Error(`Bling ${path}: ${json.error.type || ''} ${json.error.message || JSON.stringify(json.error)}`);
+  if (json.error) {
+    const isRateLimit = json.error.type === 'TOO_MANY_REQUESTS' || res.status === 429;
+    if (isRateLimit && !_isRetry) {
+      await sleep(2000);
+      return apiGet(path, params, true);
+    }
+    throw new Error(`Bling ${path}: ${json.error.type || ''} ${json.error.message || JSON.stringify(json.error)}`);
+  }
   return json;
 }
 
@@ -144,6 +165,15 @@ export async function fetchOrdersList(sinceISO, untilISO, { pagina = 1, limite =
 // que a listagem não traz). GET /pedidos/vendas/:id.
 export async function fetchOrderDetail(idPedidoVenda) {
   return apiGet(`/pedidos/vendas/${idPedidoVenda}`);
+}
+
+// Lista os canais de venda cadastrados no Bling (cada integração de
+// marketplace/loja virtual vira um canal aqui, com nome/tipo). É o que
+// permite traduzir o `loja.unidadeNegocio.id` de cada pedido pro nome real
+// do canal (Shopee, Mercado Livre, Shopify, Amazon...). GET /canais-venda.
+export async function fetchSalesChannels() {
+  if (!isConfigured() || !getBlingTokens()) return { data: [] };
+  return apiGet('/canais-venda');
 }
 
 // Sonda de exploração: pega a 1ª página de pedidos do intervalo + o detalhe
