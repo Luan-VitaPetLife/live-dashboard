@@ -292,3 +292,23 @@ export async function fetchCampaigns(sinceISO, untilISO) {
     return [];
   }
 }
+
+// Diagnóstico pontual (não usado em nenhum sync): confirma se um número que outra fonte
+// externa (Bling) reporta como "numeroLoja" do pedido é o `order.id` de verdade (o que
+// fetchOrders() grava) ou o `pack_id` de um envio com vários pedidos agrupados — o ML tem
+// os dois conceitos e um pack_id NUNCA bate com nosso id salvo, porque sempre gravamos por
+// order.id. GET /orders/:id primeiro; se 404, tenta GET /packs/:id (traz os order_ids reais
+// do pack, se existir).
+export async function probeOrderOrPack(numero) {
+  if (!isConfigured() || !getMlTokens()) throw new Error('Mercado Livre ainda não autorizado.');
+  try {
+    const order = await apiGet(`/orders/${numero}`);
+    if (order?.id) return { tipo: 'order', order };
+  } catch (e) { /* não é um order.id — tenta pack abaixo */ }
+  try {
+    const pack = await apiGet(`/packs/${numero}`);
+    return { tipo: 'pack', pack };
+  } catch (e) {
+    return { tipo: 'nenhum', error: e.message };
+  }
+}

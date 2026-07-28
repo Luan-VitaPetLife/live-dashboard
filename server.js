@@ -797,6 +797,20 @@ app.get('/api/bling/canais-venda', syncLimiter, async (req, res) => {
   }
 });
 
+// Diagnóstico pontual: confirma se um número que o Bling reporta como "numeroLoja" de um
+// pedido Mercado Livre é o order.id de verdade ou o pack_id de um envio agrupado (ver
+// ml.probeOrderOrPack) — usado pra investigar por que alguns pedidos ML não casam na
+// reconciliação de geografia do Bling. Não é chamado por nenhum sync automático.
+app.get('/api/ml/probe-order', syncLimiter, async (req, res) => {
+  try {
+    const { numero } = req.query;
+    if (!numero) return res.status(400).json({ error: 'Parâmetro numero obrigatório.' });
+    res.json(await ml.probeOrderOrPack(numero));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Dispara a reconciliação de geografia (preenche `state` de pedidos existentes com o
 // endereço do Bling) manualmente, ignorando o throttle — mesmo padrão de
 // /api/amazon/sync-names. Progresso em GET /api/status → bling.geo. Nunca cria pedido,
