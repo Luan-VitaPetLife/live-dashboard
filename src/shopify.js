@@ -21,7 +21,13 @@ async function gqlFetch(store, token, version, query, variables = {}) {
   return json.data;
 }
 
-const CANCELLED = new Set(['EXPIRED', 'VOIDED', 'CANCELLED']);
+// Decisão (28/07/2026, CLAUDE.md 4.1 — "decisão em aberto" resolvida): só pedido com
+// pagamento de verdade recebido conta como venda. EXPIRED/VOIDED já eram excluídos
+// (pagamento nunca aconteceu). Adicionado PENDING (aguardando, pode falhar — Pix/boleto)
+// e AUTHORIZED (cartão autorizado mas NÃO capturado, dinheiro ainda não foi cobrado).
+// PAID/PARTIALLY_PAID/PARTIALLY_REFUNDED/REFUNDED continuam contando — teve pagamento
+// real (REFUNDED já zera sozinho via ajuste de devolução, ver 4.15).
+const CANCELLED = new Set(['EXPIRED', 'VOIDED', 'CANCELLED', 'PENDING', 'AUTHORIZED']);
 
 // cfg: { store, token, version, market, channel, tz }
 export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
