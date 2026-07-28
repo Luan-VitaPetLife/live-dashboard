@@ -382,6 +382,9 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
 // autorizada com um token PRÓPRIO e diferente (ver CLAUDE.md 4.7), viram duas contas
 // reais com cotas reais independentes — aí sim compensa manter as duas chamadas.
 const SAME_TOKEN = Boolean(REFRESH_TOKEN) && REFRESH_TOKEN === REFRESH_TOKEN_BR;
+// Exposto pra diagnóstico (GET /api/status) — sem isso não dá pra confirmar de fora se o
+// sync está usando a chamada combinada (uma conta) ou as duas separadas (duas contas).
+export function isSameToken() { return SAME_TOKEN; }
 const ALL_MARKETPLACE_IDS = `${MARKETPLACE_ID},${MARKETPLACE_ID_BR}`;
 
 export async function fetchOrders(sinceISO, untilISO) {

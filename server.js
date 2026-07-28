@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -858,6 +858,16 @@ app.get('/api/status', (_req, res) => {
       hasLwa:      has('AMAZON_CLIENT_ID') && has('AMAZON_CLIENT_SECRET') && has('AMAZON_REFRESH_TOKEN'),
       hasAwsCreds: has('AMAZON_AWS_ACCESS_KEY') && has('AMAZON_AWS_SECRET_KEY'),
       hasRoleArn:  has('AMAZON_ROLE_ARN'),
+      // Se true, US e BR estão usando o MESMO token/conta (chamada combinada, cursor
+      // 'combined') — se false, são duas contas de verdade com cursores 'us'/'br'
+      // independentes. Ver CLAUDE.md 4.7.1 — eram pra ser diferentes desde 09/07/2026;
+      // exposto aqui pra confirmar de fora sem adivinhar.
+      sameToken:   amazon.isSameToken(),
+      cursors: {
+        us:       getAmazonCursor('us'),
+        br:       getAmazonCursor('br'),
+        combined: getAmazonCursor('combined'),
+      },
       backoffActive,
       backoffUntil:  backoffActive ? new Date(backoffUntil).toISOString() : null,
       nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
@@ -866,14 +876,16 @@ app.get('/api/status', (_req, res) => {
       items:         itemsStatus,
     },
     amazon_br: {
-      // US e BR usam o mesmo app/token e o mesmo balde de cota (chamada combinada).
       configured:  amazon.isConfiguredBR(),
-      hasLwa:      has('AMAZON_CLIENT_ID') && has('AMAZON_CLIENT_SECRET') && has('AMAZON_REFRESH_TOKEN'),
+      hasLwa:      has('AMAZON_BR_REFRESH_TOKEN') || (has('AMAZON_REFRESH_TOKEN') && amazon.isSameToken()),
       hasAwsCreds: has('AMAZON_AWS_ACCESS_KEY') && has('AMAZON_AWS_SECRET_KEY'),
-      sharedWithUs:  true,
-      backoffActive, // mesmo backoff da US
-      backoffUntil:  backoffActive ? new Date(backoffUntil).toISOString() : null,
-      nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
+      sharedWithUs:  amazon.isSameToken(),
+      // Bug corrigido (28/07/2026): mostrava o backoff da US (backoffActive/backoffUntil)
+      // em vez do da BR — backoffBRActive/backoffBRUntil já eram calculados acima mas
+      // nunca usados aqui.
+      backoffActive: backoffBRActive,
+      backoffUntil:  backoffBRActive ? new Date(backoffBRUntil).toISOString() : null,
+      nextSyncIn:    backoffBRActive ? `${Math.ceil((backoffBRUntil - Date.now()) / 60000)} min` : 'agora',
     },
     meta: {
       br: { configured: meta.isConfigured(), hasToken: has('META_ACCESS_TOKEN'), hasAccount: has('META_AD_ACCOUNT_ID') },
