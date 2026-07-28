@@ -341,18 +341,35 @@ export function removeAmazonMarketLeak() {
   return ids.length;
 }
 
-// Correção pontual (28/07/2026): 'PendingAvailability' (pré-venda, Amazon) era tratado
-// como cancelamento (bug em amazon.js, corrigido no código — ver ali). Pedido já gravado
-// com esse status continua com cancelled:true até ser re-sincronizado (o sync incremental
-// só busca quem mudou de status recentemente) — sem re-chamar a API, só corrige o flag
-// local de quem já está no banco com esse status específico. Rodar uma vez após o deploy.
-export function fixAmazonPendingAvailability() {
+// Correção pontual (28/07/2026): decisão de só contar pedido com pagamento de verdade
+// como venda (CLAUDE.md 4.1) — expandiu o que cada canal trata como "não conta" em
+// shopify.js/mercadolivre.js/amazon.js. Pedido já gravado com um desses status continua
+// com cancelled:false (contando errado) até ser re-sincronizado — o sync incremental só
+// busca quem mudou de status recentemente, então o histórico não se autocorrige sozinho.
+// Corrige o flag local de quem já está no banco, sem chamar nenhuma API de novo. Só vira
+// false→true (nunca desfaz um cancelamento real já marcado). Rodar uma vez após o deploy.
+//
+// Substitui a correção pontual anterior (fixAmazonPendingAvailability, mesmo dia) — aquela
+// tratava 'PendingAvailability' como "não deveria estar cancelado"; a decisão de negócio
+// mudou: ele deve ficar de fora mesmo, só que pelo motivo certo (sem pagamento, não
+// cancelamento). Já rodou em produção sem nenhum pedido afetado (fixed:0), então não há
+// nada pra desfazer.
+const UNPAID_STATUS_BY_CHANNEL = {
+  amazon:        ['Pending', 'PendingAvailability'],
+  amazon_us:     ['Pending', 'PendingAvailability'],
+  shopify:       ['PENDING', 'AUTHORIZED'],
+  shopify_us:    ['PENDING', 'AUTHORIZED'],
+  mercadolivre:  ['confirmed', 'payment_required', 'payment_in_process'],
+};
+
+export function fixUnpaidOrders() {
   const db = load();
   const toPersist = [];
   for (const o of Object.values(db.orders)) {
-    if (!o.channel?.startsWith('amazon')) continue;
-    if (o.status === 'PendingAvailability' && o.cancelled === true) {
-      o.cancelled = false;
+    const unpaidStatuses = UNPAID_STATUS_BY_CHANNEL[o.channel];
+    if (!unpaidStatuses) continue;
+    if (!o.cancelled && unpaidStatuses.includes(o.status)) {
+      o.cancelled = true;
       toPersist.push(o);
     }
   }

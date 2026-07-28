@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor, fixAmazonPendingAvailability } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor, fixUnpaidOrders } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -561,13 +561,16 @@ app.post('/api/amazon/cleanup-market-leak', (req, res) => {
   }
 });
 
-// Correção pontual: 'PendingAvailability' (pré-venda) não é cancelamento — pedido já
-// gravado com esse status ficou marcado cancelled:true por engano (bug corrigido em
-// amazon.js). Corrige o flag local de quem já está no banco, sem chamar a API de novo.
-app.post('/api/amazon/fix-pending-availability', (req, res) => {
+// Correção pontual (28/07/2026): só pedido com pagamento de verdade conta como venda
+// (CLAUDE.md 4.1) — pedido já gravado com status "sem pagamento" (Pending/
+// PendingAvailability na Amazon, PENDING/AUTHORIZED no Shopify, confirmed/
+// payment_required/payment_in_process no ML) ficou marcado cancelled:false por engano.
+// Corrige o flag local de quem já está no banco, sem chamar nenhuma API de novo — ver
+// UNPAID_STATUS_BY_CHANNEL em store.js.
+app.post('/api/orders/fix-unpaid', (req, res) => {
   try {
-    const fixed = fixAmazonPendingAvailability();
-    res.json({ ok: true, fixed, message: `${fixed} pedidos corrigidos (não estavam cancelados de verdade).` });
+    const fixed = fixUnpaidOrders();
+    res.json({ ok: true, fixed, message: `${fixed} pedidos sem pagamento confirmado corrigidos (não contam mais como venda).` });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -340,13 +340,17 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
           name:      '#' + o.AmazonOrderId,
           createdAt: o.PurchaseDate,
           status:    o.OrderStatus,
-          // Bug corrigido (28/07/2026): 'PendingAvailability' NÃO é cancelamento — é status
-          // de pré-venda (pedido feito, pagamento ainda não autorizado, aguardando data de
-          // lançamento do produto; confirmado na doc oficial da SP-API). Tratar como
-          // cancelado fazia o pedido sumir de toda métrica (receita/unidades/canal/produto/
-          // geografia, via isCancelled em metrics.js) até o status mudar — contribuía pra
-          // receita/unidades da Amazon US aparecerem menores que o real.
-          cancelled: o.OrderStatus === 'Canceled',
+          // Duas regras diferentes somadas em `cancelled` (campo usado como gate único de
+          // exclusão em isCancelled/metrics.js — ver CLAUDE.md):
+          // 1) 'Canceled' — cancelamento de verdade.
+          // 2) Decisão (28/07/2026, CLAUDE.md 4.1): só pedido com pagamento de verdade
+          //    conta como venda. 'Pending' (pedido feito, pagamento NÃO autorizado) e
+          //    'PendingAvailability' (pré-venda, mesma coisa) confirmados como "sem
+          //    pagamento" na doc oficial da SP-API — não é cancelamento, mas não deve
+          //    contar em receita/unidades/canal/produto/geografia até o pagamento ser
+          //    autorizado (aí o pedido passa pra Unshipped/Shipped/etc e o sync
+          //    incremental já pega a mudança sozinho).
+          cancelled: ['Canceled', 'Pending', 'PendingAvailability'].includes(o.OrderStatus),
           total:     Number(o.OrderTotal?.Amount || 0),
           source:    'Amazon',
           customer:  o.BuyerInfo?.BuyerName || '',
@@ -534,7 +538,11 @@ function ordersFromRows(rows, marketplaceId) {
         name:      '#' + orderId,
         createdAt: new Date(r['purchase-date']).toISOString(),
         status,
-        cancelled: ['Cancelled', 'Canceled'].includes(status),
+        // Mesma regra do sync ao vivo (fetchMarketplaceOrders, ver comentário lá): cancelado
+        // de verdade OU sem pagamento confirmado ('Pending'/'PendingAvailability') não conta
+        // como venda. 'Cancelled'/'Canceled' cobre a grafia com 1 ou 2 L (relatório vs API,
+        // ver CLAUDE.md 4.7.8).
+        cancelled: ['Cancelled', 'Canceled', 'Pending', 'PendingAvailability'].includes(status),
         total:     0,
         source:    'Amazon',
         customer:  '',
