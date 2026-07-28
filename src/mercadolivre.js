@@ -293,6 +293,18 @@ export async function fetchCampaigns(sinceISO, untilISO) {
   }
 }
 
+// Resolve o(s) order.id de dentro de um pack (envio que agrupa pedidos) — usado pra casar
+// pedidos com fontes externas que reportam pack_id em vez de order.id como referência.
+// Confirmado que é sempre o caso do Bling (ver probeOrderOrPack/CLAUDE.md). Retorna [] se
+// não for um pack válido — nunca lança, quem chama decide o que fazer com a lista vazia.
+export async function fetchPackOrderIds(packId) {
+  if (!isConfigured() || !getMlTokens()) return [];
+  try {
+    const pack = await apiGet(`/packs/${packId}`);
+    return (pack.orders || []).map(o => o.id).filter(Boolean);
+  } catch { return []; }
+}
+
 // Diagnóstico pontual (não usado em nenhum sync): confirma se um número que outra fonte
 // externa (Bling) reporta como "numeroLoja" do pedido é o `order.id` de verdade (o que
 // fetchOrders() grava) ou o `pack_id` de um envio com vários pedidos agrupados — o ML tem
