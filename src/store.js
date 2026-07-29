@@ -210,6 +210,17 @@ export function upsertOrders(orders) {
         && Array.isArray(existing.items) && existing.items.some(it => it.title)) {
       o.items = existing.items;
     }
+    // Mesma proteção, agora para `state` e `productSales`: canais cuja própria API não
+    // traz o dado (Shopee mascara o endereço, ver CLAUDE.md 4.5; a Amazon Orders API não
+    // traz valor de produto separado, ver 4.7.6) são regravados a cada sync com o campo
+    // vazio — sem esta guarda, isso apaga o que uma reconciliação (Bling/Reports API)
+    // preencheu depois. Só protege contra apagar: valor novo não-vazio sobrescreve normal.
+    if (existing && !o.state && existing.state) {
+      o.state = existing.state;
+    }
+    if (existing && o.productSales == null && existing.productSales != null) {
+      o.productSales = existing.productSales;
+    }
     db.orders[o.id] = o;
   }
   indexDirty = true;
