@@ -968,7 +968,7 @@ function computeIntegrationsList() {
       ...integrationStatus({ key: 'mercadolivre', configured: ml.isConfigured(), authorized: Boolean(getMlTokens()) }) },
     { key: 'amazon_br', label: 'Amazon', country: 'br', category: 'geral', logo: 'Amazon_logo.png', detail: 'Conta CocoandLuna',
       ...integrationStatus({ key: 'amazon_br', configured: amazon.isConfiguredBR(), paused: backoffBRActive, pausedNote: backoffBRActive ? amazonPauseNote(Math.ceil((backoffBRUntil - Date.now()) / 60000)) : '' }) },
-    { key: 'bling', label: 'Bling', country: 'br', category: 'geral', logo: 'logo-bling1.png', detail: 'Enriquece geografia com endereço de entrega, não é canal de venda',
+    { key: 'bling', label: 'Bling', country: 'br', category: 'geral', logo: 'logo-bling1.png', detail: 'Informações de ERP para complementar dados dos outros canais',
       ...integrationStatus({ key: 'bling', configured: bling.isConfigured(), authorized: Boolean(db.blingTokens) }) },
 
     // ── Brasil · Marketing ──
