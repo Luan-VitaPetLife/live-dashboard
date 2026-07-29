@@ -270,11 +270,6 @@
   .arev-labels b{ color:var(--text); }
   .arev-caption{ font-size:11px; color:var(--muted); line-height:1.5; padding-top:6px; }
 
-  /* ── Aviso: dado recente da Amazon US ainda preliminar (Pending/captura em andamento) ── */
-  .amz-fresh-notice{ display:none; align-items:flex-start; gap:8px; background:rgba(155,122,42,.08); border:1px solid rgba(155,122,42,.25); color:var(--amber); border-radius:var(--radius-sm); padding:8px 12px; font-size:12px; line-height:1.5; margin-bottom:10px; }
-  .amz-fresh-notice.show{ display:flex; }
-  .amz-fresh-notice i{ margin-top:1px; }
-
   /* ── Modo de edição / grid reordenável ── */
   .edit-toolbar{display:none;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--sub)}
   body.edit-mode .edit-toolbar{display:flex}
@@ -429,7 +424,6 @@
     <div class="edit-grid" id="editGrid">
       <div class="edit-card" data-card-id="kpiStrip" data-title="Indicadores" style="grid-column:span 12">
         <div class="card"><div class="kpi-strip-pad">
-          <div class="amz-fresh-notice" id="amzFreshNotice"><i class="bi bi-exclamation-triangle"></i><span>Período inclui hoje e/ou ontem no Amazon US — pedidos ainda "Pending" (aguardando captura de pagamento) contam com valor zerado até serem processados pela Amazon. O número tende a subir nos próximos dias, isso é normal (não é erro).</span></div>
           <div class="kpi-strip-grid" id="kpiStripGrid">
             <div class="kpi-mini" data-kpi-id="revenue" data-title="Receita Total">
               <div class="kpi-mini-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
@@ -790,25 +784,10 @@ function drawDonut(id, data, colors) {
   setChart(id, cfg);
 }
 
-// Amazon US fecha o "dia" no horário do Pacífico (ver CLAUDE.md 4.7.2/store.js), não
-// UTC/BR — por isso "hoje"/"ontem" aqui usa o mesmo fuso, senão o aviso apareceria/
-// sumiria na hora errada perto da virada do dia.
-function pacificDateStr(offsetDays) {
-  const d = new Date(Date.now() + offsetDays * 86400000);
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(d); // en-CA => YYYY-MM-DD
-}
-function updateAmazonFreshNotice(d) {
-  const el = document.getElementById('amzFreshNotice');
-  const relevant = d.market === 'us' && (d.channel === 'todos' || d.channel === 'amazon_us');
-  const includesRecent = relevant && d.period.until >= pacificDateStr(-1); // até ontem (Pacífico)
-  el.classList.toggle('show', includesRecent);
-}
-
 function render(d) {
   lastData = d;
   const label = rangeLabel(d.period.since, d.period.until);
   document.getElementById('pageSub').textContent = `Coco and Luna · ${CHAN[d.channel]} · multicanal`;
-  updateAmazonFreshNotice(d);
 
   // KPIs
   const k = d.kpis;
