@@ -285,7 +285,20 @@ export function patchOrderItems(orders, { allowInsert = false } = {}) {
       }
       // "Ordered Product Sales" (ver amazon.js ordersFromRows) — só o relatório traz esse
       // valor separado; copia pro pedido já existente sem mexer em total/status.
-      if (o.productSales != null && o.productSales !== existing.productSales) {
+      // ⚠️ Só confia no valor quando o PRÓPRIO relatório não marcou o pedido como
+      // cancelado/pendente (`o.cancelled`, calculado a partir do status QUE O PEDIDO TINHA
+      // no momento em que o relatório rodou). Em ordersFromRows, `o.cancelled === true` faz
+      // TODAS as linhas do pedido serem puladas (`continue`), deixando `productSales` parado
+      // em 0 — um "0 falso" (não processado), não "vendas de produto zero". Como o relatório
+      // de reconciliação é de janela curta (AMAZON_NAMES_DAYS, padrão 2 dias) e roda a cada
+      // poucas horas, um pedido pode estar Pending nesse instante e já ter sido capturado/
+      // enviado (total real, não cancelado) quando o dashboard é consultado depois — sem esta
+      // guarda, o 0 falso era copiado por cima do pedido já existente, fazendo o modo "Vendas
+      // de produto" ficar bem abaixo do real (confirmado em produção: ~41% abaixo do modo
+      // "Total" num dia só, muito acima do gap de definição de ~1,5% que o toggle deveria
+      // refletir). Não usar `o.items.length` como sinal: um pedido pode ter revenue real de
+      // produto mas `items` vazio (todas as linhas com product-name "-", frete/ajuste).
+      if (!o.cancelled && o.productSales != null && o.productSales !== existing.productSales) {
         existing.productSales = o.productSales;
         changed = true;
       }
