@@ -657,6 +657,16 @@ export async function inspectReport({ market = 'br', days = 1 } = {}) {
     shipCountry:  r['ship-country'],
     shipState:    r['ship-state'],
     rowMarket:    rowMarket(r),
+    itemPrice:            r['item-price'],
+    itemTax:              r['item-tax'],
+    shippingPrice:        r['shipping-price'],
+    shippingTax:          r['shipping-tax'],
+    giftWrapPrice:        r['gift-wrap-price'],
+    itemPromotionDiscount: r['item-promotion-discount'],
+    shipPromotionDiscount: r['ship-promotion-discount'],
+    quantity:             r['quantity'],
+    rowAmount:            rowAmount(r),
+    rowProductAmount:     rowProductAmount(r),
   }));
   // Contagem por mercado deduzido, pra ver a proporção de contaminação.
   const tally = {};
