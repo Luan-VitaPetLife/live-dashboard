@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getAmazonProductImages, load } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getAmazonProductImages, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
@@ -513,7 +513,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 // para não misturar BRL/USD. Devolve o mesmo formato normalizado do `recentOrders`.
 const CH_LABEL = { shopify: 'Shopify', shopify_us: 'Shopify US', shopee: 'Shopee', mercadolivre: 'Mercado Livre', amazon: 'Amazon BR', amazon_us: 'Amazon US' };
 function statusLabelPt(o) {
-  if (o.cancelled) return 'Cancelado';
+  if (o.cancelled) {
+    // "Não pago" (Pending/PendingAvailability etc, ver UNPAID_STATUS_BY_CHANNEL em store.js)
+    // não é cancelamento de verdade pela Amazon/canal — só ainda não conta como venda. Rótulo
+    // diferente pra não alarmar à toa (mesma distinção do statusTag() no front). Ver 4.7.10.
+    const unpaid = UNPAID_STATUS_BY_CHANNEL[o.channel];
+    if (unpaid && unpaid.includes(o.status)) return 'Não pago';
+    return 'Cancelado';
+  }
   const s = (o.status || '').toUpperCase();
   if (['PAID', 'COMPLETED', 'SHIPPED', 'TO_CONFIRM_RECEIVE', 'READY_TO_SHIP'].includes(s)) return 'OK';
   return 'Pendente';

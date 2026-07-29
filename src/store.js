@@ -385,7 +385,9 @@ export function removeAmazonMarketLeak() {
 // mudou: ele deve ficar de fora mesmo, só que pelo motivo certo (sem pagamento, não
 // cancelamento). Já rodou em produção sem nenhum pedido afetado (fixed:0), então não há
 // nada pra desfazer.
-const UNPAID_STATUS_BY_CHANNEL = {
+// Exportada (não só usada aqui) — metrics.js reaproveita pra rotular pedido "não pago"
+// diferente de cancelado de verdade na busca (ver statusLabelPt / CLAUDE.md 4.7.10).
+export const UNPAID_STATUS_BY_CHANNEL = {
   amazon:        ['Pending', 'PendingAvailability'],
   amazon_us:     ['Pending', 'PendingAvailability'],
   shopify:       ['PENDING', 'AUTHORIZED'],
