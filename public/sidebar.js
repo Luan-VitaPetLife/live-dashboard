@@ -204,7 +204,7 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
   const SLUG_TO_FILE = {
     '': 'index.html', segmentos: 'segmentos.html', geografia: 'geografia.html',
     'geografia-us': 'geografia-us.html', produtos: 'produtos.html', estoque: 'estoque.html',
-    campanhas: 'campanhas.html', configuracoes: 'configuracoes.html', login: 'login.html',
+    campanhas: 'campanhas.html', configuracoes: 'configuracoes.html', integracoes: 'integracoes.html', login: 'login.html',
   };
 
   function mount() {
@@ -297,7 +297,7 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
       if (managed.has(page) && !isAdmin && !allowed.includes(page)) {
         if (allowed.length) { location.href = FILE_TO_SLUG[allowed[0]] || '/'; return; }
       }
-      if (page === 'configuracoes.html' && !isAdmin) { location.href = '/'; return; }
+      if ((page === 'configuracoes.html' || page === 'integracoes.html') && !isAdmin) { location.href = '/'; return; }
     }
 
     // Visibilidade dos itens de navegação gerenciados
