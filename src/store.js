@@ -44,6 +44,7 @@ const EMPTY = {
   users: [],          // [{ id, username, name, role, salt, hash, pages:[], createdAt }]
   authConfig: null,   // { enabled: bool } — null = ainda não inicializado (initAuth semeia)
   authSessions: {},   // { token: { userId, createdAt, expiresAt } }
+  integrationsConfig: {}, // { [chave]: { enabled: bool } } — liga/desliga por integração, ver tela Integrações
 };
 
 let cache = null;
@@ -140,6 +141,7 @@ export async function initStore() {
       if (r.key === 'users')                 cache.users                 = r.value;
       if (r.key === 'authConfig')            cache.authConfig            = r.value;
       if (r.key === 'authSessions')          cache.authSessions          = r.value;
+      if (r.key === 'integrationsConfig')    cache.integrationsConfig    = r.value;
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -713,4 +715,20 @@ export function getAuthSessions() { return load().authSessions || {}; }
 export function setAuthSessions(sessions) {
   const db = load(); db.authSessions = sessions; saveJson();
   if (USE_PG) pgKv('authSessions', sessions);
+}
+
+// Liga/desliga por integração (tela Integrações, dentro de Configurações). Mesmo
+// padrão de authConfig acima. Sem registro salvo para uma chave, considera ligada
+// (opt-out: a feature nova nunca desativa uma integração já funcionando sozinha).
+export function getIntegrationsConfig() { return load().integrationsConfig || {}; }
+export function setIntegrationEnabled(key, enabled) {
+  const db = load();
+  db.integrationsConfig = db.integrationsConfig || {};
+  db.integrationsConfig[key] = { enabled: Boolean(enabled) };
+  saveJson();
+  if (USE_PG) pgKv('integrationsConfig', db.integrationsConfig);
+}
+export function isIntegrationEnabled(key) {
+  const cfg = getIntegrationsConfig()[key];
+  return cfg ? cfg.enabled !== false : true;
 }

@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor, fixUnpaidOrders } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -175,6 +175,7 @@ const SLUG_TO_FILE = {
   estoque: 'estoque.html',
   campanhas: 'campanhas.html',
   configuracoes: 'configuracoes.html',
+  integracoes: 'integracoes.html',
   login: 'login.html',
 };
 const FILE_TO_SLUG = Object.fromEntries(
@@ -222,7 +223,7 @@ app.use((req, res, next) => {
   // Controle de acesso por página (só quando a URL resolve pra uma página conhecida).
   const file = resolvePageFile(p);
   if (file) {
-    if (file === 'configuracoes.html' && user.role !== 'admin') return res.redirect('/');
+    if ((file === 'configuracoes.html' || file === 'integracoes.html') && user.role !== 'admin') return res.redirect('/');
     if (auth.isManagedPage(file) && !auth.canAccessPage(user, file)) {
       const fp = auth.firstAllowedPage(user);
       if (fp) return res.redirect(FILE_TO_SLUG[fp] || '/');
@@ -385,20 +386,24 @@ app.get('/api/campaigns', async (req, res) => {
   const channels = {};
   try {
     if (market === 'br') {
+      const mlOn = isIntegrationEnabled('mercadolivre_ads');
+      const metaOn = isIntegrationEnabled('meta_br');
       const [mlC, metaC] = await Promise.all([
-        ml.fetchCampaigns(since, until).catch(() => []),
-        meta.fetchCampaigns(since, until).catch(() => []),
+        mlOn ? ml.fetchCampaigns(since, until).catch(() => []) : Promise.resolve([]),
+        metaOn ? meta.fetchCampaigns(since, until).catch(() => []) : Promise.resolve([]),
       ]);
-      channels.mercadolivre = { available: ml.isConfigured(), campaigns: mlC };
-      channels.meta = { available: meta.isConfigured(), campaigns: metaC };
+      channels.mercadolivre = { available: mlOn && ml.isConfigured(), campaigns: mlC };
+      channels.meta = { available: metaOn && meta.isConfigured(), campaigns: metaC };
     } else {
       const usAcc = process.env.META_US_AD_ACCOUNT_ID;
+      const metaOn = isIntegrationEnabled('meta_us');
+      const googleOn = isIntegrationEnabled('google_ads');
       const [metaC, googleC] = await Promise.all([
-        meta.fetchCampaigns(since, until, usAcc).catch(() => []),
-        googleads.fetchCampaigns(since, until).catch(() => []),
+        metaOn ? meta.fetchCampaigns(since, until, usAcc).catch(() => []) : Promise.resolve([]),
+        googleOn ? googleads.fetchCampaigns(since, until).catch(() => []) : Promise.resolve([]),
       ]);
-      channels.meta = { available: meta.isConfigured(usAcc), campaigns: metaC };
-      channels.google = { available: googleads.isConfigured(), campaigns: googleC };
+      channels.meta = { available: metaOn && meta.isConfigured(usAcc), campaigns: metaC };
+      channels.google = { available: googleOn && googleads.isConfigured(), campaigns: googleC };
     }
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -925,6 +930,87 @@ app.get('/api/status', (_req, res) => {
     },
     lastSync: db.lastSync || null,
   });
+});
+
+// ── Tela Integrações (dentro de Configurações, somente admin) ──────────────────
+// Monta a lista de integrações com status ao vivo, reaproveitando os mesmos checks
+// já usados em /api/status acima, mais o liga/desliga persistido (integrationsConfig).
+// TOGGLEABLE_KEYS: as únicas chaves que POST /api/integrations/:key/toggle aceita.
+const TOGGLEABLE_KEYS = new Set([
+  'shopify_br', 'shopify_us', 'shopee', 'mercadolivre', 'mercadolivre_ads',
+  'amazon_br', 'amazon_us', 'meta_br', 'meta_us', 'google_ads', 'bling',
+]);
+
+function integrationStatus({ key, configured, authorized = true, paused = false, pausedNote = '' }) {
+  if (!isIntegrationEnabled(key)) return { state: 'disabled', note: 'Desativada pelo administrador.' };
+  if (!configured) return { state: 'not_configured', note: 'Sem credenciais configuradas ainda.' };
+  if (!authorized) return { state: 'pending_auth', note: 'Aguardando autorização (fluxo de conexão pendente).' };
+  if (paused) return { state: 'paused', note: pausedNote || 'Pausada temporariamente.' };
+  return { state: 'connected', note: '' };
+}
+
+function computeIntegrationsList() {
+  const db = load();
+  const has = key => Boolean(process.env[key]);
+  const backoffUntil = getAmazonBackoff();
+  const backoffActive = backoffUntil > Date.now();
+  const backoffBRUntil = getAmazonBRBackoff();
+  const backoffBRActive = backoffBRUntil > Date.now();
+  const amazonPauseNote = min => `Pausada por ${min} min (cota da Amazon atingida). Volta sozinha.`;
+
+  const items = [
+    // ── Brasil · Geral ──
+    { key: 'shopify_br', label: 'Shopify', country: 'br', category: 'geral', logo: 'Shopify_logo.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
+      ...integrationStatus({ key: 'shopify_br', configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') }) },
+    { key: 'shopee', label: 'Shopee', country: 'br', category: 'geral', logo: 'logo-shopee.png', detail: db.shopeeTokens ? 'Loja autorizada' : '',
+      ...integrationStatus({ key: 'shopee', configured: shopee.isConfigured(), authorized: Boolean(getShopeeTokens()) }) },
+    { key: 'mercadolivre', label: 'Mercado Livre', country: 'br', category: 'geral', logo: 'Logotipo_MercadoLivre.png', detail: db.mlTokens ? 'Conta autorizada' : '',
+      ...integrationStatus({ key: 'mercadolivre', configured: ml.isConfigured(), authorized: Boolean(getMlTokens()) }) },
+    { key: 'amazon_br', label: 'Amazon', country: 'br', category: 'geral', logo: 'Amazon_logo.png', detail: 'Conta CocoandLuna',
+      ...integrationStatus({ key: 'amazon_br', configured: amazon.isConfiguredBR(), paused: backoffBRActive, pausedNote: backoffBRActive ? amazonPauseNote(Math.ceil((backoffBRUntil - Date.now()) / 60000)) : '' }) },
+    { key: 'bling', label: 'Bling', country: 'br', category: 'geral', logo: 'logo-bling1.png', detail: 'Enriquece geografia com endereço de entrega, não é canal de venda',
+      ...integrationStatus({ key: 'bling', configured: bling.isConfigured(), authorized: Boolean(db.blingTokens) }) },
+
+    // ── Brasil · Marketing ──
+    { key: 'meta_br', label: 'Meta Ads', country: 'br', category: 'marketing', logo: 'logo-meta.png', detail: 'Conta Coco and Luna',
+      ...integrationStatus({ key: 'meta_br', configured: meta.isConfigured() }) },
+    { key: 'mercadolivre_ads', label: 'Mercado Ads', country: 'br', category: 'marketing', logo: 'Mercado-ADS.png', detail: 'Product Ads do Mercado Livre',
+      ...integrationStatus({ key: 'mercadolivre_ads', configured: ml.isConfigured(), authorized: Boolean(getMlTokens()) }) },
+
+    // ── Brasil · Planejadas ──
+    { key: null, label: 'Amazon Ads', country: 'br', category: 'planned', logo: 'Amazon_Ads_Horizontal_SquidInk.png', detail: 'Ainda não conectada', state: 'planned', note: '' },
+    { key: null, label: 'TikTok Shop', country: 'br', category: 'planned', logo: 'logo-tiktok-shop.png', detail: 'Loja em configuração, sem pedidos ainda', state: 'planned', note: '' },
+
+    // ── Estados Unidos · Geral ──
+    { key: 'shopify_us', label: 'Shopify', country: 'us', category: 'geral', logo: 'Shopify_logo.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
+      ...integrationStatus({ key: 'shopify_us', configured: has('SHOPIFY_US_STORE') && has('SHOPIFY_US_ADMIN_TOKEN') }) },
+    { key: 'amazon_us', label: 'Amazon', country: 'us', category: 'geral', logo: 'Amazon_logo.png', detail: 'Conta VITA PET LIFE',
+      ...integrationStatus({ key: 'amazon_us', configured: amazon.isConfigured(), paused: backoffActive, pausedNote: backoffActive ? amazonPauseNote(Math.ceil((backoffUntil - Date.now()) / 60000)) : '' }) },
+
+    // ── Estados Unidos · Marketing ──
+    { key: 'meta_us', label: 'Meta Ads', country: 'us', category: 'marketing', logo: 'logo-meta.png', detail: 'Conta Vita Pet Life',
+      ...integrationStatus({ key: 'meta_us', configured: meta.isConfigured(process.env.META_US_AD_ACCOUNT_ID) }) },
+    { key: 'google_ads', label: 'Google Ads', country: 'us', category: 'marketing', logo: 'google_ads_logo_icon.png', detail: has('GOOGLE_ADS_CUSTOMER_ID') ? 'Conta Coco and Luna' : '',
+      ...integrationStatus({ key: 'google_ads', configured: googleads.isConfigured(), authorized: Boolean(db.googleAdsTokens) }) },
+
+    // ── Estados Unidos · Planejadas ──
+    { key: null, label: 'Amazon Ads', country: 'us', category: 'planned', logo: 'Amazon_Ads_Horizontal_SquidInk.png', detail: 'Ainda não conectada', state: 'planned', note: '' },
+  ];
+
+  // Achata { state, note } no objeto (integrationStatus devolve isso via spread acima).
+  return items;
+}
+
+app.get('/api/integrations', requireAdmin, (_req, res) => {
+  res.json({ integrations: computeIntegrationsList() });
+});
+
+app.post('/api/integrations/:key/toggle', requireAdmin, (req, res) => {
+  const { key } = req.params;
+  if (!TOGGLEABLE_KEYS.has(key)) return res.status(400).json({ error: 'Integração desconhecida.' });
+  const enabled = Boolean((req.body || {}).enabled);
+  setIntegrationEnabled(key, enabled);
+  res.json({ ok: true, key, enabled });
 });
 
 // ── Gestão de usuários e configuração de login (somente admin) ──

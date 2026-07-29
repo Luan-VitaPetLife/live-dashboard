@@ -11,7 +11,7 @@ import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -47,96 +47,123 @@ async function doSync() {
   // mudou desde o último sync completo, então uma janela inicial curta basta e mantém a
   // primeira execução dentro do burst de 20 requisições da SP-API.
   const { since: sinceAmazon } = defaultWindow(Number(process.env.AMAZON_BACKFILL_DAYS || 2));
-  const report = { shopify: 0, shopify_us: 0, shopee: 0, mercadolivre: 0, amazon: 0, amazon_br: 0, meta: 0, sessions: 0, errors: [] };
+  const report = { shopify: 0, shopify_us: 0, shopee: 0, mercadolivre: 0, amazon: 0, amazon_br: 0, meta: 0, sessions: 0, errors: [], disabled: [] };
 
   // Shopify — pedidos
-  try {
-    const orders = await shopify.fetchOrders(since, until);
-    upsertOrders(orders);
-    report.shopify = orders.length;
-  } catch (e) { report.errors.push('shopify.orders: ' + e.message); }
+  if (isIntegrationEnabled('shopify_br')) {
+    try {
+      const orders = await shopify.fetchOrders(since, until);
+      upsertOrders(orders);
+      report.shopify = orders.length;
+    } catch (e) { report.errors.push('shopify.orders: ' + e.message); }
 
-  // Shopify — sessões diárias
-  try {
-    const sessions = await shopify.fetchSessionsDaily(90);
-    upsertSessionsDaily(sessions);
-    report.sessions = sessions.length;
-  } catch (e) { report.errors.push('shopify.sessions: ' + e.message); }
+    // Shopify — sessões diárias
+    try {
+      const sessions = await shopify.fetchSessionsDaily(90);
+      upsertSessionsDaily(sessions);
+      report.sessions = sessions.length;
+    } catch (e) { report.errors.push('shopify.sessions: ' + e.message); }
+  } else { report.disabled.push('shopify_br'); }
 
   // Shopee — pedidos (só se já autorizada)
-  try {
-    const orders = await shopee.fetchOrders(since, until);
-    upsertOrders(orders);
-    report.shopee = orders.length;
-  } catch (e) { report.errors.push('shopee.orders: ' + e.message); }
+  if (isIntegrationEnabled('shopee')) {
+    try {
+      const orders = await shopee.fetchOrders(since, until);
+      upsertOrders(orders);
+      report.shopee = orders.length;
+    } catch (e) { report.errors.push('shopee.orders: ' + e.message); }
+  } else { report.disabled.push('shopee'); }
 
   // Mercado Livre — pedidos (só se já autorizado)
-  try {
-    const orders = await ml.fetchOrders(since, until);
-    upsertOrders(orders);
-    report.mercadolivre = orders.length;
-  } catch (e) { report.errors.push('mercadolivre.orders: ' + e.message); }
+  if (isIntegrationEnabled('mercadolivre')) {
+    try {
+      const orders = await ml.fetchOrders(since, until);
+      upsertOrders(orders);
+      report.mercadolivre = orders.length;
+    } catch (e) { report.errors.push('mercadolivre.orders: ' + e.message); }
+  } else { report.disabled.push('mercadolivre'); }
 
   // Mercado Livre — custo de anúncios (Product Ads API; retorna zeros se sem acesso)
-  try {
-    const adCosts = await ml.fetchAdCosts(since, until);
-    setMlAdCosts({ since, until, ...adCosts });
-    report.ml_ads_spend = adCosts.spend;
-  } catch (e) { report.errors.push('mercadolivre.ads: ' + e.message); }
+  if (isIntegrationEnabled('mercadolivre_ads')) {
+    try {
+      const adCosts = await ml.fetchAdCosts(since, until);
+      setMlAdCosts({ since, until, ...adCosts });
+      report.ml_ads_spend = adCosts.spend;
+    } catch (e) { report.errors.push('mercadolivre.ads: ' + e.message); }
+  } else { report.disabled.push('mercadolivre_ads'); }
 
   // Meta BR — gasto diário de anúncios (Coco and Luna)
-  try {
-    const insights = await meta.fetchInsights(since, until);
-    const existing = getMetaInsightsDaily();
-    setMetaInsightsDaily({ ...existing, ...insights });
-    report.meta = Object.keys(insights).length;
-  } catch (e) { report.errors.push('meta.insights: ' + e.message); }
+  if (isIntegrationEnabled('meta_br')) {
+    try {
+      const insights = await meta.fetchInsights(since, until);
+      const existing = getMetaInsightsDaily();
+      setMetaInsightsDaily({ ...existing, ...insights });
+      report.meta = Object.keys(insights).length;
+    } catch (e) { report.errors.push('meta.insights: ' + e.message); }
+  } else { report.disabled.push('meta_br'); }
 
   // Meta EUA — gasto diário de anúncios (Vita Pet Life)
-  try {
-    const usAccountId = meta.AD_ACCOUNT_ID_US;
-    if (usAccountId) {
-      const insights = await meta.fetchInsights(since, until, usAccountId);
-      const existing = getMetaUSInsightsDaily();
-      setMetaUSInsightsDaily({ ...existing, ...insights });
-      report.meta_us = Object.keys(insights).length;
-    }
-  } catch (e) { report.errors.push('meta_us.insights: ' + e.message); }
+  if (isIntegrationEnabled('meta_us')) {
+    try {
+      const usAccountId = meta.AD_ACCOUNT_ID_US;
+      if (usAccountId) {
+        const insights = await meta.fetchInsights(since, until, usAccountId);
+        const existing = getMetaUSInsightsDaily();
+        setMetaUSInsightsDaily({ ...existing, ...insights });
+        report.meta_us = Object.keys(insights).length;
+      }
+    } catch (e) { report.errors.push('meta_us.insights: ' + e.message); }
+  } else { report.disabled.push('meta_us'); }
 
   // ── Mercado EUA ───────────────────────────────
 
   // Shopify EUA (opcional — requer SHOPIFY_US_STORE + SHOPIFY_US_ADMIN_TOKEN)
-  try {
-    const usStore = process.env.SHOPIFY_US_STORE;
-    const usToken = process.env.SHOPIFY_US_ADMIN_TOKEN;
-    if (usStore && usToken) {
-      const orders = await shopify.fetchOrders(since, until, { store: usStore, token: usToken, market: 'us', channel: 'shopify_us' });
-      upsertOrders(orders);
-      report.shopify_us = orders.length;
-    }
-  } catch (e) { report.errors.push('shopify_us.orders: ' + e.message); }
+  if (isIntegrationEnabled('shopify_us')) {
+    try {
+      const usStore = process.env.SHOPIFY_US_STORE;
+      const usToken = process.env.SHOPIFY_US_ADMIN_TOKEN;
+      if (usStore && usToken) {
+        const orders = await shopify.fetchOrders(since, until, { store: usStore, token: usToken, market: 'us', channel: 'shopify_us' });
+        upsertOrders(orders);
+        report.shopify_us = orders.length;
+      }
+    } catch (e) { report.errors.push('shopify_us.orders: ' + e.message); }
 
-  // Shopify EUA — sessões diárias (requer escopo read_analytics no token US)
-  try {
-    const usStore = process.env.SHOPIFY_US_STORE;
-    const usToken = process.env.SHOPIFY_US_ADMIN_TOKEN;
-    if (usStore && usToken) {
-      const sessions = await shopify.fetchSessionsDaily(90, { store: usStore, token: usToken });
-      upsertSessionsDaily(sessions, 'us');
-      report.sessions_us = sessions.length;
-    }
-  } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
+    // Shopify EUA — sessões diárias (requer escopo read_analytics no token US)
+    try {
+      const usStore = process.env.SHOPIFY_US_STORE;
+      const usToken = process.env.SHOPIFY_US_ADMIN_TOKEN;
+      if (usStore && usToken) {
+        const sessions = await shopify.fetchSessionsDaily(90, { store: usStore, token: usToken });
+        upsertSessionsDaily(sessions, 'us');
+        report.sessions_us = sessions.length;
+      }
+    } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
+  } else { report.disabled.push('shopify_us'); }
 
   // Amazon US + BR — amazon.js decide sozinho se combina numa chamada só (tokens
   // ainda idênticos, mesma conta/cota) ou faz duas separadas (tokens já distintos).
   // Backoff gerenciado internamente em amazon.js. Ver CLAUDE.md 4.7.
+  //
+  // O toggle de Amazon BR/EUA é aplicado DEPOIS da busca, filtrando o array por
+  // mercado antes de gravar — não dá pra desligar só um lado dentro de
+  // amazon.fetchOrders() sem mexer nessa parte frágil do código (histórico de
+  // problemas documentado, CLAUDE.md 4.7). Por isso a chamada de rede continua
+  // acontecendo pros dois mercados mesmo com um deles desativado aqui; só o que é
+  // gravado no banco respeita o toggle.
+  const amazonBrOn = isIntegrationEnabled('amazon_br');
+  const amazonUsOn = isIntegrationEnabled('amazon_us');
+  if (!amazonBrOn) report.disabled.push('amazon_br');
+  if (!amazonUsOn) report.disabled.push('amazon_us');
   try {
     if (!amazon.isConfigured()) {
       report.errors.push('amazon: credenciais LWA ausentes (AMAZON_CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN)');
     } else if (!amazon.hasAwsCreds()) {
       report.errors.push('amazon: credenciais AWS ausentes (AMAZON_AWS_ACCESS_KEY / AMAZON_AWS_SECRET_KEY)');
     } else {
-      const orders = await amazon.fetchOrders(sinceAmazon, until);
+      let orders = await amazon.fetchOrders(sinceAmazon, until);
+      if (!amazonBrOn) orders = orders.filter(o => o.market !== 'br');
+      if (!amazonUsOn) orders = orders.filter(o => o.market !== 'us');
       upsertOrders(orders);
       report.amazon    = orders.filter(o => o.market === 'us').length;
       report.amazon_br = orders.filter(o => o.market === 'br').length;
@@ -297,6 +324,10 @@ export async function reconcileGeoFromBling({ market = 'br', force = false, days
     // confirmar se o casamento de id está mesmo certo, não só assumir).
     unmappedByLoja: {}, notFoundExamples: [] };
   if (!bling.isConfigured()) { out.errors.push('bling: não configurado'); return out; }
+  // Desativado na tela de Integrações: nem a rodada automática nem a manual (force)
+  // rodam. Diferente do throttle logo abaixo (que force ignora), aqui "desativado" é
+  // desativado mesmo se alguém tentar forçar.
+  if (!isIntegrationEnabled('bling')) { out.skipped = 'disabled'; return out; }
   if (!force && !geoDue()) { out.skipped = 'throttle'; return out; }
 
   // Mapa por canal: id local → pedido (só os canais conhecidos, mercado BR).
