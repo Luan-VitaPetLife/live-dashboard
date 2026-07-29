@@ -1015,6 +1015,52 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   todo o CSS da sidebar para o `sidebar.js` (ver 4.9 e Resolvidos na seção 9); esse tipo de bug não
   pode mais acontecer, já que a página não declara mais o CSS da sidebar.
 
+### 4.17 Tela de Integrações — `public/integracoes.html` (implementado 29/07/2026)
+- **Acesso:** dentro de Configurações (`configuracoes.html` ganhou uma seção nova com botão "Ver
+  integrações"), não é item próprio da barra lateral. Admin only, mesmo padrão de guarda de
+  `configuracoes.html` (client em `sidebar.js` `applyAuth()`, servidor no portão de acesso e no
+  `SLUG_TO_FILE`/redirect de `server.js`).
+- **O que mostra:** cada integração (Shopify, Shopee, Mercado Livre, Amazon, Meta Ads, Google Ads,
+  Bling), agrupada por país (Brasil/Estados Unidos) e por categoria (Geral/Marketing), com selo de
+  status ao vivo (Conectada, Aguardando autorização, Não configurada, Pausada só Amazon com backoff
+  ativo, Desativada) e um switch por integração. Inclui também Amazon Ads (BR e EUA) e TikTok Shop
+  (BR) como "Planejadas", sem switch, só o selo "Em breve" — ainda não têm nenhum código de
+  integração por trás.
+- **`GET /api/integrations`** (admin) monta a lista reaproveitando os mesmos checks já usados em
+  `/api/status` (`isConfigured()`/tokens salvos de cada módulo) mais o liga/desliga persistido.
+  **`POST /api/integrations/:key/toggle`** (admin) valida a chave contra uma allowlist
+  (`TOGGLEABLE_KEYS`) e grava.
+- **Persistência:** `kv.integrationsConfig` (`{ [chave]: { enabled } }`), mesmo padrão de
+  `authConfig` — `getIntegrationsConfig`/`setIntegrationEnabled`/`isIntegrationEnabled` em
+  `store.js`. **Opt-out por padrão:** sem registro salvo pra uma chave, `isIntegrationEnabled`
+  devolve `true` — a feature nunca desativa sozinha uma integração já funcionando.
+- **O switch tem efeito real**, não é só visual: `sync.js` (`doSync`) checa
+  `isIntegrationEnabled()` antes de cada bloco de canal (`shopify_br`, `shopify_us`, `shopee`,
+  `mercadolivre`, `mercadolivre_ads`, `meta_br`, `meta_us`) e pula o bloco inteiro se desativado —
+  o pedido pulado entra em `report.disabled` (informativo), não em `report.errors`. `/api/campaigns`
+  ganhou a mesma checagem pra `meta_br`/`meta_us`/`mercadolivre_ads`/`google_ads` (chamada ao vivo da
+  tela de Campanhas), pra desligar valer também ali, não só no sync agendado.
+- **Amazon BR/EUA — decisão deliberada de não mexer em `amazon.js`:** `fetchOrders()` busca os dois
+  mercados numa chamada só (ou duas, dependendo de `SAME_TOKEN`) e devolve tudo junto — não dá pra
+  desligar só um lado por dentro dessa função sem tocar na parte mais frágil e sensível do projeto
+  (histórico extenso de incidentes, ver 4.7). Em vez disso, `sync.js` filtra o array **depois** que
+  `fetchOrders()` já respondeu, conforme `isIntegrationEnabled('amazon_br')`/`'amazon_us'`, antes do
+  `upsertOrders`. Efeito real (pedido daquele mercado para de ser gravado), mas **a chamada de rede
+  em si continua acontecendo pros dois mercados** mesmo com um desativado — não reduz a cota
+  consumida, só o que é gravado no banco. Documentado assim de propósito, sem tentar otimizar isso
+  agora.
+- **Bling:** o toggle desativa tanto a rodada automática quanto a manual (`force`) de
+  `reconcileGeoFromBling` — desativado é desativado, mesmo forçando pelo endpoint de diagnóstico.
+- **Fora do escopo desta rodada:** os jobs de reconciliação da Amazon (`reconcileAmazonNames`,
+  `enrichAmazonItems`, backfill, imagens) não respeitam o toggle — continuam rodando mesmo com
+  Amazon BR/EUA desativado. São enriquecimento patch-only, de baixo risco, e desligá-los também
+  expandiria o escopo sem necessidade real agora.
+- **Logos:** `public/logos-integracao/` (pasta nova, o Luan subiu os arquivos). Nomes reais não
+  seguem um padrão único (`Shopify_logo.png`, `logo-shopee.png`, `Logotipo_MercadoLivre.png` etc.) —
+  mapeados um a um em `computeIntegrationsList()` (`server.js`). `<img onerror>` troca por um ícone
+  Bootstrap Icons genérico por categoria se o arquivo não carregar, então nada quebra se um nome
+  mudar.
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js
@@ -1119,7 +1165,10 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     - `GET /api/users` / `POST /api/users` / `PUT /api/users/:id` / `DELETE /api/users/:id` — gestão de usuários (admin).
     - `POST /api/auth/config` — liga/desliga a exigência de login (admin), `{ enabled }`.
     - `POST /api/me/password` — troca a própria senha (qualquer usuário logado), `{ current, next }`.
-    - `GET /login.html`, `GET /configuracoes.html`
+    - `GET /login.html`, `GET /configuracoes.html`, `GET /integracoes.html`
+  - **Integrações (dentro de Configurações, ver 4.17):**
+    - `GET /api/integrations` (admin) — status ao vivo de cada canal, agrupado por país/categoria.
+    - `POST /api/integrations/:key/toggle` (admin) — liga/desliga a sincronização automática de um canal, `{ enabled }`.
 
 ## 8. Status das integrações
 
