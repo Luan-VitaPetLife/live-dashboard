@@ -569,6 +569,49 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   amazon.items`. Trava `ABORT_AFTER=15` (aborta a rodada se muitas chamadas seguidas falham, pra não desperdiçar).
   Funciona para os pedidos que o getOrderItems aceita; os `701-/702-` ficam pendentes até entendermos o 400.
 
+#### 4.7.10 Toggle "Receita da Amazon": Total cobrado × Vendas de produto (implementado 29/07/2026)
+- **O quê:** painel de Configurações (⚙) ganhou um switch pra escolher, só pra Amazon, entre
+  **"Total cobrado"** (`o.total`, igual aos outros canais — produto + imposto + frete) e
+  **"Vendas de produto"** (`o.productSales`, a métrica que a Amazon chama de "Ordered Product
+  Sales" no Seller Central — só o valor do produto). Persistido em
+  `localStorage('coco_amazon_rev_mode')`, mandado como `?amazonRevenueMode=total|product` pro
+  `/api/dashboard`. `orderRevenue(o, mode)` em `metrics.js` decide por pedido; aplicado em KPI,
+  tendência e `byChannel` — **não** em geografia/marketing/segmentos/produtos (fora de escopo
+  dessa rodada). `productSales` só existe pra pedido que passou pela Reports API (backfill ou
+  `reconcileAmazonNames`, ver 4.7.6) — pedido não reconciliado cai automaticamente no total cheio
+  (`orderRevenue` nunca mostra 0/quebra).
+- **⚠️ Bug corrigido no mesmo dia — "zero falso" de pedido Pending no relatório:**
+  `ordersFromRows()` pula TODAS as linhas de um pedido que estava `Pending`/`PendingAvailability`
+  no instante em que o relatório rodou (mesma regra de "só pedido pago conta", ver 6f1eb2c),
+  deixando `productSales` parado em `0` — um "não processado", não "vendas zero". Como a
+  reconciliação usa janela curta (`AMAZON_NAMES_DAYS`, 2 dias) e roda a cada poucas horas, um
+  pedido pode estar Pending nesse instante e já ter sido capturado/enviado (total real) quando o
+  dashboard é consultado depois. `patchOrderItems()` (`store.js`) copiava esse `0` falso por cima
+  do pedido já existente sem checar isso — o modo "Vendas de produto" saía ~41% abaixo do
+  "Total" num dia só. **Corrigido:** só aplica `productSales` quando o pedido do relatório não
+  veio marcado `cancelled` (não usa `items.length` como proxy — pedido pode ter `productSales`
+  real com `items` vazio, linhas todas "-", frete/ajuste).
+- **⚠️ Limitação conhecida, NÃO é bug (apurada 29/07/2026) — "Vendas de produto" pode ficar bem
+  abaixo do real em vários dias:** mesmo corrigido o zero falso, comparar `productSales` contra
+  o `total` real (Orders API) mostrou gap de até ~40% em dias fechados — bem acima do ~1,5%
+  validado contra um print real do Seller Central (23/07, ver histórico). Causa: o relatório
+  `GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL` frequentemente vem com `item-tax`/
+  `shipping-price`/`shipping-tax` **em branco** (string vazia, não `"0.00"`) pra boa parte dos
+  pedidos — não é bug de parsing (os campos ficam consistentemente vazios juntos, `item-price`
+  continua presente) — parece ser porque a Amazon recolhe/repassa esse imposto sem detalhar por
+  pedido nesse relatório específico (Marketplace Facilitated Tax). Como `existing.total` (a fonte
+  confiável, vinda da Orders API) inclui esse imposto/frete de verdade, e `o.productSales`
+  (relatório) não tem como refletir o que não veio, o gap fica maior e mais inconsistente do que
+  o gap "de definição" puro (produto vs total, calculado **dentro do próprio relatório**, que fica
+  em ~7% — plausível pra frete individual de pedido avulso). Também existem linhas
+  `sales-channel: "Non-Amazon"/"Non-Amazon US"` (Multi-Channel Fulfillment — Amazon só despachando
+  pedido de fora, ver 4.7.9) com **todos os campos de preço em branco**; não é a causa principal
+  do gap (poucos pedidos, ~9 num teste de 2 dias), mas contribuem. **Decisão do Luan:** manter o
+  toggle, com aviso na própria tela (`public/index.html`, texto do `.arev-caption`) — "Total
+  cobrado" continua sendo o número confiável por padrão; "Vendas de produto" é uma aproximação
+  que pode subestimar. Diagnóstico: `GET /api/amazon/report-columns?market=us&days=` (`inspectReport`)
+  expõe os campos financeiros crus por linha do relatório pra investigar um dia específico.
+
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
 - Pedidos legados no banco (sem campo `market`) são inferidos como `'br'`.
