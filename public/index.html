@@ -1079,8 +1079,23 @@ function renderOrdersPage() {
   }
 }
 
+// Mesma lista de status "não pago" usada em store.js (UNPAID_STATUS_BY_CHANNEL/
+// fixUnpaidOrders) — pedido nesse status ainda pode virar venda (a Amazon demora a
+// capturar pagamento, ver CLAUDE.md 4.7.2/4.7.10); não é cancelamento de verdade, então
+// merece um rótulo diferente de "Cancelado" pra não parecer que a venda foi perdida.
+const UNPAID_STATUS_BY_CHANNEL = {
+  amazon:        ['Pending', 'PendingAvailability'],
+  amazon_us:     ['Pending', 'PendingAvailability'],
+  shopify:       ['PENDING', 'AUTHORIZED'],
+  shopify_us:    ['PENDING', 'AUTHORIZED'],
+  mercadolivre:  ['confirmed', 'payment_required', 'payment_in_process'],
+};
 function statusTag(o) {
-  if (o.cancelled) return { cls:'canc', label:'Cancelado' };
+  if (o.cancelled) {
+    const unpaid = UNPAID_STATUS_BY_CHANNEL[o.channel];
+    if (unpaid && unpaid.includes(o.status)) return { cls:'pend', label:'Não pago' };
+    return { cls:'canc', label:'Cancelado' };
+  }
   const s = (o.status||'').toUpperCase();
   if (['PAID','COMPLETED','SHIPPED','TO_CONFIRM_RECEIVE','READY_TO_SHIP'].includes(s)) return { cls:'ok', label:'OK' };
   return { cls:'pend', label:'Pendente' };
