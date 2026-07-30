@@ -173,6 +173,61 @@
   .bulk-pop-btn:hover{opacity:.85}
   .bulk-pop-btn.primary{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
 
+  /* ── "Unificar" — agrupamento manual de produtos entre famílias (mesma função de segmentos.html,
+     aplicada ao card agregado "Estoque"). Reaproveita o endpoint genérico /api/product-groups. ── */
+  .stk-toolbar{display:flex;align-items:center;gap:8px;padding:10px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .stk-unify-btn{display:flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;font-family:inherit}
+  .stk-unify-btn:hover{border-color:var(--ink);color:var(--text)}
+  .stk-unify-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .stk-select-bar{display:none;align-items:center;gap:12px;margin-left:auto;font-size:11px;color:var(--sub)}
+  .stk-select-bar.open{display:flex}
+  .stk-select-bar button{font-size:11px;font-weight:600;padding:6px 13px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;transition:all .12s;font-family:inherit}
+  .stk-select-bar button:hover:not(:disabled){border-color:var(--ink);color:var(--text)}
+  .stk-select-bar button:disabled{opacity:.45;cursor:not-allowed}
+  .stk-select-bar button.primary{background:var(--ink);color:var(--side-text);border-color:var(--ink)}
+  .stk-select-bar button.primary:disabled{background:var(--border2);border-color:var(--border2);color:var(--muted)}
+  .stk-select-check{width:15px;height:15px;flex-shrink:0;accent-color:var(--ink);cursor:pointer}
+  .stk-unify-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;cursor:pointer;flex-shrink:0}
+  .stk-unify-badge:hover{border-color:var(--ink);color:var(--text)}
+  .stk-select-warn{display:inline-block;font-size:9px;font-weight:700;color:var(--amber);background:rgba(155,122,42,.1);border:1px solid rgba(155,122,42,.35);border-radius:10px;padding:2px 7px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+  tr[data-title] .prod-name-wrap{cursor:default}
+
+  /* Modal pra nomear o grupo unificado */
+  .stk-name-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4100;display:none;backdrop-filter:blur(2px)}
+  .stk-name-modal-overlay.open{display:block}
+  .stk-name-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:380px;max-width:92vw;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4101;display:none;flex-direction:column;padding:20px}
+  .stk-name-modal.open{display:flex}
+  .stk-name-modal-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:3px}
+  .stk-name-modal-sub{font-size:11px;color:var(--sub);margin-bottom:14px}
+  .stk-name-modal input{font-size:13px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none;font-family:inherit;color:var(--text)}
+  .stk-name-modal input:focus{border-color:var(--ink)}
+  .stk-name-modal-err{font-size:10px;color:var(--red);min-height:14px;margin-top:5px}
+  .stk-name-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+  .stk-name-modal-actions button{font-size:12px;font-weight:600;padding:8px 16px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;font-family:inherit}
+  .stk-name-modal-actions .primary{background:var(--ink);color:var(--side-text);border-color:var(--ink)}
+
+  /* Modal "gerenciar grupo" — edita a ordem de cada produto real do grupo individualmente
+     (a soma exibida na linha unificada não é editável direto, senão qual membro receberia o valor?) */
+  .stk-group-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4100;display:none;backdrop-filter:blur(2px)}
+  .stk-group-modal-overlay.open{display:block}
+  .stk-group-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:640px;max-width:94vw;max-height:80vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4101;display:none;flex-direction:column;overflow:hidden}
+  .stk-group-modal.open{display:flex}
+  .stk-group-modal-head{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .stk-group-modal-title{font-size:14px;font-weight:700;color:var(--ink)}
+  .stk-group-modal-sub{font-size:11px;color:var(--sub);margin-top:2px}
+  .stk-group-modal-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px}
+  .stk-group-modal-close:hover{background:var(--surface2);color:var(--text)}
+  .stk-group-modal-body{overflow-y:auto;padding:6px 20px 14px}
+  .stk-group-member{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+  .stk-group-member:last-child{border-bottom:none}
+  .stk-group-member-name{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stk-group-member-stat{font-size:11px;color:var(--muted);flex-shrink:0;min-width:70px;text-align:right}
+  .stk-group-member-remove{flex-shrink:0;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px 6px;border-radius:4px}
+  .stk-group-member-remove:hover{background:var(--border2);color:var(--red)}
+  .stk-group-modal-foot{flex-shrink:0;padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
+  .stk-group-ungroup-btn{font-size:11px;font-weight:600;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:7px 14px;cursor:pointer;font-family:inherit}
+  .stk-group-ungroup-btn:hover{border-color:var(--red);color:var(--red)}
+
   @media(max-width:768px){
     .main{margin-left:0}
     .content{padding:16px}
@@ -266,6 +321,35 @@
   </div>
 </div>
 
+<!-- Modal pra nomear o grupo unificado (Unificar, card agregado "Estoque") -->
+<div class="stk-name-modal-overlay" id="stkNameModalOverlay"></div>
+<div class="stk-name-modal" id="stkNameModal">
+  <div class="stk-name-modal-title">Nome do produto unificado</div>
+  <div class="stk-name-modal-sub">Reusar um nome já existente adiciona os selecionados a esse grupo.</div>
+  <input type="text" id="stkNameInput" placeholder="Ex: Lysine" autocomplete="off">
+  <div class="stk-name-modal-err" id="stkNameError"></div>
+  <div class="stk-name-modal-actions">
+    <button id="stkNameCancelBtn">Cancelar</button>
+    <button class="primary" id="stkNameConfirmBtn">Unificar</button>
+  </div>
+</div>
+
+<!-- Modal "gerenciar grupo" — edita a Ordem Projetada/Nova/Andamento de cada produto real do grupo -->
+<div class="stk-group-modal-overlay" id="stkGroupModalOverlay"></div>
+<div class="stk-group-modal" id="stkGroupModal">
+  <div class="stk-group-modal-head">
+    <div>
+      <div class="stk-group-modal-title" id="stkGroupModalTitle"></div>
+      <div class="stk-group-modal-sub">A soma aparece na linha unificada; edite a ordem de cada produto aqui.</div>
+    </div>
+    <button class="stk-group-modal-close" id="stkGroupModalClose">✕</button>
+  </div>
+  <div class="stk-group-modal-body" id="stkGroupModalBody"></div>
+  <div class="stk-group-modal-foot">
+    <button class="stk-group-ungroup-btn" id="stkGroupUngroupBtn">Desfazer unificação</button>
+  </div>
+</div>
+
 <script>
 const fmtInt = v => Math.round(v || 0).toLocaleString('pt-BR');
 const fmtDec = (v, d = 1) => v == null ? '—' : v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -293,6 +377,130 @@ function contrastText(hex) {
 let market = localStorage.getItem('coco_market') || 'br';
 let current = null;
 let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
+
+// ── "Unificar" — agrupamento manual de produtos entre famílias (mesma função de segmentos.html,
+// aplicada ao card agregado "Estoque"). Sem matching automático: só o que o usuário selecionar pela
+// tela. Grupos são por mercado, endpoint genérico /api/product-groups (mesmo backend de Segmentos).
+let stkUnifyOn = localStorage.getItem('coco_estoque_unify') === '1';
+let stkSelectMode = false;
+let stkSelected = new Set();
+let stkGroups = {};        // { [nomeDoGrupo]: [tituloBruto,...] } — grupos do mercado atual
+let stkGroupModalName = null; // nome do grupo aberto no modal "gerenciar grupo"
+
+async function loadProductGroups() {
+  try {
+    const r = await fetch('/api/product-groups?market=' + market, { credentials: 'same-origin' });
+    const d = await r.json();
+    stkGroups = d.groups || {};
+  } catch (e) { stkGroups = {}; }
+}
+
+function findGroupForTitle(title) {
+  for (const [name, members] of Object.entries(stkGroups)) {
+    if (members.includes(title)) return name;
+  }
+  return null;
+}
+
+function stockSuggestionClient(months) {
+  if (months == null) return null;
+  if (months < 3) return 'urgente';
+  if (months < 7) return 'atencao';
+  return 'aguardar';
+}
+
+// Junta os grupos definidos em `groups` dentro da lista `list` (agg.products) — soma os campos
+// numéricos e une a lista de membros. Ordem Projetada/Nova/Andamento também somam (exibição), mas
+// não ficam editáveis na linha unida: cada uma pertence a um produto real diferente, então editar
+// ali seria ambíguo — a edição continua por produto, dentro do modal "gerenciar grupo".
+function mergeStockGroups(list, groups) {
+  if (!groups || !Object.keys(groups).length) return list;
+  const byTitle = {};
+  list.forEach(p => { byTitle[p.title] = p; });
+  const usedTitles = new Set();
+  const mergedRows = [];
+  for (const [name, members] of Object.entries(groups)) {
+    const found = members.map(t => byTitle[t]).filter(Boolean);
+    if (!found.length) continue;
+    found.forEach(p => usedTitles.add(p.title));
+    let image = null, type = null;
+    const comboBySize = {};
+    const sums = { avulsoQty: 0, comboQty: 0, salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0 };
+    found.forEach(p => {
+      sums.avulsoQty += p.avulsoQty || 0;
+      sums.comboQty += p.comboQty || 0;
+      sums.salesDaily += p.salesDaily || 0;
+      sums.salesMonth += p.salesMonth || 0;
+      sums.stock += p.stock || 0;
+      sums.incoming += p.incoming || 0;
+      sums.orderInProgress += p.orderInProgress || 0;
+      sums.orderNew += p.orderNew || 0;
+      sums.projected += p.projected || 0;
+      for (const [size, n] of Object.entries(p.comboBySize || {})) comboBySize[size] = (comboBySize[size] || 0) + n;
+      if (!image && p.image) image = p.image;
+      if (!type && p.type) type = p.type;
+    });
+    const monthsOfStock = sums.salesMonth > 0 ? (sums.stock + sums.incoming) / sums.salesMonth : null;
+    const totalMonthsOfStock = sums.salesMonth > 0 ? (sums.stock + sums.projected + sums.orderNew + sums.orderInProgress) / sums.salesMonth : null;
+    mergedRows.push({
+      title: name, type, image, comboBySize, ...sums,
+      monthsOfStock, totalMonthsOfStock, suggestion: stockSuggestionClient(totalMonthsOfStock),
+      _grouped: true, _members: found.map(p => p.title),
+    });
+  }
+  const passthrough = list.filter(p => !usedTitles.has(p.title));
+  return [...mergedRows, ...passthrough].sort((a, b) => b.salesMonth - a.salesMonth);
+}
+
+function suggestGroupName(titles) {
+  return titles.reduce((shortest, t) => (t.length < shortest.length ? t : shortest), titles[0]);
+}
+function openStkNameModal(titles) {
+  const input = document.getElementById('stkNameInput');
+  input.value = suggestGroupName(titles);
+  document.getElementById('stkNameError').textContent = '';
+  document.getElementById('stkNameModal').dataset.titles = JSON.stringify(titles);
+  document.getElementById('stkNameModalOverlay').classList.add('open');
+  document.getElementById('stkNameModal').classList.add('open');
+  input.focus(); input.select();
+}
+function closeStkNameModal() {
+  document.getElementById('stkNameModalOverlay').classList.remove('open');
+  document.getElementById('stkNameModal').classList.remove('open');
+}
+
+function openStkGroupModal(name) {
+  stkGroupModalName = name;
+  renderStkGroupModal();
+  document.getElementById('stkGroupModalOverlay').classList.add('open');
+  document.getElementById('stkGroupModal').classList.add('open');
+}
+function closeStkGroupModal() {
+  stkGroupModalName = null;
+  document.getElementById('stkGroupModalOverlay').classList.remove('open');
+  document.getElementById('stkGroupModal').classList.remove('open');
+}
+function renderStkGroupModal() {
+  const name = stkGroupModalName;
+  if (!name) return;
+  const members = stkGroups[name] || [];
+  document.getElementById('stkGroupModalTitle').textContent = name;
+  const raw = current?.agg?.products || [];
+  const byTitle = {}; raw.forEach(p => { byTitle[p.title] = p; });
+  document.getElementById('stkGroupModalBody').innerHTML = members.map(title => {
+    const p = byTitle[title];
+    if (!p) return `<div class="stk-group-member"><span class="stk-group-member-name" title="${escapeHtml(title)}">${escapeHtml(title)}</span><span class="stk-group-member-stat">sem dados no período</span></div>`;
+    return `<div class="stk-group-member">
+      <span class="stk-group-member-name" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+      <span class="stk-group-member-stat">${fmtInt(p.salesMonth)} un/mês</span>
+      <input class="prod-input" type="number" step="1" placeholder="0" value="${p.projected ?? ''}" data-title="${escAttr(title)}" data-field="projected" title="Ordem Projetada">
+      <input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" data-title="${escAttr(title)}" data-field="orderNew" title="Ordem Nova">
+      <input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" data-title="${escAttr(title)}" data-field="orderInProgress" title="Ordem em Andamento">
+      <button class="stk-group-member-remove" data-remove-member="${escAttr(title)}" title="Tirar do grupo"><i class="bi bi-x-lg"></i></button>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('#stkGroupModalBody .prod-input').forEach(inp => inp.addEventListener('change', onStockAggEdit));
+}
 let refreshTimer = null;
 function applyRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -493,6 +701,9 @@ function setMarket(m) {
   document.getElementById('mktBtnUs').classList.toggle('active', m === 'us');
   document.body.classList.toggle('market-us', m === 'us');
   applyDefaultCollapse(getOrderedChannels(m));
+  stkSelectMode = false;
+  stkSelected.clear();
+  closeStkGroupModal();
   load();
 }
 
@@ -656,12 +867,32 @@ function aggRowHTML(p) {
     : `<div class="prod-thumb-ph"><i class="bi bi-image"></i></div>`;
   const typeTag = p.type ? `<span class="prod-type-tag">${p.type}</span>` : '';
   const dataAttrs = `data-title="${escAttr(p.title)}"`;
-  return `<tr>
+  const checkbox = stkSelectMode
+    ? `<input type="checkbox" class="stk-select-check" ${stkSelected.has(p.title) ? 'checked' : ''}>`
+    : '';
+  const badge = (!stkSelectMode && p._grouped)
+    ? `<span class="stk-unify-badge" data-group="${escAttr(p.title)}" title="${escapeHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>`
+    : '';
+  const existingGroup = stkSelectMode ? findGroupForTitle(p.title) : null;
+  const warn = existingGroup
+    ? `<span class="stk-select-warn" title="Já faz parte do grupo &quot;${escapeHtml(existingGroup)}&quot;">⚠ faz parte de "${escapeHtml(existingGroup)}"</span>`
+    : '';
+  // Linha unificada: os 3 campos de ordem são a soma de produtos reais diferentes — editar ali
+  // seria ambíguo (qual membro receberia o valor?). Edição continua por produto, ver badge acima.
+  const orderCells = p._grouped
+    ? `<td class="prod-num prod-muted">${fmtInt(p.projected)}</td>
+    <td class="prod-num prod-muted">${fmtInt(p.orderNew)}</td>
+    <td class="prod-num prod-muted">${fmtInt(p.orderInProgress)}</td>`
+    : `<td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.projected ?? ''}" ${dataAttrs} data-field="projected" title="Simulação: quantidade cogitada para um novo pedido ao laboratório, só pra ver o efeito no Tempo de Estoque Total. Não é um pedido real ainda."></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" ${dataAttrs} data-field="orderNew" title="Unidades de um novo pedido a ser feito ao laboratório."></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" ${dataAttrs} data-field="orderInProgress" title="Unidades já pedidas ao laboratório, produção em andamento."></td>`;
+  return `<tr data-title="${escAttr(p.title)}">
     <td>
       <div class="prod-name-wrap">
+        ${checkbox}
         ${thumb}
         <div class="prod-name-col">
-          <div class="prod-name-line"><span class="prod-name" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</span>${typeTag}</div>
+          <div class="prod-name-line"><span class="prod-name" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</span>${typeTag}${badge}${warn}</div>
           ${combo ? `<div class="prod-combo">${combo}</div>` : ''}
         </div>
       </div>
@@ -671,23 +902,22 @@ function aggRowHTML(p) {
     <td class="prod-num prod-muted">${fmtInt(p.stock)}</td>
     <td class="prod-num prod-muted">${fmtInt(p.incoming)}</td>
     <td class="prod-num ${monthsCellClass(p.monthsOfStock)}">${fmtDec(p.monthsOfStock, 1)}</td>
-    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.projected ?? ''}" ${dataAttrs} data-field="projected" title="Simulação: quantidade cogitada para um novo pedido ao laboratório, só pra ver o efeito no Tempo de Estoque Total. Não é um pedido real ainda."></td>
-    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" ${dataAttrs} data-field="orderNew" title="Unidades de um novo pedido a ser feito ao laboratório."></td>
-    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" ${dataAttrs} data-field="orderInProgress" title="Unidades já pedidas ao laboratório, produção em andamento."></td>
+    ${orderCells}
     <td class="prod-num ${monthsCellClass(p.totalMonthsOfStock)}">${fmtDec(p.totalMonthsOfStock, 1)}</td>
     <td class="prod-num">${suggestionHTML(p.suggestion)}</td>
   </tr>`;
 }
 
 function aggCardHTML() {
-  const data = current?.agg;
-  const products = data?.products || [];
+  const raw = current?.agg?.products || [];
+  // Modo Selecionar sempre mostra a lista crua (senão não dá pra escolher membros já unificados).
+  const products = (stkUnifyOn && !stkSelectMode) ? mergeStockGroups(raw, stkGroups) : raw;
   const rows = products.length
     ? products.map(aggRowHTML).join('')
     : '<tr><td colspan="11" class="prod-empty">Sem dados no período</td></tr>';
   const collapsed = aggCollapsed ? ' collapsed' : '';
-  const t = data?.totals || { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0, monthsOfStock: null, totalMonthsOfStock: null, suggestion: null };
-  const footRow = products.length ? `<tfoot><tr class="prod-total-row">
+  const t = current?.agg?.totals || { salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0, monthsOfStock: null, totalMonthsOfStock: null, suggestion: null };
+  const footRow = raw.length ? `<tfoot><tr class="prod-total-row">
     <td>Total</td>
     <td class="prod-num">${fmtDec(t.salesDaily, 1)}</td>
     <td class="prod-num">${fmtInt(t.salesMonth)}</td>
@@ -700,13 +930,23 @@ function aggCardHTML() {
     <td class="prod-num ${monthsCellClass(t.totalMonthsOfStock)}">${fmtDec(t.totalMonthsOfStock, 1)}</td>
     <td class="prod-num">${suggestionHTML(t.suggestion)}</td>
   </tr></tfoot>` : '';
+  const toolbar = raw.length ? `
+      <div class="stk-toolbar">
+        <button class="stk-unify-btn${stkUnifyOn ? ' active' : ''}" id="stkUnifyBtn" title="Mostra produtos unificados manualmente como uma linha só"><i class="bi bi-link-45deg"></i> Unificar</button>
+        <button class="stk-unify-btn${stkSelectMode ? ' active' : ''}" id="stkSelectBtn" title="Selecionar produtos pra unificar"><i class="bi bi-check2-square"></i> Selecionar</button>
+        <div class="stk-select-bar${stkSelectMode ? ' open' : ''}" id="stkSelectBar">
+          <span id="stkSelectCount">${stkSelected.size} selecionado${stkSelected.size === 1 ? '' : 's'}</span>
+          <button class="primary" id="stkSelectConfirmBtn" ${stkSelected.size < 2 ? 'disabled' : ''}>Unificar selecionados</button>
+          <button id="stkSelectCancelBtn">Cancelar</button>
+        </div>
+      </div>` : '';
   return `
     <div class="prod-card${collapsed}" id="agg-card">
       <div class="prod-card-head">
         <div class="camp-logo" style="background:var(--ink);color:var(--side-text)"><i class="bi bi-boxes"></i></div>
         <div>
           <div class="camp-ch-name">Estoque</div>
-          <div class="camp-ch-type">${products.length} produto${products.length === 1 ? '' : 's'} · todos os canais</div>
+          <div class="camp-ch-type">${raw.length} produto${raw.length === 1 ? '' : 's'} · todos os canais</div>
         </div>
         <div class="prod-head-stats">
           <div>
@@ -720,6 +960,7 @@ function aggCardHTML() {
         </div>
         <button class="prod-collapse-btn" onclick="toggleAggCollapse()" title="Minimizar/expandir"><i class="bi bi-chevron-down"></i></button>
       </div>
+      ${toolbar}
       <div class="prod-table-wrap">
         <table class="prod-table">
           <thead><tr>
@@ -754,10 +995,50 @@ async function onStockAggEdit(e) {
       body: JSON.stringify({ market, title, [field]: value }),
     });
     await load();
+    if (stkGroupModalName) renderStkGroupModal();
   } catch (err) {
     console.warn('Estoque: falha ao salvar dado agregado', err);
     inp.disabled = false;
   }
+}
+
+function attachAggUnifyHandlers() {
+  document.getElementById('stkUnifyBtn')?.addEventListener('click', () => {
+    stkUnifyOn = !stkUnifyOn;
+    localStorage.setItem('coco_estoque_unify', stkUnifyOn ? '1' : '0');
+    renderAggCard();
+  });
+  document.getElementById('stkSelectBtn')?.addEventListener('click', () => {
+    stkSelectMode = !stkSelectMode;
+    stkSelected.clear();
+    renderAggCard();
+  });
+  document.getElementById('stkSelectCancelBtn')?.addEventListener('click', () => {
+    stkSelectMode = false;
+    stkSelected.clear();
+    renderAggCard();
+  });
+  document.getElementById('stkSelectConfirmBtn')?.addEventListener('click', () => {
+    if (stkSelected.size < 2) return;
+    openStkNameModal([...stkSelected]);
+  });
+  document.querySelector('#agg-card tbody')?.addEventListener('click', e => {
+    const badge = e.target.closest('.stk-unify-badge');
+    if (badge) { e.stopPropagation(); openStkGroupModal(badge.dataset.group); return; }
+    if (!stkSelectMode) return;
+    if (e.target.closest('input')) return;
+    const tr = e.target.closest('tr[data-title]');
+    if (!tr) return;
+    const title = tr.dataset.title;
+    if (stkSelected.has(title)) stkSelected.delete(title); else stkSelected.add(title);
+    renderAggCard();
+  });
+}
+
+function renderAggCard() {
+  document.getElementById('aggCardWrap').innerHTML = aggCardHTML();
+  document.querySelectorAll('#aggCardWrap .prod-input').forEach(inp => inp.addEventListener('change', onStockAggEdit));
+  attachAggUnifyHandlers();
 }
 
 function render() {
@@ -766,8 +1047,7 @@ function render() {
   setText('lastUpdate', 'sync: ' + updated);
   setText('pageSub', `Coco and Luna · vendas reais dos últimos ${d.windowDays || 30} dias (${rangeLabelShort(d.since, d.until)})`);
   setText('footerDate', `Coco and Luna · últimos ${d.windowDays || 30} dias · última sincronização: ${updated}`);
-  document.getElementById('aggCardWrap').innerHTML = aggCardHTML();
-  document.querySelectorAll('#aggCardWrap .prod-input').forEach(inp => inp.addEventListener('change', onStockAggEdit));
+  renderAggCard();
   const channels = getOrderedChannels(market);
   document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
   document.querySelectorAll('#prodGrid .prod-input').forEach(inp => inp.addEventListener('change', onStockEdit));
@@ -777,11 +1057,67 @@ function render() {
 // ── Carregamento ──────────────────────────────────────────
 async function load() {
   try {
-    const r = await fetch(`/api/stock?market=${market}`);
+    const [r] = await Promise.all([fetch(`/api/stock?market=${market}`), loadProductGroups()]);
     current = await r.json();
   } catch (e) { console.warn('Estoque: falha ao carregar', e); return; }
   render();
 }
+
+// ── "Unificar" — modais (elementos estáticos, ligados uma vez só) ─
+document.getElementById('stkNameModalOverlay').addEventListener('click', closeStkNameModal);
+document.getElementById('stkNameCancelBtn').addEventListener('click', closeStkNameModal);
+document.getElementById('stkNameConfirmBtn').addEventListener('click', async () => {
+  const name = document.getElementById('stkNameInput').value.trim();
+  const errEl = document.getElementById('stkNameError');
+  if (!name) { errEl.textContent = 'Digite um nome.'; return; }
+  const titles = JSON.parse(document.getElementById('stkNameModal').dataset.titles || '[]');
+  try {
+    const r = await fetch('/api/product-groups', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ market, name, members: titles }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    stkGroups = d.groups || {};
+    closeStkNameModal();
+    stkSelectMode = false;
+    stkSelected.clear();
+    stkUnifyOn = true;
+    localStorage.setItem('coco_estoque_unify', '1');
+    renderAggCard();
+  } catch (e) {
+    errEl.textContent = 'Erro ao salvar. Tente de novo.';
+  }
+});
+document.getElementById('stkGroupModalOverlay').addEventListener('click', closeStkGroupModal);
+document.getElementById('stkGroupModalClose').addEventListener('click', closeStkGroupModal);
+document.getElementById('stkGroupModalBody').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-remove-member]');
+  if (!btn) return;
+  const title = btn.dataset.removeMember;
+  const name = stkGroupModalName;
+  try {
+    const r = await fetch('/api/product-groups/remove-member', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ market, name, title }),
+    });
+    const d = await r.json();
+    stkGroups = d.groups || {};
+    renderStkGroupModal();
+    renderAggCard();
+  } catch (err) { console.warn('Estoque: falha ao remover do grupo', err); }
+});
+document.getElementById('stkGroupUngroupBtn').addEventListener('click', async () => {
+  const name = stkGroupModalName;
+  if (!name) return;
+  try {
+    const r = await fetch(`/api/product-groups?market=${encodeURIComponent(market)}&name=${encodeURIComponent(name)}`, { method: 'DELETE', credentials: 'same-origin' });
+    const d = await r.json();
+    stkGroups = d.groups || {};
+    closeStkGroupModal();
+    renderAggCard();
+  } catch (err) { console.warn('Estoque: falha ao desfazer unificação', err); }
+});
 
 // ── Sincronizar agora ───────────────────────────────────────
 document.getElementById('syncBtn').addEventListener('click', async () => {

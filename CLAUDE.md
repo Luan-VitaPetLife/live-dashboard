@@ -929,6 +929,24 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   agregado (por família) passou a reaproveitar essa mesma lista já mesclada em vez de reagregar só a janela de
   30 dias, então ganha a correção também. Testado localmente: produto com pedido só há 6+ meses e `stock`/
   `incoming` cadastrados manualmente aparece na tabela com vendas zeradas e o estoque intacto (antes, sumia).
+- **"Unificar" no card agregado "Estoque" (implementado 30/07/2026):** mesma função de agrupamento manual
+  já usada em Segmentos (ver 4.7.6, "Unificar"), adicionada ao card "Estoque" — reaproveita o endpoint
+  genérico `/api/product-groups` (já market-agnóstico, sem mudança de backend). Útil pra juntar famílias
+  que `classifyFamily()` não reconhece como o mesmo produto (ex: um item que não bate com "lisina"/"daily"
+  e acaba com o próprio título como família própria, fragmentado do resto). Botões "Unificar" (mostra os
+  grupos já criados como uma linha só) e "Selecionar" (força a visão crua, com checkbox por linha; 2+
+  selecionados abre um modal pra nomear o grupo) no topo da tabela — mesmo padrão visual/CSS de Segmentos,
+  prefixo de classe `stk-` em vez de `geo-`. Linha unificada soma Vendas/dia, Vendas/mês, Estoque, Recebendo,
+  Meses de Estoque, Ordem Projetada/Nova/Andamento e Tempo de Estoque Total (mesmas fórmulas client-side de
+  `computeStock()`, replicadas em `mergeStockGroups()`); um badge (🔗 N) ao lado do nome abre o modal
+  "gerenciar grupo". **Diferença deliberada de Segmentos:** lá a linha unida é só leitura; aqui as 3 colunas
+  de ordem (Projetada/Nova/Andamento) SÃO editáveis no card, mas não editáveis direto na linha unida — cada
+  uma pertence a um produto real diferente, editar ali seria ambíguo (qual membro receberia o valor?). A
+  linha unida mostra a soma em texto (cinza, como Estoque/Recebendo já eram) e o badge abre um modal com um
+  campo editável por produto membro (reaproveita `onStockAggEdit`/`POST /api/stock/agg-finance` por título
+  real), mais "✕" pra tirar um membro e "Desfazer unificação" pra apagar o grupo inteiro. `mergeStockGroups()`
+  nunca toca nos totais do rodapé da tabela (`current.agg.totals`, sempre a soma real por família vinda do
+  servidor) — a unificação é só uma visão de agrupamento no cliente, igual em Segmentos.
 - Fora de escopo por ora (não pedido, evitar scope creep): canais que só existem no Monday e não no
   nosso sistema (Chewy, Walmart, Website separado, Wholesale) e qualquer chamada à API do Monday.
 
