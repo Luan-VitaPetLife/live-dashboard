@@ -512,18 +512,20 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 // varremos TODOS os pedidos do mercado (todos os canais, sem janela de data). Escopo por mercado
 // para não misturar BRL/USD. Devolve o mesmo formato normalizado do `recentOrders`.
 const CH_LABEL = { shopify: 'Shopify', shopify_us: 'Shopify US', shopee: 'Shopee', mercadolivre: 'Mercado Livre', amazon: 'Amazon BR', amazon_us: 'Amazon US' };
+// Mesmo vocabulário Bling (Autorizado/Em aberto/Cancelado) do statusTag() em index.html — mantido
+// em sincronia pra buscar "em aberto" ou "autorizado" no campo de busca encontrar os pedidos certos.
 function statusLabelPt(o) {
   if (o.cancelled) {
-    // "Não pago" (Pending/PendingAvailability etc, ver UNPAID_STATUS_BY_CHANNEL em store.js)
+    // "Em aberto" (Pending/PendingAvailability etc, ver UNPAID_STATUS_BY_CHANNEL em store.js)
     // não é cancelamento de verdade pela Amazon/canal — só ainda não conta como venda. Rótulo
     // diferente pra não alarmar à toa (mesma distinção do statusTag() no front). Ver 4.7.10.
     const unpaid = UNPAID_STATUS_BY_CHANNEL[o.channel];
-    if (unpaid && unpaid.includes(o.status)) return 'Não pago';
+    if (unpaid && unpaid.includes(o.status)) return 'Em aberto';
     return 'Cancelado';
   }
   const s = (o.status || '').toUpperCase();
-  if (['PAID', 'COMPLETED', 'SHIPPED', 'TO_CONFIRM_RECEIVE', 'READY_TO_SHIP'].includes(s)) return 'OK';
-  return 'Pendente';
+  if (['PAID', 'COMPLETED', 'SHIPPED', 'TO_CONFIRM_RECEIVE', 'READY_TO_SHIP'].includes(s)) return 'Autorizado';
+  return 'Em aberto';
 }
 export function searchOrders({ market = 'br', q = '', limit = 200 } = {}) {
   const terms = String(q).trim().toLowerCase().split(/\s+/).filter(Boolean);

@@ -1069,15 +1069,19 @@ const UNPAID_STATUS_BY_CHANNEL = {
   shopify_us:    ['PENDING', 'AUTHORIZED'],
   mercadolivre:  ['confirmed', 'payment_required', 'payment_in_process'],
 };
+// Vocabulário de status inspirado no Bling (Autorizada/Em aberto/Cancelada) — em vez do genérico
+// "OK", os pedidos válidos aparecem como "Autorizado" e qualquer coisa ainda não concluída (inclusive
+// o caso "Não pago" da Amazon, ver UNPAID_STATUS_BY_CHANNEL) cai em "Em aberto". Rótulo, não muda
+// nada do cálculo de receita/cancelamento — `o.cancelled` continua a mesma fonte de verdade de sempre.
 function statusTag(o) {
   if (o.cancelled) {
     const unpaid = UNPAID_STATUS_BY_CHANNEL[o.channel];
-    if (unpaid && unpaid.includes(o.status)) return { cls:'pend', label:'Não pago' };
+    if (unpaid && unpaid.includes(o.status)) return { cls:'pend', label:'Em aberto' };
     return { cls:'canc', label:'Cancelado' };
   }
   const s = (o.status||'').toUpperCase();
-  if (['PAID','COMPLETED','SHIPPED','TO_CONFIRM_RECEIVE','READY_TO_SHIP'].includes(s)) return { cls:'ok', label:'OK' };
-  return { cls:'pend', label:'Pendente' };
+  if (['PAID','COMPLETED','SHIPPED','TO_CONFIRM_RECEIVE','READY_TO_SHIP'].includes(s)) return { cls:'ok', label:'Autorizado' };
+  return { cls:'pend', label:'Em aberto' };
 }
 
 // Cards sem regra de visibilidade por canal (sempre visíveis, exceto se removidos no modo de edição)
