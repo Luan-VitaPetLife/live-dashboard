@@ -18,6 +18,10 @@ const REDIRECT      = process.env.ML_REDIRECT_URL;
 const API_BASE      = 'https://api.mercadolibre.com';
 const AUTH_URL      = 'https://auth.mercadolivre.com.br/authorization';
 
+// Tipos de listagem com exposição paga de verdade ("Destaque"/"Diamante") — 'gold_special'
+// (Clássico) e 'free' (Clássico legado) ficam de fora de propósito, ver comentário em fetchOrders.
+const PREMIUM_LISTING_TYPES = new Set(['gold_pro', 'gold_premium']);
+
 function now() { return Math.floor(Date.now() / 1000); }
 
 export function isConfigured() {
@@ -199,7 +203,14 @@ export async function fetchOrders(sinceISO, untilISO) {
     out.forEach(o => {
       const firstItemId = o.items[0]?._itemId || null;
       const ltid = firstItemId ? typeMap[firstItemId] : null;
-      o.listingType = ltid ? (ltid === 'free' ? 'organic' : 'premium') : null;
+      // 'gold_special' é o "Clássico" atual (tier padrão pago só de comissão normal, sem
+      // destaque) — NÃO é "Destaque" apesar do nome "gold". Só 'gold_pro' (Premium) e
+      // 'gold_premium' (Diamante) são exposição paga de verdade. 'free' é o Clássico legado
+      // (raro hoje). Confirmado contra a doc oficial do Mercado Livre (Tipos de publicação) —
+      // ver 4.6 do CLAUDE.md. Antes, qualquer coisa != 'free' virava 'premium', então como
+      // 'gold_special' é o tipo padrão de quase todo anúncio hoje, praticamente 100% dos
+      // pedidos do Mercado Livre apareciam como "Campanha" mesmo sem Destaque nenhum.
+      o.listingType = ltid ? (PREMIUM_LISTING_TYPES.has(ltid) ? 'premium' : 'organic') : null;
       o.items.forEach(it => { it.image = thumbMap[it._itemId] || null; delete it._itemId; });
     });
   } else {

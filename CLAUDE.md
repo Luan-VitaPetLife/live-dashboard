@@ -153,8 +153,7 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
 - Cancelados ML: status `cancelled` ou `invalid`. Sem tokens → retorna `[]`, canal fica 0, nada quebra.
 - Estado do pedido: buscado via `/shipments/{id}` → `receiver_address.state.id` (formato "BR-SP" → "SP").
 - **Breakdown de listagem:** cada pedido tem campo `listingType: 'organic' | 'premium' | null`.
-  - `free` → `'organic'` (Clássico — listagem grátis).
-  - `bronze/silver/gold_*` → `'premium'` (Destaque — listagem paga).
+  - `PREMIUM_LISTING_TYPES = {'gold_pro', 'gold_premium'}` → `'premium'` (Destaque/Diamante — exposição paga de verdade). Qualquer outro `listing_type_id` (incluindo `gold_special` e `free`) → `'organic'`.
   - **Bug corrigido (07/07/2026):** o código lia `listing_type_id` de dentro de `order_items[].item`
     na resposta de `/orders/search` — mas esse campo **não existe** nessa resposta (confirmado
     contra a doc oficial e exemplos reais de JSON da API; `order_items[].item` só tem `id, title,
@@ -166,6 +165,24 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
     já existia pra buscar a thumbnail (ver 4.13) — sem custo extra de requisição. `fetchOrders()`
     monta `typeMap` junto com `thumbMap` nesse lote e só resolve `o.listingType` depois, usando o
     `_itemId` do primeiro item do pedido.
+  - **⚠️ Bug corrigido (30/07/2026) — quase todo pedido ML aparecia como "100% Campanha":** a regra
+    original era `ltid === 'free' ? 'organic' : 'premium'` — ou seja, tudo que não fosse literalmente
+    `'free'` virava `'premium'`. Só que `'free'` é um tipo de listagem **legado**, raro hoje; o tipo
+    padrão de praticamente todo anúncio no Brasil desde a mudança de política da própria plataforma é
+    `gold_special`, que a Central de Devs do Mercado Livre chama de **"Clássico"** — o equivalente
+    moderno do antigo grátis, com comissão normal e **sem** exposição paga nenhuma (confirmado contra
+    a doc oficial, "Tipos de publicação"). Só `gold_pro` ("Premium") e `gold_premium` ("Diamante") são
+    exposição paga de verdade — o que a tela chama de "Destaque". Como `gold_special` caía em
+    `'premium'` pela regra antiga, o card "Orgânico x Campanha" mostrava Mercado Livre como 100%
+    Campanha mesmo sem nenhum anúncio de Destaque ativo (reportado pelo Luan, print do card mostrando
+    Mercado Livre 100% Campanha vs. Shopee/Amazon 100% Orgânico e Shopify 56/44 via Meta). **Corrigido:**
+    a checagem agora é uma allowlist positiva (`PREMIUM_LISTING_TYPES`) em vez de negativa — só
+    `gold_pro`/`gold_premium` marcam `'premium'`; `gold_special`, `free` e qualquer tipo legado
+    desconhecido (`bronze`/`silver`/`gold` simples) caem em `'organic'` por padrão, coerente com o
+    princípio geral do app de nunca inflar atribuição por engano. Afeta `mlBreakdown` (Clássico vs
+    Destaque no dashboard principal), `salesSplitByChannel` (card "Orgânico x Campanha") e "Vendas
+    Atribuídas Geral" em Campanhas — os três liam o mesmo `o.listingType`, então a correção é única na
+    fonte (`mercadolivre.js`), sem mudança em `metrics.js`.
 - **ML Product Ads — fluxo correto (Mercado Ads API, exige header `Api-Version: 1`):**
   1. Resolver advertiser: `GET /advertising/advertisers?product_id=PADS` → `advertiser_id` + `site_id` (helper `getPadsAdvertiser()`).
   2. Métricas agregadas: `GET /marketplace/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search`
