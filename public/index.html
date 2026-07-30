@@ -147,6 +147,18 @@
   .ss-leg-item{display:flex;align-items:center;gap:5px;justify-content:center}
   .ss-leg-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
   .ss-cell-total{font-size:11px;font-weight:500;color:var(--muted);margin-top:4px}
+  /* Um canal só selecionado = 1 célula: em vez de deixar essa pizza pequena flutuando perdida
+     num card de largura inteira, ela cresce e ganha uma faixa de KPIs ao lado (mais informação
+     útil no mesmo espaço, não só decoração) — ver pente-fino de 30/07/2026. */
+  .ss-grid.single{grid-template-columns:none;display:flex;align-items:center;justify-content:center;gap:40px;padding:8px 0}
+  .ss-grid.single .ss-cell-title{display:none}
+  .ss-grid.single .ss-pie-wrap{width:150px;height:150px}
+  .ss-grid.single .ss-cell-legend{margin-top:12px;font-size:12px;gap:5px}
+  .ss-grid.single .ss-cell-total{font-size:15px;font-weight:700;color:var(--ink);margin-top:6px}
+  .ss-single-kpis{display:flex;flex-direction:column;gap:14px}
+  .ss-single-kpi{min-width:120px}
+  .ss-single-kpi-lbl{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  .ss-single-kpi-val{font-size:20px;font-weight:700;color:var(--ink);margin-top:2px}
   .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
   .metric-cell{padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)}
   .mc-type{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
@@ -820,7 +832,12 @@ function render(d) {
   const t = d.trend, money = t.fmt === 'money';
   const line1 = cssVar('--line1'), line2 = cssVar('--line2'), surface = cssVar('--surface');
   const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:line1, borderWidth:1.5, tension:.4, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:surface, pointBorderColor:line1, pointBorderWidth:1.5, fill:false }];
-  if (d.metric === 'receita') ds.push({ label:'Custo ads', data:t.metaSpendDaily || t.data.map(()=>0), borderColor:line2, borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
+  // "Custo ads" é gasto do Meta Ads (Instagram/Facebook) — só atribuído a Shopify (ver 4.4/isCampaignOrder).
+  // Mostrar essa linha com Shopee/Mercado Livre/Amazon selecionado sugeria (errado) que o canal tinha
+  // custo de ads próprio, quando na verdade é o gasto do Meta da conta inteira aparecendo por engano.
+  // Mesma regra já usada pelo card "Marketing por origem" (cardMarketing: isTodos || isShopify).
+  const showAdsLine = d.metric === 'receita' && (d.channel === 'todos' || d.channel === 'shopify' || d.channel === 'shopify_us');
+  if (showAdsLine) ds.push({ label:'Custo ads', data:t.metaSpendDaily || t.data.map(()=>0), borderColor:line2, borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
   setChart('trendChart', { type:'line', data:{ labels:t.labels, datasets:ds }, options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{ label:c=>' '+c.dataset.label+': '+(money?fmtMoney(c.parsed.y,2):fmtInt(c.parsed.y)) }} }, scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ grid:{color:'rgba(30,28,24,0.06)'}, ticks:{callback:v=>money?fmtMoneyShort(v):fmtInt(v)} } } } });
   // Click → drilldown de canais
   document.getElementById('trendDrilldown').style.display = 'none';
@@ -835,7 +852,7 @@ function render(d) {
   document.getElementById('trendTitle').textContent = 'Tendência · ' + METRIC_LABEL[d.metric];
   document.getElementById('trendSub').textContent = (d.period.grain==='hour'?'Por hora · ':'Por dia · ') + label.toLowerCase();
   document.getElementById('trendVal').textContent = (money?fmtMoney(t.total):fmtInt(t.total)) + ' ' + METRIC_LABEL[d.metric].toUpperCase();
-  renderLegend('trendLegend', d.metric === 'receita'
+  renderLegend('trendLegend', showAdsLine
     ? [{ label:'Receita', color:'var(--line1)' }, { label:'Custo ads', color:'var(--line2)' }]
     : [{ label: METRIC_LABEL[d.metric], color:'var(--line1)' }]);
 
@@ -870,13 +887,24 @@ function render(d) {
     ? (d.market === 'us' ? ['shopify_us', 'amazon_us'] : ['shopify', 'shopee', 'mercadolivre', 'amazon'])
     : [d.channel];
   document.getElementById('ssSub').textContent = ssIsAll ? 'Por canal' : `Canal: ${CHAN[d.channel] || d.channel}`;
-  document.getElementById('ssGrid').innerHTML = ssChannels.map(ch => `
+  const ssGridEl = document.getElementById('ssGrid');
+  ssGridEl.classList.toggle('single', !ssIsAll);
+  // Canal único: a pizza cresce (ver CSS .ss-grid.single) e ganha ao lado os pedidos de campanha
+  // x orgânicos — dado real que já vem em salesSplitByChannel, não só espaço decorativo vazio.
+  const singleKpisHtml = !ssIsAll ? (() => {
+    const s = ssc[ssChannels[0]] || { campaignOrders: 0, organicOrders: 0 };
+    return `<div class="ss-single-kpis">
+      <div class="ss-single-kpi"><div class="ss-single-kpi-lbl">Pedidos de campanha</div><div class="ss-single-kpi-val">${fmtInt(s.campaignOrders||0)}</div></div>
+      <div class="ss-single-kpi"><div class="ss-single-kpi-lbl">Pedidos orgânicos</div><div class="ss-single-kpi-val">${fmtInt(s.organicOrders||0)}</div></div>
+    </div>`;
+  })() : '';
+  ssGridEl.innerHTML = ssChannels.map(ch => `
     <div class="ss-cell">
       <div class="ss-cell-title">${CHAN[ch] || ch}</div>
       <div class="ss-pie-wrap"><canvas id="ssPie-${ch}"></canvas></div>
       <div class="ss-cell-legend" id="ssLeg-${ch}"></div>
       <div class="ss-cell-total" id="ssTotal-${ch}">—</div>
-    </div>`).join('');
+    </div>`).join('') + singleKpisHtml;
   const ssRust = cssVar('--rust'), ssSage = cssVar('--sage');
   ssChannels.forEach(ch => {
     const s = ssc[ch] || { campaign: 0, organic: 0 };
@@ -953,6 +981,12 @@ function render(d) {
     const totalRow = `<div class="tp-summary"><span class="tp-summary-label">${totalLabel}</span><span class="tp-summary-val">${fmtMoney(prodTotal)}</span></div>${showToggle?`<div class="tp-toggle-wrap"><button onclick="toggleTopProducts()" class="tp-toggle-btn">${toggleLabel}</button></div>`:''}`;
     const listWrap = topProductsExpanded ? `<div class="tp-list-scroll">${prodRows}</div>` : prodRows;
     document.getElementById('topProducts').innerHTML = listWrap + totalRow;
+  } else if (d.kpis.revenue > 0) {
+    // Existe receita real no período (KPI "Receita Total" > 0), mas nenhum item tem título pra
+    // agrupar por produto — hoje só acontece com Amazon BR (nome de item bloqueado, ver CLAUDE.md
+    // 4.7.9/backlog aberto 2). "Sem vendas no período" seria enganoso aqui: a venda existe, só
+    // falta o nome do produto pra quebrar por item.
+    document.getElementById('topProducts').innerHTML = `<div class="muted-state">${fmtMoney(d.kpis.revenue)} em vendas no período, mas sem nome de produto disponível ainda pra este canal.</div>`;
   } else {
     document.getElementById('topProducts').innerHTML = '<div class="muted-state">Sem vendas no período.</div>';
   }
@@ -1091,17 +1125,19 @@ function updateCardVisibility() {
   const isTodos = channel === 'todos';
   const isShopify = channel === 'shopify' || channel === 'shopify_us';
   const setWrap = (wrap, visible) => {
-    if (!wrap) return;
+    if (!wrap) return false;
     const userHidden = hiddenByUser.has(wrap.dataset.cardId);
-    wrap.style.display = (visible && !userHidden) ? '' : 'none';
+    const finalVisible = visible && !userHidden;
+    wrap.style.display = finalVisible ? '' : 'none';
+    return finalVisible;
   };
   const show = (innerId, visible) => {
     const inner = document.getElementById(innerId);
-    setWrap(inner ? inner.closest('.edit-card') : null, visible);
+    return setWrap(inner ? inner.closest('.edit-card') : null, visible);
   };
 
-  show('cardChannelSplit', isTodos);
-  show('cardMarketing',    isTodos || isShopify);
+  const channelSplitVisible = show('cardChannelSplit', isTodos);
+  const marketingVisible    = show('cardMarketing',    isTodos || isShopify);
   show('cardSalesSplit',   true);
   show('cardTraffic',      isTodos || isShopify);
   show('cardFunnel',       isTodos || isShopify);
@@ -1110,6 +1146,14 @@ function updateCardVisibility() {
   ALWAYS_VISIBLE_CARD_IDS.forEach(id => {
     setWrap(document.querySelector(`.edit-card[data-card-id="${id}"]`), true);
   });
+
+  // Quando o card vizinho (Canais/Marketing) fica escondido pelo canal selecionado, Tendência e
+  // Top produtos passam a ocupar a linha inteira em vez de deixar metade em branco do lado
+  // (mesmo espaço branco "sobrando" reportado pelo Luan, pente-fino de 30/07/2026).
+  const trendWrap = document.querySelector('.edit-card[data-card-id="trend"]');
+  if (trendWrap) trendWrap.style.gridColumn = channelSplitVisible ? 'span 7' : 'span 12';
+  const topProdWrap = document.querySelector('.edit-card[data-card-id="topProducts"]');
+  if (topProdWrap) topProdWrap.style.gridColumn = marketingVisible ? 'span 8' : 'span 12';
 }
 
 // ── Modo de edição: reordenar / remover / banco de cards ──
