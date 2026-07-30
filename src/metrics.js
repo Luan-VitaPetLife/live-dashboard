@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getAmazonProductImages, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getAmazonProductImages, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
@@ -808,5 +808,22 @@ export function computeStock({ market = 'br' } = {}) {
     : null;
   aggTotals.suggestion = stockSuggestion(aggTotals.totalMonthsOfStock);
 
-  return { market, windowDays: STOCK_WINDOW_DAYS, since, until, channels, agg: { products: aggProducts, totals: aggTotals }, updatedAt: load().lastSync };
+  // Ordem Projetada/Nova/Andamento de cada grupo "Unificar" (agrupamento manual entre famílias,
+  // ver public/estoque.html) — o nome do grupo funciona como uma família própria pra esses 3 campos,
+  // igual Lysine/Daily; NÃO é a soma dos membros (editar a soma seria ambíguo, cada membro é um
+  // produto real diferente). Assim a linha unificada fica editável direto, com round-trip estável:
+  // o cliente grava em `market|||NomeDoGrupo` (mesmo POST /api/stock/agg-finance de sempre) e lê
+  // esses valores de volta daqui, independente do nome do grupo bater ou não com uma família real.
+  const groupNames = Object.keys(getProductGroups()[market] || {});
+  const groupOrders = {};
+  for (const name of groupNames) {
+    const ov = stockAggData[`${market}|||${name}`] || {};
+    groupOrders[name] = {
+      orderInProgress: ov.orderInProgress != null ? Number(ov.orderInProgress) : 0,
+      orderNew:        ov.orderNew != null ? Number(ov.orderNew) : 0,
+      projected:       ov.projected != null ? Number(ov.projected) : 0,
+    };
+  }
+
+  return { market, windowDays: STOCK_WINDOW_DAYS, since, until, channels, agg: { products: aggProducts, totals: aggTotals, groupOrders }, updatedAt: load().lastSync };
 }

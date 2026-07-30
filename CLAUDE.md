@@ -929,24 +929,36 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   agregado (por família) passou a reaproveitar essa mesma lista já mesclada em vez de reagregar só a janela de
   30 dias, então ganha a correção também. Testado localmente: produto com pedido só há 6+ meses e `stock`/
   `incoming` cadastrados manualmente aparece na tabela com vendas zeradas e o estoque intacto (antes, sumia).
-- **"Unificar" no card agregado "Estoque" (implementado 30/07/2026):** mesma função de agrupamento manual
-  já usada em Segmentos (ver 4.7.6, "Unificar"), adicionada ao card "Estoque" — reaproveita o endpoint
-  genérico `/api/product-groups` (já market-agnóstico, sem mudança de backend). Útil pra juntar famílias
-  que `classifyFamily()` não reconhece como o mesmo produto (ex: um item que não bate com "lisina"/"daily"
-  e acaba com o próprio título como família própria, fragmentado do resto). Botões "Unificar" (mostra os
-  grupos já criados como uma linha só) e "Selecionar" (força a visão crua, com checkbox por linha; 2+
-  selecionados abre um modal pra nomear o grupo) no topo da tabela — mesmo padrão visual/CSS de Segmentos,
-  prefixo de classe `stk-` em vez de `geo-`. Linha unificada soma Vendas/dia, Vendas/mês, Estoque, Recebendo,
-  Meses de Estoque, Ordem Projetada/Nova/Andamento e Tempo de Estoque Total (mesmas fórmulas client-side de
-  `computeStock()`, replicadas em `mergeStockGroups()`); um badge (🔗 N) ao lado do nome abre o modal
-  "gerenciar grupo". **Diferença deliberada de Segmentos:** lá a linha unida é só leitura; aqui as 3 colunas
-  de ordem (Projetada/Nova/Andamento) SÃO editáveis no card, mas não editáveis direto na linha unida — cada
-  uma pertence a um produto real diferente, editar ali seria ambíguo (qual membro receberia o valor?). A
-  linha unida mostra a soma em texto (cinza, como Estoque/Recebendo já eram) e o badge abre um modal com um
-  campo editável por produto membro (reaproveita `onStockAggEdit`/`POST /api/stock/agg-finance` por título
-  real), mais "✕" pra tirar um membro e "Desfazer unificação" pra apagar o grupo inteiro. `mergeStockGroups()`
-  nunca toca nos totais do rodapé da tabela (`current.agg.totals`, sempre a soma real por família vinda do
-  servidor) — a unificação é só uma visão de agrupamento no cliente, igual em Segmentos.
+- **"Unificar" no card agregado "Estoque" (implementado 30/07/2026, ajustado no mesmo dia — ver abaixo):**
+  mesma função de agrupamento manual já usada em Segmentos (ver 4.7.6, "Unificar"), adicionada ao card
+  "Estoque" — reaproveita o endpoint genérico `/api/product-groups` (market-agnóstico, sem mudança de
+  backend pra isso). Útil pra juntar famílias que `classifyFamily()` não reconhece como o mesmo produto
+  (ex: um item que não bate com "lisina"/"daily" e acaba com o próprio título como família própria,
+  fragmentado do resto — inclusive entre marcas diferentes, ex: Yucaloo, ver `project_yucaloo_segunda_marca`
+  na memória). Botões "Unificar" (mostra os grupos já criados como uma linha só) e "Selecionar" (força a
+  visão crua, com checkbox por linha; 2+ selecionados abre um modal pra nomear o grupo) no topo da tabela —
+  mesmo padrão visual/CSS de Segmentos, prefixo de classe `stk-` em vez de `geo-`. Um badge (🔗 N) ao lado
+  do nome abre o modal "produtos no grupo" (lista os membros com venda/estoque reais de referência, botão
+  "✕" pra tirar um membro e "Desfazer unificação" pra apagar o grupo inteiro).
+  - **Vendas/dia, Vendas/mês, Estoque, Recebendo e Meses de Estoque** na linha unificada são a SOMA real
+    dos membros (dado de venda/estoque físico — sem ambiguidade em somar, `mergeStockGroups()` no cliente).
+  - **⚠️ Ordem Projetada/Nova/Andamento — corrigido no mesmo dia (30/07/2026):** a 1ª versão também somava
+    esses 3 campos e os deixava só leitura na linha unida (exigia abrir o modal e editar produto por
+    produto). O Luan pediu o oposto: "já que se tratam do mesmo produto, devemos ter esse controle
+    enquanto eles estão unificados" — ou seja, depois de unificar, ele quer digitar UM valor pro grupo
+    inteiro, direto na linha, não um valor por marca/canal que soma sozinho. **Correção:** esses 3 campos
+    NÃO somam mais os membros — o **nome do grupo** passou a funcionar como uma família própria só pra
+    eles, igual Lysine/Daily. `computeStock()` (`metrics.js`) calcula `agg.groupOrders = { [nomeDoGrupo]:
+    {orderInProgress, orderNew, projected} }` lendo `kv.productStockAgg["market|||NomeDoGrupo"]` (mesma
+    chave que `POST /api/stock/agg-finance` já grava) pra cada grupo existente (`getProductGroups()`) —
+    e devolve isso dentro de `/api/stock`. No cliente, `mergeStockGroups()` usa esse valor em vez de somar
+    os membros, e a linha unida renderiza os 3 inputs **editáveis normalmente** (`data-title` = nome do
+    grupo) — mesmo `onStockAggEdit`/`POST /api/stock/agg-finance` de sempre, sem caso especial: editar
+    grava em `market|||NomeDoGrupo`, e o próximo load lê de volta do mesmo lugar via `groupOrders`. Round
+    -trip estável mesmo quando o nome do grupo não bate com nenhuma família real de venda.
+  - `mergeStockGroups()` nunca toca nos totais do rodapé da tabela (`current.agg.totals`, sempre a soma
+    real por família vinda do servidor, sem passar pelo agrupamento manual) — a unificação é só uma visão
+    de agrupamento, o dado bruto por família continua existindo por trás pra qualquer conferência.
 - Fora de escopo por ora (não pedido, evitar scope creep): canais que só existem no Monday e não no
   nosso sistema (Chewy, Walmart, Website separado, Wholesale) e qualquer chamada à API do Monday.
 

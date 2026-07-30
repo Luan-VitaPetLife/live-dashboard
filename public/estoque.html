@@ -409,14 +409,19 @@ function stockSuggestionClient(months) {
   return 'aguardar';
 }
 
-// Junta os grupos definidos em `groups` dentro da lista `list` (agg.products) — soma os campos
-// numéricos e une a lista de membros. Ordem Projetada/Nova/Andamento também somam (exibição), mas
-// não ficam editáveis na linha unida: cada uma pertence a um produto real diferente, então editar
-// ali seria ambíguo — a edição continua por produto, dentro do modal "gerenciar grupo".
+// Junta os grupos definidos em `groups` dentro da lista `list` (agg.products). Estoque/Recebendo/
+// Vendas continuam sendo a SOMA real dos membros (dado de venda/estoque físico, sem ambiguidade).
+// Ordem Projetada/Nova/Andamento, porém, NÃO somam os membros — são os mesmos produtos físicos
+// unificados, então o Luan quer editar um valor só pro grupo (não um valor por membro). O nome do
+// grupo funciona como uma família própria pra esses 3 campos (mesma chave `market|||NomeDoGrupo`
+// usada por onStockAggEdit), e o servidor já devolve o valor atual em `current.agg.groupOrders`
+// (ver computeStock() em metrics.js) — round-trip estável, sem depender do nome bater com uma
+// família real.
 function mergeStockGroups(list, groups) {
   if (!groups || !Object.keys(groups).length) return list;
   const byTitle = {};
   list.forEach(p => { byTitle[p.title] = p; });
+  const groupOrders = current?.agg?.groupOrders || {};
   const usedTitles = new Set();
   const mergedRows = [];
   for (const [name, members] of Object.entries(groups)) {
@@ -425,7 +430,7 @@ function mergeStockGroups(list, groups) {
     found.forEach(p => usedTitles.add(p.title));
     let image = null, type = null;
     const comboBySize = {};
-    const sums = { avulsoQty: 0, comboQty: 0, salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0, orderInProgress: 0, orderNew: 0, projected: 0 };
+    const sums = { avulsoQty: 0, comboQty: 0, salesDaily: 0, salesMonth: 0, stock: 0, incoming: 0 };
     found.forEach(p => {
       sums.avulsoQty += p.avulsoQty || 0;
       sums.comboQty += p.comboQty || 0;
@@ -433,17 +438,15 @@ function mergeStockGroups(list, groups) {
       sums.salesMonth += p.salesMonth || 0;
       sums.stock += p.stock || 0;
       sums.incoming += p.incoming || 0;
-      sums.orderInProgress += p.orderInProgress || 0;
-      sums.orderNew += p.orderNew || 0;
-      sums.projected += p.projected || 0;
       for (const [size, n] of Object.entries(p.comboBySize || {})) comboBySize[size] = (comboBySize[size] || 0) + n;
       if (!image && p.image) image = p.image;
       if (!type && p.type) type = p.type;
     });
+    const ord = groupOrders[name] || { orderInProgress: 0, orderNew: 0, projected: 0 };
     const monthsOfStock = sums.salesMonth > 0 ? (sums.stock + sums.incoming) / sums.salesMonth : null;
-    const totalMonthsOfStock = sums.salesMonth > 0 ? (sums.stock + sums.projected + sums.orderNew + sums.orderInProgress) / sums.salesMonth : null;
+    const totalMonthsOfStock = sums.salesMonth > 0 ? (sums.stock + ord.projected + ord.orderNew + ord.orderInProgress) / sums.salesMonth : null;
     mergedRows.push({
-      title: name, type, image, comboBySize, ...sums,
+      title: name, type, image, comboBySize, ...sums, ...ord,
       monthsOfStock, totalMonthsOfStock, suggestion: stockSuggestionClient(totalMonthsOfStock),
       _grouped: true, _members: found.map(p => p.title),
     });
@@ -487,19 +490,18 @@ function renderStkGroupModal() {
   document.getElementById('stkGroupModalTitle').textContent = name;
   const raw = current?.agg?.products || [];
   const byTitle = {}; raw.forEach(p => { byTitle[p.title] = p; });
+  // Só membros aqui — Vendas/Estoque/Recebendo são reais por produto (informativo). A Ordem
+  // Projetada/Nova/Andamento não aparece por membro: é editada uma vez só, direto na linha
+  // unificada da tabela (ver mergeStockGroups), já que os membros são o mesmo produto físico.
   document.getElementById('stkGroupModalBody').innerHTML = members.map(title => {
     const p = byTitle[title];
-    if (!p) return `<div class="stk-group-member"><span class="stk-group-member-name" title="${escapeHtml(title)}">${escapeHtml(title)}</span><span class="stk-group-member-stat">sem dados no período</span></div>`;
+    const stat = p ? `${fmtInt(p.salesMonth)} un/mês · estoque ${fmtInt(p.stock)}` : 'sem dados no período';
     return `<div class="stk-group-member">
       <span class="stk-group-member-name" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
-      <span class="stk-group-member-stat">${fmtInt(p.salesMonth)} un/mês</span>
-      <input class="prod-input" type="number" step="1" placeholder="0" value="${p.projected ?? ''}" data-title="${escAttr(title)}" data-field="projected" title="Ordem Projetada">
-      <input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" data-title="${escAttr(title)}" data-field="orderNew" title="Ordem Nova">
-      <input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" data-title="${escAttr(title)}" data-field="orderInProgress" title="Ordem em Andamento">
+      <span class="stk-group-member-stat">${stat}</span>
       <button class="stk-group-member-remove" data-remove-member="${escAttr(title)}" title="Tirar do grupo"><i class="bi bi-x-lg"></i></button>
     </div>`;
   }).join('');
-  document.querySelectorAll('#stkGroupModalBody .prod-input').forEach(inp => inp.addEventListener('change', onStockAggEdit));
 }
 let refreshTimer = null;
 function applyRefresh() {
@@ -877,15 +879,15 @@ function aggRowHTML(p) {
   const warn = existingGroup
     ? `<span class="stk-select-warn" title="Já faz parte do grupo &quot;${escapeHtml(existingGroup)}&quot;">⚠ faz parte de "${escapeHtml(existingGroup)}"</span>`
     : '';
-  // Linha unificada: os 3 campos de ordem são a soma de produtos reais diferentes — editar ali
-  // seria ambíguo (qual membro receberia o valor?). Edição continua por produto, ver badge acima.
-  const orderCells = p._grouped
-    ? `<td class="prod-num prod-muted">${fmtInt(p.projected)}</td>
-    <td class="prod-num prod-muted">${fmtInt(p.orderNew)}</td>
-    <td class="prod-num prod-muted">${fmtInt(p.orderInProgress)}</td>`
-    : `<td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.projected ?? ''}" ${dataAttrs} data-field="projected" title="Simulação: quantidade cogitada para um novo pedido ao laboratório, só pra ver o efeito no Tempo de Estoque Total. Não é um pedido real ainda."></td>
-    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" ${dataAttrs} data-field="orderNew" title="Unidades de um novo pedido a ser feito ao laboratório."></td>
-    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" ${dataAttrs} data-field="orderInProgress" title="Unidades já pedidas ao laboratório, produção em andamento."></td>`;
+  // Linha unificada: Ordem Projetada/Nova/Andamento continuam editáveis igual a qualquer produto —
+  // `p.title` é o nome do grupo, e o servidor já resolve esses 3 campos por grupo (não por soma dos
+  // membros), ver groupOrders em computeStock()/metrics.js. Mesmo POST de sempre, sem caso especial.
+  const projTitle = p._grouped ? 'Simulação do grupo unificado: quantidade cogitada para um novo pedido, só pra ver o efeito no Tempo de Estoque Total. Não é um pedido real ainda.' : 'Simulação: quantidade cogitada para um novo pedido ao laboratório, só pra ver o efeito no Tempo de Estoque Total. Não é um pedido real ainda.';
+  const newTitle = p._grouped ? 'Unidades de um novo pedido ao laboratório, para o grupo unificado inteiro.' : 'Unidades de um novo pedido a ser feito ao laboratório.';
+  const progressTitle = p._grouped ? 'Unidades já pedidas ao laboratório, produção em andamento, para o grupo unificado inteiro.' : 'Unidades já pedidas ao laboratório, produção em andamento.';
+  const orderCells = `<td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.projected ?? ''}" ${dataAttrs} data-field="projected" title="${escapeHtml(projTitle)}"></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" ${dataAttrs} data-field="orderNew" title="${escapeHtml(newTitle)}"></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" ${dataAttrs} data-field="orderInProgress" title="${escapeHtml(progressTitle)}"></td>`;
   return `<tr data-title="${escAttr(p.title)}">
     <td>
       <div class="prod-name-wrap">
