@@ -820,7 +820,7 @@ function render(d) {
   const t = d.trend, money = t.fmt === 'money';
   const line1 = cssVar('--line1'), line2 = cssVar('--line2'), surface = cssVar('--surface');
   const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:line1, borderWidth:1.5, tension:.4, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:surface, pointBorderColor:line1, pointBorderWidth:1.5, fill:false }];
-  if (d.metric === 'receita') ds.push({ label:'Custo ads', data:t.data.map(()=>0), borderColor:line2, borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
+  if (d.metric === 'receita') ds.push({ label:'Custo ads', data:t.metaSpendDaily || t.data.map(()=>0), borderColor:line2, borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
   setChart('trendChart', { type:'line', data:{ labels:t.labels, datasets:ds }, options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{ label:c=>' '+c.dataset.label+': '+(money?fmtMoney(c.parsed.y,2):fmtInt(c.parsed.y)) }} }, scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ grid:{color:'rgba(30,28,24,0.06)'}, ticks:{callback:v=>money?fmtMoneyShort(v):fmtInt(v)} } } } });
   // Click → drilldown de canais
   document.getElementById('trendDrilldown').style.display = 'none';
