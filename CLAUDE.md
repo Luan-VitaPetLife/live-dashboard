@@ -677,6 +677,16 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   nome de produto (o card mostra só a contagem de itens). Escopo por mercado (não mistura BRL/USD). Debounce de
   300ms, resposta fora de ordem descartada por sequência, teto de 200 resultados (`limited`). Campo vazio volta
   a exibir os recentes do `/api/dashboard`.
+  - **Vocabulário de status estilo Bling (30/07/2026):** a coluna Status trocou os rótulos genéricos
+    "OK"/"Pendente"/"Não pago" pelo vocabulário de NF-e que o Bling usa (pedido do Luan, olhando a
+    tabela de pedidos do Bling) — **"Autorizado"** (verde, pedido válido/pago), **"Em aberto"** (âmbar,
+    qualquer coisa ainda não concluída, inclusive o caso "Não pago" da Amazon) e **"Cancelado"** (vermelho,
+    inalterado). Só o texto do rótulo mudou — `statusTag()` (`index.html`) continua lendo exatamente os
+    mesmos `o.cancelled`/`o.status`/`UNPAID_STATUS_BY_CHANNEL` de sempre, sem nenhuma mudança em cálculo
+    de receita/cancelamento. `statusLabelPt()` (`metrics.js`, usada pela busca geral) foi atualizada junto,
+    pra buscar "em aberto" ou "autorizado" continuar encontrando os pedidos certos. Ícones por canal (como
+    os que o Bling mostra por tipo de documento/certificado) foram cogitados e descartados pelo Luan — o
+    canal já aparece como badge colorido por extenso na coluna Canal, que já cobre essa necessidade.
 - **Card Orgânico x Campanha (`#cardSalesSplit`, alterado 02/07/2026):** uma **pizza por canal** (não é mais um único donut agregado nem gráfico de linha) — grid `.ss-grid` com uma célula por canal do mercado atual (BR: Shopify/Shopee/ML/Amazon; US: Shopify US/Amazon US). Dados vêm de `salesSplitByChannel` (`{ [channel]: { campaign, organic, campaignOrders, organicOrders } }`) calculado em `computeDashboard()` a partir de **todos** os pedidos do mercado (independente do filtro de canal selecionado na tela — por isso sempre mostra as 4/2 pizzas). Canais sem tracking de origem/listing type (Shopee, Amazon) sempre caem 100% em orgânico, naturalmente (não é caso especial no código — `isCampaignOrder()` nunca retorna `true` pra esses canais). Canal sem nenhum pedido no período mostra o anel cinza "sem dados" do `drawDonut()` (não confundir com "100% orgânico"). Agrupado em `.right-col-stack` com `#cardMarketing`.
 - **KPI strip principal (alterado 02/07/2026):** 5 células — Receita Total, Pedidos, Ticket Médio, **ROAS**, **ACOS** (`#kpiRoas`/`#kpiAcos`). O KPI "Conversão" foi removido daqui (a métrica de conversão de sessão→compra continua existindo no card de Tráfego, `#mConv`, que é outro contexto). ROAS = `kpis.roas` (metaRevenue ÷ adCost, já calculado no backend). ACOS = `100/roas` (gasto ÷ vendas atribuídas, em %) — a grade CSS do `.kpi-strip` já era `repeat(5,1fr)` antes dessa mudança (pensada pra isso).
 - Paleta/design: tema "earthy" com variáveis CSS no `:root`. Manter visual.
