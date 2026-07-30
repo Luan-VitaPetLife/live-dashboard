@@ -261,6 +261,15 @@
   input:checked+.sp-switch-slider{background:var(--ink)}
   input:checked+.sp-switch-slider::before{transform:translateX(14px)}
 
+  /* ── Switch inline no KPI de ROAS (incluir Mercado Ads no cálculo) ── */
+  .kpi-roas-toggle{display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;user-select:none}
+  .kpi-roas-toggle input{opacity:0;width:0;height:0;position:absolute}
+  .kpi-roas-toggle-slider{position:relative;display:inline-block;width:26px;height:15px;background:#ccc;border-radius:8px;transition:.2s;flex-shrink:0}
+  .kpi-roas-toggle-slider::before{content:'';position:absolute;height:11px;width:11px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s}
+  .kpi-roas-toggle input:checked+.kpi-roas-toggle-slider{background:var(--ink)}
+  .kpi-roas-toggle input:checked+.kpi-roas-toggle-slider::before{transform:translateX(11px)}
+  .kpi-roas-toggle-label{font-size:10px;color:var(--muted)}
+
   /* ── Switch "Receita da Amazon" (Total cobrado × Vendas de produto) ── */
   .arev-switch{ --switch_width:2em; --switch_height:1em; --thumb_color:var(--surface2);
     --track_color:var(--border2); --track_active_color:var(--ink); --outline_color:var(--ink);
@@ -452,6 +461,10 @@
             <div class="kpi-mini" data-kpi-id="roas" data-title="ROAS">
               <div class="kpi-mini-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
               <div class="kc-label">ROAS</div><div class="kc-value" id="kpiRoas">—</div><div class="kc-delta" id="kpiRoasSub">retorno sobre gasto (Meta Ads)</div>
+              <label class="kpi-roas-toggle" id="kpiRoasToggleWrap" style="display:none" title="Soma o gasto e as vendas de Destaque do Mercado Ads ao cálculo (só disponível no Brasil)">
+                <input type="checkbox" id="toggleRoasMlAds"><span class="kpi-roas-toggle-slider"></span>
+                <span class="kpi-roas-toggle-label">Incluir Mercado Ads</span>
+              </label>
             </div>
             <div class="kpi-mini" data-kpi-id="acos" data-title="ACOS">
               <div class="kpi-mini-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
@@ -660,6 +673,21 @@ function isAmazonProductRev() { return localStorage.getItem('coco_amazon_rev_mod
   });
 })();
 
+// Toggle "Incluir Mercado Ads" no ROAS/ACOS — soma gasto+vendas de Destaque do Mercado Ads
+// ao Meta Ads. Só existe pro Brasil (Mercado Ads não roda no mercado US). Cálculo é só no
+// cliente, com dados que o payload já traz (kpis.metaRevenue/adCost + mlBreakdown), então o
+// toggle re-renderiza na hora, sem round-trip ao backend.
+function isRoasIncludeMlAds() { return localStorage.getItem('coco_roas_include_mlads') === '1'; }
+(function() {
+  const tog = document.getElementById('toggleRoasMlAds');
+  if (!tog) return;
+  tog.checked = isRoasIncludeMlAds();
+  tog.addEventListener('change', () => {
+    localStorage.setItem('coco_roas_include_mlads', tog.checked ? '1' : '0');
+    if (lastData) render(lastData);
+  });
+})();
+
 // ── Canal breakdown ──
 function isChanDetail() { return localStorage.getItem('coco_chan_detail') !== '0'; }
 function showTrendDrilldown(label, val, byChannel, money, metric) {
@@ -825,8 +853,22 @@ function render(d) {
       (ch === 'amazon' || ch === 'amazon_us') ? 'Receita orgânica da Amazon · Ads em breve' :
       k.adCost > 0          ? 'Meta Ads conectado · Google Ads em breve' : 'Meta Ads conectado · sincronize para ver os dados';
   }
-  document.getElementById('kpiRoas').textContent = k.roas > 0 ? k.roas.toLocaleString('pt-BR',{maximumFractionDigits:2})+'×' : '—';
-  document.getElementById('kpiAcos').textContent = (k.roas > 0) ? (100/k.roas).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%' : '—';
+  // ROAS/ACOS: "Incluir Mercado Ads" soma gasto+vendas de Destaque do Mercado Ads ao Meta Ads
+  // (só existe pro Brasil, mlBreakdown.adCost fica 0 no mercado US e o toggle fica escondido lá).
+  const roasToggleWrap = document.getElementById('kpiRoasToggleWrap');
+  roasToggleWrap.style.display = d.market === 'br' ? 'flex' : 'none';
+  const includeMlAds = d.market === 'br' && isRoasIncludeMlAds();
+  let roasVal = k.roas, roasSourceLabel = 'Meta Ads';
+  if (includeMlAds) {
+    const ml = d.mlBreakdown || {};
+    const combinedRevenue = (k.metaRevenue || 0) + (ml.premium || 0);
+    const combinedCost = (k.adCost || 0) + (ml.adCost || 0);
+    roasVal = combinedCost > 0 ? combinedRevenue / combinedCost : 0;
+    roasSourceLabel = 'Meta + Mercado Ads';
+  }
+  document.getElementById('kpiRoas').textContent = roasVal > 0 ? roasVal.toLocaleString('pt-BR',{maximumFractionDigits:2})+'×' : '—';
+  document.getElementById('kpiRoasSub').textContent = 'retorno sobre gasto (' + roasSourceLabel + ')';
+  document.getElementById('kpiAcos').textContent = (roasVal > 0) ? (100/roasVal).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%' : '—';
 
   // Trend
   const t = d.trend, money = t.fmt === 'money';
