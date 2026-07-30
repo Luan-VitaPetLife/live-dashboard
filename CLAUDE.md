@@ -694,6 +694,18 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - **Correção 3 — "Top produtos" mentia "Sem vendas no período" quando havia venda real sem nome de produto:** Amazon BR é o caso de hoje (nomes de item bloqueados, ver 4.7.9/backlog 2) — a receita do pedido conta normalmente (`o.total`), mas como nenhum item tem título, `aggregateProductsByChannel()` pula todos os itens (guarda `if (!it.title) return`) e a lista de produtos fica vazia mesmo com `kpis.revenue > 0`. Antes disso sempre virava "Sem vendas no período", que é enganoso (parece que não teve pedido nenhum). Agora, se `kpis.revenue > 0` mas a lista está vazia, mostra "R$X em vendas no período, mas sem nome de produto disponível ainda pra este canal" em vez do genérico.
   - **Correção 4 (achado pelo Luan direto na conferência visual) — linha "Custo ads" aparecia em canais sem nenhuma relação com Meta:** a linha tracejada "Custo ads" da Tendência (gasto do Meta Ads/Instagram/Facebook) era desenhada sempre que `metric==='receita'`, **sem checar o canal selecionado** — então filtrar por Shopee/Mercado Livre/Amazon mostrava a mesma linha de gasto do Meta (que só atribui a Shopify) do lado da receita daquele canal, parecendo (errado) que aquele canal tinha custo de anúncio próprio. Ficou mais visível depois da correção do dia 30/07 que fez essa linha passar a mostrar dado real (antes ficava fixa em zero, ver commit anterior). **Corrigido:** `showAdsLine = metric==='receita' && (channel==='todos'||channel==='shopify'||channel==='shopify_us')` — mesma regra de canal já usada por `#cardMarketing`. Dataset e legenda ("Custo ads") só entram no gráfico quando `showAdsLine` é verdadeiro; Shopee/Mercado Livre/Amazon mostram só a linha de Receita.
 - **KPI strip principal (alterado 02/07/2026):** 5 células — Receita Total, Pedidos, Ticket Médio, **ROAS**, **ACOS** (`#kpiRoas`/`#kpiAcos`). O KPI "Conversão" foi removido daqui (a métrica de conversão de sessão→compra continua existindo no card de Tráfego, `#mConv`, que é outro contexto). ROAS = `kpis.roas` (metaRevenue ÷ adCost, já calculado no backend). ACOS = `100/roas` (gasto ÷ vendas atribuídas, em %) — a grade CSS do `.kpi-strip` já era `repeat(5,1fr)` antes dessa mudança (pensada pra isso).
+  - **Switch "Incluir Mercado Ads" no ROAS/ACOS (implementado 30/07/2026):** pedido do Luan direto
+    olhando o KPI ("retorno sobre gasto (Meta Ads)") — o ROAS do topo só contava gasto/receita do
+    Meta, mesmo a conta rodando Mercado Ads (Product Ads) também. Um switch pequeno (`#toggleRoasMlAds`,
+    reaproveita o mesmo estilo `.sp-switch` do painel de Configurações, só que inline dentro do card
+    ROAS) soma o gasto (`mlBreakdown.adCost`) e a receita de Destaque (`mlBreakdown.premium`) ao cálculo
+    quando ligado — mesma composição de "Vendas Atribuídas Geral"/"Gasto Total" que a tela de Campanhas
+    já usa (ver 4.11), só que aplicada ao ROAS/ACOS da Revenue. **Cálculo 100% no cliente** — os campos
+    já vêm no payload de `/api/dashboard` (`kpis.metaRevenue`/`kpis.adCost` + `mlBreakdown`), então o
+    toggle recalcula na hora (`render(lastData)`) sem round-trip ao backend. **Só existe pro Brasil**
+    (`toggleRoasMlAds` fica `display:none` fora de `market==='br'`) — Mercado Ads não roda no mercado
+    US (ver 4.6). Persistido em `localStorage('coco_roas_include_mlads')`. O rótulo abaixo do valor
+    (`#kpiRoasSub`) muda de "Meta Ads" para "Meta + Mercado Ads" pra deixar claro o que está incluído.
 - Paleta/design: tema "earthy" com variáveis CSS no `:root`. Manter visual.
 
 ### 4.9c Header/footer padronizados + `public/colors.js` (implementado 07/07/2026)
