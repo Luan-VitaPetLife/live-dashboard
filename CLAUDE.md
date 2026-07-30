@@ -136,10 +136,15 @@ devolve JSON → `public/*.html` desenham. As interfaces NÃO falam com Shopify/
   Shopee (política de privacidade da plataforma, não documentada publicamente), e o app não tem (nem
   parece existir uma forma de solicitar) permissão de decriptação desses campos pela Open Platform API
   — diferente da Amazon (papel PII aprovável, ver 4.7.4) ou do ML (state vem via `/shipments/{id}`, sem
-  mascaramento). **Não há correção via código.** `toUF("****")` já devolve `null` graciosamente (não
-  quebra nada), então pedidos Shopee simplesmente não entram em `byState`/Geografia BR — comportamento
-  esperado e final, não um bug. `GET /api/shopee/probe-order` fica como diagnóstico caso a Shopee mude
-  essa política no futuro.
+  mascaramento). **Não há correção via código do lado da própria API da Shopee.** `toUF("****")` já
+  devolve `null` graciosamente (não quebra nada). `GET /api/shopee/probe-order` fica como diagnóstico
+  caso a Shopee mude essa política no futuro.
+  - **⚠️ Atualização (29/07/2026): a frase acima ("pedidos Shopee simplesmente não entram em
+    byState/Geografia BR") não é mais o comportamento final.** O Bling (ERP que recebe pedidos de todos
+    os canais, ver seção "Integração Bling ERP" na memória do projeto) traz o endereço de entrega
+    completo e sem máscara, inclusive de pedidos Shopee. `reconcileGeoFromBling` (`src/sync.js`)
+    preenche `state` desses pedidos a partir do Bling, contornando a limitação da API da Shopee sem
+    depender dela. Rodar `POST /api/bling/sync-geo?market=br` recupera o histórico.
 
 ### 4.6 Mercado Livre
 - Implementado em `src/mercadolivre.js`. OAuth 2.0 com refresh_token automático.
@@ -1190,17 +1195,24 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 ## 9. Próximos passos (backlog)
 
 ### Abertos
-1. **Decisão PENDING** — pedidos Pix/boleto aguardando contam hoje; Luan decide se quer só pagos. Ver 4.1.
-2. **Amazon — nome do comprador (PII):** `customer` vem vazio nos dois caminhos (Orders API e Reports) — dado
+1. **Amazon — nome do comprador (PII):** `customer` vem vazio nos dois caminhos (Orders API e Reports) — dado
    restrito. Exige o papel PII aprovado no Solution Provider Portal; depois é só `AMAZON_FETCH_PII=1` no Railway
    (código pronto). Ver 4.7.4.
-3. **Amazon BR — nome de produto incompleto:** valor/qtd/pedidos ok; os nomes vêm via `getOrderItems`
-   (`enrichAmazonItems`, `POST /api/amazon/fetch-items?market=br`), mas os pedidos `701-/702-` dão 400 (limitação de
-   autorização do app no marketplace BR — resolver no portal). Enquanto faltam itens, Estoque injeta o placeholder
-   "Produto TESTE". Ver 4.7.9 / 4.14.
-4. **Amazon — imagem de produto bloqueada (403):** Catalog Items API retorna 403 — o app não tem o role
+2. **Amazon BR — nome de produto incompleto:** valor/qtd/pedidos ok; os nomes vêm via `getOrderItems`
+   (`enrichAmazonItems`, `POST /api/amazon/fetch-items?market=br`), mas os pedidos `701-/702-` dão 400.
+   ⚠️ **Duas teorias sobre a causa, nunca reconciliadas:** 4.7.9 conclui que é limitação de autorização do
+   app especificamente no marketplace Brasil (resolver no portal, sem trocar token). Uma investigação
+   posterior no mesmo dia (13/07, registrada só na memória de sessão, não atualizada aqui) concluiu o
+   oposto — que `AMAZON_BR_REFRESH_TOKEN` está autorizando a conta errada (VITA PET LIFE/EUA, não
+   CocoandLuna) — com evidência própria (`whoami`, `list-orders` zerado pro BR). Antes de agir, rodar de
+   novo `GET /api/amazon/whoami` e `GET /api/amazon/probe-order?id=701-...&market=br` pra confirmar qual
+   teoria bate com o estado atual. Enquanto faltam itens, Estoque injeta o placeholder "Produto TESTE".
+   Ver 4.7.9 / 4.14.
+3. **Amazon — imagem de produto bloqueada (403):** Catalog Items API retorna 403 — o app não tem o role
    "Product Listing". Habilitar no portal + re-autorizar (novo refresh token); depois `POST /api/amazon/images`.
    Código pronto. Ver 4.13.
+4. **Amazon Ads e TikTok Shop — integrações ainda não construídas.** Aparecem como "Planejadas" na tela
+   de Integrações (`/integracoes`, ver 4.17), sem código por trás ainda.
 ### Resolvidos (referência rápida — o detalhe está na seção citada)
 - **CSS da sidebar duplicado por página** (15/07) — o CSS do componente (`.sidebar`, `.brand*`, `.nav-*`,
   toggle, overlay, botão de abrir, transforms `body.sidebar-*`) foi movido para `sidebar.js`
@@ -1217,6 +1229,14 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 - **Amazon backfill histórico US** (09/07) — Reports API, 83.897 pedidos/90 dias. Ver 4.7.5.
 - **Amazon `byState` grafia inconsistente** (10/07) — `normalizeUsState`. Ver 4.7.4.
 - **Amazon sync sem nome de produto (US)** (10/07) — job `reconcileAmazonNames`. Ver 4.7.6.
+- **Decisão sobre pedido Pix/boleto pendente** (29/07) — só pedido pago conta como venda, aplicado nos
+  4 canais. Ver 4.1 e commit `6f1eb2c`.
+- **Shopee sem endereço na Geografia BR** (29/07) — não era limitação da Shopee, era `upsertOrders()`
+  (`store.js`) apagando o `state` que a reconciliação via Bling preenchia a cada sync seguinte (mesmo
+  bug afetava `productSales` da Amazon). Corrigido com uma guarda que só protege contra apagar, nunca
+  trava um valor novo real. Ver `project_bling_erp_integracao`/`project_amazon_ops_toggle_limitacao`
+  na memória (ainda não escrito em CLAUDE.md como seção própria).
+- **Tela de Integrações** (29/07) — status e liga/desliga por canal, dentro de Configurações. Ver 4.17.
 - **Performance do `store.js`** (10/07) — índice em memória + busca binária (~60×). Ver seção 3.
 
 ## 10. Convenções
