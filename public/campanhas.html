@@ -812,11 +812,14 @@ async function render() {
   const faturamentoGeral = k.revenue || 0;
 
   // ── KPI strip (geral = soma de todos os canais de ads ativos no mercado atual) ──
+  // Subtexto objetivo em vez de listar os nomes dos canais que contribuíram (ex: "Meta + Mercado
+  // Ads") — a lista de canais muda dependendo de quem tem gasto/venda no período, então virava um
+  // texto genérico e um pouco confuso; os cards de canal logo abaixo já mostram a quebra de verdade.
   setText('kpiSpend', fmtMoney(gastoGeral));
-  setText('kpiSpendSub', [metaSpend > 0 && 'Meta', mlSpend > 0 && 'Mercado Ads', googleSpend > 0 && 'Google Ads'].filter(Boolean).join(' + ') || 'sem gasto no período');
+  setText('kpiSpendSub', gastoGeral > 0 ? 'de todos os canais' : 'sem gasto no período');
   setText('kpiOrders', fmtInt(k.orders || 0));
   setText('kpiSales', fmtMoney(vendasGeral));
-  setText('kpiSalesSub', [metaRev > 0 && 'Meta', mlPremiumRev > 0 && 'ML Destaque', googleRevenue > 0 && 'Google Ads'].filter(Boolean).join(' + ') || 'sem vendas atribuídas no período');
+  setText('kpiSalesSub', vendasGeral > 0 ? 'de todos os canais' : 'sem vendas atribuídas no período');
   setText('kpiRevenue', fmtMoney(faturamentoGeral));
   setText('kpiRoas', gastoGeral > 0 ? (vendasGeral / gastoGeral).toFixed(2).replace('.', ',') + '×' : '—');
 
