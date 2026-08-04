@@ -110,6 +110,8 @@
   .prod-card.collapsed .prod-table-wrap{display:none}
   .prod-expand-btn{position:absolute;top:14px;right:50px;width:26px;height:26px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s}
   .prod-expand-btn:hover{border-color:var(--ink);color:var(--text)}
+  .prod-export-btn{height:28px;padding:0 12px;border-radius:16px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;font-family:inherit;white-space:nowrap;transition:all .15s;flex-shrink:0}
+  .prod-export-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
   .prod-table-wrap{max-height:420px;overflow-y:auto;overflow-x:auto}
   .prod-card.expanded .prod-table-wrap{max-height:none}
   .prod-table{width:100%;border-collapse:collapse;font-size:12px}
@@ -321,6 +323,13 @@ const CH_META = {
 };
 const CHANNELS_BR = ['shopify', 'shopee', 'amazon', 'mercadolivre'];
 const CHANNELS_US = ['shopify_us', 'amazon_us'];
+// Exportar quantidade vendida pra planilha: por enquanto só Shopify US (mesmo escopo do backend,
+// ver GET /api/products/export em server.js). Outros canais ganham o botão quando o backend abrir.
+const EXPORTABLE_PRODUCT_CHANNELS = new Set(['shopify_us']);
+function exportProductsCsv(ch) {
+  const p = new URLSearchParams({ market, channel: ch, since: state.since, until: state.until });
+  window.location.href = '/api/products/export?' + p.toString();
+}
 
 function contrastText(hex) {
   const h = (hex || '#000').replace('#', '');
@@ -730,6 +739,7 @@ function cardHTML(ch) {
           <div class="camp-ch-name">${meta.name}</div>
           <div class="camp-ch-type">${products.length} produto${products.length === 1 ? '' : 's'}</div>
         </div>
+        ${EXPORTABLE_PRODUCT_CHANNELS.has(ch) ? `<button type="button" class="prod-export-btn" onclick="event.stopPropagation();exportProductsCsv('${ch}')" title="Exportar quantidade vendida de cada produto"><i class="bi bi-download"></i> Exportar</button>` : ''}
         <div class="prod-head-stats">
           <div>
             <div class="prod-stat-lbl">Receita</div>

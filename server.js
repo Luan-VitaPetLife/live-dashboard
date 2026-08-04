@@ -6,7 +6,7 @@ import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { computeDashboard, computeProducts, computeStock, searchOrders } from './src/metrics.js';
+import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled } from './src/store.js';
 import * as shopee from './src/shopee.js';
@@ -287,6 +287,74 @@ app.get('/api/orders/search', (req, res) => {
     const { q = '', market = 'br' } = req.query;
     const limit = Math.min(Number(req.query.limit || 200), 500);
     res.json(searchOrders({ market, q, limit }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Exportação para planilha (CSV, abre direto no Excel) ──
+// Ponto-e-vírgula como separador (não vírgula) + BOM UTF-8: é o que o Excel em pt-BR reconhece
+// automaticamente sem passar pelo assistente de importação (a vírgula já é usada como separador
+// decimal na configuração regional brasileira).
+function csvEscape(v) {
+  const s = v == null ? '' : String(v);
+  return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function sendCsv(res, filename, header, rows) {
+  const lines = [header.map(csvEscape).join(';'), ...rows.map(r => r.map(csvEscape).join(';'))];
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  const BOM = '﻿';
+  res.send(BOM + lines.join('\r\n'));
+}
+
+// Exporta TODOS os pedidos do período/canal/mercado (não só os "recentes" que a tela mostra),
+// com filtro opcional de status. `itemsMode` decide se a coluna "Itens" mostra o nº de produtos
+// distintos do pedido ou a soma das quantidades (mesmo toggle do card "Pedidos Recentes").
+app.get('/api/orders/export', (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { market = 'br', channel = 'todos', since = today, until = today, status = 'todos', itemsMode = 'count' } = req.query;
+    const orders = exportOrdersList({ market, channel, since, until, status });
+    const tz = market === 'us' ? 'America/Los_Angeles' : 'America/Sao_Paulo';
+    const itemsHeader = itemsMode === 'qty' ? 'Qtd. de itens' : 'Nº de produtos';
+    const rows = orders.map(o => [
+      o.name,
+      o.customer || '',
+      o.statusLabel,
+      itemsMode === 'qty' ? o.itemsQty : o.itemsCount,
+      new Date(o.createdAt).toLocaleString('pt-BR', { timeZone: tz }),
+      o.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    ]);
+    sendCsv(res, `pedidos_${market}_${since}_a_${until}.csv`,
+      ['Código do pedido', 'Cliente', 'Status', itemsHeader, 'Data', 'Valor'], rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Exporta a quantidade vendida de cada produto para planilha. Por enquanto só Shopify US —
+// reaproveita computeProducts() (mesma agregação da tela de Produtos: exclui pedido cancelado,
+// já desconta devolução via LineItem.currentQuantity, ver CLAUDE.md 4.15) em vez de duplicar a
+// lógica de contagem, então a exportação sempre bate com o que a tela mostra.
+const EXPORTABLE_PRODUCT_CHANNELS = new Set(['shopify_us']);
+app.get('/api/products/export', (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { market = 'us', channel = 'shopify_us', since = today, until = today } = req.query;
+    if (!EXPORTABLE_PRODUCT_CHANNELS.has(channel)) {
+      return res.status(400).json({ error: 'Exportação de produtos disponível apenas para Shopify US por enquanto.' });
+    }
+    const data = computeProducts({ market, since, until });
+    const products = data.channels[channel]?.products || [];
+    const rows = products.map(p => [
+      p.title,
+      Math.round(p.qty),
+      p.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      p.avgTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    ]);
+    sendCsv(res, `produtos_${channel}_${since}_a_${until}.csv`,
+      ['Produto', 'Quantidade vendida', 'Receita (US$)', 'Ticket médio (US$)'], rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

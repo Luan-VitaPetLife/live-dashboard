@@ -197,6 +197,20 @@
   .ro-search i{font-size:12px;color:var(--muted)}
   .ro-search input{border:none;background:transparent;outline:none;font-family:inherit;font-size:12px;color:var(--text);width:190px;max-width:46vw}
   .ro-search input::placeholder{color:var(--muted)}
+  .ro-items-toggle{display:flex;align-items:center;height:32px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);padding:2px;gap:2px}
+  .ro-items-toggle button{border:none;background:transparent;font-size:11px;font-weight:600;color:var(--muted);padding:0 10px;height:26px;border-radius:16px;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+  .ro-items-toggle button.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  .ro-export-wrap{position:relative}
+  .ro-export-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;font-family:inherit}
+  .ro-export-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+  .ro-export-pop{position:absolute;top:calc(100% + 6px);right:0;width:210px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;padding:10px;gap:6px}
+  .ro-export-wrap.open .ro-export-pop{display:flex}
+  .ro-export-pop-label{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);padding:2px 6px 4px}
+  .ro-export-opt{padding:8px 10px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:8px;transition:background .1s}
+  .ro-export-opt:hover{background:var(--surface2);color:var(--text)}
+  .ro-export-opt.active{color:var(--text);font-weight:600;background:var(--surface2)}
+  .ro-export-go{margin-top:4px;height:34px;border-radius:8px;border:none;background:var(--ink);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s;font-family:inherit}
+  .ro-export-go:hover{opacity:.88}
   .ro-summary-row{background:var(--surface2)}
   .ro-summary-label{padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
   .ro-summary-val{padding:10px 16px;font-weight:600;font-size:13px}
@@ -555,12 +569,27 @@
         <div class="card"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Pedidos recentes</div><div class="ct-sub">Mais recentes primeiro</div></div>
             <div class="ro-head-right">
+              <div class="ro-items-toggle" id="roItemsToggle" role="group" aria-label="Como contar a coluna Itens">
+                <button type="button" data-mode="count" title="Nº de produtos distintos no pedido">Nº produtos</button>
+                <button type="button" data-mode="qty" title="Soma das quantidades de todos os itens do pedido">Qtd. total</button>
+              </div>
+              <div class="ro-export-wrap" id="roExportWrap">
+                <button type="button" class="ro-export-btn" id="roExportBtn"><i class="bi bi-download"></i> Exportar</button>
+                <div class="ro-export-pop" id="roExportPop">
+                  <div class="ro-export-pop-label">Status a exportar</div>
+                  <div class="ro-export-opt active" data-status="todos">Todos</div>
+                  <div class="ro-export-opt" data-status="autorizado">Autorizado</div>
+                  <div class="ro-export-opt" data-status="em_aberto">Em aberto</div>
+                  <div class="ro-export-opt" data-status="cancelado">Cancelado</div>
+                  <button type="button" class="ro-export-go" id="roExportGo">Baixar CSV</button>
+                </div>
+              </div>
               <div class="ro-search"><i class="bi bi-search"></i><input type="search" id="ordersSearch" placeholder="Buscar cliente, nº, status, canal…" autocomplete="off" aria-label="Buscar pedidos"></div>
               <span class="ro-pg-info" id="ordersMeta">—</span>
             </div>
           </div>
           <div class="tbl-wrap">
-            <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Itens</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
+            <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th id="thItems">Nº produtos</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
             <tbody id="ordersBody"></tbody></table>
           </div>
           <div id="ordersPager" class="orders-pager"></div>
@@ -1058,6 +1087,10 @@ let _roSearchTotal = 0;
 let _roLimited = false;
 let _roLoading = false;
 let _roSeq = 0;         // descarta respostas de busca fora de ordem
+// "Itens": 'count' = nº de linhas de produto distintas, 'qty' = soma das quantidades (um pedido
+// com 1 linha e 70 unidades mostrava "1 item" no modo antigo — ver CLAUDE.md 4.9b).
+let _roItemsMode = localStorage.getItem('coco_orders_items_mode') || 'count';
+let _roExportStatus = 'todos';
 
 // Lista atualmente exibida no card (recentes ou resultado da busca geral).
 function activeOrders() { return _roMode === 'search' ? _roSearch : _roAll; }
@@ -1116,7 +1149,7 @@ function renderOrdersPage() {
   const start = _roPage * RO_PAGE_SIZE;
   const pageItems = ro.slice(start, start + RO_PAGE_SIZE);
 
-  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${escapeHtml(o.name||'')}</td><td>${chBadge}</td><td class="dim">${escapeHtml(o.customer||'—')}</td><td class="dim">${o.items}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; const itemsVal = _roItemsMode === 'qty' ? (o.itemsQty ?? o.items) : o.items; return `<tr><td class="mono">${escapeHtml(o.name||'')}</td><td>${chBadge}</td><td class="dim">${escapeHtml(o.customer||'—')}</td><td class="dim">${itemsVal}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
   // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
   const roValidCount = ro.filter(o=>!o.cancelled).length;
   const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
@@ -1479,6 +1512,7 @@ function closeAllDropdowns() {
 document.addEventListener('click', () => {
   closeAllDropdowns();
   document.getElementById('periodPop').classList.remove('open');
+  document.getElementById('roExportWrap')?.classList.remove('open');
 });
 
 // ── Period picker ──
@@ -1553,6 +1587,41 @@ document.getElementById('syncBtn').addEventListener('click',async()=>{
 document.getElementById('ordersSearch').addEventListener('input', e => {
   _roFilter = e.target.value;
   scheduleSearch();       // busca geral no backend (debounce); vazio volta pros recentes
+});
+
+// ── Toggle "Nº produtos" / "Qtd. total" na coluna Itens (tela e exportação) ──
+function updateItemsModeUI() {
+  document.querySelectorAll('#roItemsToggle button').forEach(b => b.classList.toggle('active', b.dataset.mode === _roItemsMode));
+  const th = document.getElementById('thItems');
+  if (th) th.textContent = _roItemsMode === 'qty' ? 'Qtd. itens' : 'Nº produtos';
+}
+document.getElementById('roItemsToggle').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn || btn.dataset.mode === _roItemsMode) return;
+  _roItemsMode = btn.dataset.mode;
+  localStorage.setItem('coco_orders_items_mode', _roItemsMode);
+  updateItemsModeUI();
+  renderOrdersPage();
+});
+updateItemsModeUI();
+
+// ── Exportar pedidos para planilha (CSV) ──
+const roExportWrap = document.getElementById('roExportWrap');
+roExportWrap.addEventListener('click', e => e.stopPropagation());
+document.getElementById('roExportBtn').addEventListener('click', () => {
+  roExportWrap.classList.toggle('open');
+});
+document.getElementById('roExportPop').querySelectorAll('.ro-export-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    roExportWrap.querySelectorAll('.ro-export-opt').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    _roExportStatus = opt.dataset.status;
+  });
+});
+document.getElementById('roExportGo').addEventListener('click', () => {
+  const p = new URLSearchParams({ market, channel, since: sinceDate, until: untilDate, status: _roExportStatus, itemsMode: _roItemsMode });
+  window.location.href = '/api/orders/export?' + p.toString();
+  roExportWrap.classList.remove('open');
 });
 
 // ── Init ──
