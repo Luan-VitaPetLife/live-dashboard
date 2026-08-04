@@ -30,7 +30,7 @@ do repositório `https://github.com/Luan-VitaPetLife/live-dashboard.git`).
 - Volume ~73 pedidos/30 dias. Paginação simples já dá conta.
 - Produto principal: **"Lisina para gatos - 120g"** (e combos); também "Daily".
 - Versão da Admin API: **2026-04** (`SHOPIFY_API_VERSION`). Não usar versões anteriores a 2025-10.
-- Amazon BR: Marketplace ID `A2Q3Y263D00KWC`. Conta de vendedor **CocoandLuna** — token próprio (`AMAZON_BR_REFRESH_TOKEN`), mesmo app/Client ID da US. Endpoint: `sellingpartnerapi-na.amazon.com` (região NA — não SA). Ver 4.7.1.
+- Amazon BR: Marketplace ID `A2Q3Y263D00KWC`. Conta de vendedor **CocoandLuna** — app SP-API próprio (`AMAZON_BR_CLIENT_ID`/`AMAZON_BR_CLIENT_SECRET`/`AMAZON_BR_REFRESH_TOKEN`), separado do app dos EUA desde 04/08/2026 (ver 4.7.11). IAM Role/chaves AWS continuam compartilhados. Endpoint: `sellingpartnerapi-na.amazon.com` (região NA — não SA). Ver 4.7.1/4.7.11.
 
 ### EUA
 - Shopify US: **vita-pet-life.myshopify.com** · ~99 pedidos/30 dias confirmados.
@@ -650,6 +650,76 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   cobrado" continua sendo o número confiável por padrão; "Vendas de produto" é uma aproximação
   que pode subestimar. Diagnóstico: `GET /api/amazon/report-columns?market=us&days=` (`inspectReport`)
   expõe os campos financeiros crus por linha do relatório pra investigar um dia específico.
+
+#### 4.7.11 ⚠️ Amazon BR "sem pedidos" — o token BR autorizava a conta errada (resolvido 04/08/2026)
+- **Sintoma (reportado pelo Luan):** Amazon BR parou de mostrar pedidos no dashboard, apesar de a
+  loja ter vendas reais recentes (confirmadas direto no Seller Central). Isso reabre e **resolve
+  definitivamente** a ambiguidade deixada em aberto no backlog desde 13/07 (duas teorias nunca
+  reconciliadas — ver histórico do item 2 do backlog).
+- **Diagnóstico (mesmo dia, com o token real do Railway em mãos):** com `AMAZON_BR_REFRESH_TOKEN`
+  configurado localmente, `whoAmI('br')` mostrava **10 marketplaces participando** (MX, CA, BR, US)
+  — exatamente a assinatura da conta **VITA PET LIFE**, não da CocoandLuna (que deveria enxergar só
+  `Brazil`, ver 4.7.1). Prova definitiva: consultando o marketplace **dos EUA**
+  (`ATVPDKIKX0DER`) usando esse mesmo token "BR", vieram **50 pedidos reais americanos**
+  (`111-.../112-...`, valores em USD) — e consultando o marketplace BR (`A2Q3Y263D00KWC`) com o
+  mesmo token, **0 pedidos**. Ou seja: o valor salvo como `AMAZON_BR_REFRESH_TOKEN` em produção
+  **não era da conta CocoandLuna** — era (ou tinha virado, num re-authorize anterior) um token da
+  conta VITA PET LIFE, que "participa" do marketplace BR só porque as contas são vinculadas, mas
+  não tem nenhum pedido lá de verdade. É a MESMA assinatura já documentada em 4.7.1 pra explicar por
+  que a conta errada "parece" ter acesso ao BR sem realmente vender lá.
+- **Decisão: app SP-API próprio pra CocoandLuna, em vez de só reautorizar o app existente.** A ideia
+  inicial (reautorizar a CocoandLuna dentro do mesmo app "Dashboard Amazon", criado sob a conta
+  VITA PET LIFE) foi descartada a pedido do Luan — o app atual já é usado em produção pelos EUA, que
+  "deu muito trabalho pra funcionar direito" (ver todo o histórico de 4.7.2 a 4.7.10), e mexer nele
+  de novo trazia risco desnecessário pro que já está estável. Em vez disso, criado um **app privado
+  novo, registrado e autorizado inteiramente dentro do Seller Central/Solution Provider Portal da
+  própria conta CocoandLuna** — sem nenhuma relação com o app da Vita Pet Life.
+  - **O código já estava pronto pra isso, sem precisar de nenhuma mudança:** `amazon.js` já tinha
+    (desde a investigação registrada em 4.7.9) o fallback `CLIENT_ID_BR = process.env.AMAZON_BR_CLIENT_ID
+    || CLIENT_ID` / `CLIENT_SECRET_BR = process.env.AMAZON_BR_CLIENT_SECRET || CLIENT_SECRET` — ou
+    seja, o app já sabia usar um client_id/secret **diferente** pro BR se essas variáveis existissem,
+    e cai de volta pro client_id/secret compartilhado (dos EUA) se não existirem. Só faltava
+    preencher as variáveis.
+  - **Nova variável:** `AMAZON_BR_CLIENT_ID` / `AMAZON_BR_CLIENT_SECRET` (além do já existente
+    `AMAZON_BR_REFRESH_TOKEN`, agora reemitido pelo app novo). O IAM Role (`AMAZON_ROLE_ARN`) e as
+    chaves AWS continuam **compartilhados** com os EUA — só o client_id/secret/refresh_token do BR
+    ficam num app totalmente separado.
+- **⚠️ A jornada de descobrir o caminho certo no site da Amazon foi o gargalo real, não o código.**
+  A UI da Amazon mudou bastante desde a última vez que esse fluxo foi documentado (4.7.1, 09/07):
+  - O menu antigo documentado ("Seller Central → Apps and Services → Develop Apps") hoje **redireciona
+    direto pro Solution Provider Portal** — os dois sistemas parecem ter sido unificados.
+  - Criar um app novo, hoje, exige **duas etapas prévias obrigatórias** que não existiam antes:
+    **Verify your Identity** (documento de identidade + registro da empresa, ~20 min) e depois
+    **Set up Solution Provider Account Profile and Permissions** (formulário com "primary business
+    activity", roles, use case, security controls) — e essa segunda etapa entra em **revisão manual
+    da Amazon** antes de liberar a criação de app de **produção** (sem revisão aprovada, só dá pra
+    criar app de **Sandbox**, que não vê pedido real nenhum).
+  - As **roles** (permissões) também mudaram de nome — não existe mais um role chamado "Orders".
+    Usado **`Inventory and Order Tracking`** ("Analyze and manage inventory. Does not include
+    information required to generate shipping labels" — o mais próximo do antigo Orders) +
+    **`Product Listing`** (pedido de propósito: o app dos EUA não tem esse role, por isso a Catalog
+    Items API dá 403 e nunca trouxe imagem de produto Amazon — ver backlog aberto 3 — então o app
+    novo do BR já nasceu pedindo essa permissão, pra não herdar a mesma limitação).
+  - No formulário do app em si, cuidado pra não confundir **três identificadores parecidos** que a
+    tela mostra em pontos diferentes: **Application ID** (`amzn1.sp.solution.<uuid>`, é só o ID do
+    registro dentro do portal), algo tipo **Account/Merchant ID** (`amzn1.pa.o.<...>`, identifica a
+    conta vendedora, não o app) e o que realmente importa pro código, o **Client ID** (formato
+    `amzn1.application-oa2-client.<hex>`) + **Client Secret** (`amzn1.oa2-cs.v1.<hex>`) — esses dois
+    ficam numa seção separada chamada **"LWA credentials"** (link "View" na listagem de apps do
+    Solution Provider Portal), não na tela principal do app.
+- **Verificado ao vivo (04/08/2026), com o app novo:** `whoAmI('br')` passou a mostrar **só**
+  `A2Q3Y263D00KWC` (Amazon.com.br) — a assinatura correta da CocoandLuna, batendo com 4.7.1. E
+  `/orders/v0/orders` nos últimos 14 dias trouxe **29 pedidos reais** (`701-.../702-...`, `Shipped`,
+  `AFN`, valores em BRL) — confirmação definitiva de que a causa raiz era mesmo o token/app errado,
+  não limitação de código nem de permissão de app.
+- **Ação pendente:** colar `AMAZON_BR_CLIENT_ID`, `AMAZON_BR_CLIENT_SECRET` e o novo
+  `AMAZON_BR_REFRESH_TOKEN` no Railway, depois `POST /api/amazon/force-sync`. **Zero mudança nas
+  variáveis dos EUA** (`AMAZON_CLIENT_ID`/`AMAZON_CLIENT_SECRET`/`AMAZON_REFRESH_TOKEN`) — o app novo
+  é inteiramente paralelo, por design.
+- **Vale re-testar depois do sync:** como o app novo já pede o role `Product Listing` desde o
+  início (o app dos EUA nunca teve isso, ver backlog aberto 3), os erros 400 de `getOrderItems` nos
+  pedidos `701-/702-` (backlog aberto 2, nome de produto Amazon BR incompleto) podem se resolver
+  sozinhos — não confirmado ainda, testar `POST /api/amazon/fetch-items?market=br` depois do sync.
 
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
@@ -1304,7 +1374,9 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 | `AMAZON_CLIENT_ID` | LWA Client ID do app SP-API "Dashboard Amazon" — mesmo app para US e BR |
 | `AMAZON_CLIENT_SECRET` | LWA Client Secret |
 | `AMAZON_REFRESH_TOKEN` | LWA Refresh Token da conta **VITA PET LIFE** (US). Ver 4.7.1 |
-| `AMAZON_BR_REFRESH_TOKEN` | LWA Refresh Token da conta **CocoandLuna** (BR). **Nunca igual ao de cima** — ver 4.7.1 |
+| `AMAZON_BR_REFRESH_TOKEN` | LWA Refresh Token do app próprio da conta **CocoandLuna** (BR). **Nunca igual ao de cima** — ver 4.7.1/4.7.11 |
+| `AMAZON_BR_CLIENT_ID` | LWA Client ID do app SP-API próprio da CocoandLuna (BR) — app separado do dos EUA desde 04/08/2026. Ver 4.7.11 |
+| `AMAZON_BR_CLIENT_SECRET` | LWA Client Secret do mesmo app BR acima |
 | `AMAZON_BACKFILL_DAYS` | Janela só da 1ª carga, antes de existir cursor (padrão `2`). Ver 4.7.3 |
 | `AMAZON_FETCH_PII` | `1` liga a busca do nome do comprador via RDT — só se o papel PII for aprovado pela Amazon |
 | `AMAZON_NAMES_EVERY_HOURS` | Intervalo mínimo entre reconciliações de nome de produto da Amazon, por mercado (padrão `12`). Ver 4.7.6 |
@@ -1382,12 +1454,13 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 | Shopee | ✅ | Partner ID 2037711, Shop ID 1502160212; analytics e endereço do comprador (estado) indisponíveis via API | 4.5 |
 | Mercado Livre | ✅ | OAuth (re-autorizar após deploy); ML Ads ativo (escopo `write:product_ads`) | 4.6 |
 | Amazon US | ✅ | `ATVPDKIKX0DER`, token conta VITA PET LIFE; sync por cursor + backfill Reports API | 4.7 |
-| Amazon BR | ✅ parcial | `A2Q3Y263D00KWC`, token conta CocoandLuna; valor/qtd ok, nome de produto só via getOrderItems | 4.7.9, backlog aberto 3 |
+| Amazon BR | ✅ | `A2Q3Y263D00KWC`, app próprio da conta CocoandLuna desde 04/08/2026 (era token da conta errada) | 4.7.11 |
 | Meta Ads BR/US | ✅ | contas separadas (`META_AD_ACCOUNT_ID` / `META_US_AD_ACCOUNT_ID`) | 4.4 |
 | Google Ads | ✅ | só EUA, Customer ID `1344114329`; aparece na tela de Campanhas (US) | 4.12 |
 
-- **Amazon — um app** ("Dashboard Amazon", `AMAZON_CLIENT_ID/SECRET`), **dois tokens** (um por conta de vendedor,
-  nunca iguais — ver 4.7.1); endpoint `sellingpartnerapi-na.amazon.com` serve os dois marketplaces.
+- **Amazon — dois apps SP-API separados desde 04/08/2026** (ver 4.7.11): o app dos EUA (`AMAZON_CLIENT_ID/SECRET`,
+  conta VITA PET LIFE) e um app próprio do BR (`AMAZON_BR_CLIENT_ID/SECRET`, conta CocoandLuna) — IAM Role/chaves
+  AWS continuam compartilhados; endpoint `sellingpartnerapi-na.amazon.com` serve os dois marketplaces.
 
 ## 9. Próximos passos (backlog)
 
@@ -1397,14 +1470,12 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
    (código pronto). Ver 4.7.4.
 2. **Amazon BR — nome de produto incompleto:** valor/qtd/pedidos ok; os nomes vêm via `getOrderItems`
    (`enrichAmazonItems`, `POST /api/amazon/fetch-items?market=br`), mas os pedidos `701-/702-` dão 400.
-   ⚠️ **Duas teorias sobre a causa, nunca reconciliadas:** 4.7.9 conclui que é limitação de autorização do
-   app especificamente no marketplace Brasil (resolver no portal, sem trocar token). Uma investigação
-   posterior no mesmo dia (13/07, registrada só na memória de sessão, não atualizada aqui) concluiu o
-   oposto — que `AMAZON_BR_REFRESH_TOKEN` está autorizando a conta errada (VITA PET LIFE/EUA, não
-   CocoandLuna) — com evidência própria (`whoami`, `list-orders` zerado pro BR). Antes de agir, rodar de
-   novo `GET /api/amazon/whoami` e `GET /api/amazon/probe-order?id=701-...&market=br` pra confirmar qual
-   teoria bate com o estado atual. Enquanto faltam itens, Estoque injeta o placeholder "Produto TESTE".
-   Ver 4.7.9 / 4.14.
+   ⚠️ **A ambiguidade das "duas teorias" (4.7.9 vs. sessão de 13/07) foi resolvida em 04/08/2026: era
+   mesmo o token da conta errada** (ver 4.7.11 — confirmado ao vivo que `AMAZON_BR_REFRESH_TOKEN`
+   autorizava VITA PET LIFE, não CocoandLuna). Com o app novo, próprio da CocoandLuna (que já pede o
+   role `Product Listing`), esse 400 em `getOrderItems` pode ter se resolvido sozinho — **testar
+   `POST /api/amazon/fetch-items?market=br` depois que o sync com as credenciais novas rodar**, antes
+   de investigar mais. Enquanto faltam itens, Estoque injeta o placeholder "Produto TESTE". Ver 4.7.9 / 4.7.11 / 4.14.
 3. **Amazon — imagem de produto bloqueada (403):** Catalog Items API retorna 403 — o app não tem o role
    "Product Listing". Habilitar no portal + re-autorizar (novo refresh token); depois `POST /api/amazon/images`.
    Código pronto. Ver 4.13.
@@ -1419,6 +1490,8 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
    não foi confirmado como viável na API de Mercado Ads sem acesso à documentação oficial (bloqueada pra
    fetch automatizado). Ver 4.11.1.
 ### Resolvidos (referência rápida — o detalhe está na seção citada)
+- **Amazon BR sem pedidos** (04/08) — `AMAZON_BR_REFRESH_TOKEN` autorizava a conta errada (VITA PET
+  LIFE, não CocoandLuna). Resolvido com app SP-API próprio pra CocoandLuna, sem mexer no app dos EUA. Ver 4.7.11.
 - **CSS da sidebar duplicado por página** (15/07) — o CSS do componente (`.sidebar`, `.brand*`, `.nav-*`,
   toggle, overlay, botão de abrir, transforms `body.sidebar-*`) foi movido para `sidebar.js`
   (injetado em `<style id="sidebarComponentStyle">`); cada página perdeu a duplicata e mantém só o
