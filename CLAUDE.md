@@ -809,15 +809,80 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   texto de UI genérico como se fosse o nome de uma loja (ver seção 1).
 
 ### 4.11 Tela de Campanhas — `public/campanhas.html`
-- Usa dados reais de dois endpoints: `/api/dashboard` (KPIs, tendência, gasto diário Meta) e `/api/campaigns` (campanha a campanha).
+- Usa dados reais de dois endpoints: `/api/dashboard` (KPIs, tendência, gasto diário Meta, faturamento total por canal) e `/api/campaigns` (campanha a campanha, ao vivo).
 - **Painel "Visão Geral":** KPIs de receita, pedidos, gasto, ROAS por canal. Mini charts de tendência com `trend.byChannel` e `trend.metaSpendDaily`.
-- **KPI strip do topo — todos "geral" (alterado 02/07/2026):** `render()` agora é `async` porque precisa buscar `/api/campaigns` (via `loadCampaigns()`, já cacheado) além de `/api/dashboard`, para somar o Google Ads no "geral" quando `market==='us'` (Google não entra em `/api/dashboard`, ver 4.12). 5 células: **Gasto Total** (Meta + Mercado Ads + Google Ads), **Pedidos** (`kpis.orders`), **Vendas Atribuídas Geral** (Meta + ML Destaque/premium + Google Ads), **Faturamento Geral** (`kpis.revenue`, receita total do período — não é atribuição, é o total da loja), **ROAS Geral** (vendas atribuídas geral ÷ gasto geral). O KPI de "Cliques" foi removido.
+- **KPI strip do topo — todos "geral" (alterado 02/07/2026):** `render()` é `async` porque busca `/api/campaigns` (via `loadCampaigns()`, já cacheado) além de `/api/dashboard`. 5 células: **Gasto Total** (Meta + Mercado Ads + Google Ads), **Pedidos** (`kpis.orders`), **Vendas Atribuídas Geral** (Meta + ML Destaque/premium + Google Ads), **Faturamento Geral** (`kpis.revenue`, receita total do período — não é atribuição, é o total da loja), **ROAS Geral** (vendas atribuídas geral ÷ gasto geral). O KPI de "Cliques" foi removido.
 - **Painel "Gastos":** ao clicar em um canal, exibe cards individuais de cada campanha retornados por `/api/campaigns`. Cada card mostra: nome, status, gasto, receita, ROAS, pedidos, cliques, impressões, CTR, ACoS (ML).
   - Logo do canal em cada card: `logo_mercadolivre.png` com `.camp-logo-fill` (sem borda/padding, `object-fit:cover`). Meta/Shopee/Amazon com `.camp-logo-img` (fundo branco, borda, padding — para logos com transparência).
   - `.cmp-status.on` / `.cmp-status.off` indicam campanha ativa/pausada.
 - Mercado Livre e Meta BR aparecem no mercado BR; apenas Meta US no mercado US. Google Ads aparece só no mercado US (card `#card-google_us`).
 - Período sincronizado com o seletor da própria página (não herda do `index.html`).
-- **Card Google Ads (só EUA):** ao contrário dos demais cards (que puxam o resumo do próprio `/api/dashboard`), o card do Google Ads (`loadGoogleCard()`) busca `/api/campaigns` diretamente e soma `spend/revenue/clicks` das campanhas retornadas para preencher os KPIs do próprio card — não está integrado ao payload de `/api/dashboard` nem ao `mlBreakdown`/`salesSplit` (decisão consciente, ver 4.12). Mini-chart mostra gasto por campanha (barras), não série diária (a API do Google Ads aqui só é consultada agregada por período, sem `segments.date`).
+
+#### 4.11.1 ⚠️ Cards de canal (topo) divergiam da lista de campanhas embaixo deles (corrigido 04/08/2026)
+- **Sintoma (reportado pelo Luan, com print):** o card resumo do Mercado Livre mostrava "Gasto Ads
+  R$ 2.588" **em qualquer período escolhido** — o número nunca mudava — enquanto a soma das 4
+  campanhas listadas logo abaixo dava só R$ 290. O card do Meta também "parecia incoerente": "Vendas
+  Atribuídas R$ 2.104" contra uma soma de "Receita" das campanhas de baixo de quase R$ 4.855 (mais do
+  dobro). O KPI geral do topo da tela ("Gasto Total"/"Vendas Atribuídas Geral"/"ROAS Geral") herdava
+  os dois problemas, por somar exatamente esses mesmos números quebrados.
+- **Causa raiz nº 1 — Mercado Livre nunca respeitava o período:** o card lia `mlBreakdown.adCost`
+  (payload de `/api/dashboard`), que por sua vez vem de `kv.mlAdCosts` — um **valor único**, gravado
+  pelo **sync periódico** (`sync.js`, a cada `SYNC_INTERVAL_MINUTES`) chamando `ml.fetchAdCosts()` com
+  a janela fixa de 60 dias do próprio sync (`defaultWindow()`), **sem nenhuma relação com o
+  `since`/`until` escolhido na tela**. Trocar o período em `campanhas.html` nunca recalculava esse
+  valor — ele só mudava quando o sync rodava de novo, e sempre pro mesmo range de 60 dias. Os cards
+  de campanha individuais, por outro lado, sempre estiveram certos: vêm de `/api/campaigns`, que
+  chama `ml.fetchCampaigns()`/`meta.fetchCampaigns()` **ao vivo**, com o `since`/`until` exato da tela.
+- **Causa raiz nº 2 — Meta usava uma metodologia de atribuição diferente da mostrada embaixo:** "Vendas
+  Atribuídas" do card vinha de `kpis.metaRevenue` (`/api/dashboard`) — soma do `total` de pedidos cujo
+  `customerJourneySummary.lastVisit.source` é Instagram/Facebook (atribuição por origem do pedido no
+  Shopify, ver 4.4). Os cards de campanha, por sua vez, mostram `revenue` vindo de `action_values` da
+  própria API do Meta (conversões que a Meta atribui ao pixel/Conversions API, com a janela de
+  atribuição dela, tipicamente mais ampla/generosa que "a origem do último clique registrada no
+  Shopify"). São duas métricas **legítimas mas diferentes** — nenhuma das duas está "errada" — só que
+  aparecerem lado a lado sem nenhuma explicação parecia incoerente. Confirmado ao vivo (7 dias,
+  04/08/2026): `kpis.metaRevenue` = R$ 2.104,01 vs soma de `revenue` das campanhas = R$ 4.855,03.
+- **Correção:** os cards de canal (Mercado Livre e Meta, BR e US) e o KPI geral do topo **pararam de
+  ler `/api/dashboard` pra gasto/vendas de Ads** e passaram a somar a **mesma lista de campanhas** já
+  buscada de `/api/campaigns` (`loadCampaigns()`) que preenche os cards individuais logo abaixo —
+  exatamente o padrão que o card do Google Ads já usava desde 01/07 (ver "Card Google Ads" abaixo).
+  Por construção, o resumo do canal nunca mais pode divergir da soma do que está listado embaixo dele.
+  `render()` agora busca `/api/campaigns` **sempre** (antes só buscava eager pra `market==='us'`, por
+  causa do Google) e deriva `metaSpend/metaRev/metaClicks` e `mlSpend/mlClicks` via `sumField(campos,
+  'spend'|'revenue'|'clicks')`. Disponibilidade (`mlAvail`/`metaAvail`) passou a vir do campo
+  `available` da resposta de `/api/campaigns`, não mais de "gasto > 0" — antes, um período com gasto
+  real igual a zero (campanha pausada, por exemplo) aparecia incorretamente como "não conectado".
+  **O que ficou intocado, de propósito:** `cs.mercadolivre` (Faturamento total do canal ML, todas as
+  vendas — não só as de Ads) continua vindo de `/api/dashboard`, já período-correto, sem relação com
+  o bug. `mlBreakdown.premium` ("ML Destaque" no KPI geral) continua vindo da tag de listagem paga do
+  pedido, não de Ads — metodologia deliberadamente diferente, já documentada acima, não mexida.
+  **O dashboard principal (`index.html`) NÃO foi tocado** — `kpis.adCost`/`metaRevenue`/
+  `mlBreakdown.adCost` em `/api/dashboard` continuam existindo do jeito que estavam, alimentando o
+  ROAS/ACOS do topo e o toggle "Incluir Mercado Ads" (ver 4.9b) com a mesma metodologia de sempre.
+  - **⚠️ Efeito colateral esperado, não é bug:** como "Vendas Atribuídas" do Meta nesta tela passou a
+    usar a receita que a própria Meta reporta (em vez da atribuição por origem do pedido), o número
+    fica **bem maior** que antes (no teste acima, mais que dobrou) — isso é a correção funcionando,
+    não uma regressão; a Meta conta conversões que a atribuição por "origem do último clique no
+    Shopify" não capturava (ex: clique no anúncio hoje, compra alguns dias depois vindo direto/busca).
+  - **⚠️ Bug relacionado, ENCONTRADO mas NÃO corrigido nesta rodada (mesma causa raiz nº 1):** o toggle
+    "Incluir Mercado Ads" no KPI de ROAS/ACOS do dashboard principal (`index.html`, ver 4.9b) também
+    lê `mlBreakdown.adCost` — herda exatamente o mesmo problema (número preso na janela de 60 dias do
+    sync, não respeita o período escolhido no dashboard principal). Não foi corrigido porque exigiria
+    ou (a) tornar `/api/dashboard` (o endpoint mais chamado do app, sem nenhuma dependência de API
+    externa até hoje, por design — ver seção 3) dependente de uma chamada ao vivo à API do Mercado
+    Ads a cada request, ou (b) sincronizar o gasto do ML como série diária (como o Meta já faz via
+    `metaInsightsDaily`) — não confirmado se a API de Mercado Ads suporta agregação diária num único
+    request (haveria indício de um parâmetro `aggregation_type=DAILY`, mas a documentação oficial
+    bloqueia acesso automatizado e não foi possível confirmar o formato exato da resposta). Qualquer
+    uma das duas é uma mudança de arquitetura maior que o escopo desta correção (só a tela de
+    Campanhas). Revisitar se o Luan quiser esse toggle corrigido também.
+- **Card Google Ads (só EUA):** ao contrário dos demais cards (que agora também puxam de
+  `/api/campaigns`, ver acima), o card do Google Ads (`loadGoogleCard()`) sempre buscou
+  `/api/campaigns` diretamente e somou `spend/revenue/clicks` das campanhas retornadas — era o padrão
+  já certo que os outros dois canais passaram a seguir nesta correção. Não está integrado ao payload
+  de `/api/dashboard` nem ao `mlBreakdown`/`salesSplit` (decisão consciente, ver 4.12). Mini-chart
+  mostra gasto por campanha (barras), não série diária (a API do Google Ads aqui só é consultada
+  agregada por período, sem `segments.date`).
 
 ### 4.10 Páginas de Geografia — `public/geografia.html` e `public/geografia-us.html`
 - **Biblioteca:** Leaflet.js 1.9.4 (CDN unpkg).
@@ -1345,6 +1410,14 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
    Código pronto. Ver 4.13.
 4. **Amazon Ads e TikTok Shop — integrações ainda não construídas.** Aparecem como "Planejadas" na tela
    de Integrações (`/integracoes`, ver 4.17), sem código por trás ainda.
+5. **Toggle "Incluir Mercado Ads" (dashboard principal, `index.html`, ver 4.9b) não respeita o período:**
+   mesma causa raiz do bug de Campanhas corrigido em 4.11.1 — lê `mlBreakdown.adCost`, um valor único
+   preso na janela fixa de 60 dias do sync periódico. Não corrigido junto porque a correção da tela de
+   Campanhas usou `/api/campaigns` (chamada ao vivo), e `/api/dashboard` é, por design, o único endpoint
+   do app que nunca depende de chamada externa em tempo de request (ver seção 3) — corrigir aqui exige
+   ou quebrar esse princípio ou sincronizar o gasto do ML como série diária (como o Meta já faz), o que
+   não foi confirmado como viável na API de Mercado Ads sem acesso à documentação oficial (bloqueada pra
+   fetch automatizado). Ver 4.11.1.
 ### Resolvidos (referência rápida — o detalhe está na seção citada)
 - **CSS da sidebar duplicado por página** (15/07) — o CSS do componente (`.sidebar`, `.brand*`, `.nav-*`,
   toggle, overlay, botão de abrir, transforms `body.sidebar-*`) foi movido para `sidebar.js`
