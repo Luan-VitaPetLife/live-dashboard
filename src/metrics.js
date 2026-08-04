@@ -54,6 +54,10 @@ function buildBuckets(since, until, grain) {
 
 const isCancelled = o => o.cancelled;
 const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
+// "Itens" na tela de Pedidos Recentes pode significar duas coisas diferentes: nº de linhas de
+// produto distintas (o.items.length) ou a soma das quantidades (um pedido com 1 linha e qty=70
+// mostrava "1 item", o que confundia — ver toggle "Itens/Qtd" no card, CLAUDE.md 4.9b).
+const sumItemsQty = o => o.items.reduce((a, it) => a + (it.qty || 0), 0);
 
 // Toggle "Receita da Amazon" (ver CLAUDE.md): mode 'product' usa o.productSales (Ordered
 // Product Sales — só o valor do produto, sem imposto/frete/embrulho, igual o Seller Central
@@ -329,7 +333,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const seenBundleIdsSeg = new Set();
   const geoAmazonImages = getAmazonProductImages(); // Shopify/Shopee/ML trazem it.image direto; Amazon só via cache de ASIN (ver 4.13)
   valid.forEach(o => {
-    const rf = amazonRevFactor(o); // escala receita ao total capturado (Amazon); ver 4.7.6
+    const rf = itemRevFactor(o); // escala receita ao total capturado; ver 4.7.6 e 4.13
     // mesma normalização de estado usada em byState (ver acima): reduz grafias da Amazon e agrupa
     // endereços fora dos EUA em 'INTL' quando market==='us'.
     let geoState = o.state;
@@ -418,7 +422,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // RECENT_MAX é só uma trava de segurança de payload para o amazon_us (~1000 pedidos/dia).
   const recent = getOrders({ channel, since, until, market })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, RECENT_MAX)
-    .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
+    .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
 
   // conversão anterior
   const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil, market) : emptySess;
@@ -541,27 +545,64 @@ export function searchOrders({ market = 'br', q = '', limit = 200 } = {}) {
   matched.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const total = matched.length;
   const results = matched.slice(0, limit).map(o => ({
-    name: o.name, channel: o.channel, customer: o.customer, items: o.items.length,
+    name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o),
     createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled,
   }));
   return { market, q, total, results, limited: total > limit };
 }
 
+// ── Exportação CSV de pedidos: TODOS os pedidos do período/canal/mercado escolhidos, com filtro
+// opcional de status (Autorizado/Em aberto/Cancelado). Diferente do `recent` do dashboard (capado
+// em RECENT_MAX por segurança de payload do carregamento normal da tela), aqui não há teto — é
+// sob demanda, só quando o usuário clica em "Exportar". Usado por GET /api/orders/export.
+export function exportOrdersList({ market = 'br', channel = 'todos', since, until, status = 'todos' } = {}) {
+  let orders = getOrders({ channel, since, until, market })
+    .slice()
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  if (status && status !== 'todos') {
+    orders = orders.filter(o => {
+      const label = statusLabelPt(o);
+      if (status === 'autorizado') return label === 'Autorizado';
+      if (status === 'em_aberto') return label === 'Em aberto';
+      if (status === 'cancelado') return label === 'Cancelado';
+      return true;
+    });
+  }
+  return orders.map(o => ({
+    name: o.name, channel: o.channel, customer: o.customer,
+    itemsCount: o.items.length, itemsQty: sumItemsQty(o),
+    createdAt: o.createdAt, total: o.total,
+    status: o.status, statusLabel: statusLabelPt(o), cancelled: o.cancelled,
+  }));
+}
+
 // Agrupa itens de uma lista de pedidos por canal → por título de produto (com quebra avulso x
 // combo, Shopify Bundles, tipo e imagem). Compartilhado por computeProducts e computeStock —
 // mesma regra de agrupamento usada em Top Produtos/Segmentos.
-// Escala a receita dos ITENS ao total CAPTURADO do pedido, só para a Amazon. Os itens da
-// Amazon vêm do relatório com preço BRUTO, e pedidos Pending têm total 0 até a captura no
-// envio — sem escalar, a receita por produto soma pedidos não capturados a preço cheio e
-// estoura (num dia de US$ 5k capturado, Segmentos/Produtos mostravam US$ 17k). O total do
-// pedido (`o.total`) é a fonte de verdade da receita em todo o app; aqui distribuímos ele
-// entre os itens na proporção do preço deles. Pending (total 0) → fator 0. Outros canais
-// retornam 1 (item.amount já é a receita líquida do produto). Ver CLAUDE.md 4.7.6.
-function amazonRevFactor(o) {
-  if (o.channel !== 'amazon' && o.channel !== 'amazon_us') return 1;
-  let itemsSum = 0;
-  for (const it of o.items) if (it.title) itemsSum += it.amount || 0;
-  return itemsSum > 0 ? (o.total || 0) / itemsSum : 0;
+// Escala a receita dos ITENS ao total CAPTURADO do pedido. Os itens da Amazon vêm do relatório
+// com preço BRUTO, e pedidos Pending têm total 0 até a captura no envio — sem escalar, a receita
+// por produto soma pedidos não capturados a preço cheio e estoura (num dia de US$ 5k capturado,
+// Segmentos/Produtos mostravam US$ 17k). O total do pedido (`o.total`) é a fonte de verdade da
+// receita em todo o app; na Amazon distribuímos ele entre os itens na proporção do preço deles.
+// Ver CLAUDE.md 4.7.6.
+// Outros canais normalmente devolvem fator 1 (item.amount já é a receita líquida do produto) —
+// EXCETO quando o pedido não gerou receita nenhuma (`o.total === 0`) mas os itens carregam preço
+// de catálogo mesmo assim. Achado testando a exportação de Produtos (Shopify US, 03/08/2026):
+// pedidos com `customer: "Walmart DFW6s"` (fulfillment por atacado — o Shopify só despacha, quem
+// cobra é o Walmart) chegam com `status: PAID`/`cancelled: false` e `total: 0`, mas item com
+// `qty`/`amount` de catálogo cheio (ex: 72 un. a preço unitário normal). Sem essa guarda, cada
+// pedido assim inflava a receita por produto em Top Produtos/Segmentos/Produtos/Estoque sem
+// nenhuma venda de fato ter acontecido — mesmo `o.total` (a fonte de verdade em todo o resto do
+// app) mostrando 0. Unidades continuam contando todas (mesmo princípio da Amazon acima) — só a
+// receita respeita o total realmente cobrado.
+function itemRevFactor(o) {
+  if (o.channel === 'amazon' || o.channel === 'amazon_us') {
+    let itemsSum = 0;
+    for (const it of o.items) if (it.title) itemsSum += it.amount || 0;
+    return itemsSum > 0 ? (o.total || 0) / itemsSum : 0;
+  }
+  if ((o.total || 0) === 0 && o.items.some(it => it.title && (it.amount || 0) > 0)) return 0;
+  return 1;
 }
 
 function aggregateProductsByChannel(orders) {
@@ -577,7 +618,7 @@ function aggregateProductsByChannel(orders) {
     const c = byChannel[o.channel];
     c.revenue += o.total;
     c.orders += 1;
-    const rf = amazonRevFactor(o);
+    const rf = itemRevFactor(o);
     o.items.forEach(it => {
       // "-" é o placeholder que o relatório da Amazon usa em linhas de frete/serviço/ajuste
       // sem produto de verdade — tratado como ausente, igual título vazio (ver amazon.js

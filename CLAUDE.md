@@ -331,14 +331,31 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   `status` do pedido novo (Orders API é a fonte deles), só não deixa apagar os nomes. Para outros canais o item sempre
   tem título, então a guarda nunca dispara. **Depois de deployar, rodar `POST /api/amazon/sync-names?market=us` uma vez**
   para re-preencher os títulos já apagados — a partir daí eles **grudam**.
-- **⚠️ Receita por item escalada ao total capturado (`amazonRevFactor`, corrigido 10/07/2026):** os itens da Amazon
-  vêm do relatório com **preço bruto**, e pedidos **Pending** têm `total: 0` até a captura no envio. Como Segmentos/
-  Produtos/Top Produtos somavam `item.amount` (bruto), num dia de **US$ 5k capturado** a tela de Segmentos mostrava
-  **US$ 17k** (contava pedidos ainda não capturados a preço cheio). `amazonRevFactor(o)` em `metrics.js` escala a
-  receita dos itens para o `o.total` do pedido (fonte de verdade em todo o app): captado → itens somam o total;
-  Pending → 0. Só afeta a Amazon (outros canais retornam fator 1). **Unidades continuam contando todas** (unidades
+- **⚠️ Receita por item escalada ao total capturado (`itemRevFactor`, corrigido 10/07/2026, generalizado 03/08/2026):**
+  os itens da Amazon vêm do relatório com **preço bruto**, e pedidos **Pending** têm `total: 0` até a captura no
+  envio. Como Segmentos/Produtos/Top Produtos somavam `item.amount` (bruto), num dia de **US$ 5k capturado** a tela
+  de Segmentos mostrava **US$ 17k** (contava pedidos ainda não capturados a preço cheio). `itemRevFactor(o)` em
+  `metrics.js` (renomeada de `amazonRevFactor` — deixou de ser exclusiva da Amazon, ver abaixo) escala a receita dos
+  itens para o `o.total` do pedido (fonte de verdade em todo o app): captado → itens somam o total; Pending → 0. Só
+  afeta a Amazon (outros canais seguem fator 1, ver exceção abaixo). **Unidades continuam contando todas** (unidades
   pedidas), só a receita respeita a captura. Aplicado em `aggregateProductsByChannel` (Produtos/Estoque/Top Produtos)
   e na agregação de Segmentos.
+  - **⚠️ Generalizado para qualquer canal — pedido Shopify US "atacado/fulfillment" com `total: 0` mas item com
+    preço de catálogo (achado 03/08/2026, verificando a exportação de Produtos):** ao implementar o botão de
+    exportar quantidade vendida (Shopify US, ver 4.13.2), a soma de receita exportada por produto (US$ 16.196) veio
+    quase o dobro do total que a própria tela de Produtos já reportava pro canal (US$ 7.364) — não era um bug da
+    exportação nova, era um problema pré-existente em `aggregateProductsByChannel`/`computeProducts`, só mais visível
+    numa planilha somada linha a linha. Causa: pedidos com `customer: "Walmart DFW6s"` — o Shopify é só o registro de
+    **fulfillment por atacado** (quem cobra é o Walmart, não a loja) — chegam com `status: PAID`, `cancelled: false`
+    e **`total: 0`** (nada foi cobrado via Shopify), mas o(s) item(ns) ainda carregam o **preço de catálogo cheio**
+    (`amount`) em quantidade grande (ex: 10 un. de "Allergy Support" a US$ 32,99 = US$ 329,90 de "receita" fantasma
+    por pedido). É o mesmo padrão já documentado pra Amazon MCF/"Non-Amazon" (ver 4.7.9), só que do lado do Shopify,
+    onde nunca tinha sido guardado. **Correção:** `itemRevFactor` ganhou uma segunda regra, válida pra qualquer
+    canal (não só Amazon): se `o.total === 0` mas algum item tem `amount > 0`, o fator é `0` — zera a receita mas
+    **preserva a unidade vendida** (mesmo princípio da regra da Amazon acima). Pedido com `total` não-zero em
+    qualquer canal não-Amazon continua com fator `1`, sem nenhuma mudança de comportamento pro caso normal.
+    Confirmado ao vivo: 17 pedidos Walmart no período (10-72 un. cada, `total:0`), soma de receita por produto caiu
+    de US$ 16.196,40 para US$ 7.369,76 (bate com o total real do canal), unidades vendidas inalteradas.
 - **Tela de Segmentos (`segmentos.html`, 10/07/2026):** ganhou **seletor de canal** (dropdown por mercado — o backend
   já filtra os segmentos pelo `channel` do `/api/dashboard`) e **"ver mais/ver menos"** nos top produtos (o backend
   passou a devolver a lista completa em `segments[k].topProducts`, a tela mostra 5 e expande).
@@ -346,7 +363,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   do período **separados por segmento**, ranqueados por unidades; clicar num produto expande (accordion, só um
   aberto por vez) um painel com **mini-mapa Leaflet coroplético + ranking de estados** e a **quebra por canal**.
   Dado vem de `productGeo` (novo campo do payload de `/api/dashboard`, `metrics.js`): mesma passada que já monta
-  `segments` (mesmo `amazonRevFactor`, mesma normalização de estado do `byState` — `normalizeUsState` + bucket
+  `segments` (mesmo `itemRevFactor`, mesma normalização de estado do `byState` — `normalizeUsState` + bucket
   `INTL` para endereço não-EUA quando `market==='us'`), agrupando por **título de produto** em vez de por segmento:
   `{ title, seg, qty, revenue, byChannel:[{channel,qty,revenue}], byState:[{state,qty,revenue,orders}] }`, ambos
   ordenados desc por `qty`. O mini-mapa reaproveita as tabelas de referência (`IBGE_UF`/`STATE_NAMES`/`FIPS_UF` etc.)
@@ -687,6 +704,26 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     pra buscar "em aberto" ou "autorizado" continuar encontrando os pedidos certos. Ícones por canal (como
     os que o Bling mostra por tipo de documento/certificado) foram cogitados e descartados pelo Luan — o
     canal já aparece como badge colorido por extenso na coluna Canal, que já cobre essa necessidade.
+  - **Toggle "Nº produtos"/"Qtd. total" na coluna Itens + exportação CSV (implementado 03/08/2026):**
+    pedido do Luan — a coluna "Itens" sempre mostrou `o.items.length` (nº de linhas de produto
+    distintas do pedido), e um pedido com **1 linha e `qty: 70`** (comum em B2B/atacado) aparecia como
+    "1 item", o que confundia. `sumItemsQty(o)` (`metrics.js`) soma `it.qty` de todas as linhas; o
+    payload de `/api/dashboard` (`recent`) e de `/api/orders/search` passaram a expor os dois valores
+    (`items` = contagem de linhas, `itemsQty` = soma de quantidades). Um toggle de pill (`#roItemsToggle`,
+    "Nº produtos" / "Qtd. total", persistido em `localStorage('coco_orders_items_mode')`) no cabeçalho
+    do card alterna qual valor a coluna mostra, tanto na tela quanto na exportação — sem chamada nova
+    ao trocar (o dado já vem nos dois formatos).
+    - **`GET /api/orders/export?market=&channel=&since=&until=&status=&itemsMode=`** (`server.js`,
+      via `exportOrdersList()` novo em `metrics.js`) baixa um CSV com **todos** os pedidos do
+      período/canal/mercado escolhidos — diferente do `recent` do payload normal, que é capado em
+      `RECENT_MAX` por segurança de tamanho; a exportação é sob demanda, sem teto, direto no store.
+      Filtro opcional de **status** (`todos`/`autorizado`/`em_aberto`/`cancelado`, mesmo vocabulário de
+      `statusLabelPt()` que a coluna Status já usa — ver acima) escolhido num popover (`#roExportPop`)
+      antes de baixar. Colunas: Código do pedido, Cliente, Status, Nº de produtos (ou Qtd. de itens,
+      conforme o toggle), Data, Valor. CSV com `;` como separador + BOM UTF-8 — abre direto no Excel
+      em pt-BR sem passar pelo assistente de importação (a vírgula já é o separador decimal na
+      configuração regional brasileira). Mesmo padrão de CSV reaproveitado pela exportação de
+      Produtos (ver 4.13.2).
 - **Card Orgânico x Campanha (`#cardSalesSplit`, alterado 02/07/2026):** uma **pizza por canal** (não é mais um único donut agregado nem gráfico de linha) — grid `.ss-grid` com uma célula por canal do mercado atual (BR: Shopify/Shopee/ML/Amazon; US: Shopify US/Amazon US). Dados vêm de `salesSplitByChannel` (`{ [channel]: { campaign, organic, campaignOrders, organicOrders } }`) calculado em `computeDashboard()` a partir de **todos** os pedidos do mercado (independente do filtro de canal selecionado na tela — por isso sempre mostra as 4/2 pizzas). Canais sem tracking de origem/listing type (Shopee, Amazon) sempre caem 100% em orgânico, naturalmente (não é caso especial no código — `isCampaignOrder()` nunca retorna `true` pra esses canais). Canal sem nenhum pedido no período mostra o anel cinza "sem dados" do `drawDonut()` (não confundir com "100% orgânico"). `#cardSalesSplit` é `grid-column:span 12` direto (não fica dentro de um `.right-col-stack` compartilhado com `#cardMarketing` — essa frase antiga aqui estava desatualizada).
 - **Pente-fino de espaço branco / cards desproporcionais (30/07/2026):** o Luan reportou, com print, cards "gigantes sem sentido" ao filtrar um canal específico — ex. Shopee com "Orgânico x Campanha" mostrando uma pizza de 88px perdida numa faixa branca com quase 1400px de largura. Causa raiz: o grid principal (`#editGrid`, 12 colunas) tem `trend`(7)+`channelSplit`(5) e `topProducts`(8)+`marketing`(4) como pares fixos — quando o card vizinho some (`updateCardVisibility()` esconde `#cardChannelSplit` fora de "todos" e `#cardMarketing` fora de "todos"/Shopify), o outro card do par ficava com a largura fixa de sempre, deixando metade da linha em branco. `#cardSalesSplit` é sempre `span 12` full-width, mas com só 1 canal (não "todos") o `.ss-grid` continuava usando a célula pequena de sempre (88px), sem motivo pra ocupar tanto espaço.
   - **Correção 1 — Tendência/Top produtos ganham a linha inteira quando o par some:** `updateCardVisibility()` agora também define `grid-column` dinamicamente: `trend` vira `span 12` quando `#cardChannelSplit` está escondido (senão `span 7`); `topProducts` vira `span 12` quando `#cardMarketing` está escondido (senão `span 8`). Não interfere no modo Editar (`.edit-grid>.edit-card{grid-column:1/-1!important}` já força largura total ali, `!important` sempre vence).
@@ -858,6 +895,25 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 - **Padrão de Comissão** (`DEFAULT_COMMISSION_PCT` em `metrics.js`): valores de referência típicos por canal, não confirmados com o Luan — **Shopee 18%, Mercado Livre 14%, Amazon 12%** (BR e US), **Shopify BR/US 0%** (não é marketplace, a taxa de gateway de pagamento é outro assunto, não modelada aqui). Editável por produto se a taxa real for diferente.
 - **Totais por canal:** `channels[ch].totalProfit`/`profitPct` somam só os produtos com COG preenchido (`profitProductsCount`) — a tabela mostra "X de Y produtos c/ custo" no rodapé pra deixar claro que o total pode estar parcial. O total de Frete no rodapé soma todos os produtos (sempre um número, nunca "—", já que frete nunca fica `null`).
 - **Produtos com tag "combo" somem da listagem (implementado 02/07/2026):** produtos Shopify vendidos como o combo em si (tag `combo`, case-insensitive, **não** via Shopify Bundles/`lineItemGroup`) não aparecem como linha própria — a venda é atribuída ao produto-base via `stripComboSuffix()` (remove o sufixo `" - Combo de N unidades"` do título) e contabilizada em `comboBySize`, exatamente como os combos vendidos via Bundles. O "produto-base" precisa ter esse título exato (sem o sufixo de combo) pra a mesclagem funcionar — se não existir, cria uma linha nova só com a quantidade do combo. A contagem aparece no textinho `.prod-combo` sob o nome do produto-base (mesmo lugar de sempre), não em resumo separado.
+
+#### 4.13.2 Exportar quantidade vendida — só Shopify US por enquanto (implementado 03/08/2026)
+- Botão "Exportar" (canto superior do card, ao lado do título) só aparece nos canais de
+  `EXPORTABLE_PRODUCT_CHANNELS` (hoje só `shopify_us`, tanto em `produtos.html` quanto no endpoint —
+  os outros canais ganham o botão quando o backend abrir, sem mudança de contrato). Pedido explícito
+  do Luan de escopo reduzido ("por enquanto, vai ser apenas do Shopify dos EUA").
+- **`GET /api/products/export?market=us&channel=shopify_us&since=&until=`** (`server.js`) reaproveita
+  `computeProducts()` — a mesma agregação que já alimenta a tela (exclui cancelado, já desconta
+  devolução via `LineItem.currentQuantity`, ver 4.15) — em vez de duplicar a lógica de contagem, então
+  a planilha exportada sempre bate com o que a tela mostra. Colunas: Produto, Quantidade vendida,
+  Receita (US$), Ticket médio (US$). CSV com `;` + BOM UTF-8 (mesmo padrão de 4.9b), abre direto no
+  Excel pt-BR sem assistente de importação.
+- **Verificação de correção dos dados (pedido explícito do Luan, "veja se ele pega apenas as vendas
+  certa"):** somar a receita exportada linha a linha divergia do total que a própria tela de Produtos
+  já reportava pro canal (US$ 16.196 vs US$ 7.364) — não era bug da exportação, era um problema
+  pré-existente em `aggregateProductsByChannel`, só mais visível numa planilha. Corrigido generalizando
+  `itemRevFactor` (ver 4.7.6) pra zerar receita de pedido `total:0` com item de preço de catálogo —
+  padrão de fulfillment por atacado (`customer: "Walmart DFW6s"`), não exclusivo da Amazon. Depois da
+  correção, a soma bate com o total do canal; unidades vendidas não mudam (só a receita é afetada).
 
 ### 4.14 Tela de Estoque — `public/estoque.html` (implementado 06/07/2026)
 - **Origem:** substitui progressivamente um board do Monday.com ("Stock + Produção") que o sócio do
@@ -1216,6 +1272,8 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/campaigns?market=br|us&since=&until=` — campanha a campanha (ao vivo, cache 5 min). BR: Mercado Ads + Meta; US: Meta + Google Ads. Usado pelo painel "Gastos" da tela de Campanhas (`campanhas.html`). Shopee/Amazon não retornam (sem API de gasto).
   - `GET /api/products?market=br|us&since=&until=` — catálogo completo de produtos por canal (sem cache, direto do store). Usado pela tela de Produtos (`produtos.html`).
   - `GET /api/orders/search?market=br|us&q=&limit=` — busca geral de pedidos em todo o histórico do mercado (`searchOrders()`), sem janela de data. Usado pelo campo de busca do card "Pedidos Recentes" (`index.html`). Ver 4.9b.
+  - `GET /api/orders/export?market=br|us&channel=&since=&until=&status=todos|autorizado|em_aberto|cancelado&itemsMode=count|qty` — exporta CSV com TODOS os pedidos do período/canal/mercado (sem teto, ao contrário do `recent` do `/api/dashboard`), via `exportOrdersList()`. Usado pelo botão "Exportar" do card "Pedidos Recentes". Ver 4.9b.
+  - `GET /api/products/export?market=us&channel=shopify_us&since=&until=` — exporta CSV com quantidade vendida/receita/ticket médio por produto. Só Shopify US por enquanto. Usado pelo botão "Exportar" da tela de Produtos. Ver 4.13.2.
   - `GET /api/product-groups?market=br|us` — grupos de unificação manual de produtos do mercado. `POST /api/product-groups` (`{market,name,members}`) cria/adiciona a um grupo. `POST /api/product-groups/remove-member` (`{market,name,title}`) tira um membro. `DELETE /api/product-groups?market=&name=` apaga o grupo. Persistido em `kv.productGroups`. Usado pelo botão "Unificar" em Segmentos.
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `GET /api/stock?market=br|us` — estoque + produção por canal (`channels`) e por família de produto somando todos os canais (`agg`), janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
