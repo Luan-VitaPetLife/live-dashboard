@@ -764,22 +764,48 @@ async function render() {
   setText('pageSub', 'Coco and Luna · ' + state.label);
   setText('footerDate', `Coco and Luna · período ${state.label} · última sincronização: ${updated}`);
 
-  const metaSpend = k.adCost || 0, metaRev = k.metaRevenue || 0, metaRoas = k.roas || 0, metaClicks = k.adClicks || 0;
-  const mlSpend = market === 'br' ? (ml.adCost || 0) : 0;
+  // Gasto/vendas/cliques por canal de Ads vêm SEMPRE de /api/campaigns (a mesma fonte ao vivo,
+  // filtrada pelo período certo, que já alimenta os cards de campanha individuais logo abaixo) —
+  // nunca mais de /api/dashboard pra essa tela. Antes, o card do Mercado Livre e o "Gasto Total"
+  // geral liam mlBreakdown.adCost, um valor ÚNICO gravado pelo sync periódico numa janela fixa de
+  // 60 dias (kv.mlAdCosts, ver sync.js/CLAUDE.md) — por isso o "Gasto Ads" do ML nunca mudava com
+  // o período escolhido na tela, e o card resumo (ex: R$2.588) não batia com a soma das campanhas
+  // mostradas embaixo dele (ex: R$290). O Meta tinha uma incoerência parecida, de origem diferente:
+  // "Vendas atribuídas" vinha de kpis.metaRevenue (atribuição por origem do pedido no Shopify —
+  // ver CLAUDE.md 4.4), um número bem menor que a soma da "Receita" que a própria Meta reporta
+  // campanha a campanha (action_values) — duas metodologias diferentes lado a lado, sem nenhuma
+  // explicação na tela. Buscando gasto E vendas sempre da mesma lista de campanhas já exibida, o
+  // resumo do canal nunca pode divergir do que está listado embaixo — por construção. Os campos
+  // kpis.adCost/metaRevenue/mlBreakdown.adCost continuam existindo em /api/dashboard e alimentando
+  // o dashboard principal (index.html: ROAS/ACOS do topo e o toggle "Incluir Mercado Ads") — não
+  // foram tocados, essa mudança é só desta tela.
+  let camps = null;
+  try { camps = await loadCampaigns(); } catch (e) { /* cards de canal ficam em estado indisponível */ }
+  const sumField = (arr, f) => (arr || []).reduce((a, c) => a + (c[f] || 0), 0);
+  const metaCamps    = camps?.channels?.meta;
+  const mlCamps       = market === 'br' ? camps?.channels?.mercadolivre : null;
+  const googleCamps   = market === 'us' ? camps?.channels?.google       : null;
+
+  const metaAvail  = !!metaCamps?.available;
+  const metaSpend  = sumField(metaCamps?.campaigns, 'spend');
+  const metaRev    = sumField(metaCamps?.campaigns, 'revenue');
+  const metaClicks = sumField(metaCamps?.campaigns, 'clicks');
+  const metaRoas   = metaSpend > 0 ? metaRev / metaSpend : 0;
+
+  const mlAvail          = !!mlCamps?.available;
+  const mlSpend          = sumField(mlCamps?.campaigns, 'spend');
+  const mlClicks         = sumField(mlCamps?.campaigns, 'clicks');
+  // Faturamento total do canal ML (todas as vendas, não só as atribuídas a Ads) — vem do
+  // /api/dashboard normalmente, já período-correto (soma de pedidos reais, sem mudança aqui).
+  const mlChannelRevenue = cs.mercadolivre || 0;
+  const mlRoas           = mlSpend > 0 ? mlChannelRevenue / mlSpend : 0;
+  // "ML Destaque" continua vindo de mlBreakdown.premium (pedido com listagem paga/Destaque, tag do
+  // próprio pedido) — metodologia deliberadamente diferente de Ads, documentada em CLAUDE.md 4.11,
+  // não mexida nesta correção.
   const mlPremiumRev = market === 'br' ? (ml.premium || 0) : 0;
 
-  // Google Ads só existe no mercado US e não vem em /api/dashboard (ver CLAUDE.md 4.12) —
-  // busca à parte via /api/campaigns (mesmo cache já usado pelo card do Google) para poder
-  // somar no "geral" do topo da tela.
-  let googleSpend = 0, googleRevenue = 0;
-  if (market === 'us') {
-    try {
-      const camps = await loadCampaigns();
-      const gCamps = camps?.channels?.google?.campaigns || [];
-      googleSpend   = gCamps.reduce((a, c) => a + (c.spend   || 0), 0);
-      googleRevenue = gCamps.reduce((a, c) => a + (c.revenue || 0), 0);
-    } catch (e) { /* segue sem Google no total geral */ }
-  }
+  const googleSpend   = sumField(googleCamps?.campaigns, 'spend');
+  const googleRevenue = sumField(googleCamps?.campaigns, 'revenue');
 
   const gastoGeral       = metaSpend + mlSpend + googleSpend;
   const vendasGeral      = metaRev + mlPremiumRev + googleRevenue;
@@ -796,19 +822,18 @@ async function render() {
 
   // ── Meta (BR/US) ──
   const metaKey = market === 'br' ? 'meta_br' : 'meta_us';
-  setText(`${metaKey}-sales`, fmtMoney(metaRev));
-  setText(`${metaKey}-orders`, `${fmtInt(metaClicks)} cliques`);
-  setText(`${metaKey}-revenue`, fmtMoney(metaSpend));
-  setText(`${metaKey}-roas`, metaRoas > 0 ? metaRoas.toFixed(1).replace('.', ',') + '×' : '—');
+  setText(`${metaKey}-sales`, metaAvail ? fmtMoney(metaRev) : '—');
+  setText(`${metaKey}-orders`, metaAvail ? `${fmtInt(metaClicks)} cliques` : 'Meta Ads não conectado');
+  setText(`${metaKey}-revenue`, metaAvail ? fmtMoney(metaSpend) : '—');
+  setText(`${metaKey}-roas`, metaAvail && metaRoas > 0 ? metaRoas.toFixed(1).replace('.', ',') + '×' : '—');
 
   if (market === 'br') {
     // ── Mercado Livre ──
-    const mlAvail = (ml.adCost || 0) > 0;
     setLabel('card-ml', 0, 'Gasto Ads');
-    setText('ml-sales', mlAvail ? fmtMoney(ml.adCost) : '—');
-    setText('ml-orders', mlAvail ? `${fmtInt(ml.adClicks)} cliques` : 'Mercado Ads não conectado');
-    setText('ml-revenue', fmtMoney(cs.mercadolivre || 0));
-    setText('ml-roas', mlAvail && ml.roas > 0 ? ml.roas.toFixed(1).replace('.', ',') + '×' : '—');
+    setText('ml-sales', mlAvail ? fmtMoney(mlSpend) : '—');
+    setText('ml-orders', mlAvail ? `${fmtInt(mlClicks)} cliques` : 'Mercado Ads não conectado');
+    setText('ml-revenue', fmtMoney(mlChannelRevenue));
+    setText('ml-roas', mlAvail && mlRoas > 0 ? mlRoas.toFixed(1).replace('.', ',') + '×' : '—');
     setText('ml-spend', mlAvail ? 'receita total ÷ gasto' : 'reautorize com escopo de Ads');
     // ── Amazon BR ──
     setText('amazon_br-sales', '—');
