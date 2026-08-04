@@ -1475,20 +1475,13 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 1. **Amazon — nome do comprador (PII):** `customer` vem vazio nos dois caminhos (Orders API e Reports) — dado
    restrito. Exige o papel PII aprovado no Solution Provider Portal; depois é só `AMAZON_FETCH_PII=1` no Railway
    (código pronto). Ver 4.7.4.
-2. **Amazon BR — nome de produto incompleto:** valor/qtd/pedidos ok; os nomes vêm via `getOrderItems`
-   (`enrichAmazonItems`, `POST /api/amazon/fetch-items?market=br`), mas os pedidos `701-/702-` dão 400.
-   ⚠️ **A ambiguidade das "duas teorias" (4.7.9 vs. sessão de 13/07) foi resolvida em 04/08/2026: era
-   mesmo o token da conta errada** (ver 4.7.11 — confirmado ao vivo que `AMAZON_BR_REFRESH_TOKEN`
-   autorizava VITA PET LIFE, não CocoandLuna). Com o app novo, próprio da CocoandLuna (que já pede o
-   role `Product Listing`), esse 400 em `getOrderItems` pode ter se resolvido sozinho — **testar
-   `POST /api/amazon/fetch-items?market=br` depois que o sync com as credenciais novas rodar**, antes
-   de investigar mais. Enquanto faltam itens, Estoque injeta o placeholder "Produto TESTE". Ver 4.7.9 / 4.7.11 / 4.14.
-3. **Amazon — imagem de produto bloqueada (403):** Catalog Items API retorna 403 — o app não tem o role
-   "Product Listing". Habilitar no portal + re-autorizar (novo refresh token); depois `POST /api/amazon/images`.
-   Código pronto. Ver 4.13.
-4. **Amazon Ads e TikTok Shop — integrações ainda não construídas.** Aparecem como "Planejadas" na tela
+2. **Amazon — imagem de produto bloqueada (403):** Catalog Items API retorna 403 **pro app dos EUA**
+   — não tem o role "Product Listing". Habilitar no portal + re-autorizar (novo refresh token); depois
+   `POST /api/amazon/images`. Código pronto. Ver 4.13. (O app novo do BR já nasceu com esse role — ver
+   4.7.11 — então essa limitação já não existe mais pro Brasil, só continua pros EUA.)
+3. **Amazon Ads e TikTok Shop — integrações ainda não construídas.** Aparecem como "Planejadas" na tela
    de Integrações (`/integracoes`, ver 4.17), sem código por trás ainda.
-5. **Toggle "Incluir Mercado Ads" (dashboard principal, `index.html`, ver 4.9b) não respeita o período:**
+4. **Toggle "Incluir Mercado Ads" (dashboard principal, `index.html`, ver 4.9b) não respeita o período:**
    mesma causa raiz do bug de Campanhas corrigido em 4.11.1 — lê `mlBreakdown.adCost`, um valor único
    preso na janela fixa de 60 dias do sync periódico. Não corrigido junto porque a correção da tela de
    Campanhas usou `/api/campaigns` (chamada ao vivo), e `/api/dashboard` é, por design, o único endpoint
@@ -1498,7 +1491,13 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
    fetch automatizado). Ver 4.11.1.
 ### Resolvidos (referência rápida — o detalhe está na seção citada)
 - **Amazon BR sem pedidos** (04/08) — `AMAZON_BR_REFRESH_TOKEN` autorizava a conta errada (VITA PET
-  LIFE, não CocoandLuna). Resolvido com app SP-API próprio pra CocoandLuna, sem mexer no app dos EUA. Ver 4.7.11.
+  LIFE, não CocoandLuna). Resolvido com app SP-API próprio pra CocoandLuna, sem mexer no app dos EUA;
+  backfill de 90 dias recuperou 121 pedidos históricos. Ver 4.7.11.
+- **Amazon BR — nome de produto incompleto / 400 em getOrderItems nos pedidos 701-/702-** (04/08) —
+  mesma causa raiz do item acima (token da conta errada). Confirmado com o app novo: `POST
+  /api/amazon/fetch-items?market=br` rodou **77/77 pedidos escaneados e corrigidos, 0 erros** — sem
+  nenhum 400. A teoria de "limitação de autorização do app no marketplace BR" (4.7.9) não era a causa
+  real. Ver 4.7.11.
 - **CSS da sidebar duplicado por página** (15/07) — o CSS do componente (`.sidebar`, `.brand*`, `.nav-*`,
   toggle, overlay, botão de abrir, transforms `body.sidebar-*`) foi movido para `sidebar.js`
   (injetado em `<style id="sidebarComponentStyle">`); cada página perdeu a duplicata e mantém só o
