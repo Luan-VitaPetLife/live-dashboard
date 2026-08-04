@@ -712,14 +712,21 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   `/orders/v0/orders` nos últimos 14 dias trouxe **29 pedidos reais** (`701-.../702-...`, `Shipped`,
   `AFN`, valores em BRL) — confirmação definitiva de que a causa raiz era mesmo o token/app errado,
   não limitação de código nem de permissão de app.
-- **Ação pendente:** colar `AMAZON_BR_CLIENT_ID`, `AMAZON_BR_CLIENT_SECRET` e o novo
-  `AMAZON_BR_REFRESH_TOKEN` no Railway, depois `POST /api/amazon/force-sync`. **Zero mudança nas
-  variáveis dos EUA** (`AMAZON_CLIENT_ID`/`AMAZON_CLIENT_SECRET`/`AMAZON_REFRESH_TOKEN`) — o app novo
-  é inteiramente paralelo, por design.
-- **Vale re-testar depois do sync:** como o app novo já pede o role `Product Listing` desde o
-  início (o app dos EUA nunca teve isso, ver backlog aberto 3), os erros 400 de `getOrderItems` nos
-  pedidos `701-/702-` (backlog aberto 2, nome de produto Amazon BR incompleto) podem se resolver
-  sozinhos — não confirmado ainda, testar `POST /api/amazon/fetch-items?market=br` depois do sync.
+- **Concluído em produção (04/08/2026):** as três variáveis coladas no Railway, `POST /api/sync`
+  disparado — mas o sync incremental sozinho voltou `amazon_br: 0`. **Causa:** o cursor
+  (`kv.amazonCursors.br`) avança pra "agora" a cada sync bem-sucedido, mesmo com 0 resultados
+  (`if (cursorKey) setAmazonCursor(cursorKey, safeUntil)`, sem checar `out.length`) — durante todo o
+  tempo em que o token estava errado, cada sync "funcionava" (200 OK, vazio) e o cursor foi
+  avançando no vazio. Resultado: o sync incremental, já com o token certo, só olhou os ~15 min desde
+  o último cursor — não o histórico represado. **Corrigido rodando um backfill** (Reports API, já
+  existia, não precisou de código novo): `POST /api/amazon/backfill?days=90&market=br` →
+  **121 pedidos recuperados** dos últimos 90 dias. A preocupação antiga de contaminação de mercado no
+  relatório BR (ver 4.7.8) não se repetiu — fazia sentido só com o token antigo (conta vinculada
+  multi-país); o token novo só participa do marketplace BR, então o relatório vem limpo.
+- **Bônus confirmado:** o job `enrichAmazonItems` (nome de produto via `getOrderItems`, backlog
+  aberto 2) rodou em paralelo e avançou normalmente (`40/77` nomeados durante o teste) — sem repetir
+  o erro 400 que os pedidos `701-/702-` davam com o token antigo. Reforça que aquele erro também era
+  causado pela autorização errada, não por limitação do app no marketplace BR (a teoria de 4.7.9).
 
 ### 4.8 Multi-mercado — `market` field
 - Campo `market: 'br' | 'us'` em todos os pedidos.
