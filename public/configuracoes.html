@@ -149,6 +149,21 @@
       <div style="margin-top:14px"><a class="btn btn-primary" href="/integracoes" style="text-decoration:none"><i class="bi bi-diagram-3"></i> Ver integrações</a></div>
     </div>
 
+    <!-- ── SEÇÃO 1C · UNIFICADOR ── -->
+    <div class="section-label">Unificador</div>
+    <div class="card">
+      <h2>Unificar produtos entre canais</h2>
+      <p class="desc">O mesmo produto físico às vezes aparece com nomes diferentes em cada canal (Shopify, Shopee, Mercado Livre, Amazon...). O Unificador junta manualmente esses produtos num grupo só — o grupo passa a valer em Revenue (Top produtos), Segmentos, Produtos e Estoque, sem precisar repetir a unificação em cada tela.</p>
+      <div class="switch-row">
+        <label class="switch">
+          <input type="checkbox" id="groupsToggle" disabled>
+          <span class="track"></span><span class="knob"></span>
+        </label>
+        <span class="switch-status" id="groupsStatus">Carregando…</span>
+      </div>
+      <div style="margin-top:14px"><a class="btn btn-primary" href="/unificador" style="text-decoration:none"><i class="bi bi-link-45deg"></i> Abrir Unificador</a></div>
+    </div>
+
     <!-- ── SEÇÃO 2 · ACESSO / LOGIN ── -->
     <div class="section-label">Acesso · Login</div>
     <div class="card">
@@ -294,6 +309,46 @@ function setLoginStatus(enabled){
   if(enabled){ el.textContent = 'Login exigido'; el.className = 'switch-status'; }
   else{ el.textContent = 'Dashboard aberta a todos'; el.className = 'switch-status off'; }
 }
+
+/* ── Unificador: liga/desliga global ── */
+function setGroupsStatus(enabled){
+  const el = $('groupsStatus');
+  if(enabled){ el.textContent = 'Unificação ativa'; el.className = 'switch-status'; }
+  else{ el.textContent = 'Desligado — telas mostram produtos sem agrupar'; el.className = 'switch-status off'; }
+}
+async function loadGroupsConfig(){
+  try{
+    const r = await fetch('/api/product-groups/config', { credentials:'same-origin' });
+    if(!r.ok) throw new Error('http '+r.status);
+    const d = await r.json();
+    const cb = $('groupsToggle');
+    cb.checked = d.enabled !== false;
+    cb.disabled = false;
+    setGroupsStatus(cb.checked);
+  }catch(e){
+    $('groupsStatus').textContent = 'Não foi possível carregar o estado do Unificador.';
+  }
+}
+$('groupsToggle').addEventListener('change', async function(){
+  const desired = this.checked;
+  this.disabled = true;
+  try{
+    const r = await fetch('/api/product-groups/config', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ enabled: desired })
+    });
+    if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || 'http '+r.status); }
+    setGroupsStatus(desired);
+    toast(desired ? 'Unificador ativado.' : 'Unificador desativado.');
+  }catch(e){
+    this.checked = !desired;
+    setGroupsStatus(!desired);
+    toast('Erro ao salvar: ' + (e.message || 'falha de rede'), true);
+  }finally{
+    this.disabled = false;
+  }
+});
 
 /* ── Toggle de login ── */
 $('loginToggle').addEventListener('change', async function(){
@@ -493,6 +548,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal();
 (async function(){
   await loadMe();
   await loadUsers();
+  await loadGroupsConfig();
 })();
 </script>
 </body>

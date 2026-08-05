@@ -64,6 +64,7 @@ public/colors.js        Sistema de cores compartilhado (IIFE) — cores de canal
 src/auth.js              Login/usuários: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página — ver 4.16
 public/login.html        Tela de login (standalone, sem sidebar) — ver 4.16
 public/configuracoes.html Tela de Configurações: geral, ativar/desativar login, gestão de usuários (admin only) — ver 4.16
+public/unificador.html   Tela Unificador: agrupamento manual global de produtos entre canais (admin only) — ver 4.18
 public/geografia.html   Mapa geográfico por estado BR (Leaflet.js, Voyager tile, coropleto + calor)
 public/geografia-us.html Mapa geográfico por estado US (Leaflet.js, Voyager tile, coropleto + calor)
 public/bandeira_brasil.webp  Imagem da bandeira BR usada nos botões de mercado
@@ -515,6 +516,10 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     (`findGroupForTitle()`, busca reversa em `geoGroups`) — evita clicar "Unificar" sem perceber que
     aquele produto já estava em outro lugar (o `upsertProductGroup` já tira ele do grupo antigo
     automaticamente, mas o aviso deixa isso visível *antes* de confirmar, não só depois).
+  - **⚠️ Superado (05/08/2026):** o "Unificar" local desta tela (toggle, Selecionar, modal de criação,
+    badge de aviso) foi removido — a unificação virou **global**, gerida na tela `unificador.html`
+    (Configurações) e aplicada automaticamente pelo backend em toda tela de produto, não só aqui. Ver
+    4.18. `productGeo` chega já mesclado; a tela só exibe o badge 🔗 e a lista de membros (leitura).
 - **Nota de limite:** o nome do produto vem, mas o **nome do comprador (PII)** continua vazio nos dois caminhos —
   é dado restrito, exige o papel PII aprovado pela Amazon (ver 4.7.4 e backlog aberto 2).
 
@@ -1211,6 +1216,12 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `mergeStockGroups()` nunca toca nos totais do rodapé da tabela (`current.agg.totals`, sempre a soma
     real por família vinda do servidor, sem passar pelo agrupamento manual) — a unificação é só uma visão
     de agrupamento, o dado bruto por família continua existindo por trás pra qualquer conferência.
+  - **⚠️ Superado (05/08/2026):** os botões "Unificar"/"Selecionar" e os dois modais (nomear grupo,
+    gerenciar grupo) foram removidos desta tela — a unificação virou **global**, gerida em
+    `unificador.html` (Configurações). `agg.products` já chega do backend agrupado por grupo manual
+    (com prioridade sobre a família automática Lysine/Daily) — `mergeStockGroups()` no cliente não
+    existe mais. Os 3 campos de ordem continuam **editáveis direto na linha**, exatamente como descrito
+    acima (o mecanismo de `groupOrders` não mudou) — só a criação/gestão do grupo saiu daqui. Ver 4.18.
 - Fora de escopo por ora (não pedido, evitar scope creep): canais que só existem no Monday e não no
   nosso sistema (Chewy, Walmart, Website separado, Wholesale) e qualquer chamada à API do Monday.
 
@@ -1348,6 +1359,85 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   Bootstrap Icons genérico por categoria se o arquivo não carregar, então nada quebra se um nome
   mudar.
 
+### 4.18 Unificador — agrupamento manual global de produtos (implementado 05/08/2026)
+- **Antes:** a unificação manual de produtos entre canais ("mesmo produto físico, nomes diferentes
+  por canal") existia separada em duas telas — Segmentos (card "Onde os produtos vendem", ver
+  histórico em 4.7.6) e Estoque (card agregado "Estoque", ver 4.14) — cada uma com seu próprio botão
+  Unificar/Selecionar, modal de criação de grupo e lógica de merge **no cliente**. Pedido do Luan:
+  centralizar num lugar só, aplicar automaticamente em **todas** as telas que mostram produto
+  (Revenue/Top Produtos, Segmentos, Produtos, Estoque), e um liga/desliga global (padrão ligado).
+- **Nova tela `public/unificador.html`** (admin only, mesmo padrão de `configuracoes.html`/
+  `integracoes.html` — gate em `server.js` linha do portão de acesso + `sidebar.js` `applyAuth()`,
+  não entra em `auth.PAGES`): lista **todo o catálogo** do mercado selecionado (todos os canais, todo
+  o histórico, via `GET /api/product-groups/catalog?market=`) organizado por **grupo** — cada grupo
+  já criado aparece como um card com seus membros (miniatura, canal, unidades/receita de referência,
+  botão "✕" pra tirar um membro, "🗑" pra desfazer o grupo inteiro, "+ Adicionar produtos" pra somar
+  mais um produto a ele depois); os produtos sem grupo ficam numa lista única abaixo, com busca por
+  título e um modo **Selecionar** (checkbox por linha, mínimo 1 selecionado — diferente do mínimo 2
+  das versões antigas em Segmentos/Estoque, porque aqui um único produto selecionado também serve pra
+  **adicionar a um grupo já existente**, não só criar um novo). Acessível a partir de Configurações
+  (`configuracoes.html`, seção "Unificador", botão "Abrir Unificador").
+- **Liga/desliga global** (`kv.productGroupsConfig.enabled`, padrão **ligado** quando ausente — mesmo
+  padrão opt-out de `isIntegrationEnabled`): switch tanto em `configuracoes.html` (seção "Unificador")
+  quanto na própria `unificador.html` (os dois batem no mesmo endpoint, refletem o mesmo estado).
+  `GET/POST /api/product-groups/config`. Desligado, **todas** as telas voltam a mostrar os produtos
+  sem agrupar — o merge no backend simplesmente não roda (`activeProductGroups()` devolve `{}`).
+- **Modelo de dados inalterado:** continua `kv.productGroups` (`{ [market]: { [nomeDoGrupo]:
+  [tituloBruto,...] } }`, ver `store.js` `getProductGroups`/`upsertProductGroup`/
+  `removeFromProductGroup`/`deleteProductGroup`) — só o **liga/desliga** (`productGroupsConfig`) é
+  novo. Endpoints de CRUD de grupo (`GET/POST/DELETE /api/product-groups*`) são os mesmos de antes,
+  só que agora **admin only** (`requireAdmin`), já que a única tela que os chama é `unificador.html`.
+- **Aplicação passou de client-side (por tela) para server-side (uma vez só, em `metrics.js`):**
+  `applyProductGroups(list, groups, opts)` é uma função genérica — soma campos numéricos (`sumKeys`),
+  soma objetos chave→número (`objSumKeys`, ex: `comboBySize`), soma arrays de sub-linhas por id
+  (`arrayKeys`, ex: `byChannel`/`byState`), junta valores únicos de um campo num array (`collectKeys`,
+  ex: canais presentes no grupo) e usa o primeiro valor não-nulo entre os membros pra metadado
+  (`pickFirst`, ex: imagem/tipo). `activeProductGroups(market)` já filtra pelo liga/desliga. Aplicada
+  em quatro pontos:
+  - **`computeDashboard` → `topProducts`/`topProductsAll`:** merge **entre canais** (linhas eram por
+    canal×título). Linha agrupada ganha `channels: [...]` (lista, não mais um `channel` singular) —
+    `index.html` mostra um badge por canal presente em vez de um só. Badge extra 🔗 N mostra os
+    membros (tooltip).
+  - **`computeDashboard` → `productGeo` (Segmentos, "Onde os produtos vendem"):** mesmo mecanismo que
+    já existia (ver histórico em 4.7.6), só que agora client-side virou server-side — `segmentos.html`
+    perdeu o botão Unificar/Selecionar/modal de criação e o `mergeProductGroups()` local; só exibe
+    `p._grouped`/`p._members` (badge 🔗, painel expandido lista os membros só leitura com link
+    "gerenciar" pra `/unificador`).
+  - **`computeProducts` (Produtos, um card por canal):** merge **dentro do mesmo canal** (dois títulos
+    do mesmo canal que descrevem o mesmo produto). `mergeProductRows()` — helper próprio, não usa o
+    genérico, porque precisa decidir o que fazer com os campos financeiros (COG/frete/%imposto/
+    %comissão são **por produto**, editáveis inline): soma qty/receita/lucro (lucro só quando algum
+    membro tem COG preenchido, mesmo critério do total do canal), mas os 4 campos editáveis viram
+    `null`/"—" na linha unificada — a tela desabilita o `<input>` nela (edição continua normal em cada
+    produto individual, fora do grupo).
+  - **`computeStock` → `agg.products` (card agregado "Estoque", por família):** grupo manual tem
+    **prioridade** sobre a família automática por palavra-chave (Lysine/Daily, `classifyFamily`) —
+    `titleToGroup[título] || classifyFamily(título) || título`. `estoque.html` perdeu o botão Unificar/
+    Selecionar/os dois modais e o `mergeStockGroups()` local — `agg.products` já chega agrupado do
+    backend. Os 3 campos de ordem (Projetada/Nova/Andamento) continuam editáveis **um valor por linha**
+    (pedido do Luan: "já que o grupo vai ter os mesmos produtos" — não há por-membro pra editar aqui,
+    nunca houve; o nome do grupo já funcionava como família própria pra esses 3 campos desde 4.14,
+    via `groupOrders`, inalterado). `_grouped`/`_members` só são marcados quando a família bate com um
+    nome real de grupo manual (`productGroupsMkt`) — a família automática (Lysine/Daily) nunca teve
+    badge, e continua sem.
+  - **Não aplicado** ao Card "Estoque" por canal (`channels[ch].products` em `computeStock`) nem a
+    `channels[ch].products` cru de `computeProducts` antes do merge — cada um só usa o merge no nível
+    que fazia sentido pro pedido original (por-canal em Produtos, agregado-por-família em Estoque).
+  - **Cuidado de correção (achado testando, não durante uso normal):** `applyProductGroups` guarda
+    **todas** as linhas por título antes de juntar por grupo, não só a última — necessário porque
+    `topProducts`/`topProductsAll` têm uma linha por combinação canal×título, e um título de grupo
+    coincidindo em 2 canais (raro, mas possível) perderia a receita de um deles se o lookup guardasse
+    só uma linha por título. `productGeo`/`computeProducts` não têm esse risco (já vêm com título único
+    por linha antes do merge), mas o guard genérico protege todos os chamadores igual.
+- **Testado localmente (05/08/2026, sem rede — só `store.js`+`metrics.js` contra o catálogo real do
+  `data/db.json`, sem subir o servidor pra não disparar o sync automático em cima de credenciais de
+  produção salvas no `.env` local, ver aviso em 4.7.4):** criado um grupo de teste com 2 produtos
+  reais (Shopify BR) → confirmado aparecendo agrupado em `topProductsAll` (com `channels`), em
+  `computeProducts` (por canal, com `cog:null`), em `computeStock.agg.products` (com `_grouped`/
+  `_members`) e em `productGeo` (com `byChannel`/`byState` somados corretamente); desligando o toggle
+  global, a linha agrupada some de `topProductsAll` (volta a mostrar separado); grupo de teste
+  removido ao final, `data/db.json` conferido limpo.
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js
@@ -1428,7 +1518,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/orders/search?market=br|us&q=&limit=` — busca geral de pedidos em todo o histórico do mercado (`searchOrders()`), sem janela de data. Usado pelo campo de busca do card "Pedidos Recentes" (`index.html`). Ver 4.9b.
   - `GET /api/orders/export?market=br|us&channel=&since=&until=&status=todos|autorizado|em_aberto|cancelado&itemsMode=count|qty` — exporta CSV com TODOS os pedidos do período/canal/mercado (sem teto, ao contrário do `recent` do `/api/dashboard`), via `exportOrdersList()`. Usado pelo botão "Exportar" do card "Pedidos Recentes". Ver 4.9b.
   - `GET /api/products/export?market=us&channel=shopify_us&since=&until=` — exporta CSV com quantidade vendida/receita/ticket médio por produto. Só Shopify US por enquanto. Usado pelo botão "Exportar" da tela de Produtos. Ver 4.13.2.
-  - `GET /api/product-groups?market=br|us` — grupos de unificação manual de produtos do mercado. `POST /api/product-groups` (`{market,name,members}`) cria/adiciona a um grupo. `POST /api/product-groups/remove-member` (`{market,name,title}`) tira um membro. `DELETE /api/product-groups?market=&name=` apaga o grupo. Persistido em `kv.productGroups`. Usado pelo botão "Unificar" em Segmentos.
+  - `GET /api/product-groups?market=br|us` (admin) — grupos de unificação manual de produtos do mercado (Unificador, ver 4.18). `POST /api/product-groups` (`{market,name,members}`) cria/adiciona a um grupo. `POST /api/product-groups/remove-member` (`{market,name,title}`) tira um membro. `DELETE /api/product-groups?market=&name=` apaga o grupo. Persistido em `kv.productGroups`. `GET/POST /api/product-groups/config` (`{enabled}`) — liga/desliga global, padrão ligado. `GET /api/product-groups/catalog?market=` — catálogo completo (todo canal, todo histórico) achatado, pra tela escolher produtos. Todos usados só por `unificador.html`.
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `GET /api/stock?market=br|us` — estoque + produção por canal (`channels`) e por família de produto somando todos os canais (`agg`), janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
   - `POST /api/stock/finance` — salva/edita estoque ou recebendo de um produto, por canal (`{ channel, title, stock?, incoming? }`), persistido em `kv.productStock`. Ver 4.14.
@@ -1456,7 +1546,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     - `GET /api/users` / `POST /api/users` / `PUT /api/users/:id` / `DELETE /api/users/:id` — gestão de usuários (admin).
     - `POST /api/auth/config` — liga/desliga a exigência de login (admin), `{ enabled }`.
     - `POST /api/me/password` — troca a própria senha (qualquer usuário logado), `{ current, next }`.
-    - `GET /login.html`, `GET /configuracoes.html`, `GET /integracoes.html`
+    - `GET /login.html`, `GET /configuracoes.html`, `GET /integracoes.html`, `GET /unificador.html`
   - **Integrações (dentro de Configurações, ver 4.17):**
     - `GET /api/integrations` (admin) — status ao vivo de cada canal, agrupado por país/categoria.
     - `POST /api/integrations/:key/toggle` (admin) — liga/desliga a sincronização automática de um canal, `{ enabled }`.
@@ -1500,6 +1590,10 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
    não foi confirmado como viável na API de Mercado Ads sem acesso à documentação oficial (bloqueada pra
    fetch automatizado). Ver 4.11.1.
 ### Resolvidos (referência rápida — o detalhe está na seção citada)
+- **Unificador global de produtos** (05/08) — o "Unificar" que existia separado em Segmentos e Estoque
+  virou uma tela própria (`unificador.html`, dentro de Configurações), aplicado automaticamente pelo
+  backend em Revenue/Top Produtos, Segmentos, Produtos e Estoque, com liga/desliga global (padrão
+  ligado). Ver 4.18.
 - **Amazon BR sem pedidos** (04/08) — `AMAZON_BR_REFRESH_TOKEN` autorizava a conta errada (VITA PET
   LIFE, não CocoandLuna). Resolvido com app SP-API próprio pra CocoandLuna, sem mexer no app dos EUA;
   backfill de 90 dias recuperou 121 pedidos históricos. Ver 4.7.11.

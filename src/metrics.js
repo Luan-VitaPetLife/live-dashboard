@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getAmazonProductImages, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getAmazonProductImages, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
@@ -212,6 +212,83 @@ function defaultCog(title) {
   return null;
 }
 
+// ── Unificador (Configurações) — agrupamento manual global de produtos ──
+// Substitui o antigo "Unificar" que existia separado em Segmentos e Estoque: agora os grupos são
+// geridos numa tela própria (public/unificador.html) e aplicados aqui, no backend, pra todas as
+// telas que mostram produto (Revenue/Top Produtos, Segmentos, Produtos, Estoque) mostrarem
+// exatamente o mesmo agrupamento, sem duplicar a lógica de merge em cada página. Ver CLAUDE.md.
+function activeProductGroups(market) {
+  if (!getProductGroupsEnabled()) return {};
+  return getProductGroups()[market] || {};
+}
+
+// Junta os grupos definidos em `groups` dentro de `list` — soma métricas numéricas (sumKeys),
+// soma objetos chave→número (objSumKeys, ex: comboBySize), soma arrays de sub-linhas por id
+// (arrayKeys, ex: byChannel/byState) e junta valores únicos de um campo num array (collectKeys,
+// ex: canais presentes no grupo). `pickFirst` usa o primeiro valor não-nulo entre os membros
+// (imagem, tipo, segmento). Produto fora de qualquer grupo passa direto, sem alteração. Função
+// pura e genérica — cada chamador descreve seu próprio formato de linha via `opts`.
+function applyProductGroups(list, groups, opts = {}) {
+  if (!groups || !Object.keys(groups).length || !list.length) return list;
+  const {
+    titleKey = 'title',
+    sumKeys = [],
+    objSumKeys = [],
+    arrayKeys = [],
+    collectKeys = [],
+    pickFirst = [],
+  } = opts;
+  // Guardamos TODAS as linhas por título (não só a última) — um título de grupo pode existir em
+  // mais de uma linha da lista de entrada quando o chamador já quebra por canal (ex: topProducts,
+  // que é uma linha por combinação canal×título): sem isso, duas linhas com o mesmo título cru
+  // vindas de canais diferentes se sobrescreveriam e uma delas perderia receita/qty silenciosamente.
+  const byTitle = new Map();
+  list.forEach(p => { const k = p[titleKey]; (byTitle.get(k) || byTitle.set(k, []).get(k)).push(p); });
+  const usedTitles = new Set();
+  const mergedRows = [];
+  for (const [name, members] of Object.entries(groups)) {
+    const found = members.flatMap(t => byTitle.get(t) || []);
+    if (!found.length) continue;
+    found.forEach(p => usedTitles.add(p[titleKey]));
+    const row = { [titleKey]: name, _grouped: true, _members: found.map(p => p[titleKey]) };
+    for (const k of sumKeys) row[k] = found.reduce((a, p) => a + (p[k] || 0), 0);
+    for (const k of objSumKeys) {
+      const acc = {};
+      found.forEach(p => { for (const [sk, sv] of Object.entries(p[k] || {})) acc[sk] = (acc[sk] || 0) + (sv || 0); });
+      row[k] = acc;
+    }
+    for (const k of pickFirst) row[k] = found.map(p => p[k]).find(v => v != null) ?? null;
+    for (const ak of arrayKeys) {
+      const acc = {};
+      found.forEach(p => (p[ak.key] || []).forEach(entry => {
+        const id = entry[ak.idKey];
+        if (!acc[id]) acc[id] = { [ak.idKey]: id };
+        for (const sk of ak.sumKeys) acc[id][sk] = (acc[id][sk] || 0) + (entry[sk] || 0);
+      }));
+      row[ak.key] = Object.values(acc).sort((a, b) => (b[ak.sumKeys[0]] || 0) - (a[ak.sumKeys[0]] || 0));
+    }
+    for (const ck of collectKeys) row[ck.to] = [...new Set(found.map(p => p[ck.from]).filter(Boolean))];
+    mergedRows.push(row);
+  }
+  const passthrough = list.filter(p => !usedTitles.has(p[titleKey]));
+  return [...mergedRows, ...passthrough];
+}
+
+// Catálogo completo (todo o histórico, todos os canais) de um mercado, achatado numa lista só —
+// usado pela tela Unificador pra listar todo produto disponível pra agrupar manualmente.
+export function listProductCatalog({ market = 'br' } = {}) {
+  const allOrders = getOrders({ channel: 'todos', market }).filter(o => !isCancelled(o));
+  const byChannel = aggregateProductsByChannel(allOrders);
+  const items = [];
+  for (const [channel, c] of Object.entries(byChannel)) {
+    for (const [title, p] of Object.entries(c.products)) {
+      items.push({ title, channel, image: p.image, type: p.type, qty: p.avulsoQty + p.comboQty, revenue: p.revenue });
+    }
+  }
+  items.sort((a, b) => b.revenue - a.revenue);
+  return { market, items };
+}
+
 // Comissão de referência por canal (marketplace) — editável por produto na tela de Produtos.
 // Shopify (BR/US) não é marketplace: comissão de venda é 0% (taxa de gateway é outro assunto).
 const DEFAULT_COMMISSION_PCT = {
@@ -299,13 +376,20 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // diferentes) — mesma agregação usada em Produtos/Estoque (aggregateProductsByChannel), incluindo
   // a quebra avulso x combo (Shopify Bundles e combos legados, ver legacyComboSize). Retornamos o
   // top 5 (topProducts) e a lista completa (topProductsAll) pra permitir expandir o card na revenue.
+  const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações) — ver acima
   const productsByChannel = aggregateProductsByChannel(valid);
-  const allProducts = Object.entries(productsByChannel)
+  let allProducts = Object.entries(productsByChannel)
     .flatMap(([ch, c]) => Object.entries(c.products).map(([title, p]) => ({
       title, channel: ch, revenue: p.revenue, avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
-    })))
-    .filter(p => p.revenue > 0)
-    .sort((a, b) => b.revenue - a.revenue);
+    })));
+  // Junta linhas de canais diferentes que pertencem ao mesmo grupo manual — sem grupo, cada
+  // (canal, título) continua sua própria linha, como sempre foi.
+  allProducts = applyProductGroups(allProducts, productGroupsMkt, {
+    sumKeys: ['revenue', 'avulsoQty', 'comboQty'],
+    objSumKeys: ['comboBySize'],
+    collectKeys: [{ from: 'channel', to: 'channels' }],
+  }).map(p => (p.channels ? p : { ...p, channels: [p.channel] }));
+  allProducts = allProducts.filter(p => p.revenue > 0).sort((a, b) => b.revenue - a.revenue);
   const topProducts = allProducts.slice(0, 5);
 
   // por estado (endereço de entrega dos pedidos válidos)
@@ -393,12 +477,22 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       }
     });
   });
-  const productGeo = Object.entries(productGeoAcc)
+  let productGeo = Object.entries(productGeoAcc)
     .map(([title, g]) => ({
       title, seg: g.seg, qty: g.qty, revenue: g.revenue, image: g.image,
       byChannel: Object.entries(g.byChannel).map(([channel, c]) => ({ channel, qty: c.qty, revenue: c.revenue })).sort((a, b) => b.qty - a.qty),
       byState: Object.entries(g.byState).map(([state, s]) => ({ state, qty: s.qty, revenue: s.revenue, orders: s.orderIds.size })).sort((a, b) => b.qty - a.qty),
-    }))
+    }));
+  // Unificador (Configurações) — junta produtos do mesmo grupo manual entre canais/segmentos.
+  // Mesmo mecanismo que antes vivia só em Segmentos (client-side); agora é global e server-side.
+  productGeo = applyProductGroups(productGeo, productGroupsMkt, {
+    sumKeys: ['qty', 'revenue'],
+    pickFirst: ['image', 'seg'],
+    arrayKeys: [
+      { key: 'byChannel', idKey: 'channel', sumKeys: ['qty', 'revenue'] },
+      { key: 'byState', idKey: 'state', sumKeys: ['qty', 'revenue', 'orders'] },
+    ],
+  })
     .sort((a, b) => b.qty - a.qty);
   const totalSegUnits = Object.values(segAcc).reduce((a, s) => a + s.units, 0);
   const segments = {};
@@ -657,6 +751,47 @@ function aggregateProductsByChannel(orders) {
   return byChannel;
 }
 
+// Junta linhas de produto (já com custo/lucro calculados) do mesmo grupo manual, DENTRO do mesmo
+// canal — a tela de Produtos é um card por canal, então o merge aqui é intra-canal (títulos
+// diferentes do mesmo canal que descrevem o mesmo produto físico). qty/receita/lucro são somados
+// (lucro só quando pelo menos um membro tem COG preenchido, mesmo critério do total do canal);
+// COG/frete/%impostos/%comissão viram null na linha unificada — são valores POR PRODUTO, não faz
+// sentido somar/mostrar um só quando os membros podem ter overrides diferentes; a tela desabilita
+// a edição inline nessas linhas (ver public/produtos.html), edição continua por produto individual.
+function mergeProductRows(products, groups) {
+  if (!groups || !Object.keys(groups).length) return products;
+  const byTitle = new Map(products.map(p => [p.title, p]));
+  const used = new Set();
+  const merged = [];
+  for (const [name, members] of Object.entries(groups)) {
+    const found = members.map(t => byTitle.get(t)).filter(Boolean);
+    if (!found.length) continue;
+    found.forEach(p => used.add(p.title));
+    const qty = found.reduce((a, p) => a + p.qty, 0);
+    const revenue = found.reduce((a, p) => a + p.revenue, 0);
+    const avulsoQty = found.reduce((a, p) => a + p.avulsoQty, 0);
+    const comboQty = found.reduce((a, p) => a + p.comboQty, 0);
+    const comboBySize = {};
+    found.forEach(p => { for (const [s, n] of Object.entries(p.comboBySize || {})) comboBySize[s] = (comboBySize[s] || 0) + n; });
+    const image = found.map(p => p.image).find(Boolean) || null;
+    const type = found.map(p => p.type).find(Boolean) || null;
+    const withProfit = found.filter(p => p.profit != null);
+    const profit = withProfit.length ? withProfit.reduce((a, p) => a + p.profit, 0) : null;
+    const taxAmount = found.reduce((a, p) => a + (p.taxAmount || 0), 0);
+    const commissionAmount = found.reduce((a, p) => a + (p.commissionAmount || 0), 0);
+    merged.push({
+      title: name, qty, revenue, avgTicket: qty > 0 ? revenue / qty : 0,
+      avulsoQty, comboQty, comboBySize, type, image,
+      cog: null, shipping: null, taxPct: null, commissionPct: null,
+      taxAmount, commissionAmount, cogTotal: null, shippingTotal: null,
+      profit, profitPct: (profit != null && revenue > 0) ? profit / revenue : null,
+      _grouped: true, _members: found.map(p => p.title),
+    });
+  }
+  const passthrough = products.filter(p => !used.has(p.title));
+  return [...merged, ...passthrough].sort((a, b) => b.revenue - a.revenue);
+}
+
 // Catálogo completo de produtos por canal (para a tela de Produtos) — sem limite de top-N,
 // com a mesma quebra avulso x combo (Shopify Bundles) usada no Top Produtos/Segmentos.
 export function computeProducts({ market = 'br', since, until } = {}) {
@@ -669,6 +804,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
   const catalogByChannel = aggregateProductsByChannel(allOrders);
 
   const finance = getProductFinance();
+  const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações)
   const channels = {};
   const chKeys = new Set([...Object.keys(byChannel), ...Object.keys(catalogByChannel)]);
   for (const ch of chKeys) {
@@ -676,7 +812,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
     const catalogProducts = catalogByChannel[ch]?.products || {};
     const titles = new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)]);
     const empty = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
-    const products = [...titles]
+    let products = [...titles]
       .map(title => {
         const cat = catalogProducts[title];
         const p = c.products[title] || { ...empty, type: cat?.type ?? null, image: cat?.image ?? null };
@@ -705,6 +841,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
+    products = mergeProductRows(products, productGroupsMkt);
 
     const withProfit = products.filter(p => p.profit != null);
     const totalProfit = withProfit.reduce((a, p) => a + p.profit, 0);
@@ -764,6 +901,14 @@ export function computeStock({ market = 'br' } = {}) {
   const chKeys = new Set([...Object.keys(byChannel), ...Object.keys(catalogByChannel)]);
   const aggMap = {};
 
+  // Unificador (Configurações) — grupo manual tem prioridade sobre a família automática
+  // (Lysine/Daily por palavra-chave, ver classifyFamily); título fora de qualquer grupo continua
+  // caindo na família automática ou, sem uma reconhecida, na própria linha (mesmo comportamento
+  // de sempre). titleToGroup é o inverso de productGroupsMkt: título → nome do grupo.
+  const productGroupsMkt = activeProductGroups(market);
+  const titleToGroup = {};
+  for (const [name, members] of Object.entries(productGroupsMkt)) for (const m of members) titleToGroup[m] = name;
+
   for (const ch of chKeys) {
     const c = byChannel[ch] || { revenue: 0, orders: 0, products: {} };
     const catalogProducts = catalogByChannel[ch]?.products || {};
@@ -804,7 +949,7 @@ export function computeStock({ market = 'br' } = {}) {
     // já mesclada com o catálogo acima, pra não duplicar a lógica de merge catálogo x período.
     for (const p of products) {
       if (p.title === 'Produto TESTE') continue; // placeholder sintético da Amazon, não é produto real
-      const family = classifyFamily(p.title) || p.title;
+      const family = titleToGroup[p.title] || classifyFamily(p.title) || p.title;
       if (!aggMap[family]) aggMap[family] = { avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null, stock: 0, incoming: 0 };
       const a = aggMap[family];
       a.avulsoQty += p.avulsoQty;
@@ -827,12 +972,16 @@ export function computeStock({ market = 'br' } = {}) {
     const projected       = ov.projected != null ? Number(ov.projected) : 0;
     const monthsOfStock = salesMonth > 0 ? (a.stock + a.incoming) / salesMonth : null;
     const totalMonthsOfStock = salesMonth > 0 ? (a.stock + projected + orderNew + orderInProgress) / salesMonth : null;
+    // `family` só é um grupo manual (badge 🔗 na tela) quando bate com um nome real do Unificador —
+    // a família automática (Lysine/Daily por palavra-chave) nunca foi marcada como "agrupada".
+    const isManualGroup = Object.prototype.hasOwnProperty.call(productGroupsMkt, family);
     return {
       title: family, type: a.type, image: a.image,
       avulsoQty: a.avulsoQty, comboQty: a.comboQty, comboBySize: a.comboBySize,
       salesDaily, salesMonth, stock: a.stock, incoming: a.incoming,
       orderInProgress, orderNew, projected,
       monthsOfStock, totalMonthsOfStock, suggestion: stockSuggestion(totalMonthsOfStock),
+      ...(isManualGroup ? { _grouped: true, _members: productGroupsMkt[family] } : {}),
     };
   }).sort((a, b) => b.salesMonth - a.salesMonth);
 
@@ -857,7 +1006,7 @@ export function computeStock({ market = 'br' } = {}) {
   // produto real diferente). Assim a linha unificada fica editável direto, com round-trip estável:
   // o cliente grava em `market|||NomeDoGrupo` (mesmo POST /api/stock/agg-finance de sempre) e lê
   // esses valores de volta daqui, independente do nome do grupo bater ou não com uma família real.
-  const groupNames = Object.keys(getProductGroups()[market] || {});
+  const groupNames = Object.keys(productGroupsMkt);
   const groupOrders = {};
   for (const name of groupNames) {
     const ov = stockAggData[`${market}|||${name}`] || {};

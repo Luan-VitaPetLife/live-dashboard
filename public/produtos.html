@@ -127,6 +127,8 @@
   .prod-name{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .prod-type-tag{font-size:9px;font-weight:700;letter-spacing:.3px;color:var(--sage);background:rgba(106,140,110,.12);border-radius:4px;padding:2px 6px;flex-shrink:0;white-space:nowrap}
   .prod-combo{font-size:10px;color:var(--muted);margin-top:2px}
+  /* Linha unificada pelo Unificador (Configurações) — só exibição, gestão fica em /unificador */
+  .stk-unify-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
   .prod-num{white-space:nowrap;font-variant-numeric:tabular-nums}
   .prod-empty{text-align:center;color:var(--muted);font-style:italic;padding:20px}
   .prod-muted{color:var(--muted)}
@@ -676,12 +678,28 @@ function rowHTML(p, ch) {
     ? `<td class="prod-num ${p.profit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg'}">${fmtMoney(p.profit)}</td>
        <td class="prod-num ${p.profit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg'}">${fmtPct(p.profitPct)}</td>`
     : `<td class="prod-num prod-muted">—</td><td class="prod-num prod-muted">—</td>`;
+  // Linha unificada (Unificador, ver Configurações): qty/receita/lucro são a soma dos produtos do
+  // grupo, mas COG/frete/%impostos/%comissão são valores POR PRODUTO — editar um valor só pra um
+  // grupo seria ambíguo (qual membro recebe o quê), então essas 4 colunas ficam só leitura aqui;
+  // continuam editáveis normalmente em cada produto individual (quando fora do grupo).
+  const financeCells = p._grouped
+    ? `<td class="prod-num prod-muted" title="Edite o custo em cada produto individual, fora do grupo.">—</td>
+       <td class="prod-num prod-muted" title="Edite o frete em cada produto individual, fora do grupo.">—</td>
+       <td class="prod-num prod-muted" title="Edite o imposto em cada produto individual, fora do grupo.">—</td>
+       <td class="prod-num prod-muted" title="Edite a comissão em cada produto individual, fora do grupo.">—</td>`
+    : `<td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.cog ?? ''}" ${dataAttrs} data-field="cog" title="Custo do produto (COG), por unidade. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
+    <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.shipping ?? ''}" ${dataAttrs} data-field="shipping" title="Custo de frete, por unidade. Vazio = considera 0; 0 é um valor válido e fica salvo."></td>
+    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.taxPct ?? ''}" ${dataAttrs} data-field="taxPct" title="% de imposto sobre a venda. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
+    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.commissionPct ?? ''}" ${dataAttrs} data-field="commissionPct" title="% de comissão do marketplace. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>`;
+  const badge = p._grouped
+    ? `<span class="stk-unify-badge" title="${escapeHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>`
+    : '';
   return `<tr>
     <td>
       <div class="prod-name-wrap">
         ${thumb}
         <div class="prod-name-col">
-          <div class="prod-name-line"><span class="prod-name" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</span>${typeTag}</div>
+          <div class="prod-name-line"><span class="prod-name" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</span>${typeTag}${badge}</div>
           ${combo ? `<div class="prod-combo">${combo}</div>` : ''}
         </div>
       </div>
@@ -689,10 +707,7 @@ function rowHTML(p, ch) {
     <td class="prod-num">${fmtInt(p.qty)}</td>
     <td class="prod-num">${fmtMoney(p.revenue)}</td>
     <td class="prod-num">${fmtMoney(p.avgTicket)}</td>
-    <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.cog ?? ''}" ${dataAttrs} data-field="cog" title="Custo do produto (COG), por unidade. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
-    <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p.shipping ?? ''}" ${dataAttrs} data-field="shipping" title="Custo de frete, por unidade. Vazio = considera 0; 0 é um valor válido e fica salvo."></td>
-    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.taxPct ?? ''}" ${dataAttrs} data-field="taxPct" title="% de imposto sobre a venda. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
-    <td class="prod-num"><input class="prod-input prod-input-pct" type="number" step="0.01" placeholder="—" value="${p.commissionPct ?? ''}" ${dataAttrs} data-field="commissionPct" title="% de comissão do marketplace. Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
+    ${financeCells}
     ${profitCells}
   </tr>`;
 }

@@ -33,7 +33,8 @@ const EMPTY = {
   productFinance: {},
   productStock: {},
   productStockAgg: {},
-  productGroups: {}, // { [market]: { [nomeDoGrupo]: [tituloBruto,...] } } — unificação manual de produtos entre canais, ver Segmentos "Unificar"
+  productGroups: {}, // { [market]: { [nomeDoGrupo]: [tituloBruto,...] } } — unificação manual de produtos entre canais, ver tela Unificador (Configurações)
+  productGroupsConfig: {}, // { enabled: bool } — liga/desliga global do Unificador, padrão ligado quando ausente
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
@@ -127,6 +128,7 @@ export async function initStore() {
       if (r.key === 'productStock')         cache.productStock         = r.value;
       if (r.key === 'productStockAgg')      cache.productStockAgg      = r.value;
       if (r.key === 'productGroups')        cache.productGroups        = r.value;
+      if (r.key === 'productGroupsConfig')  cache.productGroupsConfig  = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -614,6 +616,20 @@ export function removeFromProductGroup(market, name, title) {
   saveJson();
   if (USE_PG) pgKv('productGroups', db.productGroups);
   return mkt;
+}
+
+// Liga/desliga global do Unificador (tela própria, dentro de Configurações). Sem registro
+// salvo, considera ligado — opt-out, mesmo padrão de isIntegrationEnabled acima.
+export function getProductGroupsEnabled() {
+  const cfg = load().productGroupsConfig || {};
+  return cfg.enabled !== false;
+}
+export function setProductGroupsEnabled(enabled) {
+  const db = load();
+  db.productGroupsConfig = { enabled: Boolean(enabled) };
+  saveJson();
+  if (USE_PG) pgKv('productGroupsConfig', db.productGroupsConfig);
+  return db.productGroupsConfig;
 }
 
 // ── Meta Insights ─────────────────────────────
