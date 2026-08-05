@@ -222,6 +222,7 @@
   .tp-name-row{color:var(--sub);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .tp-qty{font-size:10px;color:var(--muted);margin-top:2px}
   .tp-val{font-weight:500;white-space:nowrap}
+  .tp-group-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
   .tp-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px}
   .tp-summary-label{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
   .tp-summary-val{font-weight:600}
@@ -784,6 +785,7 @@ function fmtMoneyShort(v) {
 }
 function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
 function pctStr(n, dec=1) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:dec,minimumFractionDigits:dec})+'%' }
+function escapeHtmlAttr(s) { return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function renderDelta(el, p, suffix='vs. período anterior') {
   if (p === null || p === undefined) { el.innerHTML=`<span class="delta-val flat">—</span> ${suffix}`; return }
@@ -1019,8 +1021,11 @@ function render(d) {
   const prodList = topProductsExpanded ? allProds : d.topProducts;
   if (prodList.length) {
     const prodRows = prodList.map((p,i) => {
-      const {title:name, channel:ch, revenue:v, avulsoQty:avQty, comboBySize} = p;
-      const badge = isAllCh ? ' '+CocoColors.chBadgeHTML(ch) : '';
+      const {title:name, revenue:v, avulsoQty:avQty, comboBySize} = p;
+      // Linha unificada pelo Unificador (Configurações): pode juntar o mesmo produto vendido em
+      // canais diferentes — mostra um badge por canal presente, em vez de um único canal.
+      const badge = isAllCh ? ' '+(p.channels||[p.channel]).map(c=>CocoColors.chBadgeHTML(c)).join(' ') : '';
+      const groupBadge = p._grouped ? ` <span class="tp-group-badge" title="${escapeHtmlAttr(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>` : '';
       const comboParts = Object.entries(comboBySize||{})
         .sort((a,b)=>Number(a[0])-Number(b[0]))
         .map(([size,n])=>`${fmtInt(n)} combo de ${size}`);
@@ -1029,7 +1034,7 @@ function render(d) {
       bits.push(...comboParts);
       const total = avQty + (p.comboQty || 0);
       const qtyLine = bits.length ? `${fmtInt(total)} un total · ${bits.join(', ')}` : '0 un';
-      return `<div class="tp-row"><div class="tp-info"><div class="tp-name-row"><span>${i+1} · ${name}</span>${badge}</div><div class="tp-qty">${qtyLine}</div></div><span class="tp-val">${fmtMoney(v)}</span></div>`;
+      return `<div class="tp-row"><div class="tp-info"><div class="tp-name-row"><span>${i+1} · ${name}</span>${groupBadge}${badge}</div><div class="tp-qty">${qtyLine}</div></div><span class="tp-val">${fmtMoney(v)}</span></div>`;
     }).join('');
     const prodTotal = prodList.reduce((a,p)=>a+p.revenue, 0);
     const totalLabel = topProductsExpanded ? `Total geral (${prodList.length})` : `Total top ${prodList.length}`;

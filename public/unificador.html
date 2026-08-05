@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unificador — Coco and Luna</title>
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<style>
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
+  body.sidebar-hidden .main{margin-left:0}
+  @media(max-width:768px){ .main{margin-left:0} .content{padding:16px} }
+
+  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  .back-link{font-size:11px;font-weight:600;color:var(--sub);text-decoration:none;display:flex;align-items:center;gap:5px}
+  .back-link:hover{color:var(--text)}
+
+  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px}
+  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
+  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;max-width:1000px;width:100%}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  .banner{background:rgba(155,122,42,.1);border:1px solid rgba(155,122,42,.3);color:var(--amber);font-size:12px;font-weight:500;padding:12px 16px;border-radius:var(--radius-sm);display:none;align-items:center;gap:8px}
+  .banner.show{display:flex}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+  .section-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:6px 0 -6px 2px}
+
+  /* ── Toggle switch (mesmo padrão de configuracoes.html) ── */
+  .switch-row{display:flex;align-items:center;gap:14px;margin:6px 0}
+  .switch{position:relative;width:46px;height:26px;flex-shrink:0;cursor:pointer}
+  .switch input{opacity:0;width:0;height:0;position:absolute}
+  .switch .track{position:absolute;inset:0;background:var(--border2);border-radius:20px;transition:background .18s}
+  .switch .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s}
+  .switch input:checked + .track{background:var(--sage)}
+  .switch input:checked + .track + .knob{transform:translateX(20px)}
+  .switch input:disabled ~ .track{opacity:.5}
+  .switch-status{font-size:13px;font-weight:600;color:var(--text)}
+  .switch-status.off{color:var(--muted)}
+
+  .btn{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12px;font-weight:600;padding:9px 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap}
+  .btn:hover:not(:disabled){border-color:var(--ink);color:var(--text)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn-primary{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .btn-primary:hover:not(:disabled){opacity:.88;color:var(--side-text)}
+  .btn-danger{color:var(--red);border-color:rgba(155,58,58,.3)}
+  .btn-danger:hover:not(:disabled){background:rgba(155,58,58,.08);border-color:var(--red);color:var(--red)}
+  .btn-sm{font-size:11px;padding:6px 11px}
+
+  /* ── Busca ── */
+  .search-wrap{position:relative;flex:1;max-width:340px}
+  .search-wrap i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px}
+  .search-wrap input{width:100%;font-family:inherit;font-size:12px;padding:9px 12px 9px 32px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);color:var(--text);outline:none}
+  .search-wrap input:focus{border-color:var(--ink)}
+
+  /* ── Toolbar ── */
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .select-bar{display:none;align-items:center;gap:10px;margin-left:auto;font-size:11px;color:var(--sub)}
+  .select-bar.open{display:flex}
+
+  /* ── Grupo (card) ── */
+  .group-card{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .group-head{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
+  .group-icon{width:30px;height:30px;border-radius:50%;background:var(--sage);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+  .group-name{font-size:13px;font-weight:700;color:var(--text)}
+  .group-stat{font-size:11px;color:var(--muted)}
+  .group-actions{margin-left:auto;display:flex;gap:6px}
+  .member-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
+  .member-row:last-child{border-bottom:none}
+  .row-thumb{width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--surface2);border:1px solid var(--border)}
+  .row-thumb-ph{width:32px;height:32px;border-radius:6px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
+  .row-title{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row-stat{font-size:11px;color:var(--muted);flex-shrink:0;white-space:nowrap}
+  .ch-badge{font-size:9px;font-weight:700;letter-spacing:.3px;padding:2px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap}
+  .row-remove{flex-shrink:0;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px 6px;border-radius:4px}
+  .row-remove:hover{background:var(--border2);color:var(--red)}
+  .group-add-foot{padding:10px 16px}
+
+  /* ── Lista de produtos sem grupo ── */
+  .plain-list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .plain-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
+  .plain-row:last-child{border-bottom:none}
+  .plain-row:nth-child(odd){background:var(--surface2)}
+  .select-check{width:15px;height:15px;flex-shrink:0;accent-color:var(--ink);cursor:pointer}
+  .empty{font-size:12px;color:var(--muted);padding:24px;text-align:center}
+
+  /* ── Modal ── */
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,18,15,.5);z-index:400;display:none;align-items:center;justify-content:center;padding:16px}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.28);width:100%;max-width:380px;padding:22px}
+  .modal h3{font-size:14px;font-weight:700;margin-bottom:3px}
+  .modal .sub{font-size:11px;color:var(--sub);margin-bottom:14px;line-height:1.5}
+  .modal input{width:100%;font-family:inherit;font-size:13px;color:var(--text);padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none}
+  .modal input:focus{border-color:var(--ink)}
+  .modal-err{font-size:11px;color:var(--red);min-height:14px;margin-top:6px}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--side-text);font-size:12px;font-weight:600;padding:11px 20px;border-radius:20px;box-shadow:0 8px 28px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:all .25s;z-index:500}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red)}
+
+  @media(max-width:560px){
+    .content{padding:20px 16px}
+    .toolbar{flex-direction:column;align-items:stretch}
+    .search-wrap{max-width:none}
+    .select-bar{margin-left:0}
+  }
+</style>
+</head>
+<body>
+
+<script src="sidebar.js"></script>
+<script src="colors.js"></script>
+
+<div class="main">
+  <div class="topbar">
+    <a class="back-link" href="/configuracoes"><i class="bi bi-arrow-left"></i> Configurações</a>
+    <div class="mkt-toggle-wrap">
+      <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
+        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
+      </button>
+      <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
+        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
+      </button>
+    </div>
+    <div class="live-dot-wrap"><div class="ldot"></div><span id="whoami">—</span></div>
+  </div>
+
+  <div class="content">
+    <div>
+      <div class="page-title">Unificador</div>
+      <div class="page-sub">Junte o mesmo produto físico vendido sob nomes diferentes em cada canal — vale para Revenue, Segmentos, Produtos e Estoque.</div>
+    </div>
+
+    <div class="banner" id="notAdminBanner">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>Esta área é restrita a administradores.</span>
+    </div>
+
+    <div class="card">
+      <div class="switch-row">
+        <label class="switch">
+          <input type="checkbox" id="groupsToggle" disabled>
+          <span class="track"></span><span class="knob"></span>
+        </label>
+        <span class="switch-status" id="groupsStatus">Carregando…</span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search-wrap"><i class="bi bi-search"></i><input type="text" id="searchInput" placeholder="Buscar produto..."></div>
+      <button class="btn" id="selectBtn"><i class="bi bi-check2-square"></i> Selecionar</button>
+      <div class="select-bar" id="selectBar">
+        <span id="selectCount">0 selecionados</span>
+        <button class="btn btn-sm" id="selectCancelBtn">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="selectConfirmBtn" disabled>Unificar selecionados</button>
+      </div>
+    </div>
+
+    <div class="section-label">Grupos</div>
+    <div id="groupsWrap" style="display:flex;flex-direction:column;gap:14px"></div>
+
+    <div class="section-label">Produtos sem grupo</div>
+    <div class="plain-list" id="plainList"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="nameModalOverlay"></div>
+<div class="modal-overlay" id="nameModal" style="z-index:401">
+  <div class="modal">
+    <h3 id="nameModalTitle">Nome do grupo</h3>
+    <div class="sub" id="nameModalSub">Reusar um nome já existente adiciona os selecionados a esse grupo.</div>
+    <input type="text" id="nameInput" placeholder="Ex.: Lysine" autocomplete="off">
+    <div class="modal-err" id="nameError"></div>
+    <div class="modal-actions">
+      <button class="btn" id="nameCancelBtn">Cancelar</button>
+      <button class="btn btn-primary" id="nameConfirmBtn">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
+function fmtMoney(n){ return (market==='us'?'US$ ':'R$ ') + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function toast(msg, isErr){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  setTimeout(()=>{ t.className = 'toast' + (isErr ? ' err' : ''); }, 2600);
+}
+
+let market = localStorage.getItem('coco_market') || 'br';
+let catalog = [];   // [{title, channel, image, type, qty, revenue}]
+let groups = {};    // { [nome]: [tituloBruto,...] }
+let selectMode = false;
+let selected = new Set();
+let addToGroupTarget = null; // nome do grupo quando o modal abre a partir de "+ Adicionar produtos"
+let searchQuery = '';
+
+function setMarket(m){
+  market = m;
+  localStorage.setItem('coco_market', m);
+  $('mktBtnBr').classList.toggle('active', m === 'br');
+  $('mktBtnUs').classList.toggle('active', m === 'us');
+  exitSelectMode();
+  load();
+}
+
+/* ── /api/me — whoami + guarda de admin no cliente (defesa; o servidor também valida) ── */
+async function loadMe(){
+  try{
+    const r = await fetch('/api/me', { credentials:'same-origin' });
+    const d = await r.json();
+    const isAdmin = !d.enabled || (d.user && d.user.role === 'admin');
+    if(!isAdmin) $('notAdminBanner').classList.add('show');
+    $('whoami').textContent = (d.user && (d.user.name || d.user.username)) || 'Admin';
+  }catch(e){ $('whoami').textContent = '—'; }
+}
+
+/* ── Toggle liga/desliga global (espelha o de Configurações) ── */
+function setGroupsStatus(enabled){
+  const el = $('groupsStatus');
+  if(enabled){ el.textContent = 'Unificação ativa'; el.className = 'switch-status'; }
+  else{ el.textContent = 'Desligado — as telas mostram os produtos sem agrupar'; el.className = 'switch-status off'; }
+}
+async function loadGroupsConfig(){
+  try{
+    const r = await fetch('/api/product-groups/config', { credentials:'same-origin' });
+    const d = await r.json();
+    const cb = $('groupsToggle');
+    cb.checked = d.enabled !== false;
+    cb.disabled = false;
+    setGroupsStatus(cb.checked);
+  }catch(e){ $('groupsStatus').textContent = 'Não foi possível carregar.'; }
+}
+$('groupsToggle').addEventListener('change', async function(){
+  const desired = this.checked;
+  this.disabled = true;
+  try{
+    const r = await fetch('/api/product-groups/config', {
+      method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ enabled: desired })
+    });
+    if(!r.ok) throw new Error('http '+r.status);
+    setGroupsStatus(desired);
+    toast(desired ? 'Unificador ativado.' : 'Unificador desativado.');
+  }catch(e){
+    this.checked = !desired; setGroupsStatus(!desired);
+    toast('Erro ao salvar.', true);
+  }finally{ this.disabled = false; }
+});
+
+/* ── Carrega catálogo + grupos do mercado atual ── */
+async function load(){
+  try{
+    const [rCat, rGroups] = await Promise.all([
+      fetch('/api/product-groups/catalog?market=' + market, { credentials:'same-origin' }),
+      fetch('/api/product-groups?market=' + market, { credentials:'same-origin' }),
+    ]);
+    const dCat = await rCat.json();
+    const dGroups = await rGroups.json();
+    catalog = dCat.items || [];
+    groups = dGroups.groups || {};
+    render();
+  }catch(e){
+    $('groupsWrap').innerHTML = '<div class="empty">Não foi possível carregar o catálogo.</div>';
+    $('plainList').innerHTML = '';
+  }
+}
+
+/* Todas as linhas do catálogo que têm este título cru (pode ser >1: mesmo título em canais
+   diferentes) — soma qty/receita, junta canais e imagem. */
+function rowsForTitle(title){
+  return catalog.filter(c => c.title === title);
+}
+function summarize(rows){
+  const qty = rows.reduce((a,r)=>a+(r.qty||0),0);
+  const revenue = rows.reduce((a,r)=>a+(r.revenue||0),0);
+  const image = rows.map(r=>r.image).find(Boolean) || null;
+  const channels = [...new Set(rows.map(r=>r.channel))];
+  return { qty, revenue, image, channels };
+}
+function thumbHtml(image, title){
+  return image
+    ? `<img class="row-thumb" src="${escapeHtml(image)}" alt="" onerror="this.outerHTML='<span class=row-thumb-ph><i class=&quot;bi bi-image&quot;></i></span>'">`
+    : `<span class="row-thumb-ph"><i class="bi bi-image"></i></span>`;
+}
+function channelBadges(channels){
+  return channels.map(ch => CocoColors.chBadgeHTML(ch)).join(' ');
+}
+
+function matchesSearch(title){
+  if(!searchQuery) return true;
+  return title.toLowerCase().includes(searchQuery);
+}
+
+function render(){
+  renderGroups();
+  renderPlainList();
+  updateSelectBar();
+}
+
+function renderGroups(){
+  const wrap = $('groupsWrap');
+  const names = Object.keys(groups).sort();
+  if(!names.length){ wrap.innerHTML = '<div class="empty">Nenhum grupo criado ainda. Selecione produtos abaixo e clique em "Unificar selecionados".</div>'; return; }
+  wrap.innerHTML = names.map(name => {
+    const members = groups[name] || [];
+    const visibleMembers = members.filter(t => matchesSearch(t) || matchesSearch(name));
+    if(searchQuery && !visibleMembers.length) return '';
+    const memberRows = members.map(title => {
+      const rows = rowsForTitle(title);
+      const s = summarize(rows);
+      return `<div class="member-row">
+        ${thumbHtml(s.image, title)}
+        <span class="row-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+        ${channelBadges(s.channels)}
+        <span class="row-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
+        <button class="row-remove" data-remove-member="${escapeHtml(title)}" data-group="${escapeHtml(name)}" title="Tirar do grupo"><i class="bi bi-x-lg"></i></button>
+      </div>`;
+    }).join('');
+    return `<div class="group-card" data-group-card="${escapeHtml(name)}">
+      <div class="group-head">
+        <div class="group-icon"><i class="bi bi-link-45deg"></i></div>
+        <div>
+          <div class="group-name">${escapeHtml(name)}</div>
+          <div class="group-stat">${members.length} produto${members.length===1?'':'s'} unificado${members.length===1?'':'s'}</div>
+        </div>
+        <div class="group-actions">
+          <button class="btn btn-sm" data-add-to-group="${escapeHtml(name)}"><i class="bi bi-plus-lg"></i> Adicionar produtos</button>
+          <button class="btn btn-sm btn-danger" data-delete-group="${escapeHtml(name)}"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>
+      ${memberRows}
+    </div>`;
+  }).join('');
+}
+
+function ungroupedTitles(){
+  const usedTitles = new Set(Object.values(groups).flat());
+  const seen = new Set();
+  const out = [];
+  for(const c of catalog){
+    if(usedTitles.has(c.title) || seen.has(c.title)) continue;
+    seen.add(c.title);
+    out.push(c.title);
+  }
+  return out;
+}
+
+function renderPlainList(){
+  const list = $('plainList');
+  let titles = ungroupedTitles().filter(matchesSearch);
+  // Ordena por receita somada desc (mesmo critério do catálogo).
+  titles.sort((a,b) => summarize(rowsForTitle(b)).revenue - summarize(rowsForTitle(a)).revenue);
+  if(!titles.length){ list.innerHTML = '<div class="empty">Nenhum produto sem grupo encontrado.</div>'; return; }
+  list.innerHTML = titles.map(title => {
+    const s = summarize(rowsForTitle(title));
+    const check = selectMode
+      ? `<input type="checkbox" class="select-check" data-select-title="${escapeHtml(title)}" ${selected.has(title)?'checked':''}>`
+      : '';
+    return `<div class="plain-row">
+      ${check}
+      ${thumbHtml(s.image, title)}
+      <span class="row-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+      ${channelBadges(s.channels)}
+      <span class="row-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
+    </div>`;
+  }).join('');
+}
+
+function updateSelectBar(){
+  $('selectBar').classList.toggle('open', selectMode);
+  $('selectBtn').style.display = selectMode ? 'none' : '';
+  $('selectCount').textContent = `${selected.size} selecionado${selected.size===1?'':'s'}`;
+  $('selectConfirmBtn').disabled = selected.size < 1;
+}
+
+function enterSelectMode(){
+  selectMode = true; selected = new Set();
+  render();
+}
+function exitSelectMode(){
+  selectMode = false; selected = new Set(); addToGroupTarget = null;
+  render();
+}
+
+/* ── Modal de nome ── */
+function suggestGroupName(titles){
+  return titles.reduce((shortest, t) => (t.length < shortest.length ? t : shortest), titles[0]);
+}
+function openNameModal(){
+  const titles = [...selected];
+  if(!titles.length) return;
+  const input = $('nameInput');
+  if(addToGroupTarget){
+    $('nameModalTitle').textContent = 'Adicionar ao grupo';
+    $('nameModalSub').textContent = `${titles.length} produto${titles.length===1?'':'s'} será${titles.length===1?'':'ão'} adicionado${titles.length===1?'':'s'} ao grupo "${addToGroupTarget}".`;
+    input.value = addToGroupTarget;
+    input.disabled = true;
+  } else {
+    $('nameModalTitle').textContent = 'Nome do grupo';
+    $('nameModalSub').textContent = 'Reusar um nome já existente adiciona os selecionados a esse grupo.';
+    input.value = suggestGroupName(titles);
+    input.disabled = false;
+  }
+  $('nameError').textContent = '';
+  $('nameModalOverlay').classList.add('open');
+  $('nameModal').classList.add('open');
+  if(!addToGroupTarget){ input.focus(); input.select(); }
+}
+function closeNameModal(){
+  $('nameModalOverlay').classList.remove('open');
+  $('nameModal').classList.remove('open');
+  $('nameInput').disabled = false;
+}
+async function confirmNameModal(){
+  const name = $('nameInput').value.trim();
+  if(!name){ $('nameError').textContent = 'Informe um nome.'; return; }
+  const members = [...selected];
+  $('nameConfirmBtn').disabled = true;
+  try{
+    const r = await fetch('/api/product-groups', {
+      method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ market, name, members })
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'Erro ao salvar.');
+    groups = d.groups || {};
+    closeNameModal();
+    exitSelectMode();
+    toast('Grupo atualizado.');
+  }catch(e){
+    $('nameError').textContent = e.message || 'Falha de rede.';
+  }finally{
+    $('nameConfirmBtn').disabled = false;
+  }
+}
+
+async function removeMember(name, title){
+  try{
+    const r = await fetch('/api/product-groups/remove-member', {
+      method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ market, name, title })
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'Erro ao remover.');
+    groups = d.groups || {};
+    render();
+    toast('Produto removido do grupo.');
+  }catch(e){ toast('Erro: ' + (e.message||'falha de rede'), true); }
+}
+async function deleteGroup(name){
+  if(!confirm(`Desfazer a unificação de "${name}"? Os produtos voltam a aparecer separados.`)) return;
+  try{
+    const r = await fetch(`/api/product-groups?market=${encodeURIComponent(market)}&name=${encodeURIComponent(name)}`, { method:'DELETE', credentials:'same-origin' });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'Erro ao excluir.');
+    groups = d.groups || {};
+    render();
+    toast('Grupo desfeito.');
+  }catch(e){ toast('Erro: ' + (e.message||'falha de rede'), true); }
+}
+
+/* ── Wiring ── */
+$('selectBtn').addEventListener('click', enterSelectMode);
+$('selectCancelBtn').addEventListener('click', exitSelectMode);
+$('selectConfirmBtn').addEventListener('click', () => { addToGroupTarget = null; openNameModal(); });
+$('nameCancelBtn').addEventListener('click', closeNameModal);
+$('nameConfirmBtn').addEventListener('click', confirmNameModal);
+$('nameModalOverlay').addEventListener('click', closeNameModal);
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeNameModal(); });
+
+$('searchInput').addEventListener('input', function(){
+  searchQuery = this.value.trim().toLowerCase();
+  render();
+});
+
+$('plainList').addEventListener('change', e => {
+  const cb = e.target.closest('[data-select-title]');
+  if(!cb) return;
+  const title = cb.dataset.selectTitle;
+  if(cb.checked) selected.add(title); else selected.delete(title);
+  updateSelectBar();
+});
+$('plainList').addEventListener('click', e => {
+  if(selectMode) return;
+  const row = e.target.closest('.plain-row');
+  if(!row) return;
+});
+
+$('groupsWrap').addEventListener('click', e => {
+  const rm = e.target.closest('[data-remove-member]');
+  if(rm){ removeMember(rm.dataset.group, rm.dataset.removeMember); return; }
+  const del = e.target.closest('[data-delete-group]');
+  if(del){ deleteGroup(del.dataset.deleteGroup); return; }
+  const add = e.target.closest('[data-add-to-group]');
+  if(add){
+    addToGroupTarget = add.dataset.addToGroup;
+    enterSelectMode();
+    toast(`Selecione os produtos pra adicionar ao grupo "${addToGroupTarget}".`);
+  }
+});
+
+/* ── Init ── */
+(async function(){
+  $('mktBtnBr').classList.toggle('active', market === 'br');
+  $('mktBtnUs').classList.toggle('active', market === 'us');
+  await loadMe();
+  await loadGroupsConfig();
+  await load();
+})();
+</script>
+</body>
+</html>

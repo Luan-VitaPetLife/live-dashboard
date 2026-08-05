@@ -6,9 +6,9 @@ import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList } from './src/metrics.js';
+import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -176,6 +176,7 @@ const SLUG_TO_FILE = {
   campanhas: 'campanhas.html',
   configuracoes: 'configuracoes.html',
   integracoes: 'integracoes.html',
+  unificador: 'unificador.html',
   login: 'login.html',
 };
 const FILE_TO_SLUG = Object.fromEntries(
@@ -223,7 +224,7 @@ app.use((req, res, next) => {
   // Controle de acesso por página (só quando a URL resolve pra uma página conhecida).
   const file = resolvePageFile(p);
   if (file) {
-    if ((file === 'configuracoes.html' || file === 'integracoes.html') && user.role !== 'admin') return res.redirect('/');
+    if ((file === 'configuracoes.html' || file === 'integracoes.html' || file === 'unificador.html') && user.role !== 'admin') return res.redirect('/');
     if (auth.isManagedPage(file) && !auth.canAccessPage(user, file)) {
       const fp = auth.firstAllowedPage(user);
       if (fp) return res.redirect(FILE_TO_SLUG[fp] || '/');
@@ -360,9 +361,10 @@ app.get('/api/products/export', (req, res) => {
   }
 });
 
-// Unificação manual de produtos entre canais ("Unificar" em Segmentos) — grupos por mercado,
-// um título pertence a no máximo um grupo. Ver CLAUDE.md.
-app.get('/api/product-groups', (req, res) => {
+// Unificador (dentro de Configurações, somente admin) — agrupamento manual global de produtos,
+// aplicado no backend (ver metrics.js applyProductGroups) em Revenue/Top Produtos, Segmentos,
+// Produtos e Estoque. Grupos por mercado, um título pertence a no máximo um grupo. Ver CLAUDE.md.
+app.get('/api/product-groups', requireAdmin, (req, res) => {
   try {
     const { market = 'br' } = req.query;
     res.json({ groups: getProductGroups()[market] || {} });
@@ -370,7 +372,7 @@ app.get('/api/product-groups', (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.post('/api/product-groups', (req, res) => {
+app.post('/api/product-groups', requireAdmin, (req, res) => {
   const { market, name, members } = req.body || {};
   if (!market || !name || !Array.isArray(members) || !members.length) {
     return res.status(400).json({ error: 'market, name e members (array não vazio) são obrigatórios.' });
@@ -378,17 +380,36 @@ app.post('/api/product-groups', (req, res) => {
   const groups = upsertProductGroup(market, name, members);
   res.json({ groups });
 });
-app.post('/api/product-groups/remove-member', (req, res) => {
+app.post('/api/product-groups/remove-member', requireAdmin, (req, res) => {
   const { market, name, title } = req.body || {};
   if (!market || !name || !title) return res.status(400).json({ error: 'market, name e title são obrigatórios.' });
   const groups = removeFromProductGroup(market, name, title);
   res.json({ groups });
 });
-app.delete('/api/product-groups', (req, res) => {
+app.delete('/api/product-groups', requireAdmin, (req, res) => {
   const { market, name } = req.query;
   if (!market || !name) return res.status(400).json({ error: 'market e name são obrigatórios.' });
   const groups = deleteProductGroup(market, name);
   res.json({ groups });
+});
+// Liga/desliga global do Unificador — padrão ligado quando ausente (opt-out).
+app.get('/api/product-groups/config', requireAdmin, (_req, res) => {
+  res.json({ enabled: getProductGroupsEnabled() });
+});
+app.post('/api/product-groups/config', requireAdmin, (req, res) => {
+  const enabled = Boolean((req.body || {}).enabled);
+  setProductGroupsEnabled(enabled);
+  res.json({ ok: true, enabled });
+});
+// Catálogo completo (todo o histórico, todos os canais) do mercado — lista de produtos pra
+// escolher na tela Unificador. Sem filtro de período, de propósito (é uma tela de catálogo).
+app.get('/api/product-groups/catalog', requireAdmin, (req, res) => {
+  try {
+    const { market = 'br' } = req.query;
+    res.json(listProductCatalog({ market }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Salva/edita dados financeiros de um produto (COG, frete, % imposto, % comissão) — usado pela tela de Produtos.
