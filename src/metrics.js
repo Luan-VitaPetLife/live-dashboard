@@ -253,6 +253,7 @@ function applyProductGroups(list, groups, opts = {}) {
     arrayKeys = [],
     collectKeys = [],
     pickFirst = [],
+    preferNonDefault = [], // [{ key, default }] — ver comentário abaixo
   } = opts;
   // Guardamos TODAS as linhas por título (não só a última) — um título de grupo pode existir em
   // mais de uma linha da lista de entrada quando o chamador já quebra por canal (ex: topProducts,
@@ -274,6 +275,16 @@ function applyProductGroups(list, groups, opts = {}) {
       row[k] = acc;
     }
     for (const k of pickFirst) row[k] = found.map(p => p[k]).find(v => v != null) ?? null;
+    // Diferente de pickFirst ("primeiro valor não-nulo, na ordem em que aparece"): aqui qualquer
+    // MEMBRO que tenha um valor diferente do "padrão" vence, mesmo que não seja o primeiro. Feito
+    // pra "Tipos de produto" (ver classifyTypeGroup) — um grupo unificado representa UM produto
+    // físico; se a listagem de só um canal (ex: Shopify) tiver a palavra-chave nas tags/título e as
+    // outras (Mercado Livre, Shopee...) não, o grupo inteiro deve entrar no tipo mesmo assim, em vez
+    // de cair em "Outros" só porque o membro processado primeiro não bateu na regra.
+    for (const pk of preferNonDefault) {
+      const hit = found.map(p => p[pk.key]).find(v => v != null && v !== pk.default);
+      row[pk.key] = hit !== undefined ? hit : pk.default;
+    }
     for (const ak of arrayKeys) {
       const acc = {};
       found.forEach(p => (p[ak.key] || []).forEach(entry => {
@@ -522,10 +533,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue, avulsoQty: d.avulsoQty, comboQty: d.comboQty, comboBySize: d.comboBySize, type: d.type, typeGroup: d.typeGroup }));
     // typeGroup: macro-categoria criada pelo usuário (Segmentos → "Tipos de produto", ver
     // classifyTypeGroup) usada pra organizar "Top produtos" por tipo em vez de uma lista só.
+    // preferNonDefault (não pickFirst): um grupo unificado é UM produto físico — se a palavra-chave
+    // bateu na listagem de QUALQUER canal membro (ex: só no Shopify, não no Mercado Livre), o grupo
+    // inteiro entra nesse tipo, em vez de cair em "Outros" por causa do membro que não bateu.
     topProducts = applyProductGroups(topProducts, productGroupsMkt, {
       sumKeys: ['qty', 'revenue', 'avulsoQty', 'comboQty'],
       objSumKeys: ['comboBySize'],
-      pickFirst: ['type', 'typeGroup'],
+      pickFirst: ['type'],
+      preferNonDefault: [{ key: 'typeGroup', default: 'Outros' }],
     }).sort((a, b) => b.qty - a.qty);
     segments[k] = {
       revenue: v.revenue,

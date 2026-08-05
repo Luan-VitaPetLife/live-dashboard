@@ -1485,8 +1485,22 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   ordem em que os tipos foram criados — primeira que bater vence. Nenhuma regra cadastrada, ou
   nenhuma batendo, cai em `'Outros'` (nunca quebra, sempre uma string). Calculado dentro do loop que
   já monta `segAcc[seg].products` (guardado como `p[title].typeGroup`, "primeiro valor vence" se o
-  mesmo título aparecer em mais de um pedido — mesmo padrão de `p[title].type`), e sobrevive ao merge
-  do Unificador via `pickFirst: ['type', 'typeGroup']` em `applyProductGroups` (ver 4.18).
+  mesmo título aparecer em mais de um pedido — mesmo padrão de `p[title].type`).
+  - **⚠️ Correção no mesmo dia — grupo do Unificador perdia o tipo se só UM canal tivesse a
+    palavra-chave:** reportado pelo Luan — criou o tipo "Suplemento" com a palavra "suplemento", e
+    dentro do grupo "Lysine" (unificado entre canais, ver 4.18) só o Daily entrou no tipo; o Lysine
+    ficou em "Outros", porque só a listagem do Shopify tinha a palavra nas tags/título — Mercado Livre/
+    Shopee descrevem o produto diferente. A 1ª versão usava `pickFirst: ['type', 'typeGroup']` em
+    `applyProductGroups` — "primeiro valor não-nulo, na ordem dos membros" —, e o membro processado
+    primeiro por acaso não batia na regra. **Correção:** `applyProductGroups` ganhou a opção
+    `preferNonDefault: [{ key, default }]` — em vez de "primeiro valor", pega o primeiro membro cujo
+    valor seja DIFERENTE do padrão (`'Outros'`), varrendo TODOS os membros, não só o primeiro. Raciocínio
+    do Luan, direto: "como cada grupo vai ter um só produto [físico], acredito que podemos adicionar o
+    grupo a esse tipo quando pelo menos um produto tem essa palavra-chave" — é exatamente essa a regra.
+    `typeGroup` passou de `pickFirst` pra `preferNonDefault: [{ key: 'typeGroup', default: 'Outros' }]`
+    na montagem de `segments[k].topProducts`; `type` (usado só para exibição, sem essa ambiguidade)
+    continua em `pickFirst`. Testado localmente: grupo com 2 membros, palavra-chave batendo só num
+    deles → grupo inteiro classificado no tipo certo.
 - **Endpoints** (não admin-gated, mesmo padrão de `/api/products/finance`): `GET /api/product-types
   ?market=` lê as regras do mercado. `POST /api/product-types` (`{market,name,keywords}`) cria/
   adiciona palavra(s) a um tipo. `POST /api/product-types/remove-keyword` (`{market,name,keyword}`)
