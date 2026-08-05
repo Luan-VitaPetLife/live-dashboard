@@ -275,12 +275,16 @@
   .tr-modal-close:hover{background:var(--surface2);color:var(--text)}
   .tr-modal-body{overflow-y:auto;padding:14px 20px}
   .tr-empty{font-size:11px;color:var(--muted);font-style:italic;padding:6px 0 14px}
-  .tr-type-row{padding:10px 0;border-bottom:1px solid var(--border)}
+  .tr-type-row{border-bottom:1px solid var(--border)}
   .tr-type-row:last-child{border-bottom:none}
+  .tr-type-head{display:flex;align-items:center;gap:8px;padding:10px 0;background:none;border:none;width:100%;cursor:pointer;font-family:inherit;text-align:left}
   .tr-type-name{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text)}
-  .tr-type-del{margin-left:auto;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:3px 6px;border-radius:4px}
+  .tr-type-count{font-size:10px;font-weight:600;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .tr-type-chevron{color:var(--muted);font-size:11px;flex-shrink:0}
+  .tr-type-del{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:3px 6px;border-radius:4px;flex-shrink:0}
   .tr-type-del:hover{background:var(--border2);color:var(--red,#9b3a3a)}
-  .tr-kw-list{display:flex;flex-wrap:wrap;gap:5px;margin:7px 0}
+  .tr-type-body{padding:0 0 12px}
+  .tr-kw-list{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 7px}
   .tr-kw-chip{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 4px 3px 9px}
   .tr-kw-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:2px 4px;border-radius:50%;line-height:1}
   .tr-kw-chip button:hover{background:var(--border2);color:var(--red,#9b3a3a)}
@@ -1446,23 +1450,39 @@ async function loadTrTypes() {
   renderTrTypes();
 }
 
+// Quais tipos estão abertos no modal — some é fechado. Só o 1º vem aberto na 1ª renderização
+// (mesmo princípio de "só o primeiro aberto" já usado em Produtos/Estoque/Top produtos — ver 4.13).
+let trOpen = new Set();
+let trOpenInited = false;
+
 function renderTrTypes() {
   const wrap = document.getElementById('trTypesList');
   const names = Object.keys(trTypes).sort();
   if (!names.length) {
+    trOpenInited = false;
     wrap.innerHTML = '<div class="tr-empty">Nenhum tipo criado ainda — tudo aparece em "Outros" até você criar o primeiro.</div>';
     return;
   }
+  if (!trOpenInited) { trOpen = new Set(names.slice(0, 1)); trOpenInited = true; }
   wrap.innerHTML = names.map(name => {
     const kws = trTypes[name] || [];
+    const open = trOpen.has(name);
     const chips = kws.map(k => `<span class="tr-kw-chip">${escHtml(k)}<button data-remove-kw="${escHtml(name)}|${escHtml(k)}" title="Remover palavra-chave"><i class="bi bi-x"></i></button></span>`).join('');
+    const body = open ? `<div class="tr-type-body">
+        <div class="tr-kw-list">${chips || '<span class="tr-empty" style="padding:0">Sem palavra-chave — nunca vai bater em nenhum produto.</span>'}</div>
+        <div class="tr-kw-add">
+          <input type="text" placeholder="Adicionar palavra-chave..." data-kw-input="${escHtml(name)}">
+          <button data-add-kw="${escHtml(name)}">Adicionar</button>
+        </div>
+      </div>` : '';
     return `<div class="tr-type-row" data-type-row="${escHtml(name)}">
-      <div class="tr-type-name"><i class="bi bi-tag"></i> ${escHtml(name)}<button class="tr-type-del" data-delete-type="${escHtml(name)}" title="Excluir tipo"><i class="bi bi-trash"></i></button></div>
-      <div class="tr-kw-list">${chips || '<span class="tr-empty" style="padding:0">Sem palavra-chave — nunca vai bater em nenhum produto.</span>'}</div>
-      <div class="tr-kw-add">
-        <input type="text" placeholder="Adicionar palavra-chave..." data-kw-input="${escHtml(name)}">
-        <button data-add-kw="${escHtml(name)}">Adicionar</button>
+      <div class="tr-type-head" data-toggle-type="${escHtml(name)}">
+        <div class="tr-type-name"><i class="bi bi-tag"></i> ${escHtml(name)}</div>
+        <span class="tr-type-count">${kws.length} palavra${kws.length===1?'':'s'}-chave</span>
+        <button class="tr-type-del" data-delete-type="${escHtml(name)}" title="Excluir tipo"><i class="bi bi-trash"></i></button>
+        <span class="tr-type-chevron"><i class="bi bi-chevron-${open?'up':'down'}"></i></span>
       </div>
+      ${body}
     </div>`;
   }).join('');
 }
@@ -1488,6 +1508,7 @@ async function trCreateType(name, keyword) {
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'Erro ao salvar.');
   trTypes = d.types || {};
+  trOpen.add(name); // tipo recém-criado já aparece aberto, como confirmação visual
   renderTrTypes();
   loadData(); // refaz a classificação com a regra nova
 }
@@ -1560,6 +1581,13 @@ document.getElementById('trTypesList').addEventListener('click', e => {
     if (!kw) return;
     trAddKeyword(name, kw);
     if (input) input.value = '';
+    return;
+  }
+  const toggle = e.target.closest('[data-toggle-type]');
+  if (toggle) {
+    const name = toggle.dataset.toggleType;
+    if (trOpen.has(name)) trOpen.delete(name); else trOpen.add(name);
+    renderTrTypes();
   }
 });
 document.getElementById('trTypesList').addEventListener('keydown', e => {
