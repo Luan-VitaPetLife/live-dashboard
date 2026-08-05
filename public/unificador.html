@@ -120,8 +120,16 @@
   .group-compact-row.expanded{background:var(--surface2);font-weight:600}
   .group-compact-row .row-title{flex:1}
 
+  /* ── Arrastar produtos entre grupos ── */
+  [draggable="true"]{cursor:grab}
+  .dragging-source{opacity:.4}
+  .drag-over{outline:2px dashed var(--sage);outline-offset:-2px;background:rgba(106,140,110,.08)}
+  #plainList.drag-over,.uni-col.drag-over-col{outline:2px dashed var(--rust);outline-offset:-2px;background:rgba(160,90,58,.06)}
+
   /* ── Grupo (card) ── */
   .group-card{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .group-card.collapsed{overflow:visible}
+  .btn-icon{padding:6px 8px}
   .group-head{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
   .group-icon{width:30px;height:30px;border-radius:50%;background:var(--sage);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
   .group-name{font-size:13px;font-weight:700;color:var(--text)}
@@ -220,7 +228,7 @@
     </div>
 
     <div class="uni-columns">
-      <div class="uni-col">
+      <div class="uni-col" id="ungroupedCol">
         <div class="uni-col-head">
           <span class="uni-col-title">Sem grupo</span><span class="uni-col-count" id="ungroupedCount"></span>
           <div class="view-toggle" id="ungroupedViewToggle">
@@ -289,6 +297,13 @@ let groupedView = localStorage.getItem('coco_uni_view_grouped') || 'cards';    /
 // Nos modos Grade/Compacta da coluna "Com grupo", clicar num grupo alterna se o card detalhado dele
 // aparece embaixo da grade/lista (evita duplicar a renderização completa do card por padrão).
 let expandedGroups = new Set();
+// No modo Cards, cada grupo pode ser fechado/aberto individualmente (member list some, só o
+// cabeçalho fica visível) — útil com muitos grupos na tela. Não persiste entre recarregamentos.
+let collapsedCards = new Set();
+
+// ── Arrastar produtos entre grupos (e de/para "sem grupo") ──
+let dragTitle = null;     // título cru sendo arrastado no momento
+let dragFromGroup = null; // nome do grupo de origem, ou null se veio da coluna "sem grupo"
 
 function setMarket(m){
   market = m;
@@ -411,10 +426,11 @@ function summarizeGroup(name){
 // nos modos Grade/Compacta.
 function groupCardHtml(name){
   const members = groups[name] || [];
+  const collapsed = collapsedCards.has(name);
   const memberRows = members.map(title => {
     const rows = rowsForTitle(title);
     const s = summarize(rows);
-    return `<div class="member-row">
+    return `<div class="member-row" draggable="${selectMode?'false':'true'}" data-drag-title="${escapeHtml(title)}" data-drag-from="${escapeHtml(name)}">
       ${thumbHtml(s.image, title)}
       <span class="row-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
       ${channelBadges(s.channels)}
@@ -422,7 +438,7 @@ function groupCardHtml(name){
       <button class="row-remove" data-remove-member="${escapeHtml(title)}" data-group="${escapeHtml(name)}" title="Tirar do grupo"><i class="bi bi-x-lg"></i></button>
     </div>`;
   }).join('');
-  return `<div class="group-card" data-group-card="${escapeHtml(name)}">
+  return `<div class="group-card${collapsed?' collapsed':''}" data-group-card="${escapeHtml(name)}" data-drop-group="${escapeHtml(name)}">
     <div class="group-head">
       <div class="group-icon"><i class="bi bi-link-45deg"></i></div>
       <div>
@@ -432,9 +448,10 @@ function groupCardHtml(name){
       <div class="group-actions">
         <button class="btn btn-sm" data-add-to-group="${escapeHtml(name)}"><i class="bi bi-plus-lg"></i> Adicionar produtos</button>
         <button class="btn btn-sm btn-danger" data-delete-group="${escapeHtml(name)}"><i class="bi bi-trash"></i></button>
+        <button class="btn btn-sm btn-icon" data-collapse-card="${escapeHtml(name)}" title="${collapsed?'Abrir':'Fechar'}"><i class="bi bi-chevron-${collapsed?'down':'up'}"></i></button>
       </div>
     </div>
-    ${memberRows}
+    ${collapsed ? '' : `<div class="group-body">${memberRows}</div>`}
   </div>`;
 }
 
@@ -463,7 +480,7 @@ function renderGroups(){
     const chips = names.map(name => {
       const s = summarizeGroup(name);
       const members = groups[name] || [];
-      return `<button class="group-chip${expandedGroups.has(name)?' expanded':''}" data-toggle-group="${escapeHtml(name)}">
+      return `<button class="group-chip${expandedGroups.has(name)?' expanded':''}" data-toggle-group="${escapeHtml(name)}" data-drop-group="${escapeHtml(name)}">
         <div class="chip-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
         <div class="chip-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</div>
         <span class="chip-count">${members.length} produto${members.length===1?'':'s'}</span>
@@ -476,7 +493,7 @@ function renderGroups(){
   const rows = names.map(name => {
     const s = summarizeGroup(name);
     const members = groups[name] || [];
-    return `<button class="group-compact-row${expandedGroups.has(name)?' expanded':''}" data-toggle-group="${escapeHtml(name)}">
+    return `<button class="group-compact-row${expandedGroups.has(name)?' expanded':''}" data-toggle-group="${escapeHtml(name)}" data-drop-group="${escapeHtml(name)}">
       <i class="bi bi-link-45deg"></i>
       <span class="row-title" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
       <span class="row-stat">${members.length} produto${members.length===1?'':'s'} · ${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
@@ -511,7 +528,7 @@ function renderPlainList(){
       const check = selectMode
         ? `<input type="checkbox" class="select-check card-check" data-select-title="${escapeHtml(title)}" ${selected.has(title)?'checked':''}>`
         : '';
-      return `<div class="plain-card">
+      return `<div class="plain-card" draggable="${selectMode?'false':'true'}" data-drag-title="${escapeHtml(title)}">
         ${check}
         ${thumbHtml(s.image, title)}
         <div class="card-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
@@ -527,7 +544,7 @@ function renderPlainList(){
       const check = selectMode
         ? `<input type="checkbox" class="select-check" data-select-title="${escapeHtml(title)}" ${selected.has(title)?'checked':''}>`
         : '';
-      return `<div class="plain-compact-row">
+      return `<div class="plain-compact-row" draggable="${selectMode?'false':'true'}" data-drag-title="${escapeHtml(title)}">
         ${check}
         <span class="row-title" title="${escapeHtml(title)}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(title)}</span>
         ${channelBadges(s.channels)}
@@ -542,7 +559,7 @@ function renderPlainList(){
     const check = selectMode
       ? `<input type="checkbox" class="select-check" data-select-title="${escapeHtml(title)}" ${selected.has(title)?'checked':''}>`
       : '';
-    return `<div class="plain-row">
+    return `<div class="plain-row" draggable="${selectMode?'false':'true'}" data-drag-title="${escapeHtml(title)}">
       ${check}
       ${thumbHtml(s.image, title)}
       <span class="row-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
@@ -646,9 +663,9 @@ async function deleteGroup(name){
 }
 
 /* ── Wiring ── */
-$('selectBtn').addEventListener('click', enterSelectMode);
+$('selectBtn').addEventListener('click', () => { addToGroupTarget = null; enterSelectMode(); });
 $('selectCancelBtn').addEventListener('click', exitSelectMode);
-$('selectConfirmBtn').addEventListener('click', () => { addToGroupTarget = null; openNameModal(); });
+$('selectConfirmBtn').addEventListener('click', () => { openNameModal(); });
 $('nameCancelBtn').addEventListener('click', closeNameModal);
 $('nameConfirmBtn').addEventListener('click', confirmNameModal);
 $('nameModalOverlay').addEventListener('click', closeNameModal);
@@ -684,6 +701,13 @@ $('groupsWrap').addEventListener('click', e => {
     toast(`Selecione os produtos pra adicionar ao grupo "${addToGroupTarget}".`);
     return;
   }
+  const collapse = e.target.closest('[data-collapse-card]');
+  if(collapse){
+    const name = collapse.dataset.collapseCard;
+    if(collapsedCards.has(name)) collapsedCards.delete(name); else collapsedCards.add(name);
+    renderGroups();
+    return;
+  }
   const toggle = e.target.closest('[data-toggle-group]');
   if(toggle){
     const name = toggle.dataset.toggleGroup;
@@ -712,6 +736,80 @@ wireViewToggle('groupedViewToggle', groupedView, v => {
   groupedView = v;
   localStorage.setItem('coco_uni_view_grouped', v);
   renderGroups();
+});
+
+/* ── Arrastar produtos entre grupos (e de/para "sem grupo") ──
+   Drag and drop nativo (draggable + dragstart/dragover/drop) — ao contrário do arraste
+   customizado por ponteiro usado em produtos.html/estoque.html (que resolve reordenar uma lista
+   com placeholder), aqui o gesto é só "soltar sobre um alvo" (o grupo de destino), o caso clássico
+   que a API nativa já resolve bem, sem precisar clonar elemento nem seguir o cursor. */
+async function moveProductToGroup(name, title){
+  try{
+    const r = await fetch('/api/product-groups', {
+      method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ market, name, members: [title] })
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'Erro ao mover.');
+    groups = d.groups || {};
+    render();
+    toast(`Movido para "${name}".`);
+  }catch(e){ toast('Erro: ' + (e.message||'falha de rede'), true); }
+}
+
+document.addEventListener('dragstart', e => {
+  const src = e.target.closest('[data-drag-title]');
+  if(!src || selectMode) return;
+  dragTitle = src.dataset.dragTitle;
+  dragFromGroup = src.dataset.dragFrom || null;
+  src.classList.add('dragging-source');
+  e.dataTransfer.effectAllowed = 'move';
+  try{ e.dataTransfer.setData('text/plain', dragTitle); }catch(err){}
+});
+document.addEventListener('dragend', e => {
+  const src = e.target.closest('[data-drag-title]');
+  if(src) src.classList.remove('dragging-source');
+  dragTitle = null; dragFromGroup = null;
+  document.querySelectorAll('.drag-over,.drag-over-col').forEach(el => el.classList.remove('drag-over','drag-over-col'));
+});
+
+$('groupsWrap').addEventListener('dragover', e => {
+  const target = e.target.closest('[data-drop-group]');
+  if(!target || !dragTitle) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  target.classList.add('drag-over');
+});
+$('groupsWrap').addEventListener('dragleave', e => {
+  const target = e.target.closest('[data-drop-group]');
+  if(target && !target.contains(e.relatedTarget)) target.classList.remove('drag-over');
+});
+$('groupsWrap').addEventListener('drop', e => {
+  const target = e.target.closest('[data-drop-group]');
+  if(!target || !dragTitle) return;
+  e.preventDefault();
+  target.classList.remove('drag-over');
+  const destGroup = target.dataset.dropGroup;
+  const title = dragTitle;
+  if(destGroup === dragFromGroup) return; // soltou no próprio grupo, nada a fazer
+  moveProductToGroup(destGroup, title);
+});
+
+const ungroupedCol = $('ungroupedCol');
+ungroupedCol.addEventListener('dragover', e => {
+  if(!dragTitle || !dragFromGroup) return; // só aceita drop de um produto que veio de um grupo
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  ungroupedCol.classList.add('drag-over-col');
+});
+ungroupedCol.addEventListener('dragleave', e => {
+  if(!ungroupedCol.contains(e.relatedTarget)) ungroupedCol.classList.remove('drag-over-col');
+});
+ungroupedCol.addEventListener('drop', e => {
+  if(!dragTitle || !dragFromGroup) return;
+  e.preventDefault();
+  ungroupedCol.classList.remove('drag-over-col');
+  removeMember(dragFromGroup, dragTitle);
 });
 
 /* ── Init ── */
