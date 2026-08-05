@@ -1437,6 +1437,31 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   `_members`) e em `productGeo` (com `byChannel`/`byState` somados corretamente); desligando o toggle
   global, a linha agrupada some de `topProductsAll` (volta a mostrar separado); grupo de teste
   removido ao final, `data/db.json` conferido limpo.
+- **⚠️ Bug corrigido no mesmo dia (05/08/2026) — "ficou sem unificar" em Segmentos:** o "Top produtos"
+  de cada card (Gato/Cão, topo do card, ANTES do card "Onde os produtos vendem") lê `segments[k].
+  topProducts`, uma quarta lista agregada por produto (`segAcc[seg].products` em `computeDashboard`)
+  que ficou de fora da rodada acima por engano — só `topProducts`/`topProductsAll`, `productGeo` e
+  `computeProducts`/`computeStock` foram cobertos. Reportado pelo Luan com print mostrando as
+  variações de "Lisina para gatos" todas separadas ali, mesmo com o grupo criado. Corrigido: `p[title]`
+  dentro de `segAcc[seg].products` passou a guardar `type` também, e a lista final passa pelo mesmo
+  `applyProductGroups()` antes de virar `segments[k].topProducts`. Testado localmente (mesmo método
+  sem rede): grupo de teste aparece agrupado dentro de `dash.segments.cat.topProducts`.
+- **Top produtos separado por tipo — Areia x Suplementos (implementado 05/08/2026, mesmo pedido):**
+  o Luan pediu pra organizar essa mesma lista por tipo de produto em vez de uma lista só misturando
+  areia (marca Yucaloo, ver `project_yucaloo_segunda_marca` na memória) com suplementos (Lysine/
+  Daily/etc) — clicar no tipo abre/fecha o que já existia. `classifyTypeGroup(type)` (`metrics.js`)
+  é a nova macro-categoria: `type` (already normalizado por `classifyType`) contém "areia" → `'Areia'`,
+  qualquer outra coisa (incluindo tipo ausente) → `'Suplementos'` — só essas duas existem no catálogo
+  hoje, de propósito sem uma 3ª categoria "outro". Cada produto de `segments[k].topProducts` ganha o
+  campo `typeGroup`. `segmentos.html`: `prodByTypeGroupHtml()` substitui a renderização direta —
+  separa em baldes por `typeGroup`, ordena os baldes por unidades desc, e renderiza cada um como um
+  bloco `.seg-type-group` com cabeçalho clicável (nome + contagem + soma) e chevron; só o maior balde
+  vem aberto por padrão na 1ª renderização de cada card (`segTypeOpen`, mesmo princípio de "só o
+  primeiro aberto" já usado em Produtos/Estoque — ver 4.13), resetado ao trocar mercado/canal. O "ver
+  mais/ver menos" de cada balde (`segExpanded`) passou a usar uma chave composta (`'cat__Suplementos'`)
+  em vez de só `'cat'`, então cada tipo dentro do mesmo card mostra/esconde independente do outro. O
+  card "Por tipo de produto" (pills finas: Pó/Tablets/etc, `s.byType`) não mudou — é uma métrica
+  complementar diferente (granularidade mais fina), continua abaixo do "Top produtos" de sempre.
 
 ## 5. Modelo de dados (pedido normalizado)
 
