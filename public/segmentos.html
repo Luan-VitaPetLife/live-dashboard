@@ -140,6 +140,16 @@
   .seg-prod-rev{font-size:10px;color:var(--sub);flex-shrink:0;min-width:64px;text-align:right}
   .seg-empty{font-size:12px;color:var(--muted);font-style:italic;padding:8px 0}
 
+  /* ── Top produtos separado por tipo (Areia x Suplementos) — abre/fecha por grupo ── */
+  .seg-type-group{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+  .seg-type-toggle{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:var(--surface2);color:var(--text);cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
+  .seg-type-toggle:hover{background:var(--border2)}
+  .seg-type-group.open .seg-type-toggle{border-bottom:1px solid var(--border)}
+  .seg-type-toggle-name{font-size:12px;font-weight:700}
+  .seg-type-toggle-stat{font-size:10px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .seg-type-toggle-chevron{color:var(--muted);font-size:11px;flex-shrink:0}
+  .seg-type-group .seg-prod-list{padding:12px}
+
   /* ── Tipos de produto ── */
   .seg-types-area{padding:0 20px 16px;border-top:1px solid var(--border)}
   .seg-types-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin:12px 0 8px}
@@ -429,6 +439,10 @@ const CH_BY_MARKET = { br:['todos','shopify','shopee','mercadolivre'], us:['todo
 let channel = 'todos';
 // Estado de expansão dos "top produtos" por segmento (ver mais / ver menos).
 const segExpanded = { cat:false, dog:false, other:false };
+// Quais grupos de tipo (Areia/Suplementos) estão abertos, por card ('cat'/'dog'/'other') — um
+// Set por card. Preenchido preguiçosamente na 1ª renderização com só o maior grupo aberto (mesmo
+// princípio de "só o primeiro aberto" já usado em Produtos/Estoque).
+const segTypeOpen = {};
 let lastSegs = {};
 
 // ── Formatters ──
@@ -514,7 +528,8 @@ function prodItemHtml(p, i) {
           <span class="seg-prod-rev">${fmtMoney(p.revenue)}</span>
         </div>`;
 }
-// Lista com "ver mais": mostra 5 e expande para todos. `key` é 'cat' | 'dog' | 'other'.
+// Lista com "ver mais": mostra 5 e expande para todos. `key` é uma chave única do grupo mostrado
+// (ex: 'cat__Suplementos') — cada grupo de tipo tem seu próprio estado de "ver mais" independente.
 function prodListHtml(products, key) {
   if (!products || products.length === 0) return '<div class="seg-empty">Sem produtos no período</div>';
   const exp = segExpanded[key];
@@ -532,13 +547,53 @@ function toggleSegExpand(key) {
   renderOther(lastSegs);
 }
 
+// Separa os "top produtos" de um card em Areia x Suplementos (classifyTypeGroup no backend, ver
+// metrics.js) — pedido do Luan: mais organizado que uma lista só misturando os dois. `cardKey` é
+// 'cat' | 'dog' | 'other'.
+function prodByTypeGroupHtml(products, cardKey) {
+  if (!products || !products.length) return '<div class="seg-empty">Sem produtos no período</div>';
+  const buckets = {};
+  products.forEach(p => {
+    const g = p.typeGroup || 'Suplementos';
+    (buckets[g] || (buckets[g] = [])).push(p);
+  });
+  const names = Object.keys(buckets).sort((a, b) =>
+    buckets[b].reduce((s, p) => s + p.qty, 0) - buckets[a].reduce((s, p) => s + p.qty, 0));
+  // Só o maior grupo aberto por padrão, na 1ª renderização do card — depois disso o usuário controla.
+  if (!segTypeOpen[cardKey]) segTypeOpen[cardKey] = new Set(names.slice(0, 1));
+  return names.map(name => {
+    const items = buckets[name];
+    const qty = items.reduce((s, p) => s + p.qty, 0);
+    const revenue = items.reduce((s, p) => s + p.revenue, 0);
+    const open = segTypeOpen[cardKey].has(name);
+    const listKey = `${cardKey}__${name}`;
+    return `
+      <div class="seg-type-group${open ? ' open' : ''}">
+        <button class="seg-type-toggle" onclick="toggleTypeGroup('${cardKey}', '${escJs(name)}')">
+          <span class="seg-type-toggle-name">${escapeHtml(name)}</span>
+          <span class="seg-type-toggle-stat">${items.length} produto${items.length===1?'':'s'} · ${fmtInt(qty)} un · ${fmtMoney(revenue)}</span>
+          <span class="seg-type-toggle-chevron"><i class="bi bi-chevron-${open?'up':'down'}"></i></span>
+        </button>
+        ${open ? `<div class="seg-prod-list">${prodListHtml(items, listKey)}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+function toggleTypeGroup(cardKey, name) {
+  if (!segTypeOpen[cardKey]) segTypeOpen[cardKey] = new Set();
+  if (segTypeOpen[cardKey].has(name)) segTypeOpen[cardKey].delete(name); else segTypeOpen[cardKey].add(name);
+  renderCards(lastSegs);
+  renderOther(lastSegs);
+}
+function escJs(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+function fmtInt(n) { return Math.round(n || 0).toLocaleString('pt-BR'); }
+
 function renderCards(segs) {
   const totalUnits = (segs.cat?.units||0) + (segs.dog?.units||0);
   const cards = ['cat','dog'].map(k => {
     const s = segs[k] || { revenue:0, units:0, orders:0, pct:0, byType:{}, topProducts:[] };
     const pctW = totalUnits > 0 ? Math.round(s.units / totalUnits * 100) : 0;
 
-    const prods = prodListHtml(s.topProducts, k);
+    const prods = prodByTypeGroupHtml(s.topProducts, k);
 
     const byType = s.byType || {};
     const typeEntries = [
@@ -593,7 +648,7 @@ function renderOther(segs) {
   const card = document.getElementById('otherCard');
   if (!other || other.units === 0) { card.style.display = 'none'; return; }
   card.style.display = '';
-  document.getElementById('otherList').innerHTML = prodListHtml(other.topProducts, 'other');
+  document.getElementById('otherList').innerHTML = prodByTypeGroupHtml(other.topProducts, 'other');
 }
 
 // ── Onde os produtos vendem (mapa + ranking por estado, por produto) ──
@@ -1217,6 +1272,7 @@ document.querySelectorAll('.mkt-btn').forEach(btn => {
     document.querySelectorAll('.mkt-btn').forEach(b => b.classList.toggle('active', b.dataset.market === market));
     channel = 'todos';            // troca de mercado reseta o canal (canais diferem por mercado)
     segExpanded.cat = segExpanded.dog = segExpanded.other = false;
+    delete segTypeOpen.cat; delete segTypeOpen.dog; delete segTypeOpen.other;
     geoExpanded.cat = geoExpanded.dog = geoExpanded.other = false;
     openProduct = null;
     geoSearchQuery = '';
