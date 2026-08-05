@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -410,6 +410,38 @@ app.get('/api/product-groups/catalog', requireAdmin, (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Tipos de produto (Segmentos → "Tipos de produto") — nome + palavras-chave criados pelo usuário,
+// buscadas em título/productType/tags de cada item (ver metrics.js classifyTypeGroup). Diferente do
+// Unificador, não é admin-only: qualquer usuário com acesso a Segmentos usa essa tela. Ver CLAUDE.md.
+app.get('/api/product-types', (req, res) => {
+  try {
+    const { market = 'br' } = req.query;
+    res.json({ types: getProductTypeGroups()[market] || {} });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post('/api/product-types', (req, res) => {
+  const { market, name, keywords } = req.body || {};
+  if (!market || !name || !Array.isArray(keywords) || !keywords.length) {
+    return res.status(400).json({ error: 'market, name e keywords (array não vazio) são obrigatórios.' });
+  }
+  const types = upsertProductTypeGroup(market, name, keywords);
+  res.json({ types });
+});
+app.post('/api/product-types/remove-keyword', (req, res) => {
+  const { market, name, keyword } = req.body || {};
+  if (!market || !name || !keyword) return res.status(400).json({ error: 'market, name e keyword são obrigatórios.' });
+  const types = removeProductTypeKeyword(market, name, keyword);
+  res.json({ types });
+});
+app.delete('/api/product-types', (req, res) => {
+  const { market, name } = req.query;
+  if (!market || !name) return res.status(400).json({ error: 'market e name são obrigatórios.' });
+  const types = deleteProductTypeGroup(market, name);
+  res.json({ types });
 });
 
 // Salva/edita dados financeiros de um produto (COG, frete, % imposto, % comissão) — usado pela tela de Produtos.

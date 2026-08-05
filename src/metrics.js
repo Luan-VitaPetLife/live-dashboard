@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getAmazonProductImages, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getAmazonProductImages, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
@@ -114,13 +114,20 @@ function classifyType(item) {
   return item.productType || null;
 }
 
-// Duas macro-categorias de produto (pedido do Luan, 05/08/2026) usadas em Segmentos pra organizar
-// o "Top produtos" de cada card (Gato/Cão) por tipo, em vez de uma lista só misturando areia
-// (Yucaloo, ver `project_yucaloo_segunda_marca` na memória) com suplementos (Lysine/Daily/Hip &
-// Joint/etc). Hoje só existem essas duas famílias no catálogo — qualquer `type` que não contenha
-// "areia" cai em Suplementos (inclusive tipo ausente/desconhecido, nunca uma 3ª categoria vazia).
-function classifyTypeGroup(type) {
-  return (type || '').toLowerCase().includes('areia') ? 'Areia' : 'Suplementos';
+// Macro-categorias de produto usadas em Segmentos pra organizar o "Top produtos" de cada card
+// (Gato/Cão) por tipo — CRIADAS PELO USUÁRIO pela tela (Segmentos → "Tipos de produto"), nada fixo
+// no código (substituiu a 1ª versão hardcoded "Areia x Suplementos" do mesmo dia, 05/08/2026, a
+// pedido do Luan). Cada regra é { nome: [palavra-chave,...] }; a palavra-chave é buscada (contains,
+// case-insensitive) no título, no productType (Shopify) e em CADA tag do item — "em qualquer lugar",
+// como pedido. A primeira regra que bater (na ordem em que foi criada) vence; sem nenhuma regra
+// cadastrada, ou nenhuma batendo, cai em 'Outros' (nunca quebra, sempre uma string).
+function classifyTypeGroup(it, market) {
+  const rules = getProductTypeGroups()[market] || {};
+  const haystack = [it.title, it.productType, ...(it.tags || [])].filter(Boolean).join(' ').toLowerCase();
+  for (const [name, keywords] of Object.entries(rules)) {
+    if ((keywords || []).some(k => k && haystack.includes(String(k).toLowerCase()))) return name;
+  }
+  return 'Outros';
 }
 
 function aggregateSessions(since, until, market = 'br') {
@@ -451,10 +458,11 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       segAcc[seg].orderIds.add(o.id);
       if (type) segAcc[seg].byType[type] = (segAcc[seg].byType[type] || 0) + qty;
       const p = segAcc[seg].products;
-      if (!p[title]) p[title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null };
+      if (!p[title]) p[title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, typeGroup: null };
       p[title].qty     += qty;
       p[title].revenue += amount;
       if (!p[title].type) p[title].type = type;
+      if (!p[title].typeGroup) p[title].typeGroup = classifyTypeGroup(it, market);
       if (taggedSize) {
         p[title].comboQty += qty; // qty já é pacotes × tamanho aqui
         p[title].comboBySize[taggedSize] = (p[title].comboBySize[taggedSize] || 0) + rawQty;
@@ -511,16 +519,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     // topProducts/productGeo acima); estava faltando aqui até 05/08/2026 (bug reportado pelo Luan:
     // "ficou sem unificar" em Segmentos — era esta lista, a de "Onde os produtos vendem" já ia).
     let topProducts = Object.entries(v.products)
-      .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue, avulsoQty: d.avulsoQty, comboQty: d.comboQty, comboBySize: d.comboBySize, type: d.type }));
+      .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue, avulsoQty: d.avulsoQty, comboQty: d.comboQty, comboBySize: d.comboBySize, type: d.type, typeGroup: d.typeGroup }));
+    // typeGroup: macro-categoria criada pelo usuário (Segmentos → "Tipos de produto", ver
+    // classifyTypeGroup) usada pra organizar "Top produtos" por tipo em vez de uma lista só.
     topProducts = applyProductGroups(topProducts, productGroupsMkt, {
       sumKeys: ['qty', 'revenue', 'avulsoQty', 'comboQty'],
       objSumKeys: ['comboBySize'],
-      pickFirst: ['type'],
-    })
-      // typeGroup: macro-categoria (Areia x Suplementos) usada pra organizar "Top produtos" em
-      // Segmentos por tipo, em vez de uma lista só misturando os dois. Ver classifyTypeGroup.
-      .map(p => ({ ...p, typeGroup: classifyTypeGroup(p.type) }))
-      .sort((a, b) => b.qty - a.qty);
+      pickFirst: ['type', 'typeGroup'],
+    }).sort((a, b) => b.qty - a.qty);
     segments[k] = {
       revenue: v.revenue,
       units:   v.units,

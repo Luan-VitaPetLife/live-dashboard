@@ -90,7 +90,7 @@
 
   /* ── Content ── */
   .content{flex:1;padding:28px}
-  .page-header{margin-bottom:24px}
+  .page-header{margin-bottom:24px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .page-title{font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.3px}
   .page-sub{font-size:12px;color:var(--sub);margin-top:3px}
 
@@ -263,6 +263,42 @@
   .geo-state-tooltip{background:rgba(28,26,22,.88)!important;border:none!important;border-radius:5px!important;color:#f0ebe0!important;font-size:10px!important;font-weight:600!important;padding:4px 7px!important;white-space:nowrap!important;box-shadow:0 2px 8px rgba(0,0,0,.25)!important;pointer-events:none!important}
   .geo-state-tooltip::before{display:none!important}
 
+  /* ── Modal "Tipos de produto" (Segmentos → classifyTypeGroup) ── */
+  .tr-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4200;display:none;backdrop-filter:blur(2px)}
+  .tr-modal-overlay.open{display:block}
+  .tr-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:460px;max-width:94vw;max-height:82vh;background:var(--surface,#faf8f4);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4201;display:none;flex-direction:column;overflow:hidden}
+  .tr-modal.open{display:flex}
+  .tr-modal-head{flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .tr-modal-title{font-size:14px;font-weight:700;color:var(--ink)}
+  .tr-modal-sub{font-size:11px;color:var(--sub);margin-top:3px;line-height:1.5}
+  .tr-modal-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;flex-shrink:0}
+  .tr-modal-close:hover{background:var(--surface2);color:var(--text)}
+  .tr-modal-body{overflow-y:auto;padding:14px 20px}
+  .tr-empty{font-size:11px;color:var(--muted);font-style:italic;padding:6px 0 14px}
+  .tr-type-row{padding:10px 0;border-bottom:1px solid var(--border)}
+  .tr-type-row:last-child{border-bottom:none}
+  .tr-type-name{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text)}
+  .tr-type-del{margin-left:auto;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:3px 6px;border-radius:4px}
+  .tr-type-del:hover{background:var(--border2);color:var(--red,#9b3a3a)}
+  .tr-kw-list{display:flex;flex-wrap:wrap;gap:5px;margin:7px 0}
+  .tr-kw-chip{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 4px 3px 9px}
+  .tr-kw-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:2px 4px;border-radius:50%;line-height:1}
+  .tr-kw-chip button:hover{background:var(--border2);color:var(--red,#9b3a3a)}
+  .tr-kw-add{display:flex;gap:6px}
+  .tr-kw-add input{flex:1;font-family:inherit;font-size:11px;padding:6px 9px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);color:var(--text);outline:none}
+  .tr-kw-add input:focus{border-color:var(--ink)}
+  .tr-kw-add button{font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;font-family:inherit;white-space:nowrap}
+  .tr-kw-add button:hover{border-color:var(--ink);color:var(--text)}
+  .tr-new-form{margin-top:6px;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+  .tr-new-form-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub)}
+  .tr-new-form input{font-family:inherit;font-size:12px;padding:8px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none}
+  .tr-new-form input:focus{border-color:var(--ink)}
+  .tr-new-form-row{display:flex;gap:8px}
+  .tr-new-form-row input{flex:1;min-width:0}
+  .tr-new-form-err{font-size:10px;color:var(--red,#9b3a3a);min-height:13px}
+  .tr-new-form button{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text,#f0ebe0);border:none;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit}
+  .tr-new-form button:hover{opacity:.88}
+
   /* ── Grupos manuais do Unificador (Configurações) — só exibição, gestão fica em /unificador ── */
   .geo-unify-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
   .geo-unified-members{padding:10px 12px;margin-bottom:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)}
@@ -352,8 +388,11 @@
 
   <div class="content">
     <div class="page-header">
-      <div class="page-title">Segmentos</div>
-      <div class="page-sub" id="pageSub">Gato vs Cão · comparação por unidades vendidas</div>
+      <div>
+        <div class="page-title">Segmentos</div>
+        <div class="page-sub" id="pageSub">Gato vs Cão · comparação por unidades vendidas</div>
+      </div>
+      <button class="geo-map-toggle" id="manageTypesBtn"><i class="bi bi-tags"></i> Tipos de produto</button>
     </div>
 
     <div class="seg-overview">
@@ -421,6 +460,29 @@
   <div class="geo-modal-map" id="geoModalMap"></div>
 </div>
 
+<!-- Modal "Tipos de produto" — cria/edita as regras de palavra-chave usadas por classifyTypeGroup -->
+<div class="tr-modal-overlay" id="trModalOverlay"></div>
+<div class="tr-modal" id="trModal">
+  <div class="tr-modal-head">
+    <div>
+      <div class="tr-modal-title">Tipos de produto</div>
+      <div class="tr-modal-sub">Crie um tipo com uma palavra-chave — a dashboard busca esse termo no título, no tipo do produto e nas tags de cada item. O "Top produtos" de cada card passa a mostrar esses tipos, separados.</div>
+    </div>
+    <button class="tr-modal-close" id="trModalClose">✕</button>
+  </div>
+  <div class="tr-modal-body">
+    <div id="trTypesList"></div>
+    <div class="tr-new-form">
+      <div class="tr-new-form-title">Criar novo tipo</div>
+      <div class="tr-new-form-row">
+        <input type="text" id="trNewName" placeholder="Nome do tipo (ex: Areia)" autocomplete="off">
+        <input type="text" id="trNewKeyword" placeholder="Palavra-chave (ex: areia)" autocomplete="off">
+      </div>
+      <div class="tr-new-form-err" id="trNewErr"></div>
+      <button id="trNewSubmit">Criar tipo</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ── Utils ──
@@ -1370,6 +1432,145 @@ document.addEventListener('click', e => {
     document.getElementById('channelPop').classList.remove('open');
     document.getElementById('channelPill').classList.remove('open');
   }
+});
+
+// ── "Tipos de produto" — cria/edita as regras de palavra-chave (classifyTypeGroup, metrics.js) ──
+let trTypes = {}; // { [nome]: [palavraChave,...] } do mercado atual
+
+async function loadTrTypes() {
+  try {
+    const r = await fetch('/api/product-types?market=' + market, { credentials: 'same-origin' });
+    const d = await r.json();
+    trTypes = d.types || {};
+  } catch (e) { trTypes = {}; }
+  renderTrTypes();
+}
+
+function renderTrTypes() {
+  const wrap = document.getElementById('trTypesList');
+  const names = Object.keys(trTypes).sort();
+  if (!names.length) {
+    wrap.innerHTML = '<div class="tr-empty">Nenhum tipo criado ainda — tudo aparece em "Outros" até você criar o primeiro.</div>';
+    return;
+  }
+  wrap.innerHTML = names.map(name => {
+    const kws = trTypes[name] || [];
+    const chips = kws.map(k => `<span class="tr-kw-chip">${escHtml(k)}<button data-remove-kw="${escHtml(name)}|${escHtml(k)}" title="Remover palavra-chave"><i class="bi bi-x"></i></button></span>`).join('');
+    return `<div class="tr-type-row" data-type-row="${escHtml(name)}">
+      <div class="tr-type-name"><i class="bi bi-tag"></i> ${escHtml(name)}<button class="tr-type-del" data-delete-type="${escHtml(name)}" title="Excluir tipo"><i class="bi bi-trash"></i></button></div>
+      <div class="tr-kw-list">${chips || '<span class="tr-empty" style="padding:0">Sem palavra-chave — nunca vai bater em nenhum produto.</span>'}</div>
+      <div class="tr-kw-add">
+        <input type="text" placeholder="Adicionar palavra-chave..." data-kw-input="${escHtml(name)}">
+        <button data-add-kw="${escHtml(name)}">Adicionar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openTrModal() {
+  document.getElementById('trModalOverlay').classList.add('open');
+  document.getElementById('trModal').classList.add('open');
+  loadTrTypes();
+}
+function closeTrModal() {
+  document.getElementById('trModalOverlay').classList.remove('open');
+  document.getElementById('trModal').classList.remove('open');
+  document.getElementById('trNewErr').textContent = '';
+  document.getElementById('trNewName').value = '';
+  document.getElementById('trNewKeyword').value = '';
+}
+
+async function trCreateType(name, keyword) {
+  const r = await fetch('/api/product-types', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({ market, name, keywords: [keyword] }),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Erro ao salvar.');
+  trTypes = d.types || {};
+  renderTrTypes();
+  loadData(); // refaz a classificação com a regra nova
+}
+async function trAddKeyword(name, keyword) {
+  const r = await fetch('/api/product-types', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({ market, name, keywords: [keyword] }),
+  });
+  const d = await r.json();
+  if (!r.ok) return;
+  trTypes = d.types || {};
+  renderTrTypes();
+  loadData();
+}
+async function trRemoveKeyword(name, keyword) {
+  const r = await fetch('/api/product-types/remove-keyword', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({ market, name, keyword }),
+  });
+  const d = await r.json();
+  if (!r.ok) return;
+  trTypes = d.types || {};
+  renderTrTypes();
+  loadData();
+}
+async function trDeleteType(name) {
+  if (!confirm(`Excluir o tipo "${name}"? Os produtos voltam a cair em "Outros".`)) return;
+  const r = await fetch(`/api/product-types?market=${encodeURIComponent(market)}&name=${encodeURIComponent(name)}`, { method: 'DELETE', credentials: 'same-origin' });
+  const d = await r.json();
+  if (!r.ok) return;
+  trTypes = d.types || {};
+  renderTrTypes();
+  loadData();
+}
+
+document.getElementById('manageTypesBtn').addEventListener('click', openTrModal);
+document.getElementById('trModalClose').addEventListener('click', closeTrModal);
+document.getElementById('trModalOverlay').addEventListener('click', closeTrModal);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTrModal(); });
+
+document.getElementById('trNewSubmit').addEventListener('click', async () => {
+  const name = document.getElementById('trNewName').value.trim();
+  const keyword = document.getElementById('trNewKeyword').value.trim();
+  const err = document.getElementById('trNewErr');
+  if (!name || !keyword) { err.textContent = 'Informe o nome do tipo e a palavra-chave.'; return; }
+  err.textContent = '';
+  try {
+    await trCreateType(name, keyword);
+    document.getElementById('trNewName').value = '';
+    document.getElementById('trNewKeyword').value = '';
+  } catch (e) {
+    err.textContent = e.message || 'Falha de rede.';
+  }
+});
+
+document.getElementById('trTypesList').addEventListener('click', e => {
+  const del = e.target.closest('[data-delete-type]');
+  if (del) { trDeleteType(del.dataset.deleteType); return; }
+  const rm = e.target.closest('[data-remove-kw]');
+  if (rm) {
+    const [name, keyword] = rm.dataset.removeKw.split('|');
+    trRemoveKeyword(name, keyword);
+    return;
+  }
+  const add = e.target.closest('[data-add-kw]');
+  if (add) {
+    const name = add.dataset.addKw;
+    const input = document.querySelector(`[data-kw-input="${CSS.escape(name)}"]`);
+    const kw = (input?.value || '').trim();
+    if (!kw) return;
+    trAddKeyword(name, kw);
+    if (input) input.value = '';
+  }
+});
+document.getElementById('trTypesList').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const input = e.target.closest('[data-kw-input]');
+  if (!input) return;
+  const name = input.dataset.kwInput;
+  const kw = input.value.trim();
+  if (!kw) return;
+  trAddKeyword(name, kw);
+  input.value = '';
 });
 
 buildChannelDropdown();
