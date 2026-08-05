@@ -1446,22 +1446,58 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   dentro de `segAcc[seg].products` passou a guardar `type` também, e a lista final passa pelo mesmo
   `applyProductGroups()` antes de virar `segments[k].topProducts`. Testado localmente (mesmo método
   sem rede): grupo de teste aparece agrupado dentro de `dash.segments.cat.topProducts`.
-- **Top produtos separado por tipo — Areia x Suplementos (implementado 05/08/2026, mesmo pedido):**
-  o Luan pediu pra organizar essa mesma lista por tipo de produto em vez de uma lista só misturando
-  areia (marca Yucaloo, ver `project_yucaloo_segunda_marca` na memória) com suplementos (Lysine/
-  Daily/etc) — clicar no tipo abre/fecha o que já existia. `classifyTypeGroup(type)` (`metrics.js`)
-  é a nova macro-categoria: `type` (already normalizado por `classifyType`) contém "areia" → `'Areia'`,
-  qualquer outra coisa (incluindo tipo ausente) → `'Suplementos'` — só essas duas existem no catálogo
-  hoje, de propósito sem uma 3ª categoria "outro". Cada produto de `segments[k].topProducts` ganha o
-  campo `typeGroup`. `segmentos.html`: `prodByTypeGroupHtml()` substitui a renderização direta —
-  separa em baldes por `typeGroup`, ordena os baldes por unidades desc, e renderiza cada um como um
-  bloco `.seg-type-group` com cabeçalho clicável (nome + contagem + soma) e chevron; só o maior balde
-  vem aberto por padrão na 1ª renderização de cada card (`segTypeOpen`, mesmo princípio de "só o
-  primeiro aberto" já usado em Produtos/Estoque — ver 4.13), resetado ao trocar mercado/canal. O "ver
-  mais/ver menos" de cada balde (`segExpanded`) passou a usar uma chave composta (`'cat__Suplementos'`)
-  em vez de só `'cat'`, então cada tipo dentro do mesmo card mostra/esconde independente do outro. O
-  card "Por tipo de produto" (pills finas: Pó/Tablets/etc, `s.byType`) não mudou — é uma métrica
-  complementar diferente (granularidade mais fina), continua abaixo do "Top produtos" de sempre.
+- **Top produtos separado por tipo (implementado 05/08/2026, mesmo pedido):** o Luan pediu pra
+  organizar essa mesma lista por tipo de produto em vez de uma lista só misturando areia (marca
+  Yucaloo, ver `project_yucaloo_segunda_marca` na memória) com suplementos (Lysine/Daily/etc) —
+  clicar no tipo abre/fecha o que já existia. `segmentos.html`: `prodByTypeGroupHtml()` substitui a
+  renderização direta — separa em baldes por `p.typeGroup` (ver "Tipos de produto" abaixo), ordena os
+  baldes por unidades desc, e renderiza cada um como um bloco `.seg-type-group` com cabeçalho
+  clicável (nome + contagem + soma) e chevron; só o maior balde vem aberto por padrão na 1ª
+  renderização de cada card (`segTypeOpen`, mesmo princípio de "só o primeiro aberto" já usado em
+  Produtos/Estoque — ver 4.13), resetado ao trocar mercado/canal. O "ver mais/ver menos" de cada
+  balde (`segExpanded`) passou a usar uma chave composta (`'cat__NomeDoTipo'`) em vez de só `'cat'`,
+  então cada tipo dentro do mesmo card mostra/esconde independente do outro. O card "Por tipo de
+  produto" (pills finas: Pó/Tablets/etc, `s.byType`) não mudou — é uma métrica complementar diferente
+  (granularidade mais fina, sempre por `classifyType`/`TYPE_KW`, nunca editável), continua abaixo.
+  - **⚠️ Superado no mesmo dia — "Areia x Suplementos" era hardcoded, virou dinâmico:** a 1ª versão
+    tinha `classifyTypeGroup(type)` decidindo por código (`type` contém "areia" → Areia, senão
+    Suplementos, só essas duas). O Luan pediu pra generalizar: "Vamos criar uma função de criar esses
+    tipos na dashboard, para que não seja algo fixo no código" — e que a busca seja "nas tags do
+    produto, no nome, em qualquer lugar", não só no `productType` já normalizado. Ver 4.19 — é a
+    versão atual, sem nada fixo no código.
+
+### 4.19 "Tipos de produto" — regras de palavra-chave criadas pela UI (implementado 05/08/2026)
+- Substitui o `classifyTypeGroup` hardcoded do item acima (mesmo dia) por um sistema onde o próprio
+  usuário cria as categorias, pela tela — botão no cabeçalho de Segmentos (`#manageTypesBtn`, canto
+  direito do título "Segmentos") abre um modal (`#trModal`) pra criar/editar tipos: nome do tipo +
+  uma ou mais palavras-chave por tipo. Não é admin-only (ao contrário do Unificador, ver 4.18) —
+  qualquer usuário com acesso a Segmentos usa.
+- **Modelo de dados:** `kv.productTypeGroups` (`store.js`): `{ [market]: { [nomeDoTipo]:
+  [palavraChave,...] } }` — mesmo formato de `productGroups`, mas SEM a exclusividade de "um item só
+  pode estar num grupo" (não faz sentido pra palavra-chave: nada impede duas regras diferentes de
+  baterem no mesmo produto, a primeira criada vence). `getProductTypeGroups`/`upsertProductTypeGroup`
+  (une palavras-chave a um tipo, cria se não existir)/`removeProductTypeKeyword`/
+  `deleteProductTypeGroup`.
+- **`classifyTypeGroup(it, market)`** (`metrics.js`, reescrita — antes recebia só `type` já
+  processado, agora recebe o item cru): monta um "haystack" com `it.title` + `it.productType` +
+  TODAS as `it.tags` (array, já vem em cada line item do Shopify — mesmo campo que `classifySeg` usa
+  pra Gato/Cão, ver 4.1) e testa `.includes()` (case-insensitive) da palavra-chave de cada regra, na
+  ordem em que os tipos foram criados — primeira que bater vence. Nenhuma regra cadastrada, ou
+  nenhuma batendo, cai em `'Outros'` (nunca quebra, sempre uma string). Calculado dentro do loop que
+  já monta `segAcc[seg].products` (guardado como `p[title].typeGroup`, "primeiro valor vence" se o
+  mesmo título aparecer em mais de um pedido — mesmo padrão de `p[title].type`), e sobrevive ao merge
+  do Unificador via `pickFirst: ['type', 'typeGroup']` em `applyProductGroups` (ver 4.18).
+- **Endpoints** (não admin-gated, mesmo padrão de `/api/products/finance`): `GET /api/product-types
+  ?market=` lê as regras do mercado. `POST /api/product-types` (`{market,name,keywords}`) cria/
+  adiciona palavra(s) a um tipo. `POST /api/product-types/remove-keyword` (`{market,name,keyword}`)
+  tira uma palavra-chave (tipo sem nenhuma palavra-chave some sozinho, mesmo comportamento de
+  `productGroups`). `DELETE /api/product-types?market=&name=` apaga o tipo inteiro.
+- **Escopo desta rodada:** só Segmentos (onde o tipo já era usado). O modelo já nasceu genérico o
+  bastante (mesmo formato de `productGroups`) pra reaproveitar em outras telas se pedido depois.
+- **Testado localmente (sem rede, mesmo método das rodadas acima):** sem nenhuma regra cadastrada,
+  todo produto cai em `'Outros'`; criando um tipo "Suplemento" com a palavra-chave "lisina", os
+  produtos com "lisina" no título migram pra esse balde e o resto continua em "Outros"; apagando o
+  tipo, tudo volta a `'Outros'`.
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -1544,6 +1580,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/orders/export?market=br|us&channel=&since=&until=&status=todos|autorizado|em_aberto|cancelado&itemsMode=count|qty` — exporta CSV com TODOS os pedidos do período/canal/mercado (sem teto, ao contrário do `recent` do `/api/dashboard`), via `exportOrdersList()`. Usado pelo botão "Exportar" do card "Pedidos Recentes". Ver 4.9b.
   - `GET /api/products/export?market=us&channel=shopify_us&since=&until=` — exporta CSV com quantidade vendida/receita/ticket médio por produto. Só Shopify US por enquanto. Usado pelo botão "Exportar" da tela de Produtos. Ver 4.13.2.
   - `GET /api/product-groups?market=br|us` (admin) — grupos de unificação manual de produtos do mercado (Unificador, ver 4.18). `POST /api/product-groups` (`{market,name,members}`) cria/adiciona a um grupo. `POST /api/product-groups/remove-member` (`{market,name,title}`) tira um membro. `DELETE /api/product-groups?market=&name=` apaga o grupo. Persistido em `kv.productGroups`. `GET/POST /api/product-groups/config` (`{enabled}`) — liga/desliga global, padrão ligado. `GET /api/product-groups/catalog?market=` — catálogo completo (todo canal, todo histórico) achatado, pra tela escolher produtos. Todos usados só por `unificador.html`.
+  - `GET /api/product-types?market=br|us` — regras de "Tipos de produto" do mercado (Segmentos, ver 4.19), não admin. `POST /api/product-types` (`{market,name,keywords}`) cria/adiciona palavra(s)-chave a um tipo. `POST /api/product-types/remove-keyword` (`{market,name,keyword}`) tira uma palavra-chave. `DELETE /api/product-types?market=&name=` apaga o tipo. Persistido em `kv.productTypeGroups`.
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `GET /api/stock?market=br|us` — estoque + produção por canal (`channels`) e por família de produto somando todos os canais (`agg`), janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
   - `POST /api/stock/finance` — salva/edita estoque ou recebendo de um produto, por canal (`{ channel, title, stock?, incoming? }`), persistido em `kv.productStock`. Ver 4.14.
@@ -1615,6 +1652,10 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
    não foi confirmado como viável na API de Mercado Ads sem acesso à documentação oficial (bloqueada pra
    fetch automatizado). Ver 4.11.1.
 ### Resolvidos (referência rápida — o detalhe está na seção citada)
+- **"Tipos de produto" dinâmico em Segmentos** (05/08) — o "Top produtos" de cada card volta a
+  respeitar o Unificador (bug: uma 4ª lista tinha ficado de fora) e passou a separar por tipo — não
+  mais hardcoded (Areia x Suplementos), e sim tipos criados pela própria UI com palavra-chave buscada
+  em título/productType/tags. Ver 4.18 (bug) e 4.19 (feature).
 - **Unificador global de produtos** (05/08) — o "Unificar" que existia separado em Segmentos e Estoque
   virou uma tela própria (`unificador.html`, dentro de Configurações), aplicado automaticamente pelo
   backend em Revenue/Top Produtos, Segmentos, Produtos e Estoque, com liga/desliga global (padrão

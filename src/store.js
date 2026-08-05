@@ -35,6 +35,7 @@ const EMPTY = {
   productStockAgg: {},
   productGroups: {}, // { [market]: { [nomeDoGrupo]: [tituloBruto,...] } } — unificação manual de produtos entre canais, ver tela Unificador (Configurações)
   productGroupsConfig: {}, // { enabled: bool } — liga/desliga global do Unificador, padrão ligado quando ausente
+  productTypeGroups: {}, // { [market]: { [nomeDoTipo]: [palavraChave,...] } } — tipos de produto criados pelo usuário em Segmentos (busca por tags/título/productType)
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
@@ -129,6 +130,7 @@ export async function initStore() {
       if (r.key === 'productStockAgg')      cache.productStockAgg      = r.value;
       if (r.key === 'productGroups')        cache.productGroups        = r.value;
       if (r.key === 'productGroupsConfig')  cache.productGroupsConfig  = r.value;
+      if (r.key === 'productTypeGroups')    cache.productTypeGroups    = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -630,6 +632,47 @@ export function setProductGroupsEnabled(enabled) {
   saveJson();
   if (USE_PG) pgKv('productGroupsConfig', db.productGroupsConfig);
   return db.productGroupsConfig;
+}
+
+// ── Tipos de produto (Segmentos → "Tipos de produto") ──
+// Diferente de productGroups (que une TÍTULOS exatos), aqui o usuário cadastra um nome de tipo +
+// palavras-chave — a classificação busca a palavra-chave no título/productType/tags de cada item em
+// tempo real (ver classifyTypeGroup em metrics.js), então um produto novo que ainda não existia
+// quando a regra foi criada já entra classificado sozinho, sem precisar readicionar título por
+// título. Mesmo formato de productGroups (nome → array), mas sem a exclusividade de "um título só
+// pode estar num grupo" — não faz sentido pra palavra-chave.
+export function getProductTypeGroups() { return load().productTypeGroups || {}; }
+export function upsertProductTypeGroup(market, name, keywords) {
+  const db = load();
+  if (!db.productTypeGroups) db.productTypeGroups = {};
+  const mkt = db.productTypeGroups[market] || (db.productTypeGroups[market] = {});
+  const clean = keywords.map(k => String(k || '').trim()).filter(Boolean);
+  const merged = Array.from(new Set([...(mkt[name] || []), ...clean]));
+  if (merged.length) mkt[name] = merged; else delete mkt[name];
+  saveJson();
+  if (USE_PG) pgKv('productTypeGroups', db.productTypeGroups);
+  return mkt;
+}
+export function removeProductTypeKeyword(market, name, keyword) {
+  const db = load();
+  if (!db.productTypeGroups) db.productTypeGroups = {};
+  const mkt = db.productTypeGroups[market] || (db.productTypeGroups[market] = {});
+  if (mkt[name]) {
+    const kept = mkt[name].filter(k => k !== keyword);
+    if (kept.length) mkt[name] = kept; else delete mkt[name];
+  }
+  saveJson();
+  if (USE_PG) pgKv('productTypeGroups', db.productTypeGroups);
+  return mkt;
+}
+export function deleteProductTypeGroup(market, name) {
+  const db = load();
+  if (!db.productTypeGroups) db.productTypeGroups = {};
+  const mkt = db.productTypeGroups[market] || (db.productTypeGroups[market] = {});
+  delete mkt[name];
+  saveJson();
+  if (USE_PG) pgKv('productTypeGroups', db.productTypeGroups);
+  return mkt;
 }
 
 // ── Meta Insights ─────────────────────────────
