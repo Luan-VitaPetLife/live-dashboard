@@ -178,6 +178,8 @@
   .tbl td{padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle}
   .tbl tr:last-child td{border-bottom:none} .tbl tbody tr:hover td{background:var(--surface2)}
   .tbl .mono{font-family:'SF Mono','Fira Code',monospace;font-size:10px;color:var(--muted)} .tbl .dim{color:var(--sub)} .tbl .bold{font-weight:600}
+  .ro-prod-cell{display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ro-prod-more{color:var(--muted);font-weight:600;flex-shrink:0}
   .st-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
   .st-tag.ok{background:rgba(61,122,82,.08);color:var(--green)} .st-tag.pend{background:rgba(155,122,42,.08);color:var(--amber)} .st-tag.canc{background:rgba(155,58,58,.08);color:var(--red)}
   .legend-row{display:flex;align-items:center;gap:16px;margin-top:10px}
@@ -241,7 +243,8 @@
     .edit-grid>.edit-card{grid-column:1/-1!important}
     .metric-row{grid-template-columns:1fr 1fr}
     .tbl th:nth-child(3),.tbl td:nth-child(3),
-    .tbl th:nth-child(7),.tbl td:nth-child(7){display:none}
+    .tbl th:nth-child(4),.tbl td:nth-child(4),
+    .tbl th:nth-child(8),.tbl td:nth-child(8){display:none}
   }
   @media(max-width:520px){
     .filter-pill .lbl{display:none}
@@ -577,7 +580,7 @@
             </div>
           </div>
           <div class="tbl-wrap">
-            <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th id="thItems">Nº produtos</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
+            <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Produto</th><th id="thItems">Nº produtos</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
             <tbody id="ordersBody"></tbody></table>
           </div>
           <div id="ordersPager" class="orders-pager"></div>
@@ -1125,12 +1128,12 @@ function renderOrdersPage() {
       : (_roAll.length ? `${_roAll.length} pedidos` : '0 pedidos');
   }
   if (_roLoading && !ro.length) {
-    body.innerHTML = '<tr><td colspan="7" class="muted-state">Buscando…</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="muted-state">Buscando…</td></tr>';
     pager.innerHTML = '';
     return;
   }
   if (!ro.length) {
-    body.innerHTML = `<tr><td colspan="7" class="muted-state">${searching ? 'Nenhum pedido encontrado para a busca.' : 'Nenhum pedido.'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="muted-state">${searching ? 'Nenhum pedido encontrado para a busca.' : 'Nenhum pedido.'}</td></tr>`;
     pager.innerHTML = '';
     return;
   }
@@ -1140,11 +1143,11 @@ function renderOrdersPage() {
   const start = _roPage * RO_PAGE_SIZE;
   const pageItems = ro.slice(start, start + RO_PAGE_SIZE);
 
-  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; const itemsVal = _roItemsMode === 'qty' ? (o.itemsQty ?? o.items) : o.items; return `<tr><td class="mono">${escapeHtml(o.name||'')}</td><td>${chBadge}</td><td class="dim">${escapeHtml(o.customer||'—')}</td><td class="dim">${itemsVal}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; const itemsVal = _roItemsMode === 'qty' ? (o.itemsQty ?? o.items) : o.items; const prods=o.products||[]; const prodTitle=escapeHtml(prods.join(', ')); const prodCell=prods.length ? `<span class="ro-prod-cell" title="${prodTitle}">${escapeHtml(prods[0])}${prods.length>1?` <span class="ro-prod-more">+${prods.length-1}</span>`:''}</span>` : '<span class="dim">—</span>'; return `<tr><td class="mono">${escapeHtml(o.name||'')}</td><td>${chBadge}</td><td class="dim">${escapeHtml(o.customer||'—')}</td><td>${prodCell}</td><td class="dim">${itemsVal}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
   // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
   const roValidCount = ro.filter(o=>!o.cancelled).length;
   const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
-  const summaryRow = `<tr class="ro-summary-row"><td colspan="4" class="ro-summary-label">Total (${roValidCount} válidos)</td><td></td><td class="ro-summary-val">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
+  const summaryRow = `<tr class="ro-summary-row"><td colspan="5" class="ro-summary-label">Total (${roValidCount} válidos)</td><td></td><td class="ro-summary-val">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
   body.innerHTML = orderRows + summaryRow;
 
   if (pages > 1) {

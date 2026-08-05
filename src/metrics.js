@@ -59,6 +59,12 @@ const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
 // mostrava "1 item", o que confundia — ver toggle "Itens/Qtd" no card, CLAUDE.md 4.9b).
 const sumItemsQty = o => o.items.reduce((a, it) => a + (it.qty || 0), 0);
 
+// Títulos únicos vendidos num pedido — usado na coluna "Produto" de Pedidos Recentes (card
+// principal e busca geral). "-" é o placeholder de frete/serviço da Amazon (ver amazon.js
+// ordersFromRows), não é produto de verdade; item sem título (Amazon ainda não reconciliado, ver
+// CLAUDE.md 4.7.9) também é descartado, senão a coluna mostraria uma célula vazia sem explicação.
+const productTitles = o => [...new Set(o.items.filter(it => it.title && it.title.trim() !== '-').map(it => it.title))];
+
 // Toggle "Receita da Amazon" (ver CLAUDE.md): mode 'product' usa o.productSales (Ordered
 // Product Sales — só o valor do produto, sem imposto/frete/embrulho, igual o Seller Central
 // mostra) pra pedidos Amazon que já têm esse dado (só chega via relatório — ver amazon.js
@@ -559,7 +565,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // RECENT_MAX é só uma trava de segurança de payload para o amazon_us (~1000 pedidos/dia).
   const recent = getOrders({ channel, since, until, market })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, RECENT_MAX)
-    .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
+    .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o), products: productTitles(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
 
   // conversão anterior
   const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil, market) : emptySess;
@@ -683,7 +689,7 @@ export function searchOrders({ market = 'br', q = '', limit = 200 } = {}) {
   const total = matched.length;
   const results = matched.slice(0, limit).map(o => ({
     name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o),
-    createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled,
+    products: productTitles(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled,
   }));
   return { market, q, total, results, limited: total > limit };
 }
