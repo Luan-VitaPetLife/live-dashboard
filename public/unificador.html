@@ -34,7 +34,7 @@
   .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
   .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
 
-  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;max-width:1000px;width:100%}
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;max-width:1280px;width:100%}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
@@ -75,6 +75,50 @@
   .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .select-bar{display:none;align-items:center;gap:10px;margin-left:auto;font-size:11px;color:var(--sub)}
   .select-bar.open{display:flex}
+
+  /* ── Duas colunas: sem grupo (esquerda) x com grupo (direita) ── */
+  .uni-columns{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+  @media(max-width:900px){ .uni-columns{grid-template-columns:1fr} }
+  .uni-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .uni-col-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .uni-col-title{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px}
+  .uni-col-count{font-size:11px;font-weight:600;color:var(--muted);margin-left:4px}
+  .view-toggle{display:flex;align-items:center;gap:2px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px;margin-left:auto;flex-shrink:0}
+  .view-toggle button{display:flex;align-items:center;justify-content:center;width:28px;height:24px;border-radius:14px;border:none;background:transparent;color:var(--sub);cursor:pointer;font-size:12px;transition:all .15s;font-family:inherit}
+  .view-toggle button:hover{color:var(--text)}
+  .view-toggle button.active{background:var(--ink);color:var(--side-text)}
+
+  /* ── Produtos sem grupo: modo Grade ── */
+  .plain-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
+  .plain-card{position:relative;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);padding:9px;display:flex;flex-direction:column;gap:6px}
+  .plain-card .row-thumb,.plain-card .row-thumb-ph{width:100%;height:74px;border-radius:6px;font-size:20px}
+  .plain-card .card-title{font-size:11px;color:var(--text);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.7em}
+  .plain-card .card-stat{font-size:10px;color:var(--muted)}
+  .plain-card .card-badges{display:flex;flex-wrap:wrap;gap:3px}
+  .plain-card .card-check{position:absolute;top:7px;left:7px;z-index:2;background:var(--surface);border-radius:4px;padding:1px}
+
+  /* ── Produtos sem grupo: modo Compacta ── */
+  .plain-compact{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .plain-compact-row{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);font-size:11px}
+  .plain-compact-row:last-child{border-bottom:none}
+  .plain-compact-row:nth-child(odd){background:var(--surface2)}
+  .plain-compact-row .row-title{font-size:11px}
+  .plain-compact-row .row-stat{font-size:10px}
+
+  /* ── Grupos: modo Grade (chips) e Compacta ── */
+  .group-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .group-chip{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);padding:10px;cursor:pointer;transition:border-color .12s;text-align:left;font-family:inherit}
+  .group-chip:hover{border-color:var(--ink)}
+  .group-chip.expanded{border-color:var(--ink);background:var(--surface2)}
+  .group-chip .chip-name{font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .group-chip .chip-stat{font-size:10px;color:var(--muted);margin-top:3px}
+  .group-chip .chip-count{font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border-radius:10px;padding:1px 7px;display:inline-block;margin-top:5px}
+  .group-compact{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .group-compact-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);cursor:pointer;background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;font-family:inherit;font-size:12px;color:var(--text)}
+  .group-compact-row:last-child{border-bottom:none}
+  .group-compact-row:hover{background:var(--surface2)}
+  .group-compact-row.expanded{background:var(--surface2);font-weight:600}
+  .group-compact-row .row-title{flex:1}
 
   /* ── Grupo (card) ── */
   .group-card{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
@@ -175,11 +219,31 @@
       </div>
     </div>
 
-    <div class="section-label">Grupos</div>
-    <div id="groupsWrap" style="display:flex;flex-direction:column;gap:14px"></div>
+    <div class="uni-columns">
+      <div class="uni-col">
+        <div class="uni-col-head">
+          <span class="uni-col-title">Sem grupo</span><span class="uni-col-count" id="ungroupedCount"></span>
+          <div class="view-toggle" id="ungroupedViewToggle">
+            <button data-view="list" title="Lista"><i class="bi bi-list-ul"></i></button>
+            <button data-view="grid" title="Grade"><i class="bi bi-grid-3x3-gap"></i></button>
+            <button data-view="compact" title="Compacta"><i class="bi bi-text-indent-left"></i></button>
+          </div>
+        </div>
+        <div id="plainList"></div>
+      </div>
 
-    <div class="section-label">Produtos sem grupo</div>
-    <div class="plain-list" id="plainList"></div>
+      <div class="uni-col">
+        <div class="uni-col-head">
+          <span class="uni-col-title">Com grupo</span><span class="uni-col-count" id="groupedCount"></span>
+          <div class="view-toggle" id="groupedViewToggle">
+            <button data-view="cards" title="Cards (detalhado)"><i class="bi bi-card-list"></i></button>
+            <button data-view="grid" title="Grade"><i class="bi bi-grid-3x3-gap"></i></button>
+            <button data-view="compact" title="Compacta"><i class="bi bi-text-indent-left"></i></button>
+          </div>
+        </div>
+        <div id="groupsWrap" style="display:flex;flex-direction:column;gap:14px"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -218,6 +282,13 @@ let selectMode = false;
 let selected = new Set();
 let addToGroupTarget = null; // nome do grupo quando o modal abre a partir de "+ Adicionar produtos"
 let searchQuery = '';
+
+// ── Formas de visualizar cada coluna (persistido por coluna) ──
+let ungroupedView = localStorage.getItem('coco_uni_view_ungrouped') || 'list'; // 'list' | 'grid' | 'compact'
+let groupedView = localStorage.getItem('coco_uni_view_grouped') || 'cards';    // 'cards' | 'grid' | 'compact'
+// Nos modos Grade/Compacta da coluna "Com grupo", clicar num grupo alterna se o card detalhado dele
+// aparece embaixo da grade/lista (evita duplicar a renderização completa do card por padrão).
+let expandedGroups = new Set();
 
 function setMarket(m){
   market = m;
@@ -322,40 +393,96 @@ function render(){
   updateSelectBar();
 }
 
-function renderGroups(){
-  const wrap = $('groupsWrap');
-  const names = Object.keys(groups).sort();
-  if(!names.length){ wrap.innerHTML = '<div class="empty">Nenhum grupo criado ainda. Selecione produtos abaixo e clique em "Unificar selecionados".</div>'; return; }
-  wrap.innerHTML = names.map(name => {
-    const members = groups[name] || [];
-    const visibleMembers = members.filter(t => matchesSearch(t) || matchesSearch(name));
-    if(searchQuery && !visibleMembers.length) return '';
-    const memberRows = members.map(title => {
-      const rows = rowsForTitle(title);
-      const s = summarize(rows);
-      return `<div class="member-row">
-        ${thumbHtml(s.image, title)}
-        <span class="row-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
-        ${channelBadges(s.channels)}
-        <span class="row-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
-        <button class="row-remove" data-remove-member="${escapeHtml(title)}" data-group="${escapeHtml(name)}" title="Tirar do grupo"><i class="bi bi-x-lg"></i></button>
-      </div>`;
-    }).join('');
-    return `<div class="group-card" data-group-card="${escapeHtml(name)}">
-      <div class="group-head">
-        <div class="group-icon"><i class="bi bi-link-45deg"></i></div>
-        <div>
-          <div class="group-name">${escapeHtml(name)}</div>
-          <div class="group-stat">${members.length} produto${members.length===1?'':'s'} unificado${members.length===1?'':'s'}</div>
-        </div>
-        <div class="group-actions">
-          <button class="btn btn-sm" data-add-to-group="${escapeHtml(name)}"><i class="bi bi-plus-lg"></i> Adicionar produtos</button>
-          <button class="btn btn-sm btn-danger" data-delete-group="${escapeHtml(name)}"><i class="bi bi-trash"></i></button>
-        </div>
-      </div>
-      ${memberRows}
+// Soma qty/receita de todos os membros de um grupo (referência mostrada nos chips/linhas
+// compactas — o dado "de verdade" por membro só aparece no card detalhado, expandido).
+function summarizeGroup(name){
+  const members = groups[name] || [];
+  let qty = 0, revenue = 0;
+  const channels = new Set();
+  members.forEach(t => {
+    const s = summarize(rowsForTitle(t));
+    qty += s.qty; revenue += s.revenue;
+    s.channels.forEach(c => channels.add(c));
+  });
+  return { qty, revenue, channels: [...channels] };
+}
+
+// Card detalhado (visual de sempre) — usado sempre no modo Cards, e sob demanda (grupo expandido)
+// nos modos Grade/Compacta.
+function groupCardHtml(name){
+  const members = groups[name] || [];
+  const memberRows = members.map(title => {
+    const rows = rowsForTitle(title);
+    const s = summarize(rows);
+    return `<div class="member-row">
+      ${thumbHtml(s.image, title)}
+      <span class="row-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+      ${channelBadges(s.channels)}
+      <span class="row-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
+      <button class="row-remove" data-remove-member="${escapeHtml(title)}" data-group="${escapeHtml(name)}" title="Tirar do grupo"><i class="bi bi-x-lg"></i></button>
     </div>`;
   }).join('');
+  return `<div class="group-card" data-group-card="${escapeHtml(name)}">
+    <div class="group-head">
+      <div class="group-icon"><i class="bi bi-link-45deg"></i></div>
+      <div>
+        <div class="group-name">${escapeHtml(name)}</div>
+        <div class="group-stat">${members.length} produto${members.length===1?'':'s'} unificado${members.length===1?'':'s'}</div>
+      </div>
+      <div class="group-actions">
+        <button class="btn btn-sm" data-add-to-group="${escapeHtml(name)}"><i class="bi bi-plus-lg"></i> Adicionar produtos</button>
+        <button class="btn btn-sm btn-danger" data-delete-group="${escapeHtml(name)}"><i class="bi bi-trash"></i></button>
+      </div>
+    </div>
+    ${memberRows}
+  </div>`;
+}
+
+function visibleGroupNames(){
+  return Object.keys(groups).sort().filter(name => {
+    if(!searchQuery) return true;
+    if(matchesSearch(name)) return true;
+    return (groups[name] || []).some(t => matchesSearch(t));
+  });
+}
+
+function renderGroups(){
+  const wrap = $('groupsWrap');
+  const names = visibleGroupNames();
+  $('groupedCount').textContent = names.length ? `(${names.length})` : '';
+  if(!names.length){
+    wrap.innerHTML = `<div class="empty">${searchQuery ? 'Nenhum grupo encontrado.' : 'Nenhum grupo criado ainda. Selecione produtos à esquerda e clique em "Unificar selecionados".'}</div>`;
+    return;
+  }
+  if(groupedView === 'cards'){
+    wrap.innerHTML = names.map(groupCardHtml).join('');
+    return;
+  }
+  const expandedHtml = names.filter(n => expandedGroups.has(n)).map(groupCardHtml).join('');
+  if(groupedView === 'grid'){
+    const chips = names.map(name => {
+      const s = summarizeGroup(name);
+      const members = groups[name] || [];
+      return `<button class="group-chip${expandedGroups.has(name)?' expanded':''}" data-toggle-group="${escapeHtml(name)}">
+        <div class="chip-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+        <div class="chip-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</div>
+        <span class="chip-count">${members.length} produto${members.length===1?'':'s'}</span>
+      </button>`;
+    }).join('');
+    wrap.innerHTML = `<div class="group-grid">${chips}</div>${expandedHtml}`;
+    return;
+  }
+  // compact
+  const rows = names.map(name => {
+    const s = summarizeGroup(name);
+    const members = groups[name] || [];
+    return `<button class="group-compact-row${expandedGroups.has(name)?' expanded':''}" data-toggle-group="${escapeHtml(name)}">
+      <i class="bi bi-link-45deg"></i>
+      <span class="row-title" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+      <span class="row-stat">${members.length} produto${members.length===1?'':'s'} · ${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
+    </button>`;
+  }).join('');
+  wrap.innerHTML = `<div class="group-compact">${rows}</div>${expandedHtml}`;
 }
 
 function ungroupedTitles(){
@@ -375,8 +502,42 @@ function renderPlainList(){
   let titles = ungroupedTitles().filter(matchesSearch);
   // Ordena por receita somada desc (mesmo critério do catálogo).
   titles.sort((a,b) => summarize(rowsForTitle(b)).revenue - summarize(rowsForTitle(a)).revenue);
-  if(!titles.length){ list.innerHTML = '<div class="empty">Nenhum produto sem grupo encontrado.</div>'; return; }
-  list.innerHTML = titles.map(title => {
+  $('ungroupedCount').textContent = titles.length ? `(${titles.length})` : '';
+  if(!titles.length){ list.innerHTML = `<div class="empty">${searchQuery ? 'Nenhum produto encontrado.' : 'Nenhum produto sem grupo — tudo já está unificado.'}</div>`; return; }
+
+  if(ungroupedView === 'grid'){
+    list.innerHTML = `<div class="plain-grid">${titles.map(title => {
+      const s = summarize(rowsForTitle(title));
+      const check = selectMode
+        ? `<input type="checkbox" class="select-check card-check" data-select-title="${escapeHtml(title)}" ${selected.has(title)?'checked':''}>`
+        : '';
+      return `<div class="plain-card">
+        ${check}
+        ${thumbHtml(s.image, title)}
+        <div class="card-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+        <div class="card-badges">${channelBadges(s.channels)}</div>
+        <div class="card-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</div>
+      </div>`;
+    }).join('')}</div>`;
+    return;
+  }
+  if(ungroupedView === 'compact'){
+    list.innerHTML = `<div class="plain-compact">${titles.map(title => {
+      const s = summarize(rowsForTitle(title));
+      const check = selectMode
+        ? `<input type="checkbox" class="select-check" data-select-title="${escapeHtml(title)}" ${selected.has(title)?'checked':''}>`
+        : '';
+      return `<div class="plain-compact-row">
+        ${check}
+        <span class="row-title" title="${escapeHtml(title)}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(title)}</span>
+        ${channelBadges(s.channels)}
+        <span class="row-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
+      </div>`;
+    }).join('')}</div>`;
+    return;
+  }
+  // list (padrão)
+  list.innerHTML = `<div class="plain-list">${titles.map(title => {
     const s = summarize(rowsForTitle(title));
     const check = selectMode
       ? `<input type="checkbox" class="select-check" data-select-title="${escapeHtml(title)}" ${selected.has(title)?'checked':''}>`
@@ -388,7 +549,7 @@ function renderPlainList(){
       ${channelBadges(s.channels)}
       <span class="row-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
     </div>`;
-  }).join('');
+  }).join('')}</div>`;
 }
 
 function updateSelectBar(){
@@ -521,7 +682,36 @@ $('groupsWrap').addEventListener('click', e => {
     addToGroupTarget = add.dataset.addToGroup;
     enterSelectMode();
     toast(`Selecione os produtos pra adicionar ao grupo "${addToGroupTarget}".`);
+    return;
   }
+  const toggle = e.target.closest('[data-toggle-group]');
+  if(toggle){
+    const name = toggle.dataset.toggleGroup;
+    if(expandedGroups.has(name)) expandedGroups.delete(name); else expandedGroups.add(name);
+    renderGroups();
+  }
+});
+
+/* ── Formas de visualizar (Lista/Grade/Compacta e Cards/Grade/Compacta) ── */
+function wireViewToggle(elId, current, onChange){
+  const wrap = $(elId);
+  wrap.querySelectorAll('button[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === current));
+  wrap.addEventListener('click', e => {
+    const b = e.target.closest('button[data-view]');
+    if(!b) return;
+    onChange(b.dataset.view);
+    wrap.querySelectorAll('button[data-view]').forEach(x => x.classList.toggle('active', x === b));
+  });
+}
+wireViewToggle('ungroupedViewToggle', ungroupedView, v => {
+  ungroupedView = v;
+  localStorage.setItem('coco_uni_view_ungrouped', v);
+  renderPlainList();
+});
+wireViewToggle('groupedViewToggle', groupedView, v => {
+  groupedView = v;
+  localStorage.setItem('coco_uni_view_grouped', v);
+  renderGroups();
 });
 
 /* ── Init ── */
