@@ -1817,6 +1817,92 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   tela onde já existia sua própria área "Ocultos" — não são a mesma UI compartilhada, só o mesmo
   padrão de chevron+persistência replicado.
 
+### 4.22 Dashboard principal (Revenue) reconhece a Yucaloo + export dinâmico de Pedidos Recentes (06/08/2026)
+- **Canais/gráficos da tela Revenue (`index.html`) passam a mostrar a Yucaloo separada, pedido do
+  Luan** ("separando ainda daquele jeito: Shopify - Yucaloo BR e Shopify - Coco and Luna BR"):
+  - `MARKET_CHANNELS` (dropdown de canal) ganhou `yucaloo_br`/`yucaloo_us`, com rótulo completo
+    ("Shopify - Yucaloo BR"/"EUA") — e os itens `shopify`/`shopify_us` do dropdown também passaram a
+    usar o rótulo completo ("Shopify - Coco and Luna BR"/"EUA"), só ali (o `CHAN` compartilhado,
+    usado em textos mais curtos como o subtítulo da página, continua com "Shopify"/"Shopify US" —
+    evita redundância tipo "Coco and Luna · Shopify - Coco and Luna BR").
+  - **`chOrder` (donut "Canais") deixou de ter rótulo próprio hardcoded** — antes tinha uma 2ª cópia
+    do nome ("Shopify", "Amazon"...) desatualizada em relação às cores/labels de `colors.js`
+    (`CocoColors.ch`), que é quem esse gráfico já usava pra COR mas não pro texto. Motivo real do
+    bug ("os gráficos não mostravam"): a correção anterior de rótulo (ver seção 4.20, "Badges de
+    canal renomeados") nunca alcançou esse donut, porque ele lia o nome de um array próprio, não de
+    `colors.js`. Corrigido: `chOrder` agora só lista OS CANAIS (chaves), e o texto vem sempre de
+    `CocoColors.ch[k].label` — corrige o donut/legenda "Canais" retroativamente e automaticamente
+    pra qualquer rótulo futuro, sem precisar editar dois lugares de novo.
+  - `ssChannels` ("Orgânico x Campanha", uma pizza por canal) ganhou `yucaloo_br`/`yucaloo_us` na
+    lista "Todos"; o título de cada célula também passou a preferir `CocoColors.ch[ch].label` (com
+    fallback pro `CHAN` curto) — mesmo motivo acima, pra Shopify/Shopify US também mostrarem o nome
+    completo lado a lado com a Yucaloo, em vez de ficar assimétrico ("Shopify" vs "Shopify -
+    Yucaloo BR").
+  - **⚠️ Bug real encontrado e corrigido nessa mesma auditoria (não reportado, achado revisando o
+    código):** o cálculo de ROAS/ACOS por canal (`kpiRoas`/`kpiAcos`, ver 4.9b) tinha um `if/else`
+    que tratava "shopee, amazon, amazon_us" como "sem rastreamento de Ads" e jogava QUALQUER outro
+    canal (inclusive um ainda não previsto, como `yucaloo_br`/`yucaloo_us`) no branch de
+    "todos/shopify/shopify_us", que soma o gasto de Meta Ads da Coco and Luna. Sem a correção,
+    escolher "Shopify - Yucaloo BR" no dropdown mostraria um ROAS calculado com o gasto de anúncio
+    de OUTRA marca — número sem nenhum sentido pro canal selecionado. Corrigido adicionando
+    `yucaloo_br`/`yucaloo_us` à lista "sem rastreamento de Ads ainda" (correto — a Yucaloo não tem
+    Meta Ads própria integrada ainda). `showAdsLine` (linha tracejada "Custo ads" na Tendência) e a
+    disponibilidade de Tráfego/Funil (`hasTraffic`) já excluíam a Yucaloo corretamente sem
+    precisar de nenhuma mudança (checam channel === 'shopify'/'shopify_us' explicitamente, não uma
+    lista negativa).
+  - **`updateCardVisibility()` não precisou de mudança:** `isShopify` (controla se Marketing/
+    Tráfego/Funil aparecem) já é uma checagem positiva `channel==='shopify'||channel==='shopify_us'`
+    — selecionar um canal Yucaloo cai fora dela por padrão, escondendo esses 3 cards (correto, a
+    Yucaloo não tem Meta Ads nem sessões ShopifyQL sincronizadas ainda — mesmo comportamento de
+    Shopee/ML/Amazon hoje).
+  - **Continua parcial, de propósito:** `CHANNELS_BR`/`CHANNELS_US` (cards por canal em
+    Produtos/Estoque) e o dropdown de Campanhas não ganharam Yucaloo nesta rodada — escopo desta vez
+    foi só a tela Revenue, como pedido.
+- **"Pedidos Recentes" reorganizado (pedido do Luan — nova ordem: Pedido, Data/Hora da compra,
+  Cliente, Situação, Valor, Canal):**
+  - Tabela em tela caiu de 8 pra 6 colunas — **Produto e Itens saíram da tela**, viraram colunas
+    OPCIONAIS só na exportação (ver abaixo). O toggle "Nº produtos"/"Qtd. total" (`#roItemsToggle`)
+    foi removido inteiro (tela e código) — não fazia mais sentido sem a coluna Itens visível.
+  - CSS responsivo (`@media max-width:768px`) ajustado pra esconder Cliente(3)/Situação(4) no
+    mobile — antes escondia posições 3/4/8 (Cliente/Produto/Status) num layout de 8 colunas; a
+    posição 8 não existe mais.
+- **Exportar pedidos virou um modal completo com colunas dinâmicas** (pedido do Luan: "coloque um
+  pop-up dando a opção de reorganizar as colunas, adicionar mais colunas... e tirar colunas
+  também... nós também deve-se mostrar os dados e como eles ficarão em uma planilha"). Substituiu o
+  antigo popover pequeno (só filtro de status) — `#expModal`/`#expModalOverlay` (novo, `index.html`
+  não tinha nenhum componente de modal antes desta mudança; CSS `.exp-modal*` própria, não reaproveita
+  nada de `unificador.html`/`segmentos.html`).
+  - **Colunas disponíveis** (`EXPORT_COLUMN_DEFS`): Pedido, Data/Hora da compra, Cliente, Situação,
+    Valor, Canal, **Produto(s) da compra** (títulos únicos do pedido, `o.products`, já existia no
+    payload desde a coluna "Produto" da tela — ver seção 4.9b — junta com ", " no CSV), Nº de
+    produtos, Qtd. de itens.
+  - **Reordenar** é por setas ▲▼ por linha, não drag-and-drop — decisão deliberada dado o histórico
+    de bugs do HTML5 DnD nativo já documentado neste projeto (produtos.html/estoque.html precisaram
+    reescrever pra ponteiro customizado por causa disso, ver 4.13). Pra uma lista simples e plana
+    como essa, considerou-se que arrasto não vale o risco/esforço — setas são "algo dinâmico" o
+    suficiente (reordena, liga/desliga, tudo sem reload).
+  - **Pré-visualização "como vai ficar na planilha"** (`renderExportPreview`): tabela real (`<table>`)
+    com as colunas marcadas, na ordem escolhida, preenchida com até 5 linhas de `_roAll` (os pedidos
+    recentes já carregados em memória — sem chamada de rede nova só pra pré-visualizar) passadas
+    pelos mesmos formatadores usados na tela (`statusTag`, `fmtMoney`, `CocoColors.ch[...].label`).
+  - **Estado persistido** em `localStorage('coco_export_cols')` — array ordenado de
+    `{key, on}` cobrindo TODAS as colunas conhecidas (não só as ativas), então a ordem escolhida
+    pelo usuário (inclusive de colunas desmarcadas) sobrevive a reload. Migração simples: colunas
+    novas que não existiam num save antigo entram desmarcadas no fim.
+  - **Backend (`server.js`):** `/api/orders/export` ganhou o parâmetro `cols` (lista de chaves
+    separada por vírgula, controla COLUNAS e ORDEM) — `EXPORT_COLUMNS` (server-side, com
+    `CHANNEL_LABEL_PT`, cópia deliberada dos rótulos de `colors.js` só pra exportação, mesmo padrão
+    de duplicação estática já aceito no projeto) substitui o array fixo de 6 colunas de antes. Sem
+    `cols` (chamada antiga/direta), cai no mesmo padrão de 6 colunas de sempre — não quebra nada que
+    já apontava pra essa URL. Parâmetro `itemsMode` (antigo) foi removido — `itemsCount`/`itemsQty`
+    viraram colunas independentes, sem precisar de um "modo".
+  - **`exportOrdersList()` (`metrics.js`)** ganhou o campo `products` (reaproveita `productTitles()`,
+    a mesma função da coluna "Produto" da tela) no objeto devolvido por pedido.
+  - Testado localmente (sem rede, mesmo método de sempre): `exportOrdersList()` devolve `products`
+    populado corretamente; simulação da seleção de colunas (`cols=name,products,channel,total`)
+    gera cabeçalho e linhas na ordem certa, com "Shopify - Coco and Luna BR"/"Shopify - Yucaloo BR"
+    corretos por pedido.
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js

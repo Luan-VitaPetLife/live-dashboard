@@ -310,26 +310,45 @@ function sendCsv(res, filename, header, rows) {
   res.send(BOM + lines.join('\r\n'));
 }
 
+// Mesmo texto dos badges de canal do cliente (CocoColors.ch, ver public/colors.js DEFAULT_CH) —
+// duplicado de propósito aqui (server-side, só pra exportação), mesmo padrão de outras tabelas
+// estáticas já duplicadas no projeto (ver CLAUDE.md, "Onde os produtos vendem").
+const CHANNEL_LABEL_PT = {
+  shopify: 'Shopify - Coco and Luna BR', shopify_us: 'Shopify - Coco and Luna EUA',
+  shopee: 'Shopee', mercadolivre: 'Mercado Livre',
+  amazon: 'Amazon', amazon_us: 'Amazon US',
+  yucaloo_br: 'Shopify - Yucaloo BR', yucaloo_us: 'Shopify - Yucaloo EUA',
+};
+
+// Colunas disponíveis pro export dinâmico de "Pedidos Recentes" (popup de reorganizar/adicionar/
+// tirar colunas, ver public/index.html). `cols` na query string é uma lista ordenada de chaves
+// separada por vírgula — controla tanto QUAIS colunas saem quanto EM QUE ORDEM.
+const EXPORT_COLUMNS = {
+  name:        { header: 'Pedido',              get: o => o.name },
+  createdAt:   { header: 'Data/Hora da compra',  get: (o, tz) => new Date(o.createdAt).toLocaleString('pt-BR', { timeZone: tz }) },
+  customer:    { header: 'Cliente',              get: o => o.customer || '' },
+  statusLabel: { header: 'Situação',             get: o => o.statusLabel },
+  total:       { header: 'Valor',                get: o => o.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
+  channel:     { header: 'Canal',                get: o => CHANNEL_LABEL_PT[o.channel] || o.channel },
+  products:    { header: 'Produto(s)',           get: o => (o.products || []).join(', ') },
+  itemsCount:  { header: 'Nº de produtos',       get: o => o.itemsCount },
+  itemsQty:    { header: 'Qtd. de itens',        get: o => o.itemsQty },
+};
+const DEFAULT_EXPORT_COLS = ['name', 'createdAt', 'customer', 'statusLabel', 'total', 'channel'];
+
 // Exporta TODOS os pedidos do período/canal/mercado (não só os "recentes" que a tela mostra),
-// com filtro opcional de status. `itemsMode` decide se a coluna "Itens" mostra o nº de produtos
-// distintos do pedido ou a soma das quantidades (mesmo toggle do card "Pedidos Recentes").
+// com filtro opcional de status e colunas dinâmicas (`cols`, ver EXPORT_COLUMNS acima).
 app.get('/api/orders/export', (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const { market = 'br', channel = 'todos', since = today, until = today, status = 'todos', itemsMode = 'count' } = req.query;
+    const { market = 'br', channel = 'todos', since = today, until = today, status = 'todos', cols } = req.query;
     const orders = exportOrdersList({ market, channel, since, until, status });
     const tz = market === 'us' ? 'America/Los_Angeles' : 'America/Sao_Paulo';
-    const itemsHeader = itemsMode === 'qty' ? 'Qtd. de itens' : 'Nº de produtos';
-    const rows = orders.map(o => [
-      o.name,
-      o.customer || '',
-      o.statusLabel,
-      itemsMode === 'qty' ? o.itemsQty : o.itemsCount,
-      new Date(o.createdAt).toLocaleString('pt-BR', { timeZone: tz }),
-      o.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-    ]);
-    sendCsv(res, `pedidos_${market}_${since}_a_${until}.csv`,
-      ['Código do pedido', 'Cliente', 'Status', itemsHeader, 'Data', 'Valor'], rows);
+    const requested = cols ? String(cols).split(',').filter(k => EXPORT_COLUMNS[k]) : [];
+    const useCols = requested.length ? requested : DEFAULT_EXPORT_COLS;
+    const header = useCols.map(k => EXPORT_COLUMNS[k].header);
+    const rows = orders.map(o => useCols.map(k => EXPORT_COLUMNS[k].get(o, tz)));
+    sendCsv(res, `pedidos_${market}_${since}_a_${until}.csv`, header, rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

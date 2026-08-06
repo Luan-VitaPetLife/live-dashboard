@@ -178,8 +178,6 @@
   .tbl td{padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle}
   .tbl tr:last-child td{border-bottom:none} .tbl tbody tr:hover td{background:var(--surface2)}
   .tbl .mono{font-family:'SF Mono','Fira Code',monospace;font-size:10px;color:var(--muted)} .tbl .dim{color:var(--sub)} .tbl .bold{font-weight:600}
-  .ro-prod-cell{display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ro-prod-more{color:var(--muted);font-weight:600;flex-shrink:0}
   .st-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
   .st-tag.ok{background:rgba(61,122,82,.08);color:var(--green)} .st-tag.pend{background:rgba(155,122,42,.08);color:var(--amber)} .st-tag.canc{background:rgba(155,58,58,.08);color:var(--red)}
   .legend-row{display:flex;align-items:center;gap:16px;margin-top:10px}
@@ -199,20 +197,42 @@
   .ro-search i{font-size:12px;color:var(--muted)}
   .ro-search input{border:none;background:transparent;outline:none;font-family:inherit;font-size:12px;color:var(--text);width:190px;max-width:46vw}
   .ro-search input::placeholder{color:var(--muted)}
-  .ro-items-toggle{display:flex;align-items:center;height:32px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);padding:2px;gap:2px}
-  .ro-items-toggle button{border:none;background:transparent;font-size:11px;font-weight:600;color:var(--muted);padding:0 10px;height:26px;border-radius:16px;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
-  .ro-items-toggle button.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
-  .ro-export-wrap{position:relative}
   .ro-export-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;font-family:inherit}
   .ro-export-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
-  .ro-export-pop{position:absolute;top:calc(100% + 6px);right:0;width:210px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;padding:10px;gap:6px}
-  .ro-export-wrap.open .ro-export-pop{display:flex}
-  .ro-export-pop-label{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);padding:2px 6px 4px}
-  .ro-export-opt{padding:8px 10px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:8px;transition:background .1s}
-  .ro-export-opt:hover{background:var(--surface2);color:var(--text)}
-  .ro-export-opt.active{color:var(--text);font-weight:600;background:var(--surface2)}
-  .ro-export-go{margin-top:4px;height:34px;border-radius:8px;border:none;background:var(--ink);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s;font-family:inherit}
+  .ro-export-go{height:34px;padding:0 18px;border-radius:8px;border:none;background:var(--ink);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s;font-family:inherit}
   .ro-export-go:hover{opacity:.88}
+  /* ── Modal "Exportar pedidos" — colunas dinâmicas + pré-visualização ── */
+  .exp-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:800;display:none;backdrop-filter:blur(2px)}
+  .exp-modal-overlay.open{display:block}
+  .exp-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:560px;max-width:94vw;max-height:86vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.3);z-index:801;display:none;flex-direction:column;overflow:hidden}
+  .exp-modal.open{display:flex}
+  .exp-modal-head{flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+  .exp-modal-title{font-size:15px;font-weight:700;color:var(--ink)}
+  .exp-modal-sub{font-size:11px;color:var(--sub);margin-top:4px;line-height:1.5}
+  .exp-modal-close{background:none;border:none;font-size:17px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;flex-shrink:0}
+  .exp-modal-close:hover{background:var(--surface2);color:var(--text)}
+  .exp-modal-body{overflow-y:auto;padding:16px 22px;flex:1}
+  .exp-section-title{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--sub);margin:18px 0 8px}
+  .exp-section-title:first-child{margin-top:0}
+  .exp-status-row{display:flex;gap:6px;flex-wrap:wrap}
+  .exp-status-opt{padding:7px 12px;font-size:11px;font-weight:600;border-radius:16px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;font-family:inherit}
+  .exp-status-opt.active{background:var(--ink);border-color:var(--ink);color:#fff}
+  .exp-cols-list{display:flex;flex-direction:column;gap:4px}
+  .exp-col-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--surface2)}
+  .exp-col-row.off{opacity:.5}
+  .exp-col-row label{display:flex;align-items:center;gap:8px;flex:1;font-size:12px;color:var(--text);cursor:pointer;user-select:none}
+  .exp-col-arrows{display:flex;gap:2px;flex-shrink:0}
+  .exp-col-arrow{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 5px;font-size:11px;border-radius:4px}
+  .exp-col-arrow:hover:not(:disabled){background:var(--border2);color:var(--text)}
+  .exp-col-arrow:disabled{opacity:.25;cursor:default}
+  .exp-preview-wrap{overflow-x:auto;border:1px solid var(--border2);border-radius:8px}
+  .exp-preview-tbl{width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap}
+  .exp-preview-tbl th{background:var(--surface2);text-align:left;padding:7px 10px;font-weight:700;color:var(--sub);border-bottom:1px solid var(--border2)}
+  .exp-preview-tbl td{padding:7px 10px;color:var(--text);border-bottom:1px solid var(--border)}
+  .exp-preview-tbl tr:last-child td{border-bottom:none}
+  .exp-modal-actions{flex-shrink:0;display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border)}
+  .exp-btn-secondary{height:34px;padding:0 16px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+  .exp-btn-secondary:hover{border-color:var(--ink);color:var(--text)}
   .ro-summary-row{background:var(--surface2)}
   .ro-summary-label{padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
   .ro-summary-val{padding:10px 16px;font-weight:600;font-size:13px}
@@ -243,8 +263,7 @@
     .edit-grid>.edit-card{grid-column:1/-1!important}
     .metric-row{grid-template-columns:1fr 1fr}
     .tbl th:nth-child(3),.tbl td:nth-child(3),
-    .tbl th:nth-child(4),.tbl td:nth-child(4),
-    .tbl th:nth-child(8),.tbl td:nth-child(8){display:none}
+    .tbl th:nth-child(4),.tbl td:nth-child(4){display:none}
   }
   @media(max-width:520px){
     .filter-pill .lbl{display:none}
@@ -560,27 +579,13 @@
         <div class="card"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Pedidos recentes</div><div class="ct-sub">Mais recentes primeiro</div></div>
             <div class="ro-head-right">
-              <div class="ro-items-toggle" id="roItemsToggle" role="group" aria-label="Como contar a coluna Itens">
-                <button type="button" data-mode="count" title="Nº de produtos distintos no pedido">Nº produtos</button>
-                <button type="button" data-mode="qty" title="Soma das quantidades de todos os itens do pedido">Qtd. total</button>
-              </div>
-              <div class="ro-export-wrap" id="roExportWrap">
-                <button type="button" class="ro-export-btn" id="roExportBtn"><i class="bi bi-download"></i> Exportar</button>
-                <div class="ro-export-pop" id="roExportPop">
-                  <div class="ro-export-pop-label">Status a exportar</div>
-                  <div class="ro-export-opt active" data-status="todos">Todos</div>
-                  <div class="ro-export-opt" data-status="autorizado">Autorizado</div>
-                  <div class="ro-export-opt" data-status="em_aberto">Em aberto</div>
-                  <div class="ro-export-opt" data-status="cancelado">Cancelado</div>
-                  <button type="button" class="ro-export-go" id="roExportGo">Baixar CSV</button>
-                </div>
-              </div>
+              <button type="button" class="ro-export-btn" id="roExportBtn"><i class="bi bi-download"></i> Exportar</button>
               <div class="ro-search"><i class="bi bi-search"></i><input type="search" id="ordersSearch" placeholder="Buscar cliente, nº, status, canal…" autocomplete="off" aria-label="Buscar pedidos"></div>
               <span class="ro-pg-info" id="ordersMeta">—</span>
             </div>
           </div>
           <div class="tbl-wrap">
-            <table class="tbl"><thead><tr><th>Pedido</th><th>Canal</th><th>Cliente</th><th>Produto</th><th id="thItems">Nº produtos</th><th>Horário</th><th>Valor</th><th>Status</th></tr></thead>
+            <table class="tbl"><thead><tr><th>Pedido</th><th>Data/Hora da compra</th><th>Cliente</th><th>Situação</th><th>Valor</th><th>Canal</th></tr></thead>
             <tbody id="ordersBody"></tbody></table>
           </div>
           <div id="ordersPager" class="orders-pager"></div>
@@ -592,6 +597,36 @@
 </div>
 
 <!-- Settings panel -->
+<div class="exp-modal-overlay" id="expModalOverlay"></div>
+<div class="exp-modal" id="expModal">
+  <div class="exp-modal-head">
+    <div>
+      <div class="exp-modal-title">Exportar pedidos</div>
+      <div class="exp-modal-sub">Escolha as colunas, a ordem e o status a exportar — a pré-visualização mostra como vai ficar na planilha.</div>
+    </div>
+    <button class="exp-modal-close" id="expModalClose">✕</button>
+  </div>
+  <div class="exp-modal-body">
+    <div class="exp-section-title">Status a exportar</div>
+    <div class="exp-status-row" id="expStatusRow">
+      <button type="button" class="exp-status-opt active" data-status="todos">Todos</button>
+      <button type="button" class="exp-status-opt" data-status="autorizado">Autorizado</button>
+      <button type="button" class="exp-status-opt" data-status="em_aberto">Em aberto</button>
+      <button type="button" class="exp-status-opt" data-status="cancelado">Cancelado</button>
+    </div>
+
+    <div class="exp-section-title">Colunas — marque as que quer, use as setas pra reordenar</div>
+    <div id="expColsList" class="exp-cols-list"></div>
+
+    <div class="exp-section-title">Pré-visualização</div>
+    <div class="exp-preview-wrap"><table class="exp-preview-tbl" id="expPreviewTbl"></table></div>
+  </div>
+  <div class="exp-modal-actions">
+    <button class="exp-btn-secondary" id="expCancelBtn">Cancelar</button>
+    <button class="ro-export-go" id="expDownloadBtn">Baixar CSV</button>
+  </div>
+</div>
+
 <div class="sp-overlay" id="spOverlay"></div>
 <div class="sp-panel" id="spPanel">
   <div class="sp-head">
@@ -723,18 +758,20 @@ function showTrendDrilldown(label, val, byChannel, money, metric) {
 }
 
 // ── App state ──
-const CHAN = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', amazon_us:'Amazon US', mercadolivre:'Mercado Livre', shopify_us:'Shopify US' };
+const CHAN = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', amazon_us:'Amazon US', mercadolivre:'Mercado Livre', shopify_us:'Shopify US', yucaloo_br:'Shopify - Yucaloo BR', yucaloo_us:'Shopify - Yucaloo EUA' };
 const MARKET_CHANNELS = {
   br: [
     { value:'todos',         label:'Todos' },
-    { value:'shopify',       label:'Shopify' },
+    { value:'shopify',       label:'Shopify - Coco and Luna BR' },
+    { value:'yucaloo_br',    label:'Shopify - Yucaloo BR' },
     { value:'shopee',        label:'Shopee' },
     { value:'mercadolivre',  label:'Mercado Livre' },
     { value:'amazon',        label:'Amazon' },
   ],
   us: [
     { value:'todos',      label:'Todos' },
-    { value:'shopify_us', label:'Shopify US' },
+    { value:'shopify_us', label:'Shopify - Coco and Luna EUA' },
+    { value:'yucaloo_us', label:'Shopify - Yucaloo EUA' },
     { value:'amazon_us', label:'Amazon US' },
   ],
 };
@@ -871,7 +908,7 @@ function render(d) {
     roasLabel = 'Mercado Ads';
     roasAvail = (ml.adCost || 0) > 0;
     roasVal = roasAvail ? (ml.premium || 0) / ml.adCost : 0;
-  } else if (d.channel === 'shopee' || d.channel === 'amazon' || d.channel === 'amazon_us') {
+  } else if (d.channel === 'shopee' || d.channel === 'amazon' || d.channel === 'amazon_us' || d.channel === 'yucaloo_br' || d.channel === 'yucaloo_us') {
     roasLabel = 'sem rastreamento de Ads ainda';
     roasAvail = false;
   } else {
@@ -920,15 +957,19 @@ function render(d) {
 
   // Channel split
   const cs = d.channelSplit;
+  // Rótulo vem sempre de colors.js (CocoColors.ch) — fonte única, já traz "Shopify - Coco and
+  // Luna BR"/"Shopify - Yucaloo BR" etc. (ver colors.js DEFAULT_CH). chOrder só define QUAIS canais
+  // e em que ordem — não mais o texto do rótulo, pra não duplicar/desatualizar em relação às cores.
   const chOrder = d.market === 'us'
-    ? [['shopify_us','Shopify US'],['amazon_us','Amazon US']]
-    : [['shopify','Shopify'],['shopee','Shopee'],['mercadolivre','Mercado Livre'],['amazon','Amazon']];
-  const cTotal = chOrder.reduce((a,[k]) => a+(cs[k]||0), 0);
-  drawDonut('channelChart', chOrder.map(([k])=>cs[k]||0), chOrder.map(([k])=>CocoColors.ch[k]?.bg||'#999'));
+    ? ['shopify_us','yucaloo_us','amazon_us']
+    : ['shopify','yucaloo_br','shopee','mercadolivre','amazon'];
+  const cTotal = chOrder.reduce((a,k) => a+(cs[k]||0), 0);
+  drawDonut('channelChart', chOrder.map(k=>cs[k]||0), chOrder.map(k=>CocoColors.ch[k]?.bg||'#999'));
   document.getElementById('chCenter').textContent = fmtMoneyShort(cTotal);
-  document.getElementById('channelRows').innerHTML = cTotal > 0 ? chOrder.map(([k,nm]) => {
+  document.getElementById('channelRows').innerHTML = cTotal > 0 ? chOrder.map(k => {
     const v = cs[k]||0;
     const pc = cTotal>0?(v/cTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%';
+    const nm = CocoColors.ch[k]?.label || CHAN[k] || k;
     return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${CocoColors.ch[k]?.bg||'#999'}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(v)}</span></div></div>`;
   }).join('') : '<div class="muted-state">Sem dados para o período.</div>';
 
@@ -946,7 +987,7 @@ function render(d) {
   const ssc = d.salesSplitByChannel || {};
   const ssIsAll = d.channel === 'todos';
   const ssChannels = ssIsAll
-    ? (d.market === 'us' ? ['shopify_us', 'amazon_us'] : ['shopify', 'shopee', 'mercadolivre', 'amazon'])
+    ? (d.market === 'us' ? ['shopify_us', 'yucaloo_us', 'amazon_us'] : ['shopify', 'yucaloo_br', 'shopee', 'mercadolivre', 'amazon'])
     : [d.channel];
   document.getElementById('ssSub').textContent = ssIsAll ? 'Por canal' : `Canal: ${CHAN[d.channel] || d.channel}`;
   const ssGridEl = document.getElementById('ssGrid');
@@ -962,7 +1003,7 @@ function render(d) {
   })() : '';
   ssGridEl.innerHTML = ssChannels.map(ch => `
     <div class="ss-cell">
-      <div class="ss-cell-title">${CHAN[ch] || ch}</div>
+      <div class="ss-cell-title">${CocoColors.ch[ch]?.label || CHAN[ch] || ch}</div>
       <div class="ss-pie-wrap"><canvas id="ssPie-${ch}"></canvas></div>
       <div class="ss-cell-legend" id="ssLeg-${ch}"></div>
       <div class="ss-cell-total" id="ssTotal-${ch}">—</div>
@@ -1081,9 +1122,6 @@ let _roSearchTotal = 0;
 let _roLimited = false;
 let _roLoading = false;
 let _roSeq = 0;         // descarta respostas de busca fora de ordem
-// "Itens": 'count' = nº de linhas de produto distintas, 'qty' = soma das quantidades (um pedido
-// com 1 linha e 70 unidades mostrava "1 item" no modo antigo — ver CLAUDE.md 4.9b).
-let _roItemsMode = localStorage.getItem('coco_orders_items_mode') || 'count';
 let _roExportStatus = 'todos';
 
 // Lista atualmente exibida no card (recentes ou resultado da busca geral).
@@ -1128,12 +1166,12 @@ function renderOrdersPage() {
       : (_roAll.length ? `${_roAll.length} pedidos` : '0 pedidos');
   }
   if (_roLoading && !ro.length) {
-    body.innerHTML = '<tr><td colspan="8" class="muted-state">Buscando…</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="muted-state">Buscando…</td></tr>';
     pager.innerHTML = '';
     return;
   }
   if (!ro.length) {
-    body.innerHTML = `<tr><td colspan="8" class="muted-state">${searching ? 'Nenhum pedido encontrado para a busca.' : 'Nenhum pedido.'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" class="muted-state">${searching ? 'Nenhum pedido encontrado para a busca.' : 'Nenhum pedido.'}</td></tr>`;
     pager.innerHTML = '';
     return;
   }
@@ -1143,11 +1181,11 @@ function renderOrdersPage() {
   const start = _roPage * RO_PAGE_SIZE;
   const pageItems = ro.slice(start, start + RO_PAGE_SIZE);
 
-  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; const itemsVal = _roItemsMode === 'qty' ? (o.itemsQty ?? o.items) : o.items; const prods=o.products||[]; const prodTitle=escapeHtml(prods.join(', ')); const prodCell=prods.length ? `<span class="ro-prod-cell" title="${prodTitle}">${escapeHtml(prods[0])}${prods.length>1?` <span class="ro-prod-more">+${prods.length-1}</span>`:''}</span>` : '<span class="dim">—</span>'; return `<tr><td class="mono">${escapeHtml(o.name||'')}</td><td>${chBadge}</td><td class="dim">${escapeHtml(o.customer||'—')}</td><td>${prodCell}</td><td class="dim">${itemsVal}</td><td class="dim">${time}</td><td class="bold">${fmtMoney(o.total,2)}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td></tr>`; }).join('');
+  const orderRows = pageItems.map(o=>{ const st=statusTag(o); const time=new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); const chBadge=(searching||_roIsAllCh)?CocoColors.chBadgeHTML(o.channel):`<span class="mc-meta">${CocoColors.ch[o.channel]?.label||o.channel}</span>`; return `<tr><td class="mono">${escapeHtml(o.name||'')}</td><td class="dim">${time}</td><td class="dim">${escapeHtml(o.customer||'—')}</td><td><span class="st-tag ${st.cls}">${st.label}</span></td><td class="bold">${fmtMoney(o.total,2)}</td><td>${chBadge}</td></tr>`; }).join('');
   // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
   const roValidCount = ro.filter(o=>!o.cancelled).length;
   const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
-  const summaryRow = `<tr class="ro-summary-row"><td colspan="5" class="ro-summary-label">Total (${roValidCount} válidos)</td><td></td><td class="ro-summary-val">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
+  const summaryRow = `<tr class="ro-summary-row"><td colspan="4" class="ro-summary-label">Total (${roValidCount} válidos)</td><td class="ro-summary-val">${fmtMoney(roValidTotal,2)}</td><td></td></tr>`;
   body.innerHTML = orderRows + summaryRow;
 
   if (pages > 1) {
@@ -1506,7 +1544,6 @@ function closeAllDropdowns() {
 document.addEventListener('click', () => {
   closeAllDropdowns();
   document.getElementById('periodPop').classList.remove('open');
-  document.getElementById('roExportWrap')?.classList.remove('open');
 });
 
 // ── Period picker ──
@@ -1583,39 +1620,123 @@ document.getElementById('ordersSearch').addEventListener('input', e => {
   scheduleSearch();       // busca geral no backend (debounce); vazio volta pros recentes
 });
 
-// ── Toggle "Nº produtos" / "Qtd. total" na coluna Itens (tela e exportação) ──
-function updateItemsModeUI() {
-  document.querySelectorAll('#roItemsToggle button').forEach(b => b.classList.toggle('active', b.dataset.mode === _roItemsMode));
-  const th = document.getElementById('thItems');
-  if (th) th.textContent = _roItemsMode === 'qty' ? 'Qtd. itens' : 'Nº produtos';
-}
-document.getElementById('roItemsToggle').addEventListener('click', e => {
-  const btn = e.target.closest('button');
-  if (!btn || btn.dataset.mode === _roItemsMode) return;
-  _roItemsMode = btn.dataset.mode;
-  localStorage.setItem('coco_orders_items_mode', _roItemsMode);
-  updateItemsModeUI();
-  renderOrdersPage();
-});
-updateItemsModeUI();
+// ── Exportar pedidos para planilha (CSV) — colunas dinâmicas (reordenar/adicionar/tirar) ──
+// Colunas disponíveis pro export — mesmas chaves que o backend entende (ver server.js
+// EXPORT_COLUMNS). "Produto(s) da compra"/"Nº de produtos"/"Qtd. de itens" ficam disponíveis
+// aqui mas fora da tabela principal (que só mostra as 6 colunas padrão).
+const EXPORT_COLUMN_DEFS = {
+  name:        'Pedido',
+  createdAt:   'Data/Hora da compra',
+  customer:    'Cliente',
+  statusLabel: 'Situação',
+  total:       'Valor',
+  channel:     'Canal',
+  products:    'Produto(s) da compra',
+  itemsCount:  'Nº de produtos',
+  itemsQty:    'Qtd. de itens',
+};
+const DEFAULT_EXPORT_ORDER = ['name','createdAt','customer','statusLabel','total','channel'];
+const ALL_EXPORT_KEYS = Object.keys(EXPORT_COLUMN_DEFS);
+const EXPORT_VALUE_GETTERS = {
+  name:        o => o.name || '',
+  createdAt:   o => new Date(o.createdAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+  customer:    o => o.customer || '',
+  statusLabel: o => statusTag(o).label,
+  total:       o => fmtMoney(o.total, 2),
+  channel:     o => CocoColors.ch[o.channel]?.label || CHAN[o.channel] || o.channel,
+  products:    o => (o.products || []).join(', '),
+  itemsCount:  o => o.items,
+  itemsQty:    o => o.itemsQty ?? o.items,
+};
 
-// ── Exportar pedidos para planilha (CSV) ──
-const roExportWrap = document.getElementById('roExportWrap');
-roExportWrap.addEventListener('click', e => e.stopPropagation());
-document.getElementById('roExportBtn').addEventListener('click', () => {
-  roExportWrap.classList.toggle('open');
+function loadExportColState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('coco_export_cols') || 'null');
+    if (Array.isArray(saved) && saved.length) {
+      const known = new Set(saved.map(c => c.key));
+      const extra = ALL_EXPORT_KEYS.filter(k => !known.has(k)).map(k => ({ key: k, on: false }));
+      return [...saved.filter(c => EXPORT_COLUMN_DEFS[c.key]), ...extra];
+    }
+  } catch (e) {}
+  // Padrão: as 6 colunas da tabela, na mesma ordem, seguidas das opcionais desmarcadas.
+  return [...DEFAULT_EXPORT_ORDER, ...ALL_EXPORT_KEYS.filter(k => !DEFAULT_EXPORT_ORDER.includes(k))]
+    .map(k => ({ key: k, on: DEFAULT_EXPORT_ORDER.includes(k) }));
+}
+let exportCols = loadExportColState();
+function saveExportColState() { localStorage.setItem('coco_export_cols', JSON.stringify(exportCols)); }
+
+function renderExportCols() {
+  const wrap = document.getElementById('expColsList');
+  wrap.innerHTML = exportCols.map((c, i) => `
+    <div class="exp-col-row${c.on ? '' : ' off'}">
+      <div class="exp-col-arrows">
+        <button type="button" class="exp-col-arrow" data-move="up" data-idx="${i}" ${i===0?'disabled':''} title="Subir"><i class="bi bi-chevron-up"></i></button>
+        <button type="button" class="exp-col-arrow" data-move="down" data-idx="${i}" ${i===exportCols.length-1?'disabled':''} title="Descer"><i class="bi bi-chevron-down"></i></button>
+      </div>
+      <label><input type="checkbox" data-toggle-col="${c.key}" ${c.on?'checked':''}> ${EXPORT_COLUMN_DEFS[c.key]}</label>
+    </div>`).join('');
+  renderExportPreview();
+}
+function renderExportPreview() {
+  const onCols = exportCols.filter(c => c.on);
+  const tbl = document.getElementById('expPreviewTbl');
+  if (!onCols.length) { tbl.innerHTML = '<thead></thead><tbody><tr><td class="muted-state">Selecione ao menos uma coluna.</td></tr></tbody>'; return; }
+  const sample = (_roAll || []).slice(0, 5);
+  const headHtml = '<tr>' + onCols.map(c => `<th>${EXPORT_COLUMN_DEFS[c.key]}</th>`).join('') + '</tr>';
+  const bodyHtml = sample.length
+    ? sample.map(o => '<tr>' + onCols.map(c => `<td>${escapeHtml(String(EXPORT_VALUE_GETTERS[c.key](o)))}</td>`).join('') + '</tr>').join('')
+    : `<tr><td colspan="${onCols.length}" class="muted-state">Sem pedidos carregados pra pré-visualizar.</td></tr>`;
+  tbl.innerHTML = `<thead>${headHtml}</thead><tbody>${bodyHtml}</tbody>`;
+}
+
+function openExportModal() {
+  document.getElementById('expModalOverlay').classList.add('open');
+  document.getElementById('expModal').classList.add('open');
+  renderExportCols();
+}
+function closeExportModal() {
+  document.getElementById('expModalOverlay').classList.remove('open');
+  document.getElementById('expModal').classList.remove('open');
+}
+document.getElementById('roExportBtn').addEventListener('click', openExportModal);
+document.getElementById('expModalClose').addEventListener('click', closeExportModal);
+document.getElementById('expCancelBtn').addEventListener('click', closeExportModal);
+document.getElementById('expModalOverlay').addEventListener('click', closeExportModal);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeExportModal(); });
+
+document.getElementById('expStatusRow').addEventListener('click', e => {
+  const btn = e.target.closest('.exp-status-opt');
+  if (!btn) return;
+  document.querySelectorAll('#expStatusRow .exp-status-opt').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _roExportStatus = btn.dataset.status;
 });
-document.getElementById('roExportPop').querySelectorAll('.ro-export-opt').forEach(opt => {
-  opt.addEventListener('click', () => {
-    roExportWrap.querySelectorAll('.ro-export-opt').forEach(o => o.classList.remove('active'));
-    opt.classList.add('active');
-    _roExportStatus = opt.dataset.status;
-  });
+
+document.getElementById('expColsList').addEventListener('click', e => {
+  const arrow = e.target.closest('[data-move]');
+  if (!arrow) return;
+  const idx = Number(arrow.dataset.idx);
+  const swapIdx = idx + (arrow.dataset.move === 'up' ? -1 : 1);
+  if (swapIdx < 0 || swapIdx >= exportCols.length) return;
+  [exportCols[idx], exportCols[swapIdx]] = [exportCols[swapIdx], exportCols[idx]];
+  saveExportColState();
+  renderExportCols();
 });
-document.getElementById('roExportGo').addEventListener('click', () => {
-  const p = new URLSearchParams({ market, channel, since: sinceDate, until: untilDate, status: _roExportStatus, itemsMode: _roItemsMode });
+document.getElementById('expColsList').addEventListener('change', e => {
+  const cb = e.target.closest('[data-toggle-col]');
+  if (!cb) return;
+  const col = exportCols.find(c => c.key === cb.dataset.toggleCol);
+  if (col) col.on = cb.checked;
+  saveExportColState();
+  renderExportCols();
+});
+
+document.getElementById('expDownloadBtn').addEventListener('click', () => {
+  const onKeys = exportCols.filter(c => c.on).map(c => c.key);
+  if (!onKeys.length) return;
+  const p = new URLSearchParams({ market, channel, since: sinceDate, until: untilDate, status: _roExportStatus, cols: onKeys.join(',') });
   window.location.href = '/api/orders/export?' + p.toString();
-  roExportWrap.classList.remove('open');
+  closeExportModal();
 });
 
 // ── Init ──
