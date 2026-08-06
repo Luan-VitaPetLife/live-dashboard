@@ -13,13 +13,14 @@
   const STORAGE_KEY = 'coco_colors';
 
   const DEFAULT_CH = {
-    shopify:      { bg: '#95BF47', label: 'Shopify' },
-    shopify_us:   { bg: '#7EAD3C', label: 'Shopify US' },
+    shopify:      { bg: '#ee4144', label: 'Shopify - Coco and Luna BR' },
+    shopify_us:   { bg: '#ee4144', label: 'Shopify - Coco and Luna EUA' },
     shopee:       { bg: '#EE4D2D', label: 'Shopee' },
     mercadolivre: { bg: '#FFE600', label: 'Mercado Livre' },
     amazon:       { bg: '#111111', label: 'Amazon' },
     amazon_us:    { bg: '#FF9900', label: 'Amazon US' },
-    yucaloo_br:   { bg: '#4466ff', label: 'Yucaloo' },
+    yucaloo_br:   { bg: '#4466ff', label: 'Shopify - Yucaloo BR' },
+    yucaloo_us:   { bg: '#4466ff', label: 'Shopify - Yucaloo EUA' },
   };
   const DEFAULT_MKT = {
     Instagram:       '#E1306C',

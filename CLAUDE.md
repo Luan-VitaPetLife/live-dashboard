@@ -1695,6 +1695,19 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   `kv.yucalooTokens.us` existir, gravando em `market:'us'` junto com o Shopify US, sem nenhuma
   mudança de código); um card/filtro dedicado da Yucaloo nas telas de lista fixa acima, se o Luan
   quiser depois.
+- **Badges de canal renomeados pra deixar a marca explícita (06/08/2026, ajustado no mesmo dia):**
+  com duas marcas rodando em cima do Shopify (Coco and Luna e Yucaloo), o rótulo genérico
+  "Shopify"/"Shopify US" ficou ambíguo — não dava pra saber, só olhando o badge, se era Coco and Luna
+  ou Yucaloo. `colors.js` (`DEFAULT_CH`) atualizado: `shopify` → **"Shopify - Coco and Luna BR"**,
+  `shopify_us` → **"Shopify - Coco and Luna EUA"**, cor **`#ee4144`** nos dois (vermelho da marca, no
+  lugar do verde do Shopify — cor da plataforma, não da marca); `yucaloo_br` → **"Shopify - Yucaloo
+  BR"**, `yucaloo_us` → **"Shopify - Yucaloo EUA"**, mantendo o azul `#4466FF` já usado. **Rótulo
+  separado por mercado** (não um texto único "BR ou EUA" — 1ª versão, corrigida pelo Luan no mesmo
+  dia: "a tag do Shopify deve ser Shopify - Coco and Luna BR (Para pedidos do brasil) e EUA para
+  pedidos dos EUA"). Como `label` nunca é sobrescrito por customização do usuário (só `bg` pode, via
+  o color picker), o texto novo vale pra todo mundo. Efeito é global — `chBadgeHTML()` é
+  compartilhado entre Unificador, Top Produtos (`index.html`) e o donut/legenda "Canais" do
+  dashboard principal, que também passam a usar essas cores/rótulos automaticamente.
 
 ### 4.21 "Ocultar produtos" — card "Ocultos" em Segmentos (implementado 06/08/2026)
 - Pedido do Luan: uma forma de ocultar produtos (por palavra-chave buscada na TAG do item, não
