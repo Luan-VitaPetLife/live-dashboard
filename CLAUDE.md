@@ -1629,10 +1629,27 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - **Fora de escopo desta rodada, de propósito:** sessões/funil (ShopifyQL) da Yucaloo — só pedidos
     foram pedidos. Bling **não** é a fonte aqui, mesmo os 3 pedidos também aparecendo lá — decisão
     explícita do Luan de puxar primariamente do Shopify.
-- **⚠️ Consequência de propósito — nenhuma tela mostra esses pedidos ainda:** como `market` é
-  `'yucaloo_br'` (não `'br'`), nada em `index.html`/`produtos.html`/`estoque.html`/`segmentos.html`/
-  Geografia consulta esse valor — os pedidos ficam gravados e prontos, mas invisíveis em qualquer UI
-  até a dimensão de marca (`brand`) ser desenhada e implementada (próximo item).
+- **⚠️ Consequência de propósito — nenhuma tela de dashboard mostra esses pedidos ainda:** como
+  `market` é `'yucaloo_br'` (não `'br'`), nada em `index.html`/`produtos.html`/`estoque.html`/
+  `segmentos.html`/Geografia consulta esse valor — os pedidos ficam gravados e prontos, mas
+  invisíveis em qualquer tela de negócio até a dimensão de marca (`brand`) ser desenhada e
+  implementada (próximo item).
+- **Exceção — Unificador já enxerga a Yucaloo BR (implementado 06/08/2026, mesmo dia — o Luan reportou
+  que os produtos não apareciam pra unificar):** `unificador.html` ganhou um terceiro botão no toggle
+  de mercado, **"Yucaloo BR"** (`setMarket('yucaloo_br')`), ao lado de Brasil/EUA — nenhuma mudança de
+  backend foi necessária: `listProductCatalog({market})`/`GET /api/product-groups/catalog` já eram
+  agnósticos de mercado (só repassam a string pro `getOrders({market})`, que já indexa qualquer valor
+  genericamente, ver acima), então bastou expor a opção na UI. **Cuidado que valeu a pena** —
+  `coco_market` é a chave de `localStorage` COMPARTILHADA com todas as outras telas (índice, produtos,
+  estoque...) pra manter BR/US sincronizado entre páginas; gravar `'yucaloo_br'` nela faria essas
+  outras telas herdarem um valor de mercado que não sabem tratar. `setMarket()` só persiste ali quando
+  `m` é `'br'`/`'us'` — a escolha "Yucaloo BR" fica só na sessão desta página, sem vazar. Badge de
+  canal `yucaloo_br` ganhou cor própria em `colors.js` (`DEFAULT_CH`, roxo `#6a5ab5`, label "Yucaloo")
+  pra não cair no cinza genérico de canal desconhecido. **Continua só aqui** — os outros consumidores
+  de `market` (dashboard principal, Produtos, Estoque, Segmentos, Geografia) não ganharam a opção
+  Yucaloo nesta rodada; é sinal exatamente do buraco que falta preencher (dimensão de marca, ver
+  abaixo), não uma inconsistência a corrigir depois — Unificador só precisava do catálogo bruto por
+  título, as outras telas mostram KPI/gráfico/mapa que fazem sentido pra um "mercado" de verdade.
 - **Ainda faltando:** criar o app Yucaloo US na Dev Dashboard e repetir o processo (variáveis
   `YUCALOO_US_*`, ver seção 6 — o `fetchOrders(..., 'us')` já funciona sozinho assim que
   `kv.yucalooTokens.us` existir, sem nenhuma mudança de código); decidir e implementar a dimensão de
