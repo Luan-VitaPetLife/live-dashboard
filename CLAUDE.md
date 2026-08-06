@@ -52,6 +52,7 @@ src/mercadolivre.js     Mercado Livre OAuth 2.0 + pedidos + fetchAdCosts + fetch
 src/amazon.js           Amazon SP-API (EUA + BR): chamada combinada, LWA + SigV4 + STS AssumeRole
 src/meta.js             Meta Marketing API: gasto diário + fetchCampaigns (nível campanha, BR e US)
 src/googleads.js        Google Ads API: OAuth + fetchCampaigns (nível campanha, só EUA por enquanto)
+src/shopifyYucaloo.js   OAuth da Yucaloo (2ª marca, app via Dev Dashboard) — só o handshake por enquanto, ver 4.20
 src/metrics.js          Calcula o payload da dashboard por mercado; inclui salesSplit
 src/us-states.js        normalizeUsState(): reduz grafias de estado dos EUA ao código de 2 letras (Geografia US)
 src/sync.js             Orquestra a busca de todos os canais BR e US e grava no store
@@ -1523,6 +1524,81 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   produtos com "lisina" no título migram pra esse balde e o resto continua em "Outros"; apagando o
   tipo, tudo volta a `'Outros'`.
 
+### 4.20 Yucaloo — 2ª marca, integração Shopify em andamento (iniciada 06/08/2026)
+- **Yucaloo é uma marca própria da Vita Pet Life, distinta da Coco and Luna**, com loja(s) Shopify
+  separadas (BR confirmado; US mencionado pelo Luan, ainda não configurado). Convive no mesmo país
+  (BR) que a Coco and Luna — então, ao contrário de BR/US (que é geografia), Yucaloo vai exigir uma
+  dimensão nova e ortogonal ao `market` de sempre (provavelmente um campo `brand`), tocando
+  `store.js`/`shopify.js`/`metrics.js`/`server.js`/UI. **Essa arquitetura ainda não foi feita** — o
+  que existe até agora é só o handshake de autenticação (ver abaixo), sem nenhuma leitura de pedido,
+  sync ou UI ainda ligados a isso.
+- **Diferença-chave do app Shopify da Coco and Luna:** a loja Yucaloo BR já nasceu no sistema **Dev
+  Dashboard novo da Shopify** (`dev.shopify.com/dashboard`) — o botão clássico "Desenvolver apps"
+  dentro do admin da própria loja (usado pela Coco and Luna, ver seção 6) hoje só redireciona pra lá,
+  sem opção de criar um app customizado clássico. Isso muda o fluxo de autenticação por completo:
+  - **Coco and Luna:** app customizado clássico → instala na loja → Shopify mostra um **Admin API
+    access token estático** (`shpat_...`) na hora, sem OAuth nenhum. Token nunca expira, é só colar
+    no `.env` (`SHOPIFY_ADMIN_TOKEN`/`SHOPIFY_US_ADMIN_TOKEN`).
+  - **Yucaloo:** app criado na Dev Dashboard → tem Client ID/Secret (como Mercado Livre/Google Ads),
+    e **exige um handshake OAuth de verdade** — mesmo marcando "Usar fluxo de instalação legado" na
+    configuração do app (o que, na prática, testamos e não eliminou a necessidade do handshake).
+- **⚠️ Descoberta (06/08/2026) — clicar "Instalar app" na Dev Dashboard NÃO dá o token direto:** ao
+  contrário do fluxo clássico, clicar "Instalar app" → escolher a loja não abre uma tela de permissões
+  com um botão "Instalar" — a Shopify chama direto a **"URL do app"** configurada, com os parâmetros
+  `hmac`, `host`, `shop`, `timestamp` assinados na query string (sem `code`, sem `state` — não é um
+  callback OAuth pronto). Isso é o "bounce" padrão que a Shopify manda pra abrir/instalar um app: cabe
+  ao **próprio app** (nosso servidor) validar essa assinatura e então redirecionar o navegador pra
+  `https://{shop}/admin/oauth/authorize?...` — só depois disso a Shopify chama de volta o
+  `redirect_uri` cadastrado, aí sim com `?code=...`, pra trocar por um access_token de verdade.
+  Confirmado ao vivo: configurar a "URL do app" como a raiz do domínio ou preencher o campo errado
+  (URL do app vs. URLs de redirecionamento — são coisas diferentes, fáceis de confundir na tela nova)
+  só fazia a Shopify bater na raiz do site sem nenhum efeito.
+- **`src/shopifyYucaloo.js` (implementado 06/08/2026):** só o handshake, nada de leitura de pedidos
+  ainda. Um app por mercado (mesmo padrão da Amazon BR/US — `creds(mkt)` lê
+  `YUCALOO_<MKT>_CLIENT_ID`/`_CLIENT_SECRET`/`_REDIRECT_URL` do `.env`).
+  - `verifyRequest(mkt, req)` — valida a assinatura HMAC-SHA256 que a Shopify manda (mesmo algoritmo
+    nos dois casos: bounce da URL do app e callback do OAuth). **Recebe o `req` inteiro, não
+    `req.query`** — de propósito: o parser padrão do Express (`qs`) trata `+` como espaço, e o
+    parâmetro `host` vem em **base64** (alfabeto que usa `+`) — decodificar pelo caminho normal
+    quebraria a verificação toda vez que `+` aparecesse no meio do base64. A função reconstrói a query
+    a partir de `req.originalUrl` e decodifica com `decodeURIComponent` puro, sem essa armadilha.
+  - `buildAuthorizeUrl(mkt, shop, state)` — monta a URL de `/admin/oauth/authorize` da loja.
+  - `exchangeCode(mkt, shop, code)` — troca o `code` do callback pelo access_token permanente
+    (offline, não expira — mesmo tipo de token que o app clássico já dava direto), salva em
+    `kv.yucalooTokens[mkt] = { shop, accessToken, scope, obtainedAt }` (`store.js`
+    `getYucalooTokens`/`setYucalooTokens`, mesmo padrão de `googleAdsTokens`/`mlTokens`).
+- **Rotas em `server.js`** (liberadas do portão de login como as outras OAuth, prefixo
+  `/shopify-yucaloo/`, ver 4.16): diferente de `/mercadolivre/connect` etc. (que o usuário clica), aqui
+  quem chama é a própria Shopify.
+  - `GET /shopify-yucaloo/:mkt(br|us)/connect` — recebe o bounce da Shopify, valida a assinatura,
+    gera um `state` (cookie CSRF, mesmo padrão de `oauth_state_ml`/`oauth_state_google`) e redireciona
+    pro `/admin/oauth/authorize` da loja.
+  - `GET /shopify-yucaloo/:mkt(br|us)/callback` — valida o `state` (cookie) + a assinatura de novo,
+    troca o `code` pelo token via `exchangeCode`.
+- **Configuração exigida no app da Dev Dashboard** (aba do app → versão → campos "URLs"): **"URL do
+  app"** = `https://live-dashboard-vitapetlife.up.railway.app/shopify-yucaloo/br/connect` (não a raiz
+  do domínio — tem que ser esse caminho específico, é ele que recebe o bounce e inicia o OAuth).
+  **"URLs de redirecionamento"** = `https://live-dashboard-vitapetlife.up.railway.app/shopify-yucaloo/br/callback`
+  (tem que bater exatamente com `YUCALOO_BR_REDIRECT_URL` do `.env`/Railway). "Incorporar app no admin
+  da Shopify" desmarcado (não construímos nenhuma tela embarcada) e "Usar fluxo de instalação legado"
+  marcado (não confirmado se muda algo de fato nesse fluxo, mas não atrapalha).
+- **Variáveis novas** (`.env`/Railway, ver seção 6): `YUCALOO_BR_CLIENT_ID`, `YUCALOO_BR_CLIENT_SECRET`,
+  `YUCALOO_BR_REDIRECT_URL`. Futuramente `YUCALOO_US_*` quando o app US existir.
+  **⚠️ Pra funcionar de verdade, precisa estar em produção (branch `master`)** — o callback é chamado
+  pela própria Shopify batendo na URL pública do Railway, que só roda o que está em `master` (ver
+  seção 1). Só ter isso na branch `dev` não é suficiente pra completar o handshake ao vivo.
+- **Loja BR confirmada:** domínio real `pii90z-nz.myshopify.com` (o "myshopify.com" gerado pela
+  Shopify não tem relação com o nome "Yucaloo" — normal, só o nome de exibição/domínio próprio é
+  `yucaloo.com.br`). Escopos pedidos: `read_all_orders,read_analytics,read_customers,read_products,
+  read_reports` (mais amplo que o `read_orders` da Coco and Luna — `read_all_orders` não tem o limite
+  de 60 dias de histórico).
+- **Ainda faltando (nenhum destes existe ainda):** confirmar o token BR chegou (`kv.yucalooTokens.br`);
+  criar o app Yucaloo US na Dev Dashboard e repetir o processo; decidir e implementar a dimensão de
+  marca (`brand`) em todo o pipeline; um `fetchOrders` pra Yucaloo (pode reaproveitar boa parte de
+  `shopify.js`, que já aceita `cfg.store`/`cfg.token`/`cfg.version` por chamada — não precisa duplicar
+  a query GraphQL, só passar o token/loja da Yucaloo em vez do fixo via `.env`); wiring em `sync.js`;
+  novo seletor de marca na UI (ao lado do de mercado).
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js
@@ -1583,6 +1659,9 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | Developer Token do Google Ads API Center — precisa de aprovação "Basic access" |
 | `GOOGLE_ADS_CUSTOMER_ID` | Customer ID da conta "Coco and Luna" sem hífen (`1344114329`) — só EUA, ver 4.12 |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Customer ID da MCC (sem hífen) — só se o Developer Token tiver sido gerado sob uma conta gerenciadora |
+| `YUCALOO_BR_CLIENT_ID` | Client ID do app Yucaloo BR criado na Dev Dashboard da Shopify. Ver 4.20 |
+| `YUCALOO_BR_CLIENT_SECRET` | Client Secret do mesmo app |
+| `YUCALOO_BR_REDIRECT_URL` | Precisa bater exatamente com "URLs de redirecionamento" cadastrada no app (`.../shopify-yucaloo/br/callback`). Ver 4.20 |
 | `DATABASE_URL` | Connection string Postgres (Railway injeta via `${{Postgres.DATABASE_URL}}`) |
 
 **Armadilhas conhecidas:**
@@ -1626,6 +1705,8 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/shopee/probe-order` — diagnóstico: `recipient_address` cru de pedidos recentes, sem normalizar. Ver 4.5.
   - `GET /mercadolivre/connect` e `GET /mercadolivre/callback`
   - `GET /googleads/connect` e `GET /googleads/callback`
+  - `GET /shopify-yucaloo/:mkt(br|us)/connect` e `GET /shopify-yucaloo/:mkt(br|us)/callback` — chamadas
+    pela própria Shopify (não pelo usuário), handshake OAuth do app Yucaloo. Ver 4.20.
   - `GET /health`
   - **Autenticação (branch `feat/auth-usuarios`, ver 4.16):**
     - `POST /api/login` / `POST /api/logout` / `GET /api/me` — públicas (sessão por cookie `coco_session`).
