@@ -751,6 +751,7 @@ export function exportOrdersList({ market = 'br', channel = 'todos', since, unti
     itemsCount: o.items.length, itemsQty: sumItemsQty(o),
     createdAt: o.createdAt, total: o.total,
     status: o.status, statusLabel: statusLabelPt(o), cancelled: o.cancelled,
+    products: productTitles(o),
   }));
 }
 
