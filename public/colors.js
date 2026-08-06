@@ -19,6 +19,7 @@
     mercadolivre: { bg: '#FFE600', label: 'Mercado Livre' },
     amazon:       { bg: '#111111', label: 'Amazon' },
     amazon_us:    { bg: '#FF9900', label: 'Amazon US' },
+    yucaloo_br:   { bg: '#6a5ab5', label: 'Yucaloo' },
   };
   const DEFAULT_MKT = {
     Instagram:       '#E1306C',
