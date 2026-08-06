@@ -333,7 +333,7 @@ export function listProductCatalog({ market = 'br' } = {}) {
   const seen = new Set(); // "canal|||título" já coberto pela agregação de vendas
   for (const [channel, c] of Object.entries(byChannel)) {
     for (const [title, p] of Object.entries(c.products)) {
-      items.push({ title, channel, image: p.image, type: p.type, qty: p.avulsoQty + p.comboQty, revenue: p.revenue });
+      items.push({ title, channel, image: p.image, type: p.type, qty: p.avulsoQty + p.comboQty, revenue: p.revenue, hidden: isHiddenItem(p, market) });
       seen.add(channel + '|||' + title);
     }
   }
@@ -345,7 +345,7 @@ export function listProductCatalog({ market = 'br' } = {}) {
       const key = channel + '|||' + p.title;
       if (seen.has(key)) continue;
       seen.add(key);
-      items.push({ title: p.title, channel, image: p.image, type: classifyType(p), qty: 0, revenue: 0 });
+      items.push({ title: p.title, channel, image: p.image, type: classifyType(p), qty: 0, revenue: 0, hidden: isHiddenItem(p, market) });
     }
   }
   items.sort((a, b) => b.revenue - a.revenue);
@@ -809,12 +809,16 @@ function aggregateProductsByChannel(orders) {
       const taggedSize = legacyComboSize(it);
       const title = canonicalTitle(taggedSize ? stripComboSuffix(it.title) : it.title);
 
-      if (!c.products[title]) c.products[title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
+      if (!c.products[title]) c.products[title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null, tags: [] };
       const p = c.products[title], qty = it.qty || 0;
       p.revenue += (it.amount || 0) * rf;
       if (!p.type) p.type = classifyType(it);
       if (!p.image && it.image) p.image = it.image;
       if (!p.image && it.asin && amazonImages[it.asin]) p.image = amazonImages[it.asin];
+      // Tags do item — usadas pelo Unificador ("Ocultar produtos", ver isHiddenItem) pra saber se
+      // esse produto (mesmo já vendido) deve sumir do catálogo normal. União entre pedidos (mesmo
+      // título pode aparecer com tags levemente diferentes entre canais/tempos).
+      if (it.tags && it.tags.length) p.tags = Array.from(new Set([...(p.tags || []), ...it.tags]));
 
       if (taggedSize) {
         const packages = qty; // aqui o item É o produto-combo: qty = nº de pacotes comprados

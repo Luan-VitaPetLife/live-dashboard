@@ -1743,6 +1743,39 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   "atacado" — antes de cadastrar a palavra-chave, cai em "Outros" e aparece em `productGeo`; depois de
   cadastrar "atacado" como oculto, o produto sai de "Outros" e de `productGeo`, e `segments.hidden`
   aparece com a receita/unidades certas.
+- **⚠️ Bug corrigido no mesmo dia — cadastrar a tag não movia nada pro card "Ocultos" (reportado pelo
+  Luan testando com os produtos "Areia" da Yucaloo, que nunca venderam nada):** `segments.hidden` só
+  existe dentro de `computeDashboard()`, alimentado exclusivamente pelo loop que percorre **itens de
+  pedido de verdade** — um produto com **zero vendas** (como as Areias recém-cadastradas, ou "Teste
+  de Gateway", visíveis no Unificador graças ao catálogo bruto da Shopify, ver "Sync de pedidos
+  ligado" acima) nunca entra nesse loop, então nunca poderia aparecer em "Ocultos" — nem antes nem
+  depois de marcado, porque ele **já era invisível em Segmentos de qualquer jeito** (Segmentos é
+  100% orientado a venda). A confusão do Luan era legítima: ele esperava ver o efeito de "ocultar" em
+  algum lugar visível, e não havia nenhum.
+  - **Causa secundária, também corrigida:** mesmo um produto **já vendido** com a tag certa não tinha
+    como ser identificado como oculto no **Unificador** — `aggregateProductsByChannel()` (usada tanto
+    por `listProductCatalog` quanto por Produtos/Estoque) nunca guardava as tags do item no
+    acumulador por produto (`c.products[title]`), só `revenue`/`qty`/`type`/`image`. Sem tags
+    guardadas, não tinha como o catálogo do Unificador saber se aquele produto batia com uma
+    palavra-chave de "Ocultar produtos".
+  - **Correção:** `aggregateProductsByChannel()` passou a acumular `p.tags` (união das tags vistas
+    em cada pedido daquele título — o mesmo produto pode aparecer com tags um pouco diferentes entre
+    canais/tempos). `listProductCatalog()` (`metrics.js`) agora calcula e expõe um campo **`hidden`**
+    (boolean) em CADA item do catálogo — via `isHiddenItem(p, market)`, reaproveitado tal qual,
+    funciona igual pra produto vendido (tags vêm do acumulador acima) e pra produto só-catálogo
+    (tags já vinham de `fetchProductCatalog`, ver "Sync de pedidos ligado").
+  - **`unificador.html` ganhou uma 3ª área, "Ocultos"** (`#hiddenSection`, abaixo das colunas "Sem
+    grupo"/"Com grupo", full-width, some quando vazia): `ungroupedTitles()` passou a excluir título
+    com `c.hidden` (não aparece mais em "Sem grupo"), e uma nova `hiddenTitles()` alimenta a lista à
+    parte — reaproveita `.plain-list`/`.plain-row` (mesmo visual de "Sem grupo", só sem drag/seleção,
+    já que a gestão é só pelo botão "Ocultar produtos" no topo). `hideAddTag`/`hideRemoveTag` passaram
+    a chamar `load()` depois de salvar, pra recarregar o catálogo com o `hidden` atualizado na hora
+    (antes só atualizavam a lista de palavras-chave do modal, sem refletir no catálogo).
+  - **Resultado:** agora o efeito de "ocultar" é visível IMEDIATAMENTE no Unificador (onde o controle
+    mora), pra qualquer produto — vendido ou não —, e continua alimentando `segments.hidden` em
+    Segmentos pros que JÁ têm alguma venda. Testado localmente (mesmo método): produto só-catálogo
+    (nunca vendido) e produto já vendido, ambos com tag cadastrada, os dois retornam `hidden:true` de
+    `listProductCatalog()`; sem a tag, `hidden:false` nos dois.
 
 ## 5. Modelo de dados (pedido normalizado)
 
