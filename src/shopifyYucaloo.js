@@ -19,7 +19,10 @@ import 'dotenv/config';
 import crypto from 'crypto';
 import { getYucalooTokens, setYucalooTokens } from './store.js';
 
-const SCOPE = 'read_all_orders,read_analytics,read_customers,read_products,read_reports';
+// read_all_orders exige read_orders junto (a Shopify recusa o OAuth com
+// "missing_read_orders_scope" se só o primeiro vier) — confirmado ao vivo
+// tentando instalar sem ele, 06/08/2026.
+const SCOPE = 'read_orders,read_all_orders,read_analytics,read_customers,read_products,read_reports';
 
 function creds(mkt) {
   const p = String(mkt || '').toUpperCase();
