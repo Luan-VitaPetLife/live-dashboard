@@ -396,7 +396,10 @@
         <div class="page-title">Segmentos</div>
         <div class="page-sub" id="pageSub">Gato vs Cão · comparação por unidades vendidas</div>
       </div>
-      <button class="geo-map-toggle" id="manageTypesBtn"><i class="bi bi-tags"></i> Tipos de produto</button>
+      <div style="display:flex;gap:8px">
+        <button class="geo-map-toggle" id="manageTypesBtn"><i class="bi bi-tags"></i> Tipos de produto</button>
+        <button class="geo-map-toggle" id="manageHideBtn"><i class="bi bi-eye-slash"></i> Ocultar produtos</button>
+      </div>
     </div>
 
     <div class="seg-overview">
@@ -424,6 +427,15 @@
         <span class="other-note">— títulos sem palavras-chave de espécie</span>
       </div>
       <div class="seg-prod-list" id="otherList"></div>
+    </div>
+
+    <!-- Produtos ocultados manualmente por tag (Segmentos → "Ocultar produtos") -->
+    <div class="other-card" id="hiddenCard" style="display:none">
+      <div class="other-card-title">
+        <i class="bi bi-eye-slash"></i> Ocultos
+        <span class="other-note">— produtos cuja tag bateu com uma palavra-chave que você cadastrou</span>
+      </div>
+      <div class="seg-prod-list" id="hiddenList"></div>
     </div>
 
     <!-- Onde os produtos vendem -->
@@ -488,6 +500,28 @@
   </div>
 </div>
 
+<!-- Modal "Ocultar produtos" — palavras-chave buscadas nas tags de cada item (isHiddenItem, metrics.js) -->
+<div class="tr-modal-overlay" id="hideModalOverlay"></div>
+<div class="tr-modal" id="hideModal">
+  <div class="tr-modal-head">
+    <div>
+      <div class="tr-modal-title">Ocultar produtos</div>
+      <div class="tr-modal-sub">Produto cuja TAG bater com uma palavra-chave abaixo sai dos cards normais (Gato/Cão/Outros) e some de "Onde os produtos vendem" — vai só pro card "Ocultos", no fim da página.</div>
+    </div>
+    <button class="tr-modal-close" id="hideModalClose">✕</button>
+  </div>
+  <div class="tr-modal-body">
+    <div class="tr-kw-list" id="hideTagsList" style="flex-wrap:wrap;display:flex;gap:6px"></div>
+    <div class="tr-new-form">
+      <div class="tr-new-form-title">Adicionar palavra-chave</div>
+      <div class="tr-kw-add">
+        <input type="text" id="hideNewTag" placeholder="Ex: areia" autocomplete="off">
+        <button id="hideNewSubmit">Adicionar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Utils ──
 const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
@@ -504,7 +538,7 @@ const CH_LABELS = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', mercadoli
 const CH_BY_MARKET = { br:['todos','shopify','shopee','mercadolivre'], us:['todos','shopify_us','amazon_us'] };
 let channel = 'todos';
 // Estado de expansão dos "top produtos" por segmento (ver mais / ver menos).
-const segExpanded = { cat:false, dog:false, other:false };
+const segExpanded = { cat:false, dog:false, other:false, hidden:false };
 // Quais grupos de tipo (Areia/Suplementos) estão abertos, por card ('cat'/'dog'/'other') — um
 // Set por card. Preenchido preguiçosamente na 1ª renderização com só o maior grupo aberto (mesmo
 // princípio de "só o primeiro aberto" já usado em Produtos/Estoque).
@@ -611,6 +645,7 @@ function toggleSegExpand(key) {
   segExpanded[key] = !segExpanded[key];
   renderCards(lastSegs);
   renderOther(lastSegs);
+  renderHidden(lastSegs);
 }
 
 // Separa os "top produtos" de um card em Areia x Suplementos (classifyTypeGroup no backend, ver
@@ -649,6 +684,7 @@ function toggleTypeGroup(cardKey, name) {
   if (segTypeOpen[cardKey].has(name)) segTypeOpen[cardKey].delete(name); else segTypeOpen[cardKey].add(name);
   renderCards(lastSegs);
   renderOther(lastSegs);
+  renderHidden(lastSegs);
 }
 function escJs(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 function fmtInt(n) { return Math.round(n || 0).toLocaleString('pt-BR'); }
@@ -715,6 +751,14 @@ function renderOther(segs) {
   if (!other || other.units === 0) { card.style.display = 'none'; return; }
   card.style.display = '';
   document.getElementById('otherList').innerHTML = prodByTypeGroupHtml(other.topProducts, 'other');
+}
+
+function renderHidden(segs) {
+  const hidden = segs.hidden;
+  const card = document.getElementById('hiddenCard');
+  if (!hidden || hidden.units === 0) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  document.getElementById('hiddenList').innerHTML = prodByTypeGroupHtml(hidden.topProducts, 'hidden');
 }
 
 // ── Onde os produtos vendem (mapa + ranking por estado, por produto) ──
@@ -1304,6 +1348,7 @@ function render(d) {
   renderLegend(segs);
   renderCards(segs);
   renderOther(segs);
+  renderHidden(segs);
   lastProductGeo = d.productGeo || [];
   renderGeoBlocks();
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
@@ -1599,6 +1644,85 @@ document.getElementById('trTypesList').addEventListener('keydown', e => {
   if (!kw) return;
   trAddKeyword(name, kw);
   input.value = '';
+});
+
+// ── "Ocultar produtos" — palavras-chave buscadas nas tags de cada item (isHiddenItem, metrics.js) ──
+let hideTags = []; // [palavraChave,...] do mercado atual
+
+async function loadHideTags() {
+  try {
+    const r = await fetch('/api/product-hidden-tags?market=' + market, { credentials: 'same-origin' });
+    const d = await r.json();
+    hideTags = d.tags || [];
+  } catch (e) { hideTags = []; }
+  renderHideTags();
+}
+
+function renderHideTags() {
+  const wrap = document.getElementById('hideTagsList');
+  if (!hideTags.length) {
+    wrap.innerHTML = '<div class="tr-empty">Nenhuma palavra-chave ainda — nenhum produto está oculto.</div>';
+    return;
+  }
+  wrap.innerHTML = hideTags.map(t => `<span class="tr-kw-chip">${escHtml(t)}<button data-remove-hide-tag="${escHtml(t)}" title="Remover"><i class="bi bi-x"></i></button></span>`).join('');
+}
+
+function openHideModal() {
+  document.getElementById('hideModalOverlay').classList.add('open');
+  document.getElementById('hideModal').classList.add('open');
+  loadHideTags();
+}
+function closeHideModal() {
+  document.getElementById('hideModalOverlay').classList.remove('open');
+  document.getElementById('hideModal').classList.remove('open');
+  document.getElementById('hideNewTag').value = '';
+}
+
+async function hideAddTag(tag) {
+  const r = await fetch('/api/product-hidden-tags', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({ market, tags: [tag] }),
+  });
+  const d = await r.json();
+  if (!r.ok) return;
+  hideTags = d.tags || [];
+  renderHideTags();
+  loadData(); // refaz a classificação com a palavra-chave nova
+}
+async function hideRemoveTag(tag) {
+  const r = await fetch('/api/product-hidden-tags/remove', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({ market, tag }),
+  });
+  const d = await r.json();
+  if (!r.ok) return;
+  hideTags = d.tags || [];
+  renderHideTags();
+  loadData();
+}
+
+document.getElementById('manageHideBtn').addEventListener('click', openHideModal);
+document.getElementById('hideModalClose').addEventListener('click', closeHideModal);
+document.getElementById('hideModalOverlay').addEventListener('click', closeHideModal);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeHideModal(); });
+
+document.getElementById('hideNewSubmit').addEventListener('click', () => {
+  const input = document.getElementById('hideNewTag');
+  const tag = input.value.trim();
+  if (!tag) return;
+  hideAddTag(tag);
+  input.value = '';
+});
+document.getElementById('hideNewTag').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const tag = e.target.value.trim();
+  if (!tag) return;
+  hideAddTag(tag);
+  e.target.value = '';
+});
+document.getElementById('hideTagsList').addEventListener('click', e => {
+  const rm = e.target.closest('[data-remove-hide-tag]');
+  if (rm) hideRemoveTag(rm.dataset.removeHideTag);
 });
 
 buildChannelDropdown();

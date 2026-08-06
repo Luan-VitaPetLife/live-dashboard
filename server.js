@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -443,6 +443,30 @@ app.delete('/api/product-types', (req, res) => {
   if (!market || !name) return res.status(400).json({ error: 'market e name são obrigatórios.' });
   const types = deleteProductTypeGroup(market, name);
   res.json({ types });
+});
+
+// Produtos ocultos (Segmentos → "Ocultar produtos") — palavras-chave buscadas só nas tags de cada
+// item (ver metrics.js isHiddenItem); produto que bater sai dos cards normais (Gato/Cão/Outros) e
+// vai pro card "Ocultos". Mesmo padrão de acesso de /api/product-types (não é admin-only).
+app.get('/api/product-hidden-tags', (req, res) => {
+  try {
+    const { market = 'br' } = req.query;
+    res.json({ tags: getProductHiddenTags()[market] || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post('/api/product-hidden-tags', (req, res) => {
+  const { market, tags } = req.body || {};
+  if (!market || !Array.isArray(tags) || !tags.length) {
+    return res.status(400).json({ error: 'market e tags (array não vazio) são obrigatórios.' });
+  }
+  res.json({ tags: upsertProductHiddenTags(market, tags) });
+});
+app.post('/api/product-hidden-tags/remove', (req, res) => {
+  const { market, tag } = req.body || {};
+  if (!market || !tag) return res.status(400).json({ error: 'market e tag são obrigatórios.' });
+  res.json({ tags: removeProductHiddenTag(market, tag) });
 });
 
 // Salva/edita dados financeiros de um produto (COG, frete, % imposto, % comissão) — usado pela tela de Produtos.

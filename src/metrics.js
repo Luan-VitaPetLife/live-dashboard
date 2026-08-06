@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
@@ -134,6 +134,18 @@ function classifyTypeGroup(it, market) {
     if ((keywords || []).some(k => k && haystack.includes(String(k).toLowerCase()))) return name;
   }
   return 'Outros';
+}
+
+// Produtos ocultados manualmente (Segmentos → "Ocultar produtos", pedido do Luan 06/08/2026) —
+// item cuja tag bate (contains, case-insensitive) com alguma palavra-chave cadastrada sai do
+// fluxo normal (segAcc cat/dog/other, productGeo) e vai só pro card "Ocultos". Diferente de
+// classifyTypeGroup: busca SÓ nas tags do item (o pedido foi "produtos com as tags que o usuário
+// escrever"), não em título/productType.
+function isHiddenItem(it, market) {
+  const hideWords = getProductHiddenTags()[market] || [];
+  if (!hideWords.length) return false;
+  const tags = (it.tags || []).map(t => String(t || '').toLowerCase());
+  return hideWords.some(w => tags.some(t => t.includes(String(w).toLowerCase())));
 }
 
 function aggregateSessions(since, until, market = 'br') {
@@ -475,7 +487,8 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     if (market === 'us') { geoState = normalizeUsState(geoState); if (geoState && !isUsRegionCode(geoState)) geoState = 'INTL'; }
     o.items.forEach(it => {
       if (!it.title || it.title.trim() === '-') return; // placeholder de frete/serviço da Amazon, ver amazon.js ordersFromRows
-      const seg  = classifySeg(it);
+      const hidden = isHiddenItem(it, market);
+      const seg  = hidden ? 'hidden' : classifySeg(it);
       const type = classifyType(it);
       const amount = (it.amount || 0) * rf;
       // Mesma normalização de combo legado usada em aggregateProductsByChannel (ver 4.13.1): um
@@ -512,21 +525,23 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
         p[title].avulsoQty += qty;
       }
 
-      // geografia + canal por produto
-      if (!productGeoAcc[title]) productGeoAcc[title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {}, image: null };
-      const g = productGeoAcc[title];
-      g.qty += qty;
-      g.revenue += amount;
-      if (!g.image && it.image) g.image = it.image;
-      if (!g.image && it.asin && geoAmazonImages[it.asin]) g.image = geoAmazonImages[it.asin];
-      if (!g.byChannel[o.channel]) g.byChannel[o.channel] = { qty: 0, revenue: 0 };
-      g.byChannel[o.channel].qty += qty;
-      g.byChannel[o.channel].revenue += amount;
-      if (geoState) {
-        if (!g.byState[geoState]) g.byState[geoState] = { qty: 0, revenue: 0, orderIds: new Set() };
-        g.byState[geoState].qty += qty;
-        g.byState[geoState].revenue += amount;
-        g.byState[geoState].orderIds.add(o.id);
+      // geografia + canal por produto — produto oculto não entra em "Onde os produtos vendem"
+      if (!hidden) {
+        if (!productGeoAcc[title]) productGeoAcc[title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {}, image: null };
+        const g = productGeoAcc[title];
+        g.qty += qty;
+        g.revenue += amount;
+        if (!g.image && it.image) g.image = it.image;
+        if (!g.image && it.asin && geoAmazonImages[it.asin]) g.image = geoAmazonImages[it.asin];
+        if (!g.byChannel[o.channel]) g.byChannel[o.channel] = { qty: 0, revenue: 0 };
+        g.byChannel[o.channel].qty += qty;
+        g.byChannel[o.channel].revenue += amount;
+        if (geoState) {
+          if (!g.byState[geoState]) g.byState[geoState] = { qty: 0, revenue: 0, orderIds: new Set() };
+          g.byState[geoState].qty += qty;
+          g.byState[geoState].revenue += amount;
+          g.byState[geoState].orderIds.add(o.id);
+        }
       }
     });
   });
@@ -547,7 +562,9 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     ],
   })
     .sort((a, b) => b.qty - a.qty);
-  const totalSegUnits = Object.values(segAcc).reduce((a, s) => a + s.units, 0);
+  // "hidden" fica fora do denominador — não é uma fatia real da distribuição Gato/Cão/Outros,
+  // é só onde produtos explicitamente ocultados (ver isHiddenItem) vão parar.
+  const totalSegUnits = Object.entries(segAcc).filter(([k]) => k !== 'hidden').reduce((a, [, s]) => a + s.units, 0);
   const segments = {};
   for (const [k, v] of Object.entries(segAcc)) {
     // Unificador (Configurações) — junta produtos do mesmo grupo manual (mesmo mecanismo de

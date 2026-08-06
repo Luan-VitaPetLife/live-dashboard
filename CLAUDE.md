@@ -1696,6 +1696,44 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   mudança de código); um card/filtro dedicado da Yucaloo nas telas de lista fixa acima, se o Luan
   quiser depois.
 
+### 4.21 "Ocultar produtos" — card "Ocultos" em Segmentos (implementado 06/08/2026)
+- Pedido do Luan: uma forma de ocultar produtos (por palavra-chave buscada na TAG do item, não
+  título/productType — diferente de propósito de "Tipos de produto", ver 4.19) dos cards normais de
+  Segmentos, jogando-os pra um card à parte chamado "Ocultos". Caso de uso: produto de atacado/
+  fulfillment por terceiro, teste, ou qualquer coisa que não deveria contar na análise por
+  espécie/tipo mas ainda precisa existir no sistema.
+- **Modelo de dados** (`kv.productHiddenTags`, `store.js`): `{ [market]: [palavraChave,...] }` — lista
+  simples por mercado, sem nome de grupo (só existe um destino possível, o card "Ocultos", diferente
+  do `productTypeGroups` que tem N tipos nomeados). `getProductHiddenTags`/`upsertProductHiddenTags`
+  (une, dedup)/`removeProductHiddenTag`.
+- **`isHiddenItem(it, market)` (`metrics.js`):** testa CADA tag do item (`it.tags`, contains
+  case-insensitive) contra as palavras-chave cadastradas — só tags, de propósito (pedido do Luan foi
+  literalmente "produtos com as tags que o usuário escrever"). Chamada no mesmo loop que já monta
+  `segAcc`/`productGeoAcc` (dentro de `computeDashboard`): quando um item bate, `seg = 'hidden'` (em
+  vez do resultado normal de `classifySeg` — cat/dog/other) e o item é **excluído** da agregação de
+  `productGeoAcc` (não aparece em "Onde os produtos vendem"). `totalSegUnits` (denominador do `pct`
+  de cat/dog na legenda) também exclui a chave `hidden` — não é uma fatia real da distribuição
+  Gato/Cão, só o balde de itens ocultados.
+- **`segments.hidden` nasce automaticamente** com a mesma forma de `segments.cat`/`segments.dog`
+  (`revenue`, `units`, `orders`, `byType`, `topProducts` — já passando por `applyProductGroups`/
+  `classifyTypeGroup` igual aos demais) porque `segAcc` é uma agregação genérica por chave, sem lista
+  fixa de segmentos — nenhuma mudança adicional foi necessária nessa parte do pipeline.
+- **UI (`segmentos.html`):** botão "Ocultar produtos" (👁️‍🗨️) no cabeçalho, ao lado de "Tipos de
+  produto" — abre um modal simples (reaproveita as classes CSS `.tr-modal*`/`.tr-kw-chip`/
+  `.tr-new-form*` já existentes do modal de Tipos, sem CSS novo) só com uma lista de chips de
+  palavra-chave + campo pra adicionar, sem a hierarquia de "tipo nomeado" do outro modal. O card
+  "Ocultos" em si é uma cópia do padrão já usado pro card "Produtos não classificados"
+  (`#otherCard`/`renderOther`) — `#hiddenCard`/`renderHidden`, escondido via `display:none` quando
+  `segments.hidden` está vazio ou ausente, reaproveitando `prodByTypeGroupHtml()` (mesmo agrupamento
+  por "Tipos de produto" dentro do card, "ver mais/ver menos" etc. — tudo de graça).
+- **Endpoints** (`server.js`, mesmo padrão de acesso de `/api/product-types` — não admin-only):
+  `GET /api/product-hidden-tags?market=`, `POST /api/product-hidden-tags` (`{market,tags}`, array —
+  adiciona), `POST /api/product-hidden-tags/remove` (`{market,tag}`).
+- **Testado localmente (sem rede, mesmo método das rodadas anteriores):** pedido sintético com tag
+  "atacado" — antes de cadastrar a palavra-chave, cai em "Outros" e aparece em `productGeo`; depois de
+  cadastrar "atacado" como oculto, o produto sai de "Outros" e de `productGeo`, e `segments.hidden`
+  aparece com a receita/unidades certas.
+
 ## 5. Modelo de dados (pedido normalizado)
 
 ```js
@@ -1781,6 +1819,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/products/export?market=us&channel=shopify_us&since=&until=` — exporta CSV com quantidade vendida/receita/ticket médio por produto. Só Shopify US por enquanto. Usado pelo botão "Exportar" da tela de Produtos. Ver 4.13.2.
   - `GET /api/product-groups?market=br|us` (admin) — grupos de unificação manual de produtos do mercado (Unificador, ver 4.18). `POST /api/product-groups` (`{market,name,members}`) cria/adiciona a um grupo. `POST /api/product-groups/remove-member` (`{market,name,title}`) tira um membro. `DELETE /api/product-groups?market=&name=` apaga o grupo. Persistido em `kv.productGroups`. `GET/POST /api/product-groups/config` (`{enabled}`) — liga/desliga global, padrão ligado. `GET /api/product-groups/catalog?market=` — catálogo completo (todo canal, todo histórico) achatado, pra tela escolher produtos. Todos usados só por `unificador.html`.
   - `GET /api/product-types?market=br|us` — regras de "Tipos de produto" do mercado (Segmentos, ver 4.19), não admin. `POST /api/product-types` (`{market,name,keywords}`) cria/adiciona palavra(s)-chave a um tipo. `POST /api/product-types/remove-keyword` (`{market,name,keyword}`) tira uma palavra-chave. `DELETE /api/product-types?market=&name=` apaga o tipo. Persistido em `kv.productTypeGroups`.
+  - `GET /api/product-hidden-tags?market=br|us` — palavras-chave de "Ocultar produtos" do mercado (Segmentos, ver 4.21), não admin. `POST /api/product-hidden-tags` (`{market,tags}`) adiciona palavra(s)-chave. `POST /api/product-hidden-tags/remove` (`{market,tag}`) tira uma. Persistido em `kv.productHiddenTags`.
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `GET /api/stock?market=br|us` — estoque + produção por canal (`channels`) e por família de produto somando todos os canais (`agg`), janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
   - `POST /api/stock/finance` — salva/edita estoque ou recebendo de um produto, por canal (`{ channel, title, stock?, incoming? }`), persistido em `kv.productStock`. Ver 4.14.
