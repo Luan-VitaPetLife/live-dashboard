@@ -15,6 +15,7 @@ import * as amazon from './src/amazon.js';
 import * as meta from './src/meta.js';
 import * as googleads from './src/googleads.js';
 import * as bling from './src/bling.js';
+import * as shopifyYucaloo from './src/shopifyYucaloo.js';
 import * as auth from './src/auth.js';
 import rateLimit from 'express-rate-limit';
 
@@ -212,7 +213,7 @@ app.use((req, res, next) => {
     p === '/health' || p === '/login' ||
     p === '/api/login' || p === '/api/logout' || p === '/api/me' || p === '/api/sync' ||
     STATIC_ASSET_RE.test(p) ||
-    p.startsWith('/shopee/') || p.startsWith('/mercadolivre/') || p.startsWith('/googleads/') || p.startsWith('/bling/')
+    p.startsWith('/shopee/') || p.startsWith('/mercadolivre/') || p.startsWith('/googleads/') || p.startsWith('/bling/') || p.startsWith('/shopify-yucaloo/')
   ) return next();
 
   const user = req.authUser;
@@ -886,6 +887,38 @@ app.get('/googleads/callback', async (req, res) => {
     res.send('<h2>Google Ads conectado com sucesso!</h2><p>Pode fechar esta aba e voltar à dashboard.</p>');
   } catch (e) {
     res.status(500).send('Erro ao conectar o Google Ads: ' + e.message);
+  }
+});
+
+// ── Shopify Yucaloo OAuth (app novo via Dev Dashboard — ver CLAUDE.md) ──
+// Diferente dos /connect acima (o usuário clica num link nosso), aqui é a
+// própria Shopify que chama essa URL — é a "URL do app" configurada na Dev
+// Dashboard, disparada sempre que o app é aberto/instalado, com
+// hmac/host/shop/timestamp assinados em vez de um "code" pronto.
+app.get('/shopify-yucaloo/:mkt(br|us)/connect', (req, res) => {
+  const mkt = req.params.mkt;
+  try {
+    if (!shopifyYucaloo.verifyRequest(mkt, req)) return res.status(400).send('Assinatura inválida.');
+    const { shop } = req.query;
+    if (!shop) return res.status(400).send('Faltou o parâmetro "shop".');
+    const state = crypto.randomBytes(24).toString('hex');
+    const url = shopifyYucaloo.buildAuthorizeUrl(mkt, shop, state);
+    res.cookie(`oauth_state_yucaloo_${mkt}`, state, { httpOnly: true, sameSite: 'lax', maxAge: 10 * 60 * 1000, secure: isHttps(req) });
+    res.redirect(url);
+  } catch (e) { res.status(400).send(e.message); }
+});
+
+app.get('/shopify-yucaloo/:mkt(br|us)/callback', async (req, res) => {
+  const mkt = req.params.mkt;
+  if (!requireOauthState(req, res, `oauth_state_yucaloo_${mkt}`)) return;
+  try {
+    if (!shopifyYucaloo.verifyRequest(mkt, req)) return res.status(400).send('Assinatura inválida.');
+    const { code, shop } = req.query;
+    if (!code || !shop) return res.status(400).send('Faltou "code"/"shop" no retorno da Shopify.');
+    await shopifyYucaloo.exchangeCode(mkt, shop, code);
+    res.send('<h2>Yucaloo conectada com sucesso!</h2><p>Pode fechar esta aba e voltar à dashboard.</p>');
+  } catch (e) {
+    res.status(500).send('Erro ao conectar a Yucaloo: ' + e.message);
   }
 });
 

@@ -30,6 +30,7 @@ const EMPTY = {
   mlAdCosts: null,
   googleAdsTokens: null,
   blingTokens: null,
+  yucalooTokens: {}, // { [market]: { shop, accessToken, scope, obtainedAt } } — OAuth via Dev Dashboard, ver shopifyYucaloo.js
   productFinance: {},
   productStock: {},
   productStockAgg: {},
@@ -125,6 +126,7 @@ export async function initStore() {
       if (r.key === 'mlAdCosts')            cache.mlAdCosts            = r.value;
       if (r.key === 'googleAdsTokens')      cache.googleAdsTokens      = r.value;
       if (r.key === 'blingTokens')           cache.blingTokens           = r.value;
+      if (r.key === 'yucalooTokens')         cache.yucalooTokens         = r.value;
       if (r.key === 'productFinance')       cache.productFinance       = r.value;
       if (r.key === 'productStock')         cache.productStock         = r.value;
       if (r.key === 'productStockAgg')      cache.productStockAgg      = r.value;
@@ -541,6 +543,13 @@ export function setBlingTokens(tokens) {
   if (USE_PG) pgKv('blingTokens', tokens);
 }
 export function getBlingTokens() { return load().blingTokens; }
+
+// ── Tokens Yucaloo (OAuth via Dev Dashboard, um app por mercado — ver shopifyYucaloo.js) ──
+export function getYucalooTokens() { return load().yucalooTokens || {}; }
+export function setYucalooTokens(tokens) {
+  const db = load(); db.yucalooTokens = tokens; saveJson();
+  if (USE_PG) pgKv('yucalooTokens', tokens);
+}
 
 // ── Dados financeiros editáveis por produto (COG, impostos, comissão) ──
 // Chave: "canal|||título do produto" (mesma chave usada no agrupamento de Top Produtos/Produtos).
