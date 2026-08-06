@@ -1690,11 +1690,24 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - Testado localmente (mesmo método sem rede desta seção): com `kv.shopifyProductCatalog.shopify`
     tendo um título que nunca apareceu em `db.orders`, `listProductCatalog({market:'br'})` devolve
     esse título com `qty:0`/`revenue:0`, sem duplicar os que já tinham venda.
-- **Ainda faltando:** criar o app Yucaloo US na Dev Dashboard e repetir o processo (variáveis
-  `YUCALOO_US_*`, ver seção 6 — o `fetchOrders(..., 'us')` já funciona sozinho assim que
-  `kv.yucalooTokens.us` existir, gravando em `market:'us'` junto com o Shopify US, sem nenhuma
-  mudança de código); um card/filtro dedicado da Yucaloo nas telas de lista fixa acima, se o Luan
-  quiser depois.
+- **Yucaloo EUA conectada (06/08/2026):** app criado e autorizado, mesmo processo do BR
+  (`kv.yucalooTokens.us` populado). **⚠️ Faltava wiring em dois lugares, corrigido no mesmo dia** —
+  quando a BR foi implementada, a US ainda não existia, e o código só tinha o bloco BR:
+  - `sync.js`: bloco `yucaloo_us` (pedidos + catálogo, atrás de `isIntegrationEnabled('yucaloo_us')`)
+    logo depois do bloco Shopify EUA — espelha exatamente o bloco `yucaloo_br`, só trocando `'br'`
+    por `'us'` nas chamadas de `shopifyYucaloo.fetchOrders`/`fetchProductCatalog`.
+  - `metrics.js`: `SHOPIFY_CATALOG_CHANNELS.us` só tinha `['shopify_us']` — sem `'yucaloo_us'` ali,
+    o catálogo do Unificador nunca ia buscar produtos da Yucaloo EUA em `kv.shopifyProductCatalog`,
+    mesmo depois de sincronizados. Corrigido: `us: ['shopify_us', 'yucaloo_us']`.
+  - **`unificador.html` não tinha nenhum botão de sincronizar** (reportado pelo Luan: "o botão de
+    sincronizar não é mostrado em nosso header lá") — a página nunca passou pela padronização de
+    header (`#syncBtn`) que `index.html`/`campanhas.html`/`produtos.html`/`estoque.html` já tinham
+    desde 07/07 (ver 4.9c), porque foi criada depois. Adicionado `#syncBtn` no topbar (mesmo padrão:
+    `POST /api/sync` + recarrega o catálogo).
+  - Testado localmente (mesmo método sem rede): produto sintético em `kv.shopifyProductCatalog.
+    yucaloo_us` aparece em `listProductCatalog({market:'us'})` normalmente.
+- **Ainda faltando:** um card/filtro dedicado da Yucaloo nas telas de lista fixa (Produtos/Estoque/
+  Campanhas, ver bullet "Ainda parcial" acima), se o Luan quiser depois.
 - **Badges de canal renomeados pra deixar a marca explícita (06/08/2026, ajustado no mesmo dia):**
   com duas marcas rodando em cima do Shopify (Coco and Luna e Yucaloo), o rótulo genérico
   "Shopify"/"Shopify US" ficou ambíguo — não dava pra saber, só olhando o badge, se era Coco and Luna
@@ -1924,7 +1937,7 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 | Meta Ads BR/US | ✅ | contas separadas (`META_AD_ACCOUNT_ID` / `META_US_AD_ACCOUNT_ID`) | 4.4 |
 | Google Ads | ✅ | só EUA, Customer ID `1344114329`; aparece na tela de Campanhas (US) | 4.12 |
 | Yucaloo BR (Shopify) | 🟡 | conectada e sincronizando pedidos — `market:'br'`, MESCLADA com a Coco and Luna (decisão do Luan); `channel:'yucaloo_br'` rastreável, sem card/filtro dedicado ainda | 4.20 |
-| Yucaloo US (Shopify) | ⬜ | app ainda não criado na Dev Dashboard | 4.20 |
+| Yucaloo US (Shopify) | 🟡 | conectada e sincronizando pedidos+catálogo — `market:'us'`, mesclada com a Coco and Luna EUA | 4.20 |
 
 - **Amazon — dois apps SP-API separados desde 04/08/2026** (ver 4.7.11): o app dos EUA (`AMAZON_CLIENT_ID/SECRET`,
   conta VITA PET LIFE) e um app próprio do BR (`AMAZON_BR_CLIENT_ID/SECRET`, conta CocoandLuna) — IAM Role/chaves

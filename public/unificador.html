@@ -199,6 +199,7 @@
         <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
     </div>
+    <button class="btn" id="syncBtn" title="Buscar dados novos agora" style="margin-left:auto"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
     <div class="live-dot-wrap"><div class="ldot"></div><span id="whoami">—</span></div>
   </div>
 
@@ -925,6 +926,14 @@ async function hideRemoveTag(tag){
   renderHideTags();
   load();
 }
+$('syncBtn').addEventListener('click', async () => {
+  $('syncBtn').disabled = true;
+  try { await fetch('/api/sync', { method: 'POST' }); } catch (e) {}
+  await load();
+  $('syncBtn').disabled = false;
+  toast('Sincronizado.');
+});
+
 $('hideBtn').addEventListener('click', openHideModal);
 $('hideCloseBtn').addEventListener('click', closeHideModal);
 $('hideModalOverlay').addEventListener('click', closeHideModal);
