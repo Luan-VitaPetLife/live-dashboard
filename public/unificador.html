@@ -144,6 +144,8 @@
   .ch-badge{font-size:9px;font-weight:700;letter-spacing:.3px;padding:2px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap}
   .row-remove{flex-shrink:0;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px 6px;border-radius:4px}
   .row-remove:hover{background:var(--border2);color:var(--red)}
+  .other-card-collapse{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:6px;font-size:12px;line-height:1}
+  .other-card-collapse:hover{background:var(--surface2);color:var(--text)}
   .group-add-foot{padding:10px 16px}
 
   /* ── Lista de produtos sem grupo ── */
@@ -264,8 +266,11 @@
     <div class="uni-col" id="hiddenSection" style="margin-top:22px;display:none">
       <div class="uni-col-head">
         <span class="uni-col-title"><i class="bi bi-eye-slash"></i> Ocultos</span><span class="uni-col-count" id="hiddenCount"></span>
+        <button class="other-card-collapse" id="hiddenSectionCollapseBtn" title="Esconder/mostrar" style="margin-left:auto"><i class="bi bi-chevron-up"></i></button>
       </div>
-      <div id="hiddenPlainList"></div>
+      <div id="hiddenSectionBody">
+        <div id="hiddenPlainList"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -616,6 +621,19 @@ function renderPlainList(){
 // Lista à parte (fora de "Sem grupo"/"Com grupo") dos produtos cujo título bateu com uma
 // palavra-chave de "Ocultar produtos" — só exibição, sem drag/seleção (gestão é pelo botão
 // "Ocultar produtos" no topo). Some inteiramente da tela quando não há nenhum oculto.
+// Esconder/mostrar a área "Ocultos" inteira (não confundir com o que ela mostra — isso só
+// esconde a SEÇÃO, o produto continua oculto normalmente). Persistido, sobrevive a reload.
+let hiddenSectionCollapsed = localStorage.getItem('coco_uni_hiddensection_collapsed') === '1';
+function applyHiddenSectionCollapse(){
+  $('hiddenSectionBody').style.display = hiddenSectionCollapsed ? 'none' : '';
+  $('hiddenSectionCollapseBtn').innerHTML = `<i class="bi bi-chevron-${hiddenSectionCollapsed ? 'down' : 'up'}"></i>`;
+}
+$('hiddenSectionCollapseBtn').addEventListener('click', () => {
+  hiddenSectionCollapsed = !hiddenSectionCollapsed;
+  localStorage.setItem('coco_uni_hiddensection_collapsed', hiddenSectionCollapsed ? '1' : '0');
+  applyHiddenSectionCollapse();
+});
+
 function renderHiddenList(){
   const section = $('hiddenSection');
   const titles = hiddenTitles().filter(matchesSearch);
@@ -631,6 +649,7 @@ function renderHiddenList(){
       <span class="row-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
     </div>`;
   }).join('')}</div>`;
+  applyHiddenSectionCollapse();
 }
 
 function updateSelectBar(){

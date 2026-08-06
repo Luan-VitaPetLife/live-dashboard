@@ -1809,6 +1809,13 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   Estado persistido em `localStorage('coco_seg_hiddencard_collapsed')`, sobrevive a reload — mesmo
   princípio de coleção de estado já usado nos cards de Produtos/Estoque, só que aqui é um card único
   (não uma lista deles), então não precisou da lógica de "só o primeiro aberto".
+- **⚠️ Correção no mesmo dia — o Luan queria dizer a área "Ocultos" do UNIFICADOR, não a de
+  Segmentos:** mesmo botão de esconder/mostrar, agora também em `unificador.html`
+  (`#hiddenSectionCollapseBtn`/`#hiddenSectionBody`, `localStorage
+  ('coco_uni_hiddensection_collapsed')`) — CSS `.other-card-collapse` duplicada ali (não existia
+  nesse arquivo antes). As duas versões (Segmentos e Unificador) ficaram implementadas, cada uma na
+  tela onde já existia sua própria área "Ocultos" — não são a mesma UI compartilhada, só o mesmo
+  padrão de chevron+persistência replicado.
 
 ## 5. Modelo de dados (pedido normalizado)
 
