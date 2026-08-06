@@ -38,6 +38,7 @@ const EMPTY = {
   productGroups: {}, // { [market]: { [nomeDoGrupo]: [tituloBruto,...] } } — unificação manual de produtos entre canais, ver tela Unificador (Configurações)
   productGroupsConfig: {}, // { enabled: bool } — liga/desliga global do Unificador, padrão ligado quando ausente
   productTypeGroups: {}, // { [market]: { [nomeDoTipo]: [palavraChave,...] } } — tipos de produto criados pelo usuário em Segmentos (busca por tags/título/productType)
+  productHiddenTags: {}, // { [market]: [palavraChave,...] } — Segmentos → "Ocultar produtos": item cuja tag bate sai dos segmentos normais e vai pro card "Ocultos"
   lastSync: null,
   amazonBackoffCount: 0,
   amazonBRBackoffCount: 0,
@@ -135,6 +136,7 @@ export async function initStore() {
       if (r.key === 'productGroups')        cache.productGroups        = r.value;
       if (r.key === 'productGroupsConfig')  cache.productGroupsConfig  = r.value;
       if (r.key === 'productTypeGroups')    cache.productTypeGroups    = r.value;
+      if (r.key === 'productHiddenTags')    cache.productHiddenTags    = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
@@ -694,6 +696,29 @@ export function deleteProductTypeGroup(market, name) {
   saveJson();
   if (USE_PG) pgKv('productTypeGroups', db.productTypeGroups);
   return mkt;
+}
+
+// ── Tags ocultas de produto (Segmentos → "Ocultar produtos") ──
+// Lista simples por mercado (sem nome de grupo — só existe um destino, o card "Ocultos").
+export function getProductHiddenTags() { return load().productHiddenTags || {}; }
+export function upsertProductHiddenTags(market, tags) {
+  const db = load();
+  if (!db.productHiddenTags) db.productHiddenTags = {};
+  const clean = (tags || []).map(t => String(t || '').trim()).filter(Boolean);
+  const merged = Array.from(new Set([...(db.productHiddenTags[market] || []), ...clean]));
+  db.productHiddenTags[market] = merged;
+  saveJson();
+  if (USE_PG) pgKv('productHiddenTags', db.productHiddenTags);
+  return merged;
+}
+export function removeProductHiddenTag(market, tag) {
+  const db = load();
+  if (!db.productHiddenTags) db.productHiddenTags = {};
+  const kept = (db.productHiddenTags[market] || []).filter(t => t !== tag);
+  db.productHiddenTags[market] = kept;
+  saveJson();
+  if (USE_PG) pgKv('productHiddenTags', db.productHiddenTags);
+  return kept;
 }
 
 // ── Meta Insights ─────────────────────────────
