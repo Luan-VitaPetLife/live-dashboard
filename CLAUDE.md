@@ -79,6 +79,8 @@ public/logo_shopee.svg       Logo Shopee usada na tela de campanhas
 public/logo_amazon.webp      Logo Amazon usada na tela de campanhas
 public/logo_shopify.png      Logo Shopify usada na tela de produtos (BR e US)
 public/logo_google_ads.webp  Logo Google Ads usada na tela de campanhas
+public/logos-integracao/Yucaloo1.svg  Logo Yucaloo (versão maior/completa) — enviada pelo Luan
+public/logos-integracao/Yucaloo2.svg  Logo Yucaloo (versão menor/ícone) — usada no card da tela Integrações
 ```
 
 Fluxo: `sync.js` busca pedidos/sessões → grava em `store` → `metrics.js` calcula → `/api/dashboard`
@@ -1589,15 +1591,31 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   seção 1). Só ter isso na branch `dev` não é suficiente pra completar o handshake ao vivo.
 - **Loja BR confirmada:** domínio real `pii90z-nz.myshopify.com` (o "myshopify.com" gerado pela
   Shopify não tem relação com o nome "Yucaloo" — normal, só o nome de exibição/domínio próprio é
-  `yucaloo.com.br`). Escopos pedidos: `read_all_orders,read_analytics,read_customers,read_products,
-  read_reports` (mais amplo que o `read_orders` da Coco and Luna — `read_all_orders` não tem o limite
-  de 60 dias de histórico).
-- **Ainda faltando (nenhum destes existe ainda):** confirmar o token BR chegou (`kv.yucalooTokens.br`);
-  criar o app Yucaloo US na Dev Dashboard e repetir o processo; decidir e implementar a dimensão de
-  marca (`brand`) em todo o pipeline; um `fetchOrders` pra Yucaloo (pode reaproveitar boa parte de
-  `shopify.js`, que já aceita `cfg.store`/`cfg.token`/`cfg.version` por chamada — não precisa duplicar
-  a query GraphQL, só passar o token/loja da Yucaloo em vez do fixo via `.env`); wiring em `sync.js`;
-  novo seletor de marca na UI (ao lado do de mercado).
+  `yucaloo.com.br`). Escopos pedidos: `read_orders,read_all_orders,read_analytics,read_customers,
+  read_products,read_reports` (mais amplo que o `read_orders` sozinho da Coco and Luna —
+  `read_all_orders` não tem o limite de 60 dias de histórico, mas exige `read_orders` junto na chamada
+  de autorização — `missing_read_orders_scope` se faltar, corrigido no mesmo dia).
+- **⚠️ Handshake concluído em produção (06/08/2026):** app Yucaloo BR instalado e autorizado com
+  sucesso — `kv.yucalooTokens.br` populado (`{ shop, accessToken, scope, obtainedAt }`). Confirmado
+  pelo Luan ("Conectado!").
+- **Card na tela de Integrações (implementado 06/08/2026):** `yucaloo_br` (Brasil · Geral, ao lado do
+  Shopify BR) e `yucaloo_us` (Estados Unidos · Geral, ao lado do Shopify US) em
+  `computeIntegrationsList()`/`TOGGLEABLE_KEYS` (`server.js`) — mesmo padrão dos outros canais:
+  `configured` via `shopifyYucaloo.isConfigured(mkt)` (variáveis de ambiente presentes), `authorized`
+  via `Boolean(getYucalooTokens()[mkt])` (token já obtido). `yucaloo_us` aparece como "Sem credenciais
+  configuradas ainda" até o app US existir — **de propósito**, já fica pronto pra virar "Conectada"
+  assim que `YUCALOO_US_CLIENT_ID/SECRET/REDIRECT_URL` forem preenchidos e o handshake rodar, sem
+  precisar de nenhuma mudança de código. Logo: `logo: 'Yucaloo2.svg'` (a versão pequena, enviada pelo
+  Luan em `public/logos-integracao/` junto com `Yucaloo1.svg`, a versão maior — não usada em nenhuma
+  tela ainda). Sem o arquivo presente, o `onerror` do `integracoes.html` já cai no ícone genérico de
+  categoria "geral" (🏪) sem quebrar nada, mesmo padrão de qualquer outro logo faltando (ver 4.17).
+- **Ainda faltando:** criar o app Yucaloo US na Dev Dashboard e repetir o processo (variáveis
+  `YUCALOO_US_*`, ver seção 6); decidir e implementar a dimensão de marca (`brand`) em todo o
+  pipeline; um `fetchOrders` pra Yucaloo (pode reaproveitar boa parte de `shopify.js`, que já aceita
+  `cfg.store`/`cfg.token`/`cfg.version` por chamada — não precisa duplicar a query GraphQL, só passar
+  o token/loja da Yucaloo em vez do fixo via `.env`); wiring em `sync.js`; novo seletor de marca na UI
+  (ao lado do de mercado). Até essas peças existirem, o card de Integrações mostra "Conectada" mas
+  nenhum pedido da Yucaloo aparece em nenhuma tela — o handshake por si só não alimenta a dashboard.
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -1731,6 +1749,8 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 | Amazon BR | ✅ | `A2Q3Y263D00KWC`, app próprio da conta CocoandLuna desde 04/08/2026 (era token da conta errada) | 4.7.11 |
 | Meta Ads BR/US | ✅ | contas separadas (`META_AD_ACCOUNT_ID` / `META_US_AD_ACCOUNT_ID`) | 4.4 |
 | Google Ads | ✅ | só EUA, Customer ID `1344114329`; aparece na tela de Campanhas (US) | 4.12 |
+| Yucaloo BR (Shopify) | 🟡 | handshake OAuth conectado (06/08/2026); ainda sem `fetchOrders`/sync/UI — não alimenta nenhuma tela | 4.20 |
+| Yucaloo US (Shopify) | ⬜ | app ainda não criado na Dev Dashboard | 4.20 |
 
 - **Amazon — dois apps SP-API separados desde 04/08/2026** (ver 4.7.11): o app dos EUA (`AMAZON_CLIENT_ID/SECRET`,
   conta VITA PET LIFE) e um app próprio do BR (`AMAZON_BR_CLIENT_ID/SECRET`, conta CocoandLuna) — IAM Role/chaves
