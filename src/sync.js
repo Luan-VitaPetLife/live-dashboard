@@ -11,6 +11,7 @@ import * as ml from './mercadolivre.js';
 import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
+import * as shopifyYucaloo from './shopifyYucaloo.js';
 import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -64,6 +65,17 @@ async function doSync() {
       report.sessions = sessions.length;
     } catch (e) { report.errors.push('shopify.sessions: ' + e.message); }
   } else { report.disabled.push('shopify_br'); }
+
+  // Yucaloo BR — pedidos (Shopify, 2ª marca — market/channel próprios,
+  // "yucaloo_br", pra não misturar com a receita da Coco and Luna. Ver
+  // CLAUDE.md 4.20. fetchOrders devolve [] sozinho se ainda não conectada.
+  if (isIntegrationEnabled('yucaloo_br')) {
+    try {
+      const orders = await shopifyYucaloo.fetchOrders(since, until, 'br');
+      upsertOrders(orders);
+      report.yucaloo_br = orders.length;
+    } catch (e) { report.errors.push('yucaloo_br.orders: ' + e.message); }
+  } else { report.disabled.push('yucaloo_br'); }
 
   // Shopee — pedidos (só se já autorizada)
   if (isIntegrationEnabled('shopee')) {
