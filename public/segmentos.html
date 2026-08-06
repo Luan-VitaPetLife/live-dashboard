@@ -396,10 +396,7 @@
         <div class="page-title">Segmentos</div>
         <div class="page-sub" id="pageSub">Gato vs Cão · comparação por unidades vendidas</div>
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="geo-map-toggle" id="manageTypesBtn"><i class="bi bi-tags"></i> Tipos de produto</button>
-        <button class="geo-map-toggle" id="manageHideBtn"><i class="bi bi-eye-slash"></i> Ocultar produtos</button>
-      </div>
+      <button class="geo-map-toggle" id="manageTypesBtn"><i class="bi bi-tags"></i> Tipos de produto</button>
     </div>
 
     <div class="seg-overview">
@@ -436,6 +433,7 @@
         <span class="other-note">— produtos cuja tag bateu com uma palavra-chave que você cadastrou</span>
       </div>
       <div class="seg-prod-list" id="hiddenList"></div>
+      <a href="/unificador" class="other-note" style="display:inline-block;margin-top:8px">Gerenciar palavras-chave no Unificador →</a>
     </div>
 
     <!-- Onde os produtos vendem -->
@@ -496,28 +494,6 @@
       </div>
       <div class="tr-new-form-err" id="trNewErr"></div>
       <button id="trNewSubmit">Criar tipo</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal "Ocultar produtos" — palavras-chave buscadas nas tags de cada item (isHiddenItem, metrics.js) -->
-<div class="tr-modal-overlay" id="hideModalOverlay"></div>
-<div class="tr-modal" id="hideModal">
-  <div class="tr-modal-head">
-    <div>
-      <div class="tr-modal-title">Ocultar produtos</div>
-      <div class="tr-modal-sub">Produto cuja TAG bater com uma palavra-chave abaixo sai dos cards normais (Gato/Cão/Outros) e some de "Onde os produtos vendem" — vai só pro card "Ocultos", no fim da página.</div>
-    </div>
-    <button class="tr-modal-close" id="hideModalClose">✕</button>
-  </div>
-  <div class="tr-modal-body">
-    <div class="tr-kw-list" id="hideTagsList" style="flex-wrap:wrap;display:flex;gap:6px"></div>
-    <div class="tr-new-form">
-      <div class="tr-new-form-title">Adicionar palavra-chave</div>
-      <div class="tr-kw-add">
-        <input type="text" id="hideNewTag" placeholder="Ex: areia" autocomplete="off">
-        <button id="hideNewSubmit">Adicionar</button>
-      </div>
     </div>
   </div>
 </div>
@@ -1644,85 +1620,6 @@ document.getElementById('trTypesList').addEventListener('keydown', e => {
   if (!kw) return;
   trAddKeyword(name, kw);
   input.value = '';
-});
-
-// ── "Ocultar produtos" — palavras-chave buscadas nas tags de cada item (isHiddenItem, metrics.js) ──
-let hideTags = []; // [palavraChave,...] do mercado atual
-
-async function loadHideTags() {
-  try {
-    const r = await fetch('/api/product-hidden-tags?market=' + market, { credentials: 'same-origin' });
-    const d = await r.json();
-    hideTags = d.tags || [];
-  } catch (e) { hideTags = []; }
-  renderHideTags();
-}
-
-function renderHideTags() {
-  const wrap = document.getElementById('hideTagsList');
-  if (!hideTags.length) {
-    wrap.innerHTML = '<div class="tr-empty">Nenhuma palavra-chave ainda — nenhum produto está oculto.</div>';
-    return;
-  }
-  wrap.innerHTML = hideTags.map(t => `<span class="tr-kw-chip">${escHtml(t)}<button data-remove-hide-tag="${escHtml(t)}" title="Remover"><i class="bi bi-x"></i></button></span>`).join('');
-}
-
-function openHideModal() {
-  document.getElementById('hideModalOverlay').classList.add('open');
-  document.getElementById('hideModal').classList.add('open');
-  loadHideTags();
-}
-function closeHideModal() {
-  document.getElementById('hideModalOverlay').classList.remove('open');
-  document.getElementById('hideModal').classList.remove('open');
-  document.getElementById('hideNewTag').value = '';
-}
-
-async function hideAddTag(tag) {
-  const r = await fetch('/api/product-hidden-tags', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-    body: JSON.stringify({ market, tags: [tag] }),
-  });
-  const d = await r.json();
-  if (!r.ok) return;
-  hideTags = d.tags || [];
-  renderHideTags();
-  loadData(); // refaz a classificação com a palavra-chave nova
-}
-async function hideRemoveTag(tag) {
-  const r = await fetch('/api/product-hidden-tags/remove', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-    body: JSON.stringify({ market, tag }),
-  });
-  const d = await r.json();
-  if (!r.ok) return;
-  hideTags = d.tags || [];
-  renderHideTags();
-  loadData();
-}
-
-document.getElementById('manageHideBtn').addEventListener('click', openHideModal);
-document.getElementById('hideModalClose').addEventListener('click', closeHideModal);
-document.getElementById('hideModalOverlay').addEventListener('click', closeHideModal);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeHideModal(); });
-
-document.getElementById('hideNewSubmit').addEventListener('click', () => {
-  const input = document.getElementById('hideNewTag');
-  const tag = input.value.trim();
-  if (!tag) return;
-  hideAddTag(tag);
-  input.value = '';
-});
-document.getElementById('hideNewTag').addEventListener('keydown', e => {
-  if (e.key !== 'Enter') return;
-  const tag = e.target.value.trim();
-  if (!tag) return;
-  hideAddTag(tag);
-  e.target.value = '';
-});
-document.getElementById('hideTagsList').addEventListener('click', e => {
-  const rm = e.target.closest('[data-remove-hide-tag]');
-  if (rm) hideRemoveTag(rm.dataset.removeHideTag);
 });
 
 buildChannelDropdown();

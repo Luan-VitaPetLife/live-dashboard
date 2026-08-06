@@ -445,10 +445,12 @@ app.delete('/api/product-types', (req, res) => {
   res.json({ types });
 });
 
-// Produtos ocultos (Segmentos → "Ocultar produtos") — palavras-chave buscadas só nas tags de cada
-// item (ver metrics.js isHiddenItem); produto que bater sai dos cards normais (Gato/Cão/Outros) e
-// vai pro card "Ocultos". Mesmo padrão de acesso de /api/product-types (não é admin-only).
-app.get('/api/product-hidden-tags', (req, res) => {
+// Produtos ocultos (controlado no Unificador — "essa função deve estar no unificador, que é onde
+// iremos controlar tudo", pedido do Luan 06/08/2026) — palavras-chave buscadas só nas tags de cada
+// item (ver metrics.js isHiddenItem); produto que bater sai dos cards normais (Gato/Cão/Outros) de
+// Segmentos e vai pro card "Ocultos" lá. Admin-only, mesmo padrão de /api/product-groups (única tela
+// que chama esses endpoints é unificador.html — segmentos.html só exibe o resultado já calculado).
+app.get('/api/product-hidden-tags', requireAdmin, (req, res) => {
   try {
     const { market = 'br' } = req.query;
     res.json({ tags: getProductHiddenTags()[market] || [] });
@@ -456,14 +458,14 @@ app.get('/api/product-hidden-tags', (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.post('/api/product-hidden-tags', (req, res) => {
+app.post('/api/product-hidden-tags', requireAdmin, (req, res) => {
   const { market, tags } = req.body || {};
   if (!market || !Array.isArray(tags) || !tags.length) {
     return res.status(400).json({ error: 'market e tags (array não vazio) são obrigatórios.' });
   }
   res.json({ tags: upsertProductHiddenTags(market, tags) });
 });
-app.post('/api/product-hidden-tags/remove', (req, res) => {
+app.post('/api/product-hidden-tags/remove', requireAdmin, (req, res) => {
   const { market, tag } = req.body || {};
   if (!market || !tag) return res.status(400).json({ error: 'market e tag são obrigatórios.' });
   res.json({ tags: removeProductHiddenTag(market, tag) });
