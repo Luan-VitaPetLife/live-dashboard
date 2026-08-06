@@ -12,7 +12,7 @@ import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
 import * as shopifyYucaloo from './shopifyYucaloo.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -64,17 +64,32 @@ async function doSync() {
       upsertSessionsDaily(sessions);
       report.sessions = sessions.length;
     } catch (e) { report.errors.push('shopify.sessions: ' + e.message); }
+
+    // Shopify — catálogo bruto de produtos (vendido ou não). Ver Unificador,
+    // CLAUDE.md 4.20 — antes o Unificador só enxergava produto que já tinha
+    // alguma venda; isso preenche kv.shopifyProductCatalog pra ele mostrar tudo.
+    try {
+      const catalog = await shopify.fetchProductCatalog();
+      setShopifyProductCatalog('shopify', catalog);
+      report.shopify_catalog = catalog.length;
+    } catch (e) { report.errors.push('shopify.catalog: ' + e.message); }
   } else { report.disabled.push('shopify_br'); }
 
-  // Yucaloo BR — pedidos (Shopify, 2ª marca — market/channel próprios,
-  // "yucaloo_br", pra não misturar com a receita da Coco and Luna. Ver
-  // CLAUDE.md 4.20. fetchOrders devolve [] sozinho se ainda não conectada.
+  // Yucaloo BR — pedidos (Shopify, 2ª marca — market igual à Coco and Luna,
+  // channel próprio "yucaloo_br". Ver CLAUDE.md 4.20. fetchOrders/fetchProductCatalog
+  // devolvem [] sozinhos se ainda não conectada.
   if (isIntegrationEnabled('yucaloo_br')) {
     try {
       const orders = await shopifyYucaloo.fetchOrders(since, until, 'br');
       upsertOrders(orders);
       report.yucaloo_br = orders.length;
     } catch (e) { report.errors.push('yucaloo_br.orders: ' + e.message); }
+
+    try {
+      const catalog = await shopifyYucaloo.fetchProductCatalog('br');
+      setShopifyProductCatalog('yucaloo_br', catalog);
+      report.yucaloo_br_catalog = catalog.length;
+    } catch (e) { report.errors.push('yucaloo_br.catalog: ' + e.message); }
   } else { report.disabled.push('yucaloo_br'); }
 
   // Shopee — pedidos (só se já autorizada)
@@ -151,6 +166,17 @@ async function doSync() {
         report.sessions_us = sessions.length;
       }
     } catch (e) { report.errors.push('shopify_us.sessions: ' + e.message); }
+
+    // Shopify EUA — catálogo bruto de produtos (vendido ou não). Ver Unificador.
+    try {
+      const usStore = process.env.SHOPIFY_US_STORE;
+      const usToken = process.env.SHOPIFY_US_ADMIN_TOKEN;
+      if (usStore && usToken) {
+        const catalog = await shopify.fetchProductCatalog({ store: usStore, token: usToken });
+        setShopifyProductCatalog('shopify_us', catalog);
+        report.shopify_us_catalog = catalog.length;
+      }
+    } catch (e) { report.errors.push('shopify_us.catalog: ' + e.message); }
   } else { report.disabled.push('shopify_us'); }
 
   // Amazon US + BR — amazon.js decide sozinho se combina numa chamada só (tokens

@@ -1117,7 +1117,7 @@ function computeIntegrationsList() {
     // ── Brasil · Geral ──
     { key: 'shopify_br', label: 'Shopify', country: 'br', category: 'geral', logo: 'Shopify_logo.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
       ...integrationStatus({ key: 'shopify_br', configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') }) },
-    { key: 'yucaloo_br', label: 'Yucaloo', country: 'br', category: 'geral', logo: 'Yucaloo2.svg', detail: getYucalooTokens().br?.shop || '',
+    { key: 'yucaloo_br', label: 'Yucaloo', country: 'br', category: 'geral', logo: 'Yucaloo2.webp', detail: getYucalooTokens().br?.shop || '',
       ...integrationStatus({ key: 'yucaloo_br', configured: shopifyYucaloo.isConfigured('br'), authorized: Boolean(getYucalooTokens().br) }) },
     { key: 'shopee', label: 'Shopee', country: 'br', category: 'geral', logo: 'logo-shopee.png', detail: db.shopeeTokens ? 'Loja autorizada' : '',
       ...integrationStatus({ key: 'shopee', configured: shopee.isConfigured(), authorized: Boolean(getShopeeTokens()) }) },
@@ -1141,7 +1141,7 @@ function computeIntegrationsList() {
     // ── Estados Unidos · Geral ──
     { key: 'shopify_us', label: 'Shopify', country: 'us', category: 'geral', logo: 'Shopify_logo.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
       ...integrationStatus({ key: 'shopify_us', configured: has('SHOPIFY_US_STORE') && has('SHOPIFY_US_ADMIN_TOKEN') }) },
-    { key: 'yucaloo_us', label: 'Yucaloo', country: 'us', category: 'geral', logo: 'Yucaloo2.svg', detail: getYucalooTokens().us?.shop || '',
+    { key: 'yucaloo_us', label: 'Yucaloo', country: 'us', category: 'geral', logo: 'Yucaloo2.webp', detail: getYucalooTokens().us?.shop || '',
       ...integrationStatus({ key: 'yucaloo_us', configured: shopifyYucaloo.isConfigured('us'), authorized: Boolean(getYucalooTokens().us) }) },
     { key: 'amazon_us', label: 'Amazon', country: 'us', category: 'geral', logo: 'Amazon_logo.png', detail: 'Conta VITA PET LIFE',
       ...integrationStatus({ key: 'amazon_us', configured: amazon.isConfigured(), paused: backoffActive, pausedNote: backoffActive ? amazonPauseNote(Math.ceil((backoffUntil - Date.now()) / 60000)) : '' }) },

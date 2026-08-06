@@ -31,6 +31,7 @@ const EMPTY = {
   googleAdsTokens: null,
   blingTokens: null,
   yucalooTokens: {}, // { [market]: { shop, accessToken, scope, obtainedAt } } — OAuth via Dev Dashboard, ver shopifyYucaloo.js
+  shopifyProductCatalog: {}, // { [channel]: [{title,image,productType,tags}] } — catálogo bruto (vendido ou não), ver Unificador
   productFinance: {},
   productStock: {},
   productStockAgg: {},
@@ -127,6 +128,7 @@ export async function initStore() {
       if (r.key === 'googleAdsTokens')      cache.googleAdsTokens      = r.value;
       if (r.key === 'blingTokens')           cache.blingTokens           = r.value;
       if (r.key === 'yucalooTokens')         cache.yucalooTokens         = r.value;
+      if (r.key === 'shopifyProductCatalog') cache.shopifyProductCatalog = r.value;
       if (r.key === 'productFinance')       cache.productFinance       = r.value;
       if (r.key === 'productStock')         cache.productStock         = r.value;
       if (r.key === 'productStockAgg')      cache.productStockAgg      = r.value;
@@ -549,6 +551,16 @@ export function getYucalooTokens() { return load().yucalooTokens || {}; }
 export function setYucalooTokens(tokens) {
   const db = load(); db.yucalooTokens = tokens; saveJson();
   if (USE_PG) pgKv('yucalooTokens', tokens);
+}
+
+// ── Catálogo bruto de produtos Shopify (vendido ou não), por canal — ver Unificador ──
+export function getShopifyProductCatalog() { return load().shopifyProductCatalog || {}; }
+export function setShopifyProductCatalog(channel, items) {
+  const db = load();
+  if (!db.shopifyProductCatalog) db.shopifyProductCatalog = {};
+  db.shopifyProductCatalog[channel] = items;
+  saveJson();
+  if (USE_PG) pgKv('shopifyProductCatalog', db.shopifyProductCatalog);
 }
 
 // ── Dados financeiros editáveis por produto (COG, impostos, comissão) ──

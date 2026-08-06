@@ -18,7 +18,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import { getYucalooTokens, setYucalooTokens } from './store.js';
-import { fetchOrders as fetchShopifyOrders } from './shopify.js';
+import { fetchOrders as fetchShopifyOrders, fetchProductCatalog as fetchShopifyProductCatalog } from './shopify.js';
 
 // read_all_orders exige read_orders junto (a Shopify recusa o OAuth com
 // "missing_read_orders_scope" se só o primeiro vier) — confirmado ao vivo
@@ -118,4 +118,11 @@ export async function fetchOrders(sinceISO, untilISO, mkt) {
     channel: `yucaloo_${mkt}`,
     tz: mkt === 'us' ? 'Z' : '-03:00',
   });
+}
+
+// Catálogo bruto de produtos da Yucaloo (vendidos ou não) — ver shopify.js fetchProductCatalog.
+export async function fetchProductCatalog(mkt) {
+  const t = getYucalooTokens()[mkt];
+  if (!t?.accessToken) return [];
+  return fetchShopifyProductCatalog({ store: t.shop, token: t.accessToken });
 }

@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getAmazonProductImages, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
@@ -307,15 +307,33 @@ function applyProductGroups(list, groups, opts = {}) {
   return [...mergedRows, ...passthrough];
 }
 
+// Canais Shopify com catálogo bruto sincronizado (kv.shopifyProductCatalog, ver sync.js) por
+// mercado — únicos com um "produto cadastrado" separado de "produto vendido" hoje; Shopee/ML/
+// Amazon continuam só derivados de pedido (sem endpoint de catálogo integrado ainda).
+const SHOPIFY_CATALOG_CHANNELS = { br: ['shopify', 'yucaloo_br'], us: ['shopify_us'] };
+
 // Catálogo completo (todo o histórico, todos os canais) de um mercado, achatado numa lista só —
 // usado pela tela Unificador pra listar todo produto disponível pra agrupar manualmente.
 export function listProductCatalog({ market = 'br' } = {}) {
   const allOrders = getOrders({ channel: 'todos', market }).filter(o => !isCancelled(o));
   const byChannel = aggregateProductsByChannel(allOrders);
   const items = [];
+  const seen = new Set(); // "canal|||título" já coberto pela agregação de vendas
   for (const [channel, c] of Object.entries(byChannel)) {
     for (const [title, p] of Object.entries(c.products)) {
       items.push({ title, channel, image: p.image, type: p.type, qty: p.avulsoQty + p.comboQty, revenue: p.revenue });
+      seen.add(channel + '|||' + title);
+    }
+  }
+  // Produto cadastrado na Shopify mas nunca vendido (0 pedidos) não aparecia — o Unificador
+  // precisa organizar o catálogo inteiro, não só o que já vendeu (reportado pelo Luan, 06/08/2026).
+  const rawCatalog = getShopifyProductCatalog();
+  for (const channel of SHOPIFY_CATALOG_CHANNELS[market] || []) {
+    for (const p of rawCatalog[channel] || []) {
+      const key = channel + '|||' + p.title;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({ title: p.title, channel, image: p.image, type: classifyType(p), qty: 0, revenue: 0 });
     }
   }
   items.sort((a, b) => b.revenue - a.revenue);
