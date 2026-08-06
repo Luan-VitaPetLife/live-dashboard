@@ -33,7 +33,6 @@
   .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
   .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
   .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
-  .mkt-icon-img{width:16px;height:16px;object-fit:contain;flex-shrink:0}
 
   .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;max-width:1280px;width:100%}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
@@ -193,9 +192,6 @@
       <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
         <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
-      <button class="mkt-btn" id="mktBtnYucalooBr" onclick="setMarket('yucaloo_br')">
-        <img src="logos-integracao/Yucaloo2.svg" alt="" class="mkt-icon-img" onerror="this.style.display='none'"><span>Yucaloo BR</span>
-      </button>
     </div>
     <div class="live-dot-wrap"><div class="ldot"></div><span id="whoami">—</span></div>
   </div>
@@ -311,14 +307,9 @@ let dragFromGroup = null; // nome do grupo de origem, ou null se veio da coluna 
 
 function setMarket(m){
   market = m;
-  // "coco_market" é compartilhada com todas as outras telas (índice/produtos/estoque/...) —
-  // só persiste br/us ali. "yucaloo_br" é uma marca à parte, sem dimensão própria ainda (ver
-  // CLAUDE.md 4.20); gravar isso na chave compartilhada faria outras telas herdarem um valor
-  // de mercado que elas não sabem tratar. Fica só na sessão desta página.
-  if (m === 'br' || m === 'us') localStorage.setItem('coco_market', m);
+  localStorage.setItem('coco_market', m);
   $('mktBtnBr').classList.toggle('active', m === 'br');
   $('mktBtnUs').classList.toggle('active', m === 'us');
-  $('mktBtnYucalooBr').classList.toggle('active', m === 'yucaloo_br');
   exitSelectMode();
   load();
 }
@@ -825,7 +816,6 @@ ungroupedCol.addEventListener('drop', e => {
 (async function(){
   $('mktBtnBr').classList.toggle('active', market === 'br');
   $('mktBtnUs').classList.toggle('active', market === 'us');
-  $('mktBtnYucalooBr').classList.toggle('active', market === 'yucaloo_br');
   await loadMe();
   await loadGroupsConfig();
   await load();

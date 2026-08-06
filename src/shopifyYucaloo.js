@@ -97,20 +97,24 @@ export async function exchangeCode(mkt, shop, code) {
 }
 
 // Pedidos da Yucaloo — reaproveita fetchOrders de shopify.js (já aceita
-// store/token por chamada, mesmo mecanismo usado pro Shopify US). Tag de
-// market própria ("yucaloo_br"/"yucaloo_us"), NUNCA "br"/"us" — a Yucaloo é
-// uma marca separada da Coco and Luna e convive no mesmo país; usar o mesmo
-// valor de market misturaria a receita das duas marcas em todo o resto do
-// app (dashboard, produtos, estoque, segmentos), que hoje só sabe filtrar
-// por mercado. Ver CLAUDE.md 4.20 — dimensão de marca ainda não existe,
-// isso é o jeito seguro de já trazer os pedidos sem contaminar nada.
+// store/token por chamada, mesmo mecanismo usado pro Shopify US).
+//
+// Decisão do Luan (06/08/2026): market = mkt ('br'/'us'), igual à Coco and
+// Luna — NÃO um valor à parte. No Brasil a Yucaloo é vendida junto com os
+// mesmos marketplaces da Coco and Luna, e ele quer ver tudo junto ao
+// escolher só "Brasil"/"EUA", sem precisar escolher marca e depois país
+// (isso fica pra quando houver mais marcas — ver CLAUDE.md 4.20). O
+// `channel` continua próprio ("yucaloo_br"/"yucaloo_us") — é o que permite
+// saber, quando precisar, quais pedidos vieram da loja Shopify da Yucaloo
+// (badge, filtro futuro) sem misturar com o canal "shopify" da Coco and
+// Luna, mesmo os dois estando agora no mesmo balde de `market`.
 export async function fetchOrders(sinceISO, untilISO, mkt) {
   const t = getYucalooTokens()[mkt];
   if (!t?.accessToken) return []; // ainda não conectado — não quebra o sync
   return fetchShopifyOrders(sinceISO, untilISO, {
     store: t.shop,
     token: t.accessToken,
-    market: `yucaloo_${mkt}`,
+    market: mkt,
     channel: `yucaloo_${mkt}`,
     tz: mkt === 'us' ? 'Z' : '-03:00',
   });
