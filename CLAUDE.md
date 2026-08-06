@@ -79,8 +79,8 @@ public/logo_shopee.svg       Logo Shopee usada na tela de campanhas
 public/logo_amazon.webp      Logo Amazon usada na tela de campanhas
 public/logo_shopify.png      Logo Shopify usada na tela de produtos (BR e US)
 public/logo_google_ads.webp  Logo Google Ads usada na tela de campanhas
-public/logos-integracao/Yucaloo1.svg  Logo Yucaloo (versão maior/completa) — enviada pelo Luan
-public/logos-integracao/Yucaloo2.svg  Logo Yucaloo (versão menor/ícone) — usada no card da tela Integrações
+public/logos-integracao/Yucaloo1.webp Logo Yucaloo (versão maior/completa) — enviada pelo Luan
+public/logos-integracao/Yucaloo2.webp Logo Yucaloo (versão menor/ícone) — usada no card da tela Integrações
 ```
 
 Fluxo: `sync.js` busca pedidos/sessões → grava em `store` → `metrics.js` calcula → `/api/dashboard`
@@ -1611,10 +1611,11 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   via `Boolean(getYucalooTokens()[mkt])` (token já obtido). `yucaloo_us` aparece como "Sem credenciais
   configuradas ainda" até o app US existir — **de propósito**, já fica pronto pra virar "Conectada"
   assim que `YUCALOO_US_CLIENT_ID/SECRET/REDIRECT_URL` forem preenchidos e o handshake rodar, sem
-  precisar de nenhuma mudança de código. Logo: `logo: 'Yucaloo2.svg'` (a versão pequena, enviada pelo
-  Luan em `public/logos-integracao/` junto com `Yucaloo1.svg`, a versão maior — não usada em nenhuma
-  tela ainda). Sem o arquivo presente, o `onerror` do `integracoes.html` já cai no ícone genérico de
-  categoria "geral" (🏪) sem quebrar nada, mesmo padrão de qualquer outro logo faltando (ver 4.17).
+  precisar de nenhuma mudança de código. Logo: `logo: 'Yucaloo2.webp'` (a versão pequena, enviada pelo
+  Luan em `public/logos-integracao/` junto com `Yucaloo1.webp`, a versão maior — não usada em nenhuma
+  tela ainda; formato trocado de `.svg` pra `.webp` pelo Luan no mesmo dia). Sem o arquivo presente, o
+  `onerror` do `integracoes.html` já cai no ícone genérico de categoria "geral" (🏪) sem quebrar nada,
+  mesmo padrão de qualquer outro logo faltando (ver 4.17).
 - **Sync de pedidos ligado (implementado 06/08/2026, a pedido do Luan — "vamos puxar os pedidos...
   puxe primariamente do Shopify"):** `shopifyYucaloo.fetchOrders(sinceISO, untilISO, mkt)` reaproveita
   `shopify.js`'s `fetchOrders()` (a mesma função já usada por Shopify BR/US — aceita `cfg.store`/
@@ -1664,6 +1665,31 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   telas, mas ela não vira um card/filtro dedicado ainda. Adicionar isso a cada tela é trabalho
   separado, não pedido nesta rodada (o pedido foi "colocar os produtos junto com os outros", que já
   está resolvido pro catálogo/Segmentos/receita geral).
+- **Unificador mostrando só produto já vendido, corrigido (06/08/2026, mesmo dia — reportado pelo
+  Luan: "mostrou apenas um tipo de areia, pois a outra ninguém pediu ainda"):** todo o app (Produtos,
+  Estoque, Segmentos e, até então, o Unificador) sempre derivou "produto" a partir de pedidos —
+  `aggregateProductsByChannel(orders)` — então um SKU cadastrado mas nunca vendido simplesmente não
+  existia em lugar nenhum. Pras telas orientadas a venda isso é o comportamento certo; pro
+  Unificador (que existe pra ORGANIZAR o catálogo, inclusive antes de vender) não — o Luan quer poder
+  agrupar um produto novo desde o dia 1, sem esperar o primeiro pedido.
+  - **`fetchProductCatalog(cfg)` (novo em `shopify.js`):** query GraphQL separada de `fetchOrders`,
+    pagina `products(first:100)` e devolve `{title, image, productType, tags}` de TODO produto
+    cadastrado na loja — vendido ou não. Mesmo padrão multi-loja de `fetchOrders`/
+    `fetchSessionsDaily` (`cfg.store`/`cfg.token`). Espelhado em `shopifyYucaloo.fetchProductCatalog
+    (mkt)` (devolve `[]` sem token, mesmo padrão de `fetchOrders`).
+  - **Sincronizado em `sync.js`** junto com os pedidos de cada loja Shopify (BR, US, Yucaloo BR) —
+    salvo em `kv.shopifyProductCatalog[canal]` (`store.js` `getShopifyProductCatalog`/
+    `setShopifyProductCatalog`). Só canais Shopify têm essa sincronização hoje — Shopee/Mercado
+    Livre/Amazon não têm um endpoint de "listar catálogo" integrado neste projeto ainda, então
+    continuam só derivados de pedido (limitação conhecida, não corrigida nesta rodada).
+  - **`listProductCatalog()` (`metrics.js`) mescla os dois:** primeiro monta a lista de sempre (a
+    partir de `aggregateProductsByChannel`), depois passa pelo catálogo bruto de
+    `SHOPIFY_CATALOG_CHANNELS[market]` (`{br:['shopify','yucaloo_br'], us:['shopify_us']}`) e
+    adiciona qualquer título que ainda não apareceu (`qty:0, revenue:0`, tipo via `classifyType()`
+    reaproveitado). Nenhuma outra tela foi tocada — o merge é só na função que alimenta o Unificador.
+  - Testado localmente (mesmo método sem rede desta seção): com `kv.shopifyProductCatalog.shopify`
+    tendo um título que nunca apareceu em `db.orders`, `listProductCatalog({market:'br'})` devolve
+    esse título com `qty:0`/`revenue:0`, sem duplicar os que já tinham venda.
 - **Ainda faltando:** criar o app Yucaloo US na Dev Dashboard e repetir o processo (variáveis
   `YUCALOO_US_*`, ver seção 6 — o `fetchOrders(..., 'us')` já funciona sozinho assim que
   `kv.yucalooTokens.us` existir, gravando em `market:'us'` junto com o Shopify US, sem nenhuma

@@ -100,6 +100,34 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
   return out;
 }
 
+// Catálogo bruto de produtos cadastrados (vendidos ou não) — usado pelo Unificador pra
+// organizar produtos ANTES de terem qualquer venda. Diferente de fetchOrders/aggregateProductsByChannel,
+// que só enxergam produto que já apareceu em algum pedido.
+export async function fetchProductCatalog(cfg = {}) {
+  const store   = cfg.store   || STORE;
+  const token   = cfg.token   || TOKEN;
+  const version = cfg.version || VERSION;
+
+  let after = null, out = [], guard = 0;
+  do {
+    const data = await gqlFetch(store, token, version, `
+      query($after: String) {
+        products(first: 100, after: $after) {
+          edges { node { title productType tags featuredImage { url } } }
+          pageInfo { hasNextPage endCursor }
+        }
+      }`, { after });
+    const conn = data.products;
+    for (const e of conn.edges) {
+      const n = e.node;
+      out.push({ title: n.title, image: n.featuredImage?.url || null, productType: n.productType || null, tags: n.tags || [] });
+    }
+    after = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
+    guard++;
+  } while (after && guard < 50);
+  return out;
+}
+
 export async function fetchSessionsDaily(days = 90, cfg = {}) {
   const store   = cfg.store   || STORE;
   const token   = cfg.token   || TOKEN;
