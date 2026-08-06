@@ -164,6 +164,12 @@
   .modal input:focus{border-color:var(--ink)}
   .modal-err{font-size:11px;color:var(--red);min-height:14px;margin-top:6px}
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+  .hide-tags-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .hide-tag-chip{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 5px 4px 10px}
+  .hide-tag-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 4px;border-radius:50%;line-height:1}
+  .hide-tag-chip button:hover{background:var(--border2);color:var(--red)}
+  .hide-add-row{display:flex;gap:6px}
+  .hide-add-row input{flex:1;min-width:0}
 
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--side-text);font-size:12px;font-weight:600;padding:11px 20px;border-radius:20px;box-shadow:0 8px 28px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:all .25s;z-index:500}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -219,6 +225,7 @@
 
     <div class="toolbar">
       <div class="search-wrap"><i class="bi bi-search"></i><input type="text" id="searchInput" placeholder="Buscar produto..."></div>
+      <button class="btn" id="hideBtn"><i class="bi bi-eye-slash"></i> Ocultar produtos</button>
       <button class="btn" id="selectBtn"><i class="bi bi-check2-square"></i> Selecionar</button>
       <div class="select-bar" id="selectBar">
         <span id="selectCount">0 selecionados</span>
@@ -265,6 +272,22 @@
     <div class="modal-actions">
       <button class="btn" id="nameCancelBtn">Cancelar</button>
       <button class="btn btn-primary" id="nameConfirmBtn">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="hideModalOverlay"></div>
+<div class="modal-overlay" id="hideModal" style="z-index:401">
+  <div class="modal" style="max-width:460px">
+    <h3>Ocultar produtos</h3>
+    <div class="sub">Produto cuja TAG bater com uma palavra-chave abaixo some dos cards normais de Segmentos (Gato/Cão/Outros) e de "Onde os produtos vendem" — vai só pro card "Ocultos" lá.</div>
+    <div class="hide-tags-list" id="hideTagsList"></div>
+    <div class="hide-add-row">
+      <input type="text" id="hideNewTag" placeholder="Ex: areia" autocomplete="off">
+      <button class="btn btn-primary" id="hideAddBtn">Adicionar</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="hideCloseBtn">Fechar</button>
     </div>
   </div>
 </div>
@@ -810,6 +833,76 @@ ungroupedCol.addEventListener('drop', e => {
   e.preventDefault();
   ungroupedCol.classList.remove('drag-over-col');
   removeMember(dragFromGroup, dragTitle);
+});
+
+/* ── "Ocultar produtos" (Segmentos) — palavras-chave buscadas nas tags de cada item.
+   Controle centralizado aqui, a pedido do Luan ("essa função deve estar no unificador, que é
+   onde iremos controlar tudo"); o efeito (card "Ocultos") continua em segmentos.html. ── */
+let hideTags = [];
+async function loadHideTags(){
+  try{
+    const r = await fetch('/api/product-hidden-tags?market=' + market, { credentials:'same-origin' });
+    const d = await r.json();
+    hideTags = d.tags || [];
+  }catch(e){ hideTags = []; }
+  renderHideTags();
+}
+function renderHideTags(){
+  const wrap = $('hideTagsList');
+  wrap.innerHTML = hideTags.length
+    ? hideTags.map(t => `<span class="hide-tag-chip">${escapeHtml(t)}<button data-remove-hide-tag="${escapeHtml(t)}" title="Remover"><i class="bi bi-x"></i></button></span>`).join('')
+    : '<div class="sub" style="margin:0">Nenhuma palavra-chave ainda — nenhum produto está oculto.</div>';
+}
+function openHideModal(){
+  $('hideModalOverlay').classList.add('open');
+  $('hideModal').classList.add('open');
+  loadHideTags();
+}
+function closeHideModal(){
+  $('hideModalOverlay').classList.remove('open');
+  $('hideModal').classList.remove('open');
+  $('hideNewTag').value = '';
+}
+async function hideAddTag(tag){
+  const r = await fetch('/api/product-hidden-tags', {
+    method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+    body: JSON.stringify({ market, tags:[tag] }),
+  });
+  const d = await r.json();
+  if(!r.ok) { toast('Erro: ' + (d.error||'falha de rede'), true); return; }
+  hideTags = d.tags || [];
+  renderHideTags();
+}
+async function hideRemoveTag(tag){
+  const r = await fetch('/api/product-hidden-tags/remove', {
+    method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+    body: JSON.stringify({ market, tag }),
+  });
+  const d = await r.json();
+  if(!r.ok) return;
+  hideTags = d.tags || [];
+  renderHideTags();
+}
+$('hideBtn').addEventListener('click', openHideModal);
+$('hideCloseBtn').addEventListener('click', closeHideModal);
+$('hideModalOverlay').addEventListener('click', closeHideModal);
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeHideModal(); });
+$('hideAddBtn').addEventListener('click', () => {
+  const t = $('hideNewTag').value.trim();
+  if(!t) return;
+  hideAddTag(t);
+  $('hideNewTag').value = '';
+});
+$('hideNewTag').addEventListener('keydown', e => {
+  if(e.key !== 'Enter') return;
+  const t = e.target.value.trim();
+  if(!t) return;
+  hideAddTag(t);
+  e.target.value = '';
+});
+$('hideTagsList').addEventListener('click', e => {
+  const rm = e.target.closest('[data-remove-hide-tag]');
+  if(rm) hideRemoveTag(rm.dataset.removeHideTag);
 });
 
 /* ── Init ── */

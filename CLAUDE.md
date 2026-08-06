@@ -1718,15 +1718,25 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   (`revenue`, `units`, `orders`, `byType`, `topProducts` — já passando por `applyProductGroups`/
   `classifyTypeGroup` igual aos demais) porque `segAcc` é uma agregação genérica por chave, sem lista
   fixa de segmentos — nenhuma mudança adicional foi necessária nessa parte do pipeline.
-- **UI (`segmentos.html`):** botão "Ocultar produtos" (👁️‍🗨️) no cabeçalho, ao lado de "Tipos de
-  produto" — abre um modal simples (reaproveita as classes CSS `.tr-modal*`/`.tr-kw-chip`/
-  `.tr-new-form*` já existentes do modal de Tipos, sem CSS novo) só com uma lista de chips de
-  palavra-chave + campo pra adicionar, sem a hierarquia de "tipo nomeado" do outro modal. O card
-  "Ocultos" em si é uma cópia do padrão já usado pro card "Produtos não classificados"
-  (`#otherCard`/`renderOther`) — `#hiddenCard`/`renderHidden`, escondido via `display:none` quando
-  `segments.hidden` está vazio ou ausente, reaproveitando `prodByTypeGroupHtml()` (mesmo agrupamento
-  por "Tipos de produto" dentro do card, "ver mais/ver menos" etc. — tudo de graça).
-- **Endpoints** (`server.js`, mesmo padrão de acesso de `/api/product-types` — não admin-only):
+- **UI dividida entre duas telas, de propósito:** a exibição do efeito (o card "Ocultos") mora em
+  `segmentos.html` — `#hiddenCard`/`renderHidden`, cópia do padrão já usado pro card "Produtos não
+  classificados" (`#otherCard`/`renderOther`), escondido via `display:none` quando `segments.hidden`
+  está vazio ou ausente, reaproveitando `prodByTypeGroupHtml()` (mesmo agrupamento por "Tipos de
+  produto" dentro do card, "ver mais/ver menos" etc. — tudo de graça). O controle (cadastrar/remover
+  palavra-chave) mora só em `unificador.html`.
+- **⚠️ Controle movido pro Unificador no mesmo dia (a pedido do Luan: "essa função deve estar no
+  unificador, que é onde iremos controlar tudo"):** a 1ª versão tinha o botão "Ocultar produtos" e o
+  modal de gestão dentro de `segmentos.html` (mesmo padrão visual do modal de "Tipos de produto",
+  classes `.tr-modal*`). Removido de lá — `segmentos.html` ficou só com a exibição somente-leitura
+  (`#hiddenCard`), com um link "Gerenciar palavras-chave no Unificador →" apontando pra
+  `/unificador`. O botão + modal reais agora vivem em `unificador.html` (`#hideBtn`/`#hideModal`,
+  CSS própria `.hide-tag-chip`/`.hide-add-row` — reaproveita as classes genéricas `.modal-overlay`/
+  `.modal` já existentes lá, não as `.tr-*` de Segmentos), chamando os mesmos endpoints — nenhuma
+  mudança no modelo de dados (`kv.productHiddenTags`) ou em `isHiddenItem`/`metrics.js`, só de onde a
+  UI de controle é servida. Mesmo padrão de separação já usado pro Unificador "de verdade" (grupos de
+  produto, ver 4.18): controle centralizado, efeito exibido onde faz sentido pro negócio.
+- **Endpoints agora admin-only** (`server.js`, `requireAdmin` — mudou de não-admin pra admin nessa
+  mesma correção, já que a única tela que os chama virou o Unificador, que já é admin-only):
   `GET /api/product-hidden-tags?market=`, `POST /api/product-hidden-tags` (`{market,tags}`, array —
   adiciona), `POST /api/product-hidden-tags/remove` (`{market,tag}`).
 - **Testado localmente (sem rede, mesmo método das rodadas anteriores):** pedido sintético com tag
@@ -1819,7 +1829,7 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - `GET /api/products/export?market=us&channel=shopify_us&since=&until=` — exporta CSV com quantidade vendida/receita/ticket médio por produto. Só Shopify US por enquanto. Usado pelo botão "Exportar" da tela de Produtos. Ver 4.13.2.
   - `GET /api/product-groups?market=br|us` (admin) — grupos de unificação manual de produtos do mercado (Unificador, ver 4.18). `POST /api/product-groups` (`{market,name,members}`) cria/adiciona a um grupo. `POST /api/product-groups/remove-member` (`{market,name,title}`) tira um membro. `DELETE /api/product-groups?market=&name=` apaga o grupo. Persistido em `kv.productGroups`. `GET/POST /api/product-groups/config` (`{enabled}`) — liga/desliga global, padrão ligado. `GET /api/product-groups/catalog?market=` — catálogo completo (todo canal, todo histórico) achatado, pra tela escolher produtos. Todos usados só por `unificador.html`.
   - `GET /api/product-types?market=br|us` — regras de "Tipos de produto" do mercado (Segmentos, ver 4.19), não admin. `POST /api/product-types` (`{market,name,keywords}`) cria/adiciona palavra(s)-chave a um tipo. `POST /api/product-types/remove-keyword` (`{market,name,keyword}`) tira uma palavra-chave. `DELETE /api/product-types?market=&name=` apaga o tipo. Persistido em `kv.productTypeGroups`.
-  - `GET /api/product-hidden-tags?market=br|us` — palavras-chave de "Ocultar produtos" do mercado (Segmentos, ver 4.21), não admin. `POST /api/product-hidden-tags` (`{market,tags}`) adiciona palavra(s)-chave. `POST /api/product-hidden-tags/remove` (`{market,tag}`) tira uma. Persistido em `kv.productHiddenTags`.
+  - `GET /api/product-hidden-tags?market=br|us` (admin) — palavras-chave de "Ocultar produtos", controladas no Unificador (efeito exibido em Segmentos, ver 4.21). `POST /api/product-hidden-tags` (`{market,tags}`) adiciona palavra(s)-chave. `POST /api/product-hidden-tags/remove` (`{market,tag}`) tira uma. Persistido em `kv.productHiddenTags`.
   - `POST /api/products/finance` — salva/edita COG, frete, % impostos ou % comissão de um produto (`{ channel, title, cog?, shipping?, taxPct?, commissionPct? }`), persistido em `kv.productFinance`. Ver 4.13.1.
   - `GET /api/stock?market=br|us` — estoque + produção por canal (`channels`) e por família de produto somando todos os canais (`agg`), janela fixa de 30 dias (sem `since`/`until` — calculado internamente). Usado pela tela de Estoque (`estoque.html`). Ver 4.14.
   - `POST /api/stock/finance` — salva/edita estoque ou recebendo de um produto, por canal (`{ channel, title, stock?, incoming? }`), persistido em `kv.productStock`. Ver 4.14.
