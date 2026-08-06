@@ -322,7 +322,7 @@ function applyProductGroups(list, groups, opts = {}) {
 // Canais Shopify com catálogo bruto sincronizado (kv.shopifyProductCatalog, ver sync.js) por
 // mercado — únicos com um "produto cadastrado" separado de "produto vendido" hoje; Shopee/ML/
 // Amazon continuam só derivados de pedido (sem endpoint de catálogo integrado ainda).
-const SHOPIFY_CATALOG_CHANNELS = { br: ['shopify', 'yucaloo_br'], us: ['shopify_us'] };
+const SHOPIFY_CATALOG_CHANNELS = { br: ['shopify', 'yucaloo_br'], us: ['shopify_us', 'yucaloo_us'] };
 
 // Catálogo completo (todo o histórico, todos os canais) de um mercado, achatado numa lista só —
 // usado pela tela Unificador pra listar todo produto disponível pra agrupar manualmente.

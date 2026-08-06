@@ -179,6 +179,22 @@ async function doSync() {
     } catch (e) { report.errors.push('shopify_us.catalog: ' + e.message); }
   } else { report.disabled.push('shopify_us'); }
 
+  // Yucaloo EUA — pedidos + catálogo (Shopify, mesmo padrão da Yucaloo BR acima). market:'us',
+  // channel próprio "yucaloo_us". Ver CLAUDE.md 4.20.
+  if (isIntegrationEnabled('yucaloo_us')) {
+    try {
+      const orders = await shopifyYucaloo.fetchOrders(since, until, 'us');
+      upsertOrders(orders);
+      report.yucaloo_us = orders.length;
+    } catch (e) { report.errors.push('yucaloo_us.orders: ' + e.message); }
+
+    try {
+      const catalog = await shopifyYucaloo.fetchProductCatalog('us');
+      setShopifyProductCatalog('yucaloo_us', catalog);
+      report.yucaloo_us_catalog = catalog.length;
+    } catch (e) { report.errors.push('yucaloo_us.catalog: ' + e.message); }
+  } else { report.disabled.push('yucaloo_us'); }
+
   // Amazon US + BR — amazon.js decide sozinho se combina numa chamada só (tokens
   // ainda idênticos, mesma conta/cota) ou faz duas separadas (tokens já distintos).
   // Backoff gerenciado internamente em amazon.js. Ver CLAUDE.md 4.7.
