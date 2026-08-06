@@ -1802,6 +1802,13 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
     Segmentos pros que JÁ têm alguma venda. Testado localmente (mesmo método): produto só-catálogo
     (nunca vendido) e produto já vendido, ambos com tag cadastrada, os dois retornam `hidden:true` de
     `listProductCatalog()`; sem a tag, `hidden:false` nos dois.
+- **Card "Ocultos" (Segmentos) ganhou botão de esconder/mostrar (06/08/2026):** pedido do Luan —
+  `#hiddenCollapseBtn` (chevron no canto do título) alterna a visibilidade do corpo do card
+  (`#hiddenCardBody` — a lista de produtos + o link "Gerenciar no Unificador"), sem afetar o
+  cálculo/efeito de ocultar em si (só esconde o CARD, não desfaz a ocultação de nenhum produto).
+  Estado persistido em `localStorage('coco_seg_hiddencard_collapsed')`, sobrevive a reload — mesmo
+  princípio de coleção de estado já usado nos cards de Produtos/Estoque, só que aqui é um card único
+  (não uma lista deles), então não precisou da lógica de "só o primeiro aberto".
 
 ## 5. Modelo de dados (pedido normalizado)
 

@@ -162,6 +162,8 @@
   .other-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-top:16px}
   .other-card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:10px;display:flex;align-items:center;gap:8px}
   .other-note{font-size:11px;color:var(--muted)}
+  .other-card-collapse{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:6px;font-size:12px;line-height:1}
+  .other-card-collapse:hover{background:var(--surface2);color:var(--text)}
 
   /* ── Onde os produtos vendem (mapa + ranking por estado) ── */
   .geo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px 14px;margin-top:16px}
@@ -431,9 +433,12 @@
       <div class="other-card-title">
         <i class="bi bi-eye-slash"></i> Ocultos
         <span class="other-note">— produtos cuja tag bateu com uma palavra-chave que você cadastrou</span>
+        <button class="other-card-collapse" id="hiddenCollapseBtn" title="Esconder/mostrar"><i class="bi bi-chevron-up"></i></button>
       </div>
-      <div class="seg-prod-list" id="hiddenList"></div>
-      <a href="/unificador" class="other-note" style="display:inline-block;margin-top:8px">Gerenciar palavras-chave no Unificador →</a>
+      <div id="hiddenCardBody">
+        <div class="seg-prod-list" id="hiddenList"></div>
+        <a href="/unificador" class="other-note" style="display:inline-block;margin-top:8px">Gerenciar palavras-chave no Unificador →</a>
+      </div>
     </div>
 
     <!-- Onde os produtos vendem -->
@@ -729,12 +734,27 @@ function renderOther(segs) {
   document.getElementById('otherList').innerHTML = prodByTypeGroupHtml(other.topProducts, 'other');
 }
 
+// Esconder/mostrar o card "Ocultos" inteiro (não confundir com o que ele mostra — isso só
+// esconde o CARD, o produto continua oculto normalmente). Persistido, sobrevive a reload.
+let hiddenCardCollapsed = localStorage.getItem('coco_seg_hiddencard_collapsed') === '1';
+function applyHiddenCardCollapse() {
+  document.getElementById('hiddenCardBody').style.display = hiddenCardCollapsed ? 'none' : '';
+  document.getElementById('hiddenCollapseBtn').innerHTML = `<i class="bi bi-chevron-${hiddenCardCollapsed ? 'down' : 'up'}"></i>`;
+}
+function toggleHiddenCardCollapse() {
+  hiddenCardCollapsed = !hiddenCardCollapsed;
+  localStorage.setItem('coco_seg_hiddencard_collapsed', hiddenCardCollapsed ? '1' : '0');
+  applyHiddenCardCollapse();
+}
+document.getElementById('hiddenCollapseBtn').addEventListener('click', toggleHiddenCardCollapse);
+
 function renderHidden(segs) {
   const hidden = segs.hidden;
   const card = document.getElementById('hiddenCard');
   if (!hidden || hidden.units === 0) { card.style.display = 'none'; return; }
   card.style.display = '';
   document.getElementById('hiddenList').innerHTML = prodByTypeGroupHtml(hidden.topProducts, 'hidden');
+  applyHiddenCardCollapse();
 }
 
 // ── Onde os produtos vendem (mapa + ranking por estado, por produto) ──
