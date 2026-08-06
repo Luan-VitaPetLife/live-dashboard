@@ -1609,13 +1609,35 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   Luan em `public/logos-integracao/` junto com `Yucaloo1.svg`, a versão maior — não usada em nenhuma
   tela ainda). Sem o arquivo presente, o `onerror` do `integracoes.html` já cai no ícone genérico de
   categoria "geral" (🏪) sem quebrar nada, mesmo padrão de qualquer outro logo faltando (ver 4.17).
+- **Sync de pedidos ligado (implementado 06/08/2026, a pedido do Luan — "vamos puxar os pedidos...
+  puxe primariamente do Shopify"):** `shopifyYucaloo.fetchOrders(sinceISO, untilISO, mkt)` reaproveita
+  `shopify.js`'s `fetchOrders()` (a mesma função já usada por Shopify BR/US — aceita `cfg.store`/
+  `cfg.token` por chamada, então não duplicou a query GraphQL) passando o `shop`/`accessToken` salvos
+  em `kv.yucalooTokens[mkt]`. Devolve `[]` sem erro se ainda não conectado (não quebra o sync).
+  - **⚠️ Decisão importante — `market`/`channel` PRÓPRIOS (`'yucaloo_br'`/`'yucaloo_us'`), nunca
+    `'br'`/`'us'`:** a Yucaloo convive no mesmo país que a Coco and Luna (ver início desta seção) —
+    reaproveitar `market: 'br'` misturaria a receita das duas marcas em toda a dashboard atual
+    (KPIs, Top Produtos, Estoque, Segmentos, Geografia — tudo que hoje só sabe filtrar por
+    `market`), já que a dimensão de `brand` (linha abaixo) ainda não existe. Usar um valor de
+    `market` totalmente à parte é o jeito seguro de já trazer os pedidos pro banco sem contaminar
+    nenhum número existente: o índice em memória do `store.js` (`rebuildOrdersIndex`, ver seção 3)
+    agrupa por `market` de forma genérica — qualquer string vira seu próprio balde isolado, sem
+    precisar de nenhuma mudança de código lá.
+  - Wiring em `sync.js`: bloco próprio logo depois do Shopify BR, atrás do toggle
+    `isIntegrationEnabled('yucaloo_br')` (já criado no card de Integrações, ver acima) —
+    `report.yucaloo_br` no retorno de `runSync()`/`POST /api/sync`.
+  - **Fora de escopo desta rodada, de propósito:** sessões/funil (ShopifyQL) da Yucaloo — só pedidos
+    foram pedidos. Bling **não** é a fonte aqui, mesmo os 3 pedidos também aparecendo lá — decisão
+    explícita do Luan de puxar primariamente do Shopify.
+- **⚠️ Consequência de propósito — nenhuma tela mostra esses pedidos ainda:** como `market` é
+  `'yucaloo_br'` (não `'br'`), nada em `index.html`/`produtos.html`/`estoque.html`/`segmentos.html`/
+  Geografia consulta esse valor — os pedidos ficam gravados e prontos, mas invisíveis em qualquer UI
+  até a dimensão de marca (`brand`) ser desenhada e implementada (próximo item).
 - **Ainda faltando:** criar o app Yucaloo US na Dev Dashboard e repetir o processo (variáveis
-  `YUCALOO_US_*`, ver seção 6); decidir e implementar a dimensão de marca (`brand`) em todo o
-  pipeline; um `fetchOrders` pra Yucaloo (pode reaproveitar boa parte de `shopify.js`, que já aceita
-  `cfg.store`/`cfg.token`/`cfg.version` por chamada — não precisa duplicar a query GraphQL, só passar
-  o token/loja da Yucaloo em vez do fixo via `.env`); wiring em `sync.js`; novo seletor de marca na UI
-  (ao lado do de mercado). Até essas peças existirem, o card de Integrações mostra "Conectada" mas
-  nenhum pedido da Yucaloo aparece em nenhuma tela — o handshake por si só não alimenta a dashboard.
+  `YUCALOO_US_*`, ver seção 6 — o `fetchOrders(..., 'us')` já funciona sozinho assim que
+  `kv.yucalooTokens.us` existir, sem nenhuma mudança de código); decidir e implementar a dimensão de
+  marca (`brand`) em todo o pipeline — server.js/metrics.js/store.js/UI — pra Yucaloo ganhar telas
+  de verdade (hoje só existe como linha crua no banco).
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -1749,7 +1771,7 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 | Amazon BR | ✅ | `A2Q3Y263D00KWC`, app próprio da conta CocoandLuna desde 04/08/2026 (era token da conta errada) | 4.7.11 |
 | Meta Ads BR/US | ✅ | contas separadas (`META_AD_ACCOUNT_ID` / `META_US_AD_ACCOUNT_ID`) | 4.4 |
 | Google Ads | ✅ | só EUA, Customer ID `1344114329`; aparece na tela de Campanhas (US) | 4.12 |
-| Yucaloo BR (Shopify) | 🟡 | handshake OAuth conectado (06/08/2026); ainda sem `fetchOrders`/sync/UI — não alimenta nenhuma tela | 4.20 |
+| Yucaloo BR (Shopify) | 🟡 | conectada e sincronizando pedidos (`market: 'yucaloo_br'`, isolado da Coco and Luna); ainda sem UI própria | 4.20 |
 | Yucaloo US (Shopify) | ⬜ | app ainda não criado na Dev Dashboard | 4.20 |
 
 - **Amazon — dois apps SP-API separados desde 04/08/2026** (ver 4.7.11): o app dos EUA (`AMAZON_CLIENT_ID/SECRET`,

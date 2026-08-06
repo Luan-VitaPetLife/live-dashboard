@@ -18,6 +18,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import { getYucalooTokens, setYucalooTokens } from './store.js';
+import { fetchOrders as fetchShopifyOrders } from './shopify.js';
 
 // read_all_orders exige read_orders junto (a Shopify recusa o OAuth com
 // "missing_read_orders_scope" se só o primeiro vier) — confirmado ao vivo
@@ -93,4 +94,24 @@ export async function exchangeCode(mkt, shop, code) {
   tokens[mkt] = { shop, accessToken: json.access_token, scope: json.scope, obtainedAt: new Date().toISOString() };
   setYucalooTokens(tokens);
   return tokens[mkt];
+}
+
+// Pedidos da Yucaloo — reaproveita fetchOrders de shopify.js (já aceita
+// store/token por chamada, mesmo mecanismo usado pro Shopify US). Tag de
+// market própria ("yucaloo_br"/"yucaloo_us"), NUNCA "br"/"us" — a Yucaloo é
+// uma marca separada da Coco and Luna e convive no mesmo país; usar o mesmo
+// valor de market misturaria a receita das duas marcas em todo o resto do
+// app (dashboard, produtos, estoque, segmentos), que hoje só sabe filtrar
+// por mercado. Ver CLAUDE.md 4.20 — dimensão de marca ainda não existe,
+// isso é o jeito seguro de já trazer os pedidos sem contaminar nada.
+export async function fetchOrders(sinceISO, untilISO, mkt) {
+  const t = getYucalooTokens()[mkt];
+  if (!t?.accessToken) return []; // ainda não conectado — não quebra o sync
+  return fetchShopifyOrders(sinceISO, untilISO, {
+    store: t.shop,
+    token: t.accessToken,
+    market: `yucaloo_${mkt}`,
+    channel: `yucaloo_${mkt}`,
+    tz: mkt === 'us' ? 'Z' : '-03:00',
+  });
 }
