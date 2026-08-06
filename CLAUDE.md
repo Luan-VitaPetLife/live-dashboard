@@ -1528,12 +1528,18 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
 
 ### 4.20 Yucaloo — 2ª marca, integração Shopify em andamento (iniciada 06/08/2026)
 - **Yucaloo é uma marca própria da Vita Pet Life, distinta da Coco and Luna**, com loja(s) Shopify
-  separadas (BR confirmado; US mencionado pelo Luan, ainda não configurado). Convive no mesmo país
-  (BR) que a Coco and Luna — então, ao contrário de BR/US (que é geografia), Yucaloo vai exigir uma
-  dimensão nova e ortogonal ao `market` de sempre (provavelmente um campo `brand`), tocando
-  `store.js`/`shopify.js`/`metrics.js`/`server.js`/UI. **Essa arquitetura ainda não foi feita** — o
-  que existe até agora é só o handshake de autenticação (ver abaixo), sem nenhuma leitura de pedido,
-  sync ou UI ainda ligados a isso.
+  separadas (BR confirmado; US mencionado pelo Luan, ainda não configurado).
+- **⚠️ Decisão de negócio (confirmada pelo Luan, 06/08/2026) — NÃO existe (por enquanto) uma dimensão
+  de "marca" separada de `market`:** a suposição inicial era que, como a Yucaloo convive no mesmo país
+  (BR) que a Coco and Luna, seria necessário um campo `brand` novo e ortogonal ao `market` de sempre,
+  tocando `store.js`/`shopify.js`/`metrics.js`/`server.js`/UI. **O Luan corrigiu isso:** no Brasil a
+  Yucaloo é vendida junto com os mesmos marketplaces da Coco and Luna, e ele quer ver tudo junto ao
+  escolher só "Brasil"/"EUA" — sem escolher marca e depois país. Por isso os pedidos da Yucaloo usam
+  o **mesmo `market`** (`'br'`/`'us'`) que a Coco and Luna, só com `channel` próprio
+  (`'yucaloo_br'`/`'yucaloo_us'`) pra manter rastreável de onde vieram. Ver o histórico completo
+  dessa decisão (e a reversão de uma tentativa inicial de isolar por `market`) mais abaixo, no bloco
+  "Sync de pedidos ligado". Uma dimensão de marca de verdade só faria sentido "quando tiver mais
+  marcas" (palavras do Luan) — não é um problema a resolver agora.
 - **Diferença-chave do app Shopify da Coco and Luna:** a loja Yucaloo BR já nasceu no sistema **Dev
   Dashboard novo da Shopify** (`dev.shopify.com/dashboard`) — o botão clássico "Desenvolver apps"
   dentro do admin da própria loja (usado pela Coco and Luna, ver seção 6) hoje só redireciona pra lá,
@@ -1613,48 +1619,56 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   puxe primariamente do Shopify"):** `shopifyYucaloo.fetchOrders(sinceISO, untilISO, mkt)` reaproveita
   `shopify.js`'s `fetchOrders()` (a mesma função já usada por Shopify BR/US — aceita `cfg.store`/
   `cfg.token` por chamada, então não duplicou a query GraphQL) passando o `shop`/`accessToken` salvos
-  em `kv.yucalooTokens[mkt]`. Devolve `[]` sem erro se ainda não conectado (não quebra o sync).
-  - **⚠️ Decisão importante — `market`/`channel` PRÓPRIOS (`'yucaloo_br'`/`'yucaloo_us'`), nunca
-    `'br'`/`'us'`:** a Yucaloo convive no mesmo país que a Coco and Luna (ver início desta seção) —
-    reaproveitar `market: 'br'` misturaria a receita das duas marcas em toda a dashboard atual
-    (KPIs, Top Produtos, Estoque, Segmentos, Geografia — tudo que hoje só sabe filtrar por
-    `market`), já que a dimensão de `brand` (linha abaixo) ainda não existe. Usar um valor de
-    `market` totalmente à parte é o jeito seguro de já trazer os pedidos pro banco sem contaminar
-    nenhum número existente: o índice em memória do `store.js` (`rebuildOrdersIndex`, ver seção 3)
-    agrupa por `market` de forma genérica — qualquer string vira seu próprio balde isolado, sem
-    precisar de nenhuma mudança de código lá.
-  - Wiring em `sync.js`: bloco próprio logo depois do Shopify BR, atrás do toggle
-    `isIntegrationEnabled('yucaloo_br')` (já criado no card de Integrações, ver acima) —
-    `report.yucaloo_br` no retorno de `runSync()`/`POST /api/sync`.
-  - **Fora de escopo desta rodada, de propósito:** sessões/funil (ShopifyQL) da Yucaloo — só pedidos
-    foram pedidos. Bling **não** é a fonte aqui, mesmo os 3 pedidos também aparecendo lá — decisão
-    explícita do Luan de puxar primariamente do Shopify.
-- **⚠️ Consequência de propósito — nenhuma tela de dashboard mostra esses pedidos ainda:** como
-  `market` é `'yucaloo_br'` (não `'br'`), nada em `index.html`/`produtos.html`/`estoque.html`/
-  `segmentos.html`/Geografia consulta esse valor — os pedidos ficam gravados e prontos, mas
-  invisíveis em qualquer tela de negócio até a dimensão de marca (`brand`) ser desenhada e
-  implementada (próximo item).
-- **Exceção — Unificador já enxerga a Yucaloo BR (implementado 06/08/2026, mesmo dia — o Luan reportou
-  que os produtos não apareciam pra unificar):** `unificador.html` ganhou um terceiro botão no toggle
-  de mercado, **"Yucaloo BR"** (`setMarket('yucaloo_br')`), ao lado de Brasil/EUA — nenhuma mudança de
-  backend foi necessária: `listProductCatalog({market})`/`GET /api/product-groups/catalog` já eram
-  agnósticos de mercado (só repassam a string pro `getOrders({market})`, que já indexa qualquer valor
-  genericamente, ver acima), então bastou expor a opção na UI. **Cuidado que valeu a pena** —
-  `coco_market` é a chave de `localStorage` COMPARTILHADA com todas as outras telas (índice, produtos,
-  estoque...) pra manter BR/US sincronizado entre páginas; gravar `'yucaloo_br'` nela faria essas
-  outras telas herdarem um valor de mercado que não sabem tratar. `setMarket()` só persiste ali quando
-  `m` é `'br'`/`'us'` — a escolha "Yucaloo BR" fica só na sessão desta página, sem vazar. Badge de
-  canal `yucaloo_br` ganhou cor própria em `colors.js` (`DEFAULT_CH`, roxo `#6a5ab5`, label "Yucaloo")
-  pra não cair no cinza genérico de canal desconhecido. **Continua só aqui** — os outros consumidores
-  de `market` (dashboard principal, Produtos, Estoque, Segmentos, Geografia) não ganharam a opção
-  Yucaloo nesta rodada; é sinal exatamente do buraco que falta preencher (dimensão de marca, ver
-  abaixo), não uma inconsistência a corrigir depois — Unificador só precisava do catálogo bruto por
-  título, as outras telas mostram KPI/gráfico/mapa que fazem sentido pra um "mercado" de verdade.
+  em `kv.yucalooTokens[mkt]`. Devolve `[]` sem erro se ainda não conectado (não quebra o sync). Wiring
+  em `sync.js`: bloco próprio logo depois do Shopify BR, atrás do toggle `isIntegrationEnabled
+  ('yucaloo_br')` (já criado no card de Integrações) — `report.yucaloo_br` no retorno de `runSync()`/
+  `POST /api/sync`. **Fora de escopo, de propósito:** sessões/funil (ShopifyQL) da Yucaloo — só
+  pedidos foram pedidos. Bling **não** é a fonte, mesmo os pedidos também aparecendo lá — decisão
+  explícita do Luan de puxar primariamente do Shopify.
+- **⚠️ REVERTIDO no mesmo dia — `market` É `'br'`/`'us'` (o MESMO da Coco and Luna), não um valor à
+  parte:** a primeira versão desta seção (linhas acima, já corrigidas) tagueava os pedidos como
+  `market: 'yucaloo_br'`, deliberadamente isolado, com a justificativa de que misturar marcas
+  distintas no mesmo balde de mercado inflaria a receita da Coco and Luna por engano. O Luan corrigiu
+  essa premissa: **no Brasil a Yucaloo é vendida junto com os mesmos marketplaces da Coco and Luna**
+  ("estamos vendendo elas junto com o marketplaces da Coco and Luna") — ele **quer** ver tudo junto
+  ao escolher só "Brasil"/"EUA", sem um passo extra de escolher marca e depois país ("é algo que
+  podemos pensar depois, quando tiver mais marcas"). Ou seja, o pressuposto de que marcas diferentes
+  = mercados diferentes estava errado pra este caso de negócio específico. **Correção:**
+  `shopifyYucaloo.fetchOrders()` agora usa `market: mkt` (literal `'br'`/`'us'`, igual a qualquer
+  outro canal desse mercado) — os pedidos da Yucaloo passam a contar em TODOS os agregados de
+  `market==='br'` automaticamente: KPI de receita/pedidos (`computeDashboard`, `getOrders({channel:
+  'todos', market})` não filtra por canal), `channelSplit`/"Canais" (`byChannel[o.channel]` é
+  populado dinamicamente por canal encontrado, não uma lista fixa — ganha a chave `yucaloo_br`
+  sozinho), catálogo do Unificador (`listProductCatalog`), Segmentos, Produtos — **sem precisar de
+  nenhuma mudança de código nesses lugares**, confirmado com um teste local inserindo um pedido
+  sintético `market:'br', channel:'yucaloo_br'` e rodando `computeDashboard`/`listProductCatalog`
+  contra ele. **O `channel` continua próprio** (`'yucaloo_br'`, não virou `'shopify'`) — é o que
+  permite ainda saber que aquele pedido veio da loja Shopify da Yucaloo (badge, filtro futuro) sem
+  misturar com o canal "shopify" da Coco and Luna, mesmo os dois estando agora no mesmo `market`.
+  - **O terceiro botão "Yucaloo BR" que tinha sido adicionado ao Unificador nesse meio-tempo (ver
+    histórico do commit — market isolado, seletor dedicado) foi REMOVIDO no mesmo dia** — ficou
+    redundante: escolher "Brasil" normalmente já mostra os produtos da Yucaloo junto com os da Coco
+    and Luna, exatamente como pedido. Não sobrou nenhum vestígio dessa UI à parte.
+  - **Cores dos canais desconhecidos NÃO caem mais no cinza genérico:** `colors.js` (`DEFAULT_CH`)
+    ganhou uma entrada própria pro canal `yucaloo_br` — cor primária da marca, **`#4466FF`** (fornecida
+    pelo Luan), label "Yucaloo". Badges em qualquer tela que já usa `CocoColors.chBadgeHTML()`
+    (Unificador, Top Produtos, etc.) mostram essa cor automaticamente.
+  - **Não afetado por essa mudança:** `kv.yucalooTokens`, o handshake OAuth, o toggle de Integrações
+    (`yucaloo_br`/`yucaloo_us`) — nada disso dependia do valor de `market`, só o `fetchOrders()` que
+    grava os pedidos mudou.
+- **Ainda parcial, de propósito — nem tudo mostra a Yucaloo automaticamente:** telas que iteram uma
+  lista FIXA de canais conhecidos (em vez de descobrir canais dinamicamente pelos dados, como
+  `channelSplit` faz) — `CHANNELS_BR` em `produtos.html`/`estoque.html` (um card por canal),
+  `campanhas.html`, o dropdown de canal do `index.html` (`buildChannelDropdown()`) — **não** ganham
+  uma entrada "Yucaloo" só por causa dessa mudança; a receita dela entra nos agregados "Todos" dessas
+  telas, mas ela não vira um card/filtro dedicado ainda. Adicionar isso a cada tela é trabalho
+  separado, não pedido nesta rodada (o pedido foi "colocar os produtos junto com os outros", que já
+  está resolvido pro catálogo/Segmentos/receita geral).
 - **Ainda faltando:** criar o app Yucaloo US na Dev Dashboard e repetir o processo (variáveis
   `YUCALOO_US_*`, ver seção 6 — o `fetchOrders(..., 'us')` já funciona sozinho assim que
-  `kv.yucalooTokens.us` existir, sem nenhuma mudança de código); decidir e implementar a dimensão de
-  marca (`brand`) em todo o pipeline — server.js/metrics.js/store.js/UI — pra Yucaloo ganhar telas
-  de verdade (hoje só existe como linha crua no banco).
+  `kv.yucalooTokens.us` existir, gravando em `market:'us'` junto com o Shopify US, sem nenhuma
+  mudança de código); um card/filtro dedicado da Yucaloo nas telas de lista fixa acima, se o Luan
+  quiser depois.
 
 ## 5. Modelo de dados (pedido normalizado)
 
@@ -1788,7 +1802,7 @@ Resumo do estado de cada canal — o "como funciona" e as armadilhas ficam na se
 | Amazon BR | ✅ | `A2Q3Y263D00KWC`, app próprio da conta CocoandLuna desde 04/08/2026 (era token da conta errada) | 4.7.11 |
 | Meta Ads BR/US | ✅ | contas separadas (`META_AD_ACCOUNT_ID` / `META_US_AD_ACCOUNT_ID`) | 4.4 |
 | Google Ads | ✅ | só EUA, Customer ID `1344114329`; aparece na tela de Campanhas (US) | 4.12 |
-| Yucaloo BR (Shopify) | 🟡 | conectada e sincronizando pedidos (`market: 'yucaloo_br'`, isolado da Coco and Luna); ainda sem UI própria | 4.20 |
+| Yucaloo BR (Shopify) | 🟡 | conectada e sincronizando pedidos — `market:'br'`, MESCLADA com a Coco and Luna (decisão do Luan); `channel:'yucaloo_br'` rastreável, sem card/filtro dedicado ainda | 4.20 |
 | Yucaloo US (Shopify) | ⬜ | app ainda não criado na Dev Dashboard | 4.20 |
 
 - **Amazon — dois apps SP-API separados desde 04/08/2026** (ver 4.7.11): o app dos EUA (`AMAZON_CLIENT_ID/SECRET`,
