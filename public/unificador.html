@@ -259,6 +259,13 @@
         <div id="groupsWrap" style="display:flex;flex-direction:column;gap:14px"></div>
       </div>
     </div>
+
+    <div class="uni-col" id="hiddenSection" style="margin-top:22px;display:none">
+      <div class="uni-col-head">
+        <span class="uni-col-title"><i class="bi bi-eye-slash"></i> Ocultos</span><span class="uni-col-count" id="hiddenCount"></span>
+      </div>
+      <div id="hiddenPlainList"></div>
+    </div>
   </div>
 </div>
 
@@ -428,6 +435,7 @@ function matchesSearch(title){
 function render(){
   renderGroups();
   renderPlainList();
+  renderHiddenList();
   updateSelectBar();
 }
 
@@ -525,12 +533,24 @@ function renderGroups(){
   wrap.innerHTML = `<div class="group-compact">${rows}</div>${expandedHtml}`;
 }
 
+// Um título conta como oculto se QUALQUER linha dele (pode haver mais de uma — mesmo título em
+// canais diferentes) bateu com alguma palavra-chave de "Ocultar produtos" (ver metrics.js isHiddenItem).
 function ungroupedTitles(){
   const usedTitles = new Set(Object.values(groups).flat());
   const seen = new Set();
   const out = [];
   for(const c of catalog){
-    if(usedTitles.has(c.title) || seen.has(c.title)) continue;
+    if(usedTitles.has(c.title) || seen.has(c.title) || c.hidden) continue;
+    seen.add(c.title);
+    out.push(c.title);
+  }
+  return out;
+}
+function hiddenTitles(){
+  const seen = new Set();
+  const out = [];
+  for(const c of catalog){
+    if(!c.hidden || seen.has(c.title)) continue;
     seen.add(c.title);
     out.push(c.title);
   }
@@ -584,6 +604,26 @@ function renderPlainList(){
       : '';
     return `<div class="plain-row" draggable="${selectMode?'false':'true'}" data-drag-title="${escapeHtml(title)}">
       ${check}
+      ${thumbHtml(s.image, title)}
+      <span class="row-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+      ${channelBadges(s.channels)}
+      <span class="row-stat">${fmtInt(s.qty)} un · ${fmtMoney(s.revenue)}</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// Lista à parte (fora de "Sem grupo"/"Com grupo") dos produtos cujo título bateu com uma
+// palavra-chave de "Ocultar produtos" — só exibição, sem drag/seleção (gestão é pelo botão
+// "Ocultar produtos" no topo). Some inteiramente da tela quando não há nenhum oculto.
+function renderHiddenList(){
+  const section = $('hiddenSection');
+  const titles = hiddenTitles().filter(matchesSearch);
+  if(!titles.length){ section.style.display = 'none'; return; }
+  section.style.display = '';
+  $('hiddenCount').textContent = `(${titles.length})`;
+  $('hiddenPlainList').innerHTML = `<div class="plain-list">${titles.map(title => {
+    const s = summarize(rowsForTitle(title));
+    return `<div class="plain-row">
       ${thumbHtml(s.image, title)}
       <span class="row-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
       ${channelBadges(s.channels)}
@@ -872,6 +912,7 @@ async function hideAddTag(tag){
   if(!r.ok) { toast('Erro: ' + (d.error||'falha de rede'), true); return; }
   hideTags = d.tags || [];
   renderHideTags();
+  load(); // recarrega o catálogo pra refletir o novo produto oculto na hora
 }
 async function hideRemoveTag(tag){
   const r = await fetch('/api/product-hidden-tags/remove', {
@@ -882,6 +923,7 @@ async function hideRemoveTag(tag){
   if(!r.ok) return;
   hideTags = d.tags || [];
   renderHideTags();
+  load();
 }
 $('hideBtn').addEventListener('click', openHideModal);
 $('hideCloseBtn').addEventListener('click', closeHideModal);
