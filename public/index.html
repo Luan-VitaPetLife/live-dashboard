@@ -760,7 +760,7 @@ function showTrendDrilldown(label, val, byChannel, money, metric) {
 }
 
 // ── App state ──
-const CHAN = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', amazon_us:'Amazon US', mercadolivre:'Mercado Livre', shopify_us:'Shopify US', yucaloo_br:'Shopify - Yucaloo BR', yucaloo_us:'Shopify - Yucaloo EUA' };
+const CHAN = { todos:'Todos', shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', amazon:'Amazon BR', amazon_us:'Amazon EUA', mercadolivre:'Mercado Livre', shopify_us:'Shopify - Coco and Luna EUA', yucaloo_br:'Shopify - Yucaloo BR', yucaloo_us:'Shopify - Yucaloo EUA' };
 const MARKET_CHANNELS = {
   br: [
     { value:'todos',         label:'Todos' },
@@ -768,13 +768,13 @@ const MARKET_CHANNELS = {
     { value:'yucaloo_br',    label:'Shopify - Yucaloo BR' },
     { value:'shopee',        label:'Shopee' },
     { value:'mercadolivre',  label:'Mercado Livre' },
-    { value:'amazon',        label:'Amazon' },
+    { value:'amazon',        label:'Amazon BR' },
   ],
   us: [
     { value:'todos',      label:'Todos' },
     { value:'shopify_us', label:'Shopify - Coco and Luna EUA' },
     { value:'yucaloo_us', label:'Shopify - Yucaloo EUA' },
-    { value:'amazon_us', label:'Amazon US' },
+    { value:'amazon_us', label:'Amazon EUA' },
   ],
 };
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos', sessoes:'Sessões' };
@@ -1031,11 +1031,11 @@ function render(d) {
     (d.market === 'us' && (d.channel === 'todos' || d.channel === 'shopify_us'));
   const trafficSubEl = document.getElementById('trafficSub');
   if (d.market === 'us' && (d.channel === 'todos' || d.channel === 'shopify_us')) {
-    trafficSubEl.textContent = 'Shopify US · período selecionado';
+    trafficSubEl.textContent = 'Shopify - Coco and Luna EUA · período selecionado';
   } else if (d.market === 'us') {
-    trafficSubEl.textContent = 'Dados de sessão disponíveis apenas para Shopify US';
+    trafficSubEl.textContent = 'Dados de sessão disponíveis apenas para Shopify - Coco and Luna EUA';
   } else {
-    trafficSubEl.textContent = hasTraffic ? 'Shopify · período selecionado' : 'Dados de sessão disponíveis apenas para Shopify';
+    trafficSubEl.textContent = hasTraffic ? 'Shopify - Coco and Luna BR · período selecionado' : 'Dados de sessão disponíveis apenas para Shopify - Coco and Luna BR';
   }
   document.getElementById('mSessions').textContent = fmtInt(tf.sessions);
   document.getElementById('mSessionsMeta').textContent = tf.visitors?(tf.sessions/tf.visitors).toLocaleString('pt-BR',{maximumFractionDigits:1})+' por visitante':' ';

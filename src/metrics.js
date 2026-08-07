@@ -693,7 +693,12 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 // Diferente do `recentOrders` do dashboard, que só traz os mais recentes do período/canal: aqui
 // varremos TODOS os pedidos do mercado (todos os canais, sem janela de data). Escopo por mercado
 // para não misturar BRL/USD. Devolve o mesmo formato normalizado do `recentOrders`.
-const CH_LABEL = { shopify: 'Shopify', shopify_us: 'Shopify US', shopee: 'Shopee', mercadolivre: 'Mercado Livre', amazon: 'Amazon BR', amazon_us: 'Amazon US' };
+const CH_LABEL = {
+  shopify: 'Shopify - Coco and Luna BR', shopify_us: 'Shopify - Coco and Luna EUA',
+  shopee: 'Shopee', mercadolivre: 'Mercado Livre',
+  amazon: 'Amazon BR', amazon_us: 'Amazon EUA',
+  yucaloo_br: 'Shopify - Yucaloo BR', yucaloo_us: 'Shopify - Yucaloo EUA',
+};
 // Mesmo vocabulário Bling (Autorizado/Em aberto/Cancelado) do statusTag() em index.html — mantido
 // em sincronia pra buscar "em aberto" ou "autorizado" no campo de busca encontrar os pedidos certos.
 function statusLabelPt(o) {

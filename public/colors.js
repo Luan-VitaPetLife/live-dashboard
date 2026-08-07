@@ -17,8 +17,8 @@
     shopify_us:   { bg: '#ee4144', label: 'Shopify - Coco and Luna EUA' },
     shopee:       { bg: '#EE4D2D', label: 'Shopee' },
     mercadolivre: { bg: '#FFE600', label: 'Mercado Livre' },
-    amazon:       { bg: '#111111', label: 'Amazon' },
-    amazon_us:    { bg: '#FF9900', label: 'Amazon US' },
+    amazon:       { bg: '#111111', label: 'Amazon BR' },
+    amazon_us:    { bg: '#FF9900', label: 'Amazon EUA' },
     yucaloo_br:   { bg: '#4466ff', label: 'Shopify - Yucaloo BR' },
     yucaloo_us:   { bg: '#4466ff', label: 'Shopify - Yucaloo EUA' },
   };
