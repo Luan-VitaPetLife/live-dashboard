@@ -121,10 +121,10 @@
   /* ── Settings panel (mesmo padrão do Revenue) ── */
   .settings-btn{height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:14px;line-height:1;color:var(--sub);cursor:pointer;transition:all .15s}
   .settings-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
-  .sp-overlay{position:fixed;inset:0;background:rgba(30,28,24,.35);z-index:3500;display:none;backdrop-filter:blur(2px)}
+  .sp-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:3500;display:none;backdrop-filter:blur(2px)}
   .sp-overlay.open{display:block}
-  .sp-panel{position:fixed;top:0;right:0;width:300px;height:100vh;background:var(--surface);border-left:1px solid var(--border2);z-index:3600;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1)}
-  .sp-panel.open{transform:translateX(0)}
+  .sp-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;max-width:92vw;max-height:85vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.3);z-index:3600;display:none;flex-direction:column;overflow:hidden}
+  .sp-panel.open{display:flex}
   .sp-head{display:flex;align-items:center;justify-content:space-between;padding:20px 20px 16px;border-bottom:1px solid var(--border)}
   .sp-head-title{font-size:14px;font-weight:600;letter-spacing:-.2px}
   .sp-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px;line-height:1;transition:color .12s}
@@ -1081,6 +1081,7 @@ function closeSettings() { document.getElementById('spOverlay').classList.remove
 document.getElementById('settingsBtn').addEventListener('click', e => { e.stopPropagation(); openSettings(); });
 document.getElementById('spClose').addEventListener('click', closeSettings);
 document.getElementById('spOverlay').addEventListener('click', closeSettings);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
 
 document.getElementById('hcBorderW').addEventListener('input', e => { document.getElementById('hcBorderWVal').textContent = e.target.value; });
 document.getElementById('hcRadius').addEventListener('input', e => { document.getElementById('hcRadiusVal').textContent = e.target.value; });
