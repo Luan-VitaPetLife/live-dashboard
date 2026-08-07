@@ -7,6 +7,7 @@
 <link rel="icon" href="favicon.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="switch.css">
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -295,28 +296,9 @@
   /* ── Settings toggle switch ── */
   .sp-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--sub)}
   .sp-toggle-row:last-child{border-bottom:none}
-  .sp-switch{position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0}
-  .sp-switch input{opacity:0;width:0;height:0}
-  .sp-switch-slider{position:absolute;inset:0;background:#ccc;border-radius:9px;transition:.2s;cursor:pointer}
-  .sp-switch-slider::before{content:'';position:absolute;height:14px;width:14px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s}
-  input:checked+.sp-switch-slider{background:var(--ink)}
-  input:checked+.sp-switch-slider::before{transform:translateX(14px)}
 
-  /* ── Switch "Receita da Amazon" (Total cobrado × Vendas de produto) ── */
-  .arev-switch{ --switch_width:2em; --switch_height:1em; --thumb_color:var(--surface2);
-    --track_color:var(--border2); --track_active_color:var(--ink); --outline_color:var(--ink);
-    font-size:17px; position:relative; display:inline-block; width:var(--switch_width); height:var(--switch_height); flex-shrink:0; }
-  .arev-switch input{ opacity:0; width:0; height:0; }
-  .arev-slider{ box-sizing:border-box; border:2px solid var(--outline_color); position:absolute; cursor:pointer;
-    top:0; left:0; right:0; bottom:0; background-color:var(--track_color); transition:.15s; border-radius:var(--switch_height); }
-  .arev-slider::before{ box-sizing:border-box; position:absolute; content:''; height:var(--switch_height); width:var(--switch_height);
-    border:2px solid var(--outline_color); border-radius:100%; left:-2px; bottom:-2px; background-color:var(--thumb_color);
-    transform:translateY(-0.2em); box-shadow:0 0.2em 0 var(--outline_color); transition:.15s; }
-  .arev-switch input:checked+.arev-slider{ background-color:var(--track_active_color); }
-  .arev-switch input:focus-visible+.arev-slider{ box-shadow:0 0 0 2px var(--track_active_color); }
-  .arev-switch input:hover+.arev-slider::before{ transform:translateY(-0.3em); box-shadow:0 0.3em 0 var(--outline_color); }
-  .arev-switch input:checked+.arev-slider::before{ transform:translateX(calc(var(--switch_width) - var(--switch_height))) translateY(-0.2em); }
-  .arev-switch input:hover:checked+.arev-slider::before{ transform:translateX(calc(var(--switch_width) - var(--switch_height))) translateY(-0.3em); box-shadow:0 0.3em 0 var(--outline_color); }
+  /* ── "Receita da Amazon" (Total cobrado × Vendas de produto) — o switch em si vem de
+       switch.css (.ios-switch), aqui só o layout da linha ── */
   .arev-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); }
   .arev-row:last-child{ border-bottom:none; }
   .arev-labels{ font-size:12px; color:var(--sub); }
@@ -650,14 +632,14 @@
       <div class="sp-section-title">Análise de canais</div>
       <label class="sp-toggle-row">
         <span>Mostrar canais ao clicar no gráfico de tendência</span>
-        <label class="sp-switch"><input type="checkbox" id="toggleChanChart"><span class="sp-switch-slider"></span></label>
+        <label class="ios-switch"><input type="checkbox" class="ios-switch-input" id="toggleChanChart"><span class="ios-switch-track"><span class="ios-switch-thumb"></span></span></label>
       </label>
     </div>
     <div class="sp-section">
       <div class="sp-section-title">Receita da Amazon</div>
       <div class="arev-row">
         <span class="arev-labels"><b>Total cobrado</b> / Vendas de produto</span>
-        <label class="arev-switch"><input type="checkbox" id="toggleAmazonRev"><span class="arev-slider"></span></label>
+        <label class="ios-switch"><input type="checkbox" class="ios-switch-input" id="toggleAmazonRev"><span class="ios-switch-track"><span class="ios-switch-thumb"></span></span></label>
       </div>
       <div class="arev-caption">
         Desligado (padrão): total cobrado do cliente, produto mais imposto e frete, igual aos
