@@ -204,7 +204,7 @@
   /* ── Modal "Exportar pedidos" — colunas dinâmicas + pré-visualização ── */
   .exp-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:800;display:none;backdrop-filter:blur(2px)}
   .exp-modal-overlay.open{display:block}
-  .exp-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:560px;max-width:94vw;max-height:86vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.3);z-index:801;display:none;flex-direction:column;overflow:hidden}
+  .exp-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:760px;max-width:94vw;max-height:86vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.3);z-index:801;display:none;flex-direction:column;overflow:hidden}
   .exp-modal.open{display:flex}
   .exp-modal-head{flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
   .exp-modal-title{font-size:15px;font-weight:700;color:var(--ink)}
@@ -221,10 +221,12 @@
   .exp-col-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--surface2)}
   .exp-col-row.off{opacity:.5}
   .exp-col-row label{display:flex;align-items:center;gap:8px;flex:1;font-size:12px;color:var(--text);cursor:pointer;user-select:none}
-  .exp-col-arrows{display:flex;gap:2px;flex-shrink:0}
-  .exp-col-arrow{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 5px;font-size:11px;border-radius:4px}
-  .exp-col-arrow:hover:not(:disabled){background:var(--border2);color:var(--text)}
-  .exp-col-arrow:disabled{opacity:.25;cursor:default}
+  .exp-col-drag-handle{background:none;border:none;color:var(--muted);cursor:grab;padding:2px 5px;font-size:13px;border-radius:4px;flex-shrink:0;touch-action:none}
+  .exp-col-drag-handle:hover{background:var(--border2);color:var(--text)}
+  .exp-col-ghost{border:2px dashed var(--sage);border-radius:8px;background:rgba(106,140,110,.08)}
+  .exp-col-row-floating{position:fixed;z-index:900;pointer-events:none;box-shadow:0 10px 26px rgba(30,28,24,.22);opacity:.96}
+  body.exp-col-dragging-active{cursor:grabbing}
+  body.exp-col-dragging-active *{cursor:grabbing!important}
   .exp-preview-wrap{overflow-x:auto;border:1px solid var(--border2);border-radius:8px}
   .exp-preview-tbl{width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap}
   .exp-preview-tbl th{background:var(--surface2);text-align:left;padding:7px 10px;font-weight:700;color:var(--sub);border-bottom:1px solid var(--border2)}
@@ -615,7 +617,7 @@
       <button type="button" class="exp-status-opt" data-status="cancelado">Cancelado</button>
     </div>
 
-    <div class="exp-section-title">Colunas — marque as que quer, use as setas pra reordenar</div>
+    <div class="exp-section-title">Colunas — marque as que quer, arraste pela alça pra reordenar</div>
     <div id="expColsList" class="exp-cols-list"></div>
 
     <div class="exp-section-title">Pré-visualização</div>
@@ -1667,26 +1669,118 @@ function saveExportColState() { localStorage.setItem('coco_export_cols', JSON.st
 
 function renderExportCols() {
   const wrap = document.getElementById('expColsList');
-  wrap.innerHTML = exportCols.map((c, i) => `
-    <div class="exp-col-row${c.on ? '' : ' off'}">
-      <div class="exp-col-arrows">
-        <button type="button" class="exp-col-arrow" data-move="up" data-idx="${i}" ${i===0?'disabled':''} title="Subir"><i class="bi bi-chevron-up"></i></button>
-        <button type="button" class="exp-col-arrow" data-move="down" data-idx="${i}" ${i===exportCols.length-1?'disabled':''} title="Descer"><i class="bi bi-chevron-down"></i></button>
-      </div>
+  wrap.innerHTML = exportCols.map(c => `
+    <div class="exp-col-row${c.on ? '' : ' off'}" data-key="${c.key}">
+      <button type="button" class="exp-col-drag-handle" title="Arrastar para reordenar"><i class="bi bi-grip-vertical"></i></button>
       <label><input type="checkbox" data-toggle-col="${c.key}" ${c.on?'checked':''}> ${EXPORT_COLUMN_DEFS[c.key]}</label>
     </div>`).join('');
+  attachExportColDrag();
   renderExportPreview();
 }
+// Mapeia o filtro de status do export (mesmo vocabulário de statusTag(), ver UNPAID_STATUS_BY_CHANNEL
+// acima) pra classe interna — usado só pra filtrar a amostra da pré-visualização no cliente; o CSV de
+// verdade sempre filtra no backend (ver expDownloadBtn), aqui é só pra a prévia bater com o que foi
+// escolhido.
+const EXPORT_STATUS_CLS = { autorizado: 'ok', em_aberto: 'pend', cancelado: 'canc' };
 function renderExportPreview() {
   const onCols = exportCols.filter(c => c.on);
   const tbl = document.getElementById('expPreviewTbl');
   if (!onCols.length) { tbl.innerHTML = '<thead></thead><tbody><tr><td class="muted-state">Selecione ao menos uma coluna.</td></tr></tbody>'; return; }
-  const sample = (_roAll || []).slice(0, 5);
+  const wantCls = EXPORT_STATUS_CLS[_roExportStatus];
+  const pool = wantCls ? (_roAll || []).filter(o => statusTag(o).cls === wantCls) : (_roAll || []);
+  const sample = pool.slice(0, 5);
   const headHtml = '<tr>' + onCols.map(c => `<th>${EXPORT_COLUMN_DEFS[c.key]}</th>`).join('') + '</tr>';
   const bodyHtml = sample.length
     ? sample.map(o => '<tr>' + onCols.map(c => `<td>${escapeHtml(String(EXPORT_VALUE_GETTERS[c.key](o)))}</td>`).join('') + '</tr>').join('')
-    : `<tr><td colspan="${onCols.length}" class="muted-state">Sem pedidos carregados pra pré-visualizar.</td></tr>`;
+    : `<tr><td colspan="${onCols.length}" class="muted-state">${(_roAll||[]).length ? 'Nenhum pedido carregado bate com esse status, pra pré-visualizar.' : 'Sem pedidos carregados pra pré-visualizar.'}</td></tr>`;
   tbl.innerHTML = `<thead>${headHtml}</thead><tbody>${bodyHtml}</tbody>`;
+}
+
+// ── Arrastar pra reordenar as colunas do export (mesmo padrão pointer-based de produtos.html/
+// estoque.html — ver CLAUDE.md 4.13: DnD nativo do HTML5 já deu bug nesse projeto quando a alça fica
+// dentro de um ancestral draggable, então o arraste é rastreado via mousedown/mousemove/mouseup). ──
+let expDragRow = null, expDragGhost = null, expDragClone = null;
+let expDragGrabX = 0, expDragGrabY = 0, expDragStartX = 0, expDragStartY = 0, expDragStarted = false;
+const EXP_DRAG_THRESHOLD = 4;
+function getExpColAfterElement(container, y) {
+  const els = [...container.querySelectorAll('.exp-col-row')].filter(el => el !== expDragGhost);
+  let closest = null, closestDist = Infinity;
+  for (const el of els) {
+    const box = el.getBoundingClientRect();
+    const cy = box.top + box.height / 2;
+    const dist = Math.abs(y - cy);
+    if (dist < closestDist) { closestDist = dist; closest = { el, box }; }
+  }
+  if (!closest) return null;
+  const cy = closest.box.top + closest.box.height / 2;
+  return (y > cy) ? closest.el.nextElementSibling : closest.el;
+}
+function expColBeginDrag() {
+  expDragStarted = true;
+  const row = expDragRow;
+  const rect = row.getBoundingClientRect();
+  expDragGrabX = expDragStartX - rect.left;
+  expDragGrabY = expDragStartY - rect.top;
+
+  expDragGhost = document.createElement('div');
+  expDragGhost.className = 'exp-col-ghost';
+  expDragGhost.style.height = rect.height + 'px';
+  row.after(expDragGhost);
+
+  expDragClone = row.cloneNode(true);
+  expDragClone.classList.add('exp-col-row-floating');
+  expDragClone.style.width = rect.width + 'px';
+  expDragClone.style.left = rect.left + 'px';
+  expDragClone.style.top = rect.top + 'px';
+  document.body.appendChild(expDragClone);
+
+  row.remove();
+  document.body.classList.add('exp-col-dragging-active');
+}
+function expColPointerMove(e) {
+  if (!expDragStarted) {
+    if (Math.hypot(e.clientX - expDragStartX, e.clientY - expDragStartY) < EXP_DRAG_THRESHOLD) return;
+    expColBeginDrag();
+  }
+  expDragClone.style.left = (e.clientX - expDragGrabX) + 'px';
+  expDragClone.style.top = (e.clientY - expDragGrabY) + 'px';
+  const list = document.getElementById('expColsList');
+  const afterEl = getExpColAfterElement(list, e.clientY);
+  if (afterEl == null) list.appendChild(expDragGhost);
+  else if (afterEl !== expDragGhost) list.insertBefore(expDragGhost, afterEl);
+}
+function expColPointerUp() {
+  document.removeEventListener('mousemove', expColPointerMove);
+  document.removeEventListener('mouseup', expColPointerUp);
+  const row = expDragRow;
+  if (expDragStarted && row) {
+    const list = document.getElementById('expColsList');
+    list.insertBefore(row, expDragGhost);
+    const order = [...list.querySelectorAll('.exp-col-row')].map(r => r.dataset.key);
+    exportCols.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+    saveExportColState();
+    renderExportPreview();
+  }
+  if (expDragGhost) { expDragGhost.remove(); expDragGhost = null; }
+  if (expDragClone) { expDragClone.remove(); expDragClone = null; }
+  document.body.classList.remove('exp-col-dragging-active');
+  expDragRow = null;
+  expDragStarted = false;
+}
+function attachExportColDrag() {
+  const list = document.getElementById('expColsList');
+  list.querySelectorAll('.exp-col-row').forEach(row => {
+    row.querySelector('.exp-col-drag-handle')?.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      expDragRow = row;
+      expDragStartX = e.clientX;
+      expDragStartY = e.clientY;
+      expDragStarted = false;
+      document.addEventListener('mousemove', expColPointerMove);
+      document.addEventListener('mouseup', expColPointerUp);
+    });
+  });
 }
 
 function openExportModal() {
@@ -1710,18 +1804,9 @@ document.getElementById('expStatusRow').addEventListener('click', e => {
   document.querySelectorAll('#expStatusRow .exp-status-opt').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   _roExportStatus = btn.dataset.status;
+  renderExportPreview();
 });
 
-document.getElementById('expColsList').addEventListener('click', e => {
-  const arrow = e.target.closest('[data-move]');
-  if (!arrow) return;
-  const idx = Number(arrow.dataset.idx);
-  const swapIdx = idx + (arrow.dataset.move === 'up' ? -1 : 1);
-  if (swapIdx < 0 || swapIdx >= exportCols.length) return;
-  [exportCols[idx], exportCols[swapIdx]] = [exportCols[swapIdx], exportCols[idx]];
-  saveExportColState();
-  renderExportCols();
-});
 document.getElementById('expColsList').addEventListener('change', e => {
   const cb = e.target.closest('[data-toggle-col]');
   if (!cb) return;
