@@ -57,7 +57,7 @@
   /* ── Logo genérico (canal solto ou cabeçalho de família) ── */
   .integ-logo,.fam-logo,.fam-head-logo,.compact-logo{border-radius:8px;border:1px solid var(--border2);background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
   .integ-logo{width:44px;height:44px}
-  .integ-logo img{max-width:32px;max-height:32px;object-fit:contain}
+  .integ-logo img{max-width:40px;max-height:40px;object-fit:contain}
   .integ-logo i{font-size:18px;color:var(--muted)}
   .fam-logo{width:32px;height:32px;border-radius:7px}
   .fam-logo img{max-width:22px;max-height:22px;object-fit:contain}
@@ -79,12 +79,19 @@
        cabeçalho, ao lado da contagem de conectadas — sem repetir o nome em texto (os cards dos
        membros já dizem quem são: "Shopify - Coco and Luna BR", "Yucaloo BR"). Só é usado quando
        2+ integrações compartilham a mesma plataforma — uma integração sozinha aparece como card
-       avulso, sem nenhum disso. Pedido do Luan (07/08/2026): logo dentro do card, não fora. ── */
+       avulso, sem nenhum disso.
+       Altura fixa + largura livre (não mais uma caixa quadrada): os logos de plataforma
+       (Shopify_logo.png, Logotipo_MercadoLivre.png, Amazon_logo.png) são faixas bem largas
+       (ícone + nome lado a lado, ~3.5:1), não ícones quadrados — numa caixa quadrada com
+       object-fit:contain a imagem cabia pela LARGURA e sobrava um vão vazio enorme em cima e
+       embaixo (reportado pelo Luan, print mostrando o espaço vazio). Deixando só a altura fixa
+       e a largura seguir a proporção real de cada logo, o vão some sozinho — sem editar as
+       imagens. ── */
   .fam-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
-  .fam-head{display:flex;align-items:center;gap:12px}
-  .fam-head-logo{width:40px;height:40px;border-radius:9px;flex-shrink:0}
-  .fam-head-logo img{max-width:28px;max-height:28px;object-fit:contain}
-  .fam-head-logo i{font-size:16px;color:var(--muted)}
+  .fam-head{display:flex;align-items:center;gap:14px}
+  .fam-head-logo{height:44px;width:auto;border-radius:0;border:none;background:none;flex-shrink:0}
+  .fam-head-logo img{height:100%;width:auto;display:block}
+  .fam-head-logo i{font-size:22px;color:var(--muted)}
   .fam-count{font-size:10px;color:var(--muted);white-space:nowrap;margin-left:auto}
   .fam-cards{display:flex;flex-wrap:wrap;gap:12px}
   .fam-cards>.integ-card{background:var(--surface2);flex:1 1 240px}
@@ -117,7 +124,7 @@
   .integ-rows>.integ-row:last-child{border-bottom:none}
   .integ-row.is-planned{opacity:.55}
   .integ-row .integ-logo{width:30px;height:30px;border-radius:6px}
-  .integ-row .integ-logo img{max-width:20px;max-height:20px}
+  .integ-row .integ-logo img{max-width:26px;max-height:26px}
   .integ-row-name{font-size:12.5px;font-weight:600;flex-shrink:0;width:210px}
   .integ-row-note{font-size:11px;color:var(--sub);flex:1;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .integ-row-sw{flex-shrink:0;margin-left:auto}
@@ -133,7 +140,7 @@
   .compact-tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 6px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;position:relative}
   .compact-tile.is-planned{opacity:.5}
   .compact-logo{width:34px;height:34px;border-radius:8px}
-  .compact-logo img{max-width:24px;max-height:24px;object-fit:contain}
+  .compact-logo img{max-width:30px;max-height:30px;object-fit:contain}
   .compact-logo i{font-size:15px;color:var(--muted)}
   .compact-name{font-size:10px;font-weight:600;line-height:1.25;max-height:2.6em;overflow:hidden;color:var(--text)}
   .compact-dot{width:9px;height:9px;border-radius:50%;position:absolute;top:7px;right:7px;border:1.5px solid var(--surface)}
