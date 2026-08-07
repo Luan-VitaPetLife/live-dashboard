@@ -1,0 +1,20 @@
+/* switch.css — toggle switch padronizado (estilo iOS), único em todo o app.
+   Substitui as variantes que existiam por página (.switch/.track/.knob,
+   .sp-switch/.sp-switch-slider, .arev-switch/.arev-slider) por um só design.
+
+   Markup:
+   <label class="ios-switch">
+     <input type="checkbox" class="ios-switch-input">
+     <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
+   </label>
+
+   O <input> fica dentro do <label> (não precisa de id/for) — clicar em
+   qualquer parte do switch já ativa o checkbox nativamente. */
+.ios-switch{width:51px;height:31px;position:relative;display:inline-block;flex-shrink:0;cursor:pointer}
+.ios-switch-input{opacity:0;width:0;height:0;position:absolute}
+.ios-switch-track{position:absolute;inset:0;display:block;background-color:#e9e9eb;border-radius:16px;transition:background-color .2s ease-out}
+.ios-switch-thumb{width:27px;height:27px;position:absolute;left:calc(50% - 27px/2 - 10px);top:calc(50% - 27px/2);border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15),0 3px 1px rgba(0,0,0,.06);transition:left .2s ease-out}
+.ios-switch-input:checked + .ios-switch-track{background-color:#34C759}
+.ios-switch-input:checked + .ios-switch-track .ios-switch-thumb{left:calc(50% - 27px/2 + 10px)}
+.ios-switch-input:focus-visible + .ios-switch-track{box-shadow:0 0 0 2px rgba(52,199,89,.45)}
+.ios-switch-input:disabled + .ios-switch-track{opacity:.5;cursor:default}

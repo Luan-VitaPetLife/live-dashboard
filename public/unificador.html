@@ -6,6 +6,7 @@
 <title>Unificador — Coco and Luna</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="switch.css">
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -44,15 +45,8 @@
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
   .section-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:6px 0 -6px 2px}
 
-  /* ── Toggle switch (mesmo padrão de configuracoes.html) ── */
+  /* ── Toggle switch: vem de switch.css (.ios-switch), padrão único do app ── */
   .switch-row{display:flex;align-items:center;gap:14px;margin:6px 0}
-  .switch{position:relative;width:46px;height:26px;flex-shrink:0;cursor:pointer}
-  .switch input{opacity:0;width:0;height:0;position:absolute}
-  .switch .track{position:absolute;inset:0;background:var(--border2);border-radius:20px;transition:background .18s}
-  .switch .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s}
-  .switch input:checked + .track{background:var(--sage)}
-  .switch input:checked + .track + .knob{transform:translateX(20px)}
-  .switch input:disabled ~ .track{opacity:.5}
   .switch-status{font-size:13px;font-weight:600;color:var(--text)}
   .switch-status.off{color:var(--muted)}
 
@@ -218,9 +212,9 @@
 
     <div class="card">
       <div class="switch-row">
-        <label class="switch">
-          <input type="checkbox" id="groupsToggle" disabled>
-          <span class="track"></span><span class="knob"></span>
+        <label class="ios-switch">
+          <input type="checkbox" class="ios-switch-input" id="groupsToggle" disabled>
+          <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
         </label>
         <span class="switch-status" id="groupsStatus">Carregando…</span>
       </div>

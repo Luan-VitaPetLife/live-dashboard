@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="switch.css">
 <style>
   :root{
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -193,14 +194,9 @@
   .smd-chan-fill{height:100%;border-radius:3px}
   .smd-chan-val{font-size:11px;color:var(--sub);width:80px;text-align:right;flex-shrink:0}
   .smd-chan-pct{font-size:10px;color:var(--muted);width:30px;text-align:right;flex-shrink:0}
+  /* ── Settings toggle switch — o switch em si vem de switch.css (.ios-switch) ── */
   .sp-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--sub)}
   .sp-toggle-row:last-child{border-bottom:none}
-  .sp-switch{position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0}
-  .sp-switch input{opacity:0;width:0;height:0}
-  .sp-switch-slider{position:absolute;inset:0;background:#ccc;border-radius:9px;transition:.2s;cursor:pointer}
-  .sp-switch-slider::before{content:'';position:absolute;height:14px;width:14px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s}
-  input:checked+.sp-switch-slider{background:var(--ink)}
-  input:checked+.sp-switch-slider::before{transform:translateX(14px)}
   /* ── Sidebar: comportamento de recolher afeta o .main (layout da página) ── */
   @media(max-width:768px){.main{margin-left:0}}
   body.sidebar-hidden .main{margin-left:0}
@@ -390,11 +386,11 @@
       <div class="sp-section-title">Análise de canais</div>
       <label class="sp-toggle-row">
         <span>Mostrar canais nos popups do mapa</span>
-        <label class="sp-switch"><input type="checkbox" id="toggleChanMap" checked><span class="sp-switch-slider"></span></label>
+        <label class="ios-switch"><input type="checkbox" class="ios-switch-input" id="toggleChanMap" checked><span class="ios-switch-track"><span class="ios-switch-thumb"></span></span></label>
       </label>
       <label class="sp-toggle-row">
         <span>Expandir detalhes por padrão</span>
-        <label class="sp-switch"><input type="checkbox" id="toggleChanExpand"><span class="sp-switch-slider"></span></label>
+        <label class="ios-switch"><input type="checkbox" class="ios-switch-input" id="toggleChanExpand"><span class="ios-switch-track"><span class="ios-switch-thumb"></span></span></label>
       </label>
     </div>
   </div>

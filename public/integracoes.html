@@ -6,6 +6,7 @@
 <title>Integrações — Coco and Luna</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="switch.css">
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -72,14 +73,7 @@
   .badge-disabled{background:rgba(30,28,24,.08);color:var(--sub)}
   .badge-planned{background:var(--surface2);border:1px solid var(--border2);color:var(--muted)}
 
-  /* ── Toggle switch (mesmo padrão de configuracoes.html) ── */
-  .switch{position:relative;width:40px;height:23px;flex-shrink:0;cursor:pointer}
-  .switch input{opacity:0;width:0;height:0;position:absolute}
-  .switch .track{position:absolute;inset:0;background:var(--border2);border-radius:20px;transition:background .18s}
-  .switch .knob{position:absolute;top:3px;left:3px;width:17px;height:17px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s}
-  .switch input:checked + .track{background:var(--sage)}
-  .switch input:checked + .track + .knob{transform:translateX(17px)}
-  .switch input:disabled ~ .track{opacity:.5}
+  /* ── Toggle switch: vem de switch.css (.ios-switch), padrão único do app ── */
 
   /* ── Bloco de família — a logo da PLATAFORMA (ex.: Shopify) fica GRANDE e FORA do card, do
        lado esquerdo, só identificando visualmente o grupo (sem repetir o nome em texto — os
@@ -282,8 +276,9 @@ async function requestToggle(it, desired, revert){
 
 function makeSwitch(it){
   const sw = document.createElement('label');
-  sw.className = 'switch';
-  sw.innerHTML = '<input type="checkbox" ' + (it.state !== 'disabled' ? 'checked' : '') + '><span class="track"></span><span class="knob"></span>';
+  sw.className = 'ios-switch';
+  sw.innerHTML = '<input type="checkbox" class="ios-switch-input" ' + (it.state !== 'disabled' ? 'checked' : '') + '>' +
+    '<span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>';
   const cb = sw.querySelector('input');
   cb.addEventListener('change', () => {
     const desired = cb.checked;

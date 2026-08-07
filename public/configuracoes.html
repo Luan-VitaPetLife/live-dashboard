@@ -6,6 +6,7 @@
 <title>Configurações — Coco and Luna</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="switch.css">
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -43,15 +44,8 @@
   .hint{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6}
   .hint i{color:var(--sub)}
 
-  /* ── Toggle switch ── */
+  /* ── Toggle switch: vem de switch.css (.ios-switch), padrão único do app ── */
   .switch-row{display:flex;align-items:center;gap:14px;margin:14px 0 6px}
-  .switch{position:relative;width:46px;height:26px;flex-shrink:0;cursor:pointer}
-  .switch input{opacity:0;width:0;height:0;position:absolute}
-  .switch .track{position:absolute;inset:0;background:var(--border2);border-radius:20px;transition:background .18s}
-  .switch .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s}
-  .switch input:checked + .track{background:var(--sage)}
-  .switch input:checked + .track + .knob{transform:translateX(20px)}
-  .switch input:disabled ~ .track{opacity:.5}
   .switch-status{font-size:13px;font-weight:600;color:var(--text)}
   .switch-status.off{color:var(--muted)}
 
@@ -155,9 +149,9 @@
       <h2>Unificar produtos entre canais</h2>
       <p class="desc">O mesmo produto físico às vezes aparece com nomes diferentes em cada canal (Shopify, Shopee, Mercado Livre, Amazon...). O Unificador junta manualmente esses produtos num grupo só — o grupo passa a valer em Revenue (Top produtos), Segmentos, Produtos e Estoque, sem precisar repetir a unificação em cada tela.</p>
       <div class="switch-row">
-        <label class="switch">
-          <input type="checkbox" id="groupsToggle" disabled>
-          <span class="track"></span><span class="knob"></span>
+        <label class="ios-switch">
+          <input type="checkbox" class="ios-switch-input" id="groupsToggle" disabled>
+          <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
         </label>
         <span class="switch-status" id="groupsStatus">Carregando…</span>
       </div>
@@ -170,9 +164,9 @@
       <h2>Exigir login</h2>
       <p class="desc">Quando <b>ligado</b>, todos precisam entrar com usuário e senha para abrir o painel. Quando <b>desligado</b>, a dashboard fica aberta a qualquer pessoa que tenha o link — use apenas em ambiente controlado (rede interna, uso pessoal).</p>
       <div class="switch-row">
-        <label class="switch">
-          <input type="checkbox" id="loginToggle" disabled>
-          <span class="track"></span><span class="knob"></span>
+        <label class="ios-switch">
+          <input type="checkbox" class="ios-switch-input" id="loginToggle" disabled>
+          <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
         </label>
         <span class="switch-status" id="loginStatus">Carregando…</span>
       </div>
