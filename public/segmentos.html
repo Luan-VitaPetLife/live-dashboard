@@ -211,9 +211,9 @@
   /* Painel expandido */
   .geo-detail{padding:14px 14px 16px}
   .geo-detail-stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
-  .geo-stat{display:flex;flex-direction:column;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;min-width:120px}
+  .geo-stat{display:flex;flex-direction:column;gap:4px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px;min-width:150px;flex:1 1 150px;box-shadow:0 1px 3px rgba(30,28,24,.05)}
   .geo-stat-lbl{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
-  .geo-stat-val{font-size:12px;font-weight:700;color:var(--ink)}
+  .geo-stat-val{font-size:13px;font-weight:700;color:var(--ink)}
 
   .geo-detail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
   .geo-view-toggle{display:flex;border:1px solid var(--border2);border-radius:20px;overflow:hidden}
@@ -515,7 +515,7 @@ let untilDate = localStorage.getItem('coco_until') || todayISO;
 
 // Canal — dropdown por mercado (mesmos canais do dashboard principal). O backend já
 // filtra os segmentos pelo parâmetro `channel` do /api/dashboard.
-const CH_LABELS = { todos:'Todos', shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', shopify_us:'Shopify - Coco and Luna EUA', amazon_us:'Amazon EUA' };
+const CH_LABELS = { todos:'Todos', shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon BR', shopify_us:'Shopify - Coco and Luna EUA', amazon_us:'Amazon EUA', yucaloo_br:'Shopify - Yucaloo BR', yucaloo_us:'Shopify - Yucaloo EUA' };
 const CH_BY_MARKET = { br:['todos','shopify','shopee','mercadolivre'], us:['todos','shopify_us','amazon_us'] };
 let channel = 'todos';
 // Estado de expansão dos "top produtos" por segmento (ver mais / ver menos).

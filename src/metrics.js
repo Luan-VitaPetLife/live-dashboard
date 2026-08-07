@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────
 import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
+import { normalizeBrState } from './br-states.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -460,10 +461,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // senão cada variante da Amazon vira uma linha no ranking e o mapa subconta. Ver 4.10/4.7.5.
   // Endereços que não são região dos EUA (províncias do Canadá, etc.) são agrupados num
   // único bucket 'INTL' — não poluem o ranking com cada país, mas não perdem receita.
+  // BR: mesmo princípio (ver br-states.js) — nem todo canal grava o estado como código UF; sem
+  // normalizar, "SP" e "SÃO PAULO" viravam duas linhas separadas pro mesmo estado (reportado
+  // pelo Luan, 07/08/2026, no ranking de "Onde os produtos vendem" e na Geografia BR).
   const byState = {};
   valid.forEach(o => {
     let s = o.state;
     if (market === 'us') { s = normalizeUsState(s); if (s && !isUsRegionCode(s)) s = 'INTL'; }
+    else if (market === 'br') { s = normalizeBrState(s); }
     if (s && o.total > 0) {
       if (!byState[s]) byState[s] = { revenue: 0, orders: 0, byChannel: {} };
       byState[s].revenue += o.total;
@@ -485,6 +490,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     // endereços fora dos EUA em 'INTL' quando market==='us'.
     let geoState = o.state;
     if (market === 'us') { geoState = normalizeUsState(geoState); if (geoState && !isUsRegionCode(geoState)) geoState = 'INTL'; }
+    else if (market === 'br') { geoState = normalizeBrState(geoState); }
     o.items.forEach(it => {
       if (!it.title || it.title.trim() === '-') return; // placeholder de frete/serviço da Amazon, ver amazon.js ordersFromRows
       const hidden = isHiddenItem(it, market);

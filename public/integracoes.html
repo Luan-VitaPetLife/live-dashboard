@@ -54,7 +54,7 @@
   .country-name{font-size:15px;font-weight:600}
 
   /* ── Logo genérico (canal solto ou cabeçalho de família) ── */
-  .integ-logo,.fam-logo,.compact-logo{border-radius:8px;border:1px solid var(--border2);background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+  .integ-logo,.fam-logo,.fam-logo-big,.compact-logo{border-radius:8px;border:1px solid var(--border2);background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
   .integ-logo{width:44px;height:44px}
   .integ-logo img{max-width:32px;max-height:32px;object-fit:contain}
   .integ-logo i{font-size:18px;color:var(--muted)}
@@ -81,16 +81,22 @@
   .switch input:checked + .track + .knob{transform:translateX(17px)}
   .switch input:disabled ~ .track{opacity:.5}
 
-  /* ── Bloco de família — logo da PLATAFORMA no topo (ex.: Shopify), com os cards das contas/
-       lojas daquela plataforma logo abaixo (ex.: Shopify - Coco and Luna BR, Yucaloo BR). Só é
-       usado quando 2+ integrações compartilham a mesma plataforma — uma integração sozinha
-       aparece como card avulso, sem esse cabeçalho. ── */
-  .fam-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
-  .fam-head{display:flex;align-items:center;gap:10px}
-  .fam-name{font-size:13px;font-weight:700;color:var(--text)}
-  .fam-count{font-size:10px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  /* ── Bloco de família — a logo da PLATAFORMA (ex.: Shopify) fica GRANDE e FORA do card, do
+       lado esquerdo, só identificando visualmente o grupo (sem repetir o nome em texto — os
+       cards dos membros já dizem quem são: "Shopify - Coco and Luna BR", "Yucaloo BR"). O card
+       em si só tem a contagem de conectadas + os cards das contas daquela plataforma. Só é usado
+       quando 2+ integrações compartilham a mesma plataforma — uma integração sozinha aparece
+       como card avulso, sem nenhum disso. Pedido do Luan (07/08/2026): tirar o texto duplicado e
+       aumentar a logo, deixando-a fora da caixa do card. ── */
+  .fam-wrap{display:flex;align-items:flex-start;gap:14px}
+  .fam-logo-big{width:60px;height:60px;border-radius:12px;flex-shrink:0}
+  .fam-logo-big img{max-width:42px;max-height:42px;object-fit:contain}
+  .fam-logo-big i{font-size:24px;color:var(--muted)}
+  .fam-block{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px}
+  .fam-count{font-size:10px;color:var(--muted);white-space:nowrap;align-self:flex-end}
   .fam-cards{display:flex;flex-wrap:wrap;gap:12px}
   .fam-cards>.integ-card{background:var(--surface2);flex:1 1 240px}
+  @media(max-width:480px){ .fam-wrap{flex-direction:column;align-items:center} }
 
   /* ── Card individual (canal avulso OU membro de uma família) ── */
   .integ-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -102,7 +108,7 @@
   /* ── Modo Cards: family blocks ocupam a linha inteira, cards avulsos fluem lado a lado ── */
   .integ-flow{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
   .integ-flow>.integ-card{flex:1 1 260px}
-  .integ-flow>.fam-block{flex:1 1 100%}
+  .integ-flow>.fam-wrap{flex:1 1 100%}
 
   /* ── Modo Colunas: masonry via CSS columns — aproveita a largura toda distribuindo os blocos
        em colunas fluidas, cada bloco inteiro numa coluna só (sem quebrar no meio) ── */
@@ -336,32 +342,31 @@ function integCardEl(it){
   return card;
 }
 
-// ── Bloco de família: logo + nome da plataforma no topo, cards dos membros logo abaixo ──
+// ── Bloco de família: a logo da plataforma fica grande, fora da caixa do card (só o ícone —
+// sem repetir o nome em texto, os cards dos membros já dizem quem são); o card em si só tem a
+// contagem de conectadas + os cards das contas daquela plataforma. ──
 function famBlockEl(groupId, items){
   const meta = GROUP_META[groupId] || { label: groupId, logo: '' };
+  const outer = document.createElement('div');
+  outer.className = 'fam-wrap';
+  outer.appendChild(logoBoxEl('fam-logo-big', meta.logo, meta.label, 'geral'));
+
   const wrap = document.createElement('div');
   wrap.className = 'fam-block';
 
-  const head = document.createElement('div');
-  head.className = 'fam-head';
-  head.appendChild(logoBoxEl('fam-logo', meta.logo, meta.label, 'geral'));
-  const name = document.createElement('div');
-  name.className = 'fam-name';
-  name.textContent = meta.label;
   const count = document.createElement('div');
   count.className = 'fam-count';
   const connected = items.filter(it => it.state === 'connected').length;
   count.textContent = connected + '/' + items.length + ' conectadas';
-  head.appendChild(name);
-  head.appendChild(count);
-  wrap.appendChild(head);
+  wrap.appendChild(count);
 
   const cardsWrap = document.createElement('div');
   cardsWrap.className = 'fam-cards';
   items.forEach(it => cardsWrap.appendChild(integCardEl(it)));
   wrap.appendChild(cardsWrap);
 
-  return wrap;
+  outer.appendChild(wrap);
+  return outer;
 }
 
 // ── Agrupa por plataforma (`group`), preservando a ordem de GROUP_ORDER. Grupo com 2+ itens vira
