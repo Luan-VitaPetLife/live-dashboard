@@ -29,29 +29,39 @@
   .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
-  /* ── Content ── */
-  .content{padding:28px;display:flex;flex-direction:column;gap:24px;flex:1;max-width:1600px;width:100%}
+  /* ── Content — sem teto de largura: a tela inteira é aproveitada (ver pedido do Luan,
+       05/08/2026). Antes tinha max-width:1600px sem margin:auto, então em telas largas o
+       conteúdo ficava colado à esquerda com uma faixa de fundo vazia à direita. ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;width:100%}
+  .page-headrow{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
   .back-link{font-size:11px;color:var(--sub);text-decoration:none;display:inline-flex;align-items:center;gap:5px}
   .back-link:hover{color:var(--text)}
 
-  /* ── País ── */
-  .country-block{display:flex;flex-direction:column;gap:14px}
+  /* ── Seletor de modo de visualização ── */
+  .view-switch{display:flex;gap:3px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:3px;flex-shrink:0}
+  .vs-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border:none;background:none;border-radius:7px;font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;font-family:inherit;white-space:nowrap}
+  .vs-btn:hover{color:var(--text)}
+  .vs-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+
+  /* ── País — espaçamento próprio acima/abaixo de cada bloco + divisor entre os países ── */
+  .country-block{display:flex;flex-direction:column;gap:16px;padding:22px 0}
+  .country-block+.country-block{border-top:1px solid var(--border2)}
+  .country-block:first-of-type{padding-top:4px}
   .country-head{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border2)}
   .country-flag{width:22px;height:auto;border-radius:3px}
   .country-name{font-size:15px;font-weight:600}
-  .cat-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:2px 0 -4px 2px}
 
-  /* ── Grid de cards ── */
-  .integ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
-  .integ-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px}
-  .integ-card.is-planned{opacity:.6}
-  .integ-top{display:flex;align-items:center;gap:12px}
-  .integ-logo{width:44px;height:44px;border-radius:8px;border:1px solid var(--border2);background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+  /* ── Logo genérico (canal solto ou cabeçalho de família) ── */
+  .integ-logo,.fam-logo,.compact-logo{border-radius:8px;border:1px solid var(--border2);background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+  .integ-logo{width:44px;height:44px}
   .integ-logo img{max-width:32px;max-height:32px;object-fit:contain}
   .integ-logo i{font-size:18px;color:var(--muted)}
-  .integ-info{min-width:0;flex:1}
+  .fam-logo{width:32px;height:32px;border-radius:7px}
+  .fam-logo img{max-width:22px;max-height:22px;object-fit:contain}
+  .fam-logo i{font-size:14px;color:var(--muted)}
+
   .integ-name{font-size:13px;font-weight:600;color:var(--text)}
   .integ-note{font-size:11px;color:var(--sub);margin-top:2px;line-height:1.4}
   .integ-badge{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:20px;display:inline-block;width:fit-content}
@@ -61,7 +71,6 @@
   .badge-paused{background:rgba(155,122,42,.1);color:var(--amber)}
   .badge-disabled{background:rgba(30,28,24,.08);color:var(--sub)}
   .badge-planned{background:var(--surface2);border:1px solid var(--border2);color:var(--muted)}
-  .integ-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}
 
   /* ── Toggle switch (mesmo padrão de configuracoes.html) ── */
   .switch{position:relative;width:40px;height:23px;flex-shrink:0;cursor:pointer}
@@ -72,12 +81,89 @@
   .switch input:checked + .track + .knob{transform:translateX(17px)}
   .switch input:disabled ~ .track{opacity:.5}
 
+  /* ── Bloco de família — logo da PLATAFORMA no topo (ex.: Shopify), com os cards das contas/
+       lojas daquela plataforma logo abaixo (ex.: Shopify - Coco and Luna BR, Yucaloo BR). Só é
+       usado quando 2+ integrações compartilham a mesma plataforma — uma integração sozinha
+       aparece como card avulso, sem esse cabeçalho. ── */
+  .fam-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
+  .fam-head{display:flex;align-items:center;gap:10px}
+  .fam-name{font-size:13px;font-weight:700;color:var(--text)}
+  .fam-count{font-size:10px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .fam-cards{display:flex;flex-wrap:wrap;gap:12px}
+  .fam-cards>.integ-card{background:var(--surface2);flex:1 1 240px}
+
+  /* ── Card individual (canal avulso OU membro de uma família) ── */
+  .integ-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px}
+  .integ-card.is-planned{opacity:.6}
+  .integ-top{display:flex;align-items:center;gap:12px}
+  .integ-info{min-width:0;flex:1}
+  .integ-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}
+
+  /* ── Modo Cards: family blocks ocupam a linha inteira, cards avulsos fluem lado a lado ── */
+  .integ-flow{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+  .integ-flow>.integ-card{flex:1 1 260px}
+  .integ-flow>.fam-block{flex:1 1 100%}
+
+  /* ── Modo Colunas: masonry via CSS columns — aproveita a largura toda distribuindo os blocos
+       em colunas fluidas, cada bloco inteiro numa coluna só (sem quebrar no meio) ── */
+  .integ-columns{column-width:320px;column-gap:16px}
+  .integ-columns>*{break-inside:avoid;width:100%;margin:0 0 16px}
+
+  /* ── Modo Linhas: lista compacta, um card por linha, tipo configurações ── */
+  .integ-rows-wrap{display:flex;flex-direction:column;gap:12px}
+  .integ-rows{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+  .rows-famhead{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
+  .rows-famhead .fam-logo{width:20px;height:20px;border-radius:5px}
+  .rows-famhead .fam-logo img{max-width:14px;max-height:14px}
+  .rows-famhead-name{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--sub)}
+  .integ-row{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .integ-rows>.integ-row:last-child{border-bottom:none}
+  .integ-row.is-planned{opacity:.55}
+  .integ-row .integ-logo{width:30px;height:30px;border-radius:6px}
+  .integ-row .integ-logo img{max-width:20px;max-height:20px}
+  .integ-row-name{font-size:12.5px;font-weight:600;flex-shrink:0;width:210px}
+  .integ-row-note{font-size:11px;color:var(--sub);flex:1;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .integ-row-sw{flex-shrink:0;margin-left:auto}
+
+  /* ── Modo Compacto: grade densa de ícones — visão geral rápida, clique na bolinha de status
+       liga/desliga direto (sem abrir o card inteiro) ── */
+  .integ-compact-wrap{display:flex;flex-direction:column;gap:16px}
+  .compact-famhead{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+  .compact-famhead .fam-logo{width:18px;height:18px;border-radius:4px}
+  .compact-famhead .fam-logo img{max-width:12px;max-height:12px}
+  .compact-famhead-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .compact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+  .compact-tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 6px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;position:relative}
+  .compact-tile.is-planned{opacity:.5}
+  .compact-logo{width:34px;height:34px;border-radius:8px}
+  .compact-logo img{max-width:24px;max-height:24px;object-fit:contain}
+  .compact-logo i{font-size:15px;color:var(--muted)}
+  .compact-name{font-size:10px;font-weight:600;line-height:1.25;max-height:2.6em;overflow:hidden;color:var(--text)}
+  .compact-dot{width:9px;height:9px;border-radius:50%;position:absolute;top:7px;right:7px;border:1.5px solid var(--surface)}
+  .compact-dot.clickable{cursor:pointer}
+  .dot-connected{background:var(--green)}
+  .dot-pending_auth{background:var(--amber)}
+  .dot-not_configured{background:var(--muted)}
+  .dot-paused{background:var(--amber)}
+  .dot-disabled{background:var(--border2)}
+  .dot-planned{background:var(--border2)}
+
   .empty{font-size:12px;color:var(--muted);padding:24px;text-align:center}
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--side-text);font-size:12px;font-weight:600;padding:11px 20px;border-radius:20px;box-shadow:0 8px 28px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:all .25s;z-index:500}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .toast.err{background:var(--red)}
 
-  @media(max-width:560px){ .content{padding:20px 16px} .integ-grid{grid-template-columns:1fr} }
+  @media(max-width:768px){
+    .integ-row-name{width:auto}
+    .integ-columns{column-width:100%}
+  }
+  @media(max-width:560px){
+    .content{padding:20px 16px}
+    .view-switch{width:100%}
+    .vs-btn{flex:1;justify-content:center}
+    .integ-flow>.integ-card,.fam-cards>.integ-card{flex-basis:100%}
+    .compact-grid{grid-template-columns:repeat(auto-fill,minmax(78px,1fr))}
+  }
 </style>
 </head>
 <body>
@@ -91,10 +177,18 @@
   </div>
 
   <div class="content">
-    <div>
-      <a class="back-link" href="/configuracoes"><i class="bi bi-arrow-left"></i> Configurações</a>
-      <div class="page-title" style="margin-top:8px">Integrações</div>
-      <div class="page-sub">Coco and Luna · status e controle de cada canal conectado</div>
+    <div class="page-headrow">
+      <div>
+        <a class="back-link" href="/configuracoes"><i class="bi bi-arrow-left"></i> Configurações</a>
+        <div class="page-title" style="margin-top:8px">Integrações</div>
+        <div class="page-sub">Coco and Luna · status e controle de cada canal conectado</div>
+      </div>
+      <div class="view-switch" id="viewSwitch">
+        <button type="button" class="vs-btn" data-mode="cards"><i class="bi bi-grid-3x3-gap"></i> Cards</button>
+        <button type="button" class="vs-btn" data-mode="colunas"><i class="bi bi-layout-three-columns"></i> Colunas</button>
+        <button type="button" class="vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
+        <button type="button" class="vs-btn" data-mode="compacto"><i class="bi bi-grid-1x2"></i> Compacto</button>
+      </div>
     </div>
 
     <div id="listArea">
@@ -115,7 +209,25 @@ const STATE_LABEL = {
 };
 const COUNTRY_LABEL = { br: 'Brasil', us: 'Estados Unidos' };
 const COUNTRY_FLAG  = { br: 'bandeira_brasil.webp', us: 'bandeira_eua.svg' };
-const CATEGORY_LABEL = { geral: 'Geral', marketing: 'Marketing', planned: 'Planejadas' };
+
+// Metadados de cada PLATAFORMA (não confundir com o canal em si) — usados só pro cabeçalho do
+// bloco de família, quando 2+ integrações do mesmo `group` aparecem juntas (ver server.js
+// computeIntegrationsList). Logo do card individual continua sendo o da conta/marca (ex.: ícone
+// da Coco and Luna no card Shopify BR) — aqui é o logo da plataforma em si.
+const GROUP_ORDER = ['shopify','mercadolivre','amazon','shopee','meta','google','bling','tiktok'];
+const GROUP_META = {
+  shopify:      { label: 'Shopify',       logo: 'Shopify_logo.png' },
+  mercadolivre: { label: 'Mercado Livre', logo: 'Logotipo_MercadoLivre.png' },
+  amazon:       { label: 'Amazon',        logo: 'Amazon_logo.png' },
+  shopee:       { label: 'Shopee',        logo: 'logo-shopee.png' },
+  meta:         { label: 'Meta',          logo: 'logo-meta.png' },
+  google:       { label: 'Google Ads',    logo: 'google_ads_logo_icon.png' },
+  bling:        { label: 'Bling',         logo: 'logo-bling1.png' },
+  tiktok:       { label: 'TikTok Shop',   logo: 'logo-tiktok-shop.png' },
+};
+
+let viewMode = localStorage.getItem('coco_integ_view') || 'cards';
+let lastItems = [];
 
 function toast(msg, isErr){
   const t = $('toast');
@@ -138,65 +250,15 @@ async function loadMe(){
   }catch(e){}
 }
 
-function integCard(it){
-  const card = document.createElement('div');
-  card.className = 'integ-card' + (it.state === 'planned' ? ' is-planned' : '');
-
-  const top = document.createElement('div');
-  top.className = 'integ-top';
-
-  const logoBox = document.createElement('div');
-  logoBox.className = 'integ-logo';
-  const img = document.createElement('img');
-  // Logo começando com "/" é servida direto da raiz de public/ (ex: /Logo2.png, o ícone da
-  // própria Coco and Luna) em vez de logos-integracao/ — usado pros canais Shopify que são a
-  // marca em si, não um serviço de terceiro (ver server.js computeIntegrationsList).
-  img.src = it.logo.startsWith('/') ? it.logo : LOGO_BASE + it.logo;
-  img.alt = it.label;
-  img.onerror = function(){
-    logoBox.innerHTML = '<i class="bi ' + (FALLBACK_ICON[it.category] || 'bi-app') + '"></i>';
-  };
-  logoBox.appendChild(img);
-
-  const info = document.createElement('div');
-  info.className = 'integ-info';
-  const noteText = it.note || it.detail || '';
-  info.innerHTML =
-    '<div class="integ-name">' + escapeHtml(it.label) + '</div>' +
-    '<div class="integ-badge badge-' + it.state + '">' + STATE_LABEL[it.state] + '</div>' +
-    (noteText ? '<div class="integ-note">' + escapeHtml(noteText) + '</div>' : '');
-
-  top.appendChild(logoBox);
-  top.appendChild(info);
-  card.appendChild(top);
-
-  if (it.state !== 'planned'){
-    const bottom = document.createElement('div');
-    bottom.className = 'integ-bottom';
-    const label = document.createElement('span');
-    label.className = 'integ-note';
-    label.textContent = it.state === 'disabled' ? 'Sincronização pausada' : 'Sincronização automática';
-    const sw = document.createElement('label');
-    sw.className = 'switch';
-    sw.innerHTML = '<input type="checkbox" ' + (it.state !== 'disabled' ? 'checked' : '') + '><span class="track"></span><span class="knob"></span>';
-    const cb = sw.querySelector('input');
-    cb.addEventListener('change', () => onToggle(it, cb));
-    bottom.appendChild(label);
-    bottom.appendChild(sw);
-    card.appendChild(bottom);
-  }
-
-  return card;
-}
-
-async function onToggle(it, cb){
-  const desired = cb.checked;
+// ── Ligar/desligar — compartilhado por todos os modos de visualização (switch nos modos Cards/
+// Colunas/Linhas, clique na bolinha de status no modo Compacto). `revert` desfaz uma mudança
+// visual otimista (hoje só o checkbox nativo, que já se marca sozinho antes do evento `change`
+// disparar) se o usuário cancelar a confirmação ou a chamada falhar. ──
+async function requestToggle(it, desired, revert){
   const question = desired
     ? 'Ativar ' + it.label + ' (' + COUNTRY_LABEL[it.country] + ')? A sincronização automática volta a rodar no próximo ciclo.'
     : 'Desativar ' + it.label + ' (' + COUNTRY_LABEL[it.country] + ')? A sincronização automática para de buscar dados novos desse canal. O que já está salvo continua no painel normalmente.';
-  if (!confirm(question)){ cb.checked = !desired; return; }
-
-  cb.disabled = true;
+  if (!confirm(question)){ if (revert) revert(); return; }
   try{
     const r = await fetch('/api/integrations/' + encodeURIComponent(it.key) + '/toggle', {
       method:'POST', credentials:'same-origin',
@@ -207,10 +269,228 @@ async function onToggle(it, cb){
     toast(it.label + (desired ? ' ativada.' : ' desativada.'));
     load();
   }catch(e){
-    cb.checked = !desired;
+    if (revert) revert();
     toast('Erro ao salvar: ' + (e.message || 'falha de rede'), true);
-  }finally{
-    cb.disabled = false;
+  }
+}
+
+function makeSwitch(it){
+  const sw = document.createElement('label');
+  sw.className = 'switch';
+  sw.innerHTML = '<input type="checkbox" ' + (it.state !== 'disabled' ? 'checked' : '') + '><span class="track"></span><span class="knob"></span>';
+  const cb = sw.querySelector('input');
+  cb.addEventListener('change', () => {
+    const desired = cb.checked;
+    cb.disabled = true;
+    requestToggle(it, desired, () => { cb.checked = !desired; }).finally(() => { cb.disabled = false; });
+  });
+  return sw;
+}
+
+function logoBoxEl(className, logo, label, category){
+  const box = document.createElement('div');
+  box.className = className;
+  const img = document.createElement('img');
+  // Logo começando com "/" é servida direto da raiz de public/ (ex: /Logo2.png, o ícone da
+  // própria Coco and Luna) em vez de logos-integracao/ — usado pros canais Shopify que são a
+  // marca em si, não um serviço de terceiro (ver server.js computeIntegrationsList).
+  img.src = (logo || '').startsWith('/') ? logo : LOGO_BASE + logo;
+  img.alt = label;
+  img.onerror = function(){
+    box.innerHTML = '<i class="bi ' + (FALLBACK_ICON[category] || 'bi-app') + '"></i>';
+  };
+  box.appendChild(img);
+  return box;
+}
+
+// ── Card individual (usado tanto pra canal avulso quanto pra membro dentro de um fam-block) ──
+function integCardEl(it){
+  const card = document.createElement('div');
+  card.className = 'integ-card' + (it.state === 'planned' ? ' is-planned' : '');
+
+  const top = document.createElement('div');
+  top.className = 'integ-top';
+  top.appendChild(logoBoxEl('integ-logo', it.logo, it.label, it.category));
+
+  const info = document.createElement('div');
+  info.className = 'integ-info';
+  const noteText = it.note || it.detail || '';
+  info.innerHTML =
+    '<div class="integ-name">' + escapeHtml(it.label) + '</div>' +
+    '<div class="integ-badge badge-' + it.state + '">' + STATE_LABEL[it.state] + '</div>' +
+    (noteText ? '<div class="integ-note">' + escapeHtml(noteText) + '</div>' : '');
+  top.appendChild(info);
+  card.appendChild(top);
+
+  if (it.state !== 'planned'){
+    const bottom = document.createElement('div');
+    bottom.className = 'integ-bottom';
+    const label = document.createElement('span');
+    label.className = 'integ-note';
+    label.textContent = it.state === 'disabled' ? 'Sincronização pausada' : 'Sincronização automática';
+    bottom.appendChild(label);
+    bottom.appendChild(makeSwitch(it));
+    card.appendChild(bottom);
+  }
+
+  return card;
+}
+
+// ── Bloco de família: logo + nome da plataforma no topo, cards dos membros logo abaixo ──
+function famBlockEl(groupId, items){
+  const meta = GROUP_META[groupId] || { label: groupId, logo: '' };
+  const wrap = document.createElement('div');
+  wrap.className = 'fam-block';
+
+  const head = document.createElement('div');
+  head.className = 'fam-head';
+  head.appendChild(logoBoxEl('fam-logo', meta.logo, meta.label, 'geral'));
+  const name = document.createElement('div');
+  name.className = 'fam-name';
+  name.textContent = meta.label;
+  const count = document.createElement('div');
+  count.className = 'fam-count';
+  const connected = items.filter(it => it.state === 'connected').length;
+  count.textContent = connected + '/' + items.length + ' conectadas';
+  head.appendChild(name);
+  head.appendChild(count);
+  wrap.appendChild(head);
+
+  const cardsWrap = document.createElement('div');
+  cardsWrap.className = 'fam-cards';
+  items.forEach(it => cardsWrap.appendChild(integCardEl(it)));
+  wrap.appendChild(cardsWrap);
+
+  return wrap;
+}
+
+// ── Agrupa por plataforma (`group`), preservando a ordem de GROUP_ORDER. Grupo com 2+ itens vira
+// um fam-block; grupo com 1 item só aparece como card avulso (sem cabeçalho de família). ──
+function buildBlocks(items){
+  const byGroup = {};
+  items.forEach(it => { (byGroup[it.group] ||= []).push(it); });
+  const order = GROUP_ORDER.filter(g => byGroup[g]).concat(Object.keys(byGroup).filter(g => !GROUP_ORDER.includes(g)));
+  return order.map(g => {
+    const list = byGroup[g];
+    return list.length > 1 ? { kind: 'family', group: g, items: list } : { kind: 'solo', item: list[0] };
+  });
+}
+
+// ── Modos Cards/Colunas: mesmos elementos (fam-block / integ-card), só muda a classe do
+// container — flex-wrap num, CSS multi-column no outro. ──
+function renderFlowLikeMode(container, blocks, className){
+  container.className = className;
+  blocks.forEach(b => {
+    container.appendChild(b.kind === 'family' ? famBlockEl(b.group, b.items) : integCardEl(b.item));
+  });
+}
+
+// ── Modo Linhas: lista compacta, um bloco (com cabeçalho, se família) por grupo ──
+function rowEl(it, isMember){
+  const row = document.createElement('div');
+  row.className = 'integ-row' + (it.state === 'planned' ? ' is-planned' : '');
+  row.appendChild(logoBoxEl('integ-logo', it.logo, it.label, it.category));
+
+  const name = document.createElement('div');
+  name.className = 'integ-row-name';
+  name.textContent = it.label;
+  row.appendChild(name);
+
+  const badge = document.createElement('div');
+  badge.className = 'integ-badge badge-' + it.state;
+  badge.textContent = STATE_LABEL[it.state];
+  row.appendChild(badge);
+
+  const note = document.createElement('div');
+  note.className = 'integ-row-note';
+  note.textContent = it.note || it.detail || '';
+  row.appendChild(note);
+
+  if (it.state !== 'planned'){
+    const sw = makeSwitch(it);
+    sw.classList.add('integ-row-sw');
+    row.appendChild(sw);
+  }
+  return row;
+}
+function renderRowsMode(container, blocks){
+  container.className = 'integ-rows-wrap';
+  blocks.forEach(b => {
+    const list = document.createElement('div');
+    list.className = 'integ-rows';
+    if (b.kind === 'family'){
+      const meta = GROUP_META[b.group] || { label: b.group, logo: '' };
+      const head = document.createElement('div');
+      head.className = 'rows-famhead';
+      head.appendChild(logoBoxEl('fam-logo', meta.logo, meta.label, 'geral'));
+      const nm = document.createElement('span');
+      nm.className = 'rows-famhead-name';
+      nm.textContent = meta.label;
+      head.appendChild(nm);
+      list.appendChild(head);
+      b.items.forEach(it => list.appendChild(rowEl(it, true)));
+    } else {
+      list.appendChild(rowEl(b.item, false));
+    }
+    container.appendChild(list);
+  });
+}
+
+// ── Modo Compacto: grade densa de ícones — clique na bolinha de status liga/desliga direto,
+// sem precisar abrir o card inteiro. Itens avulsos (sem família) ficam juntos numa grade final,
+// sem cabeçalho, pra não criar uma grade de 1 ícone só pra cada um. ──
+function compactTileEl(it){
+  const tile = document.createElement('div');
+  tile.className = 'compact-tile' + (it.state === 'planned' ? ' is-planned' : '');
+  const noteText = it.note || it.detail || '';
+  tile.title = it.label + ' — ' + STATE_LABEL[it.state] + (noteText ? ' · ' + noteText : '');
+  tile.appendChild(logoBoxEl('compact-logo', it.logo, it.label, it.category));
+  const name = document.createElement('div');
+  name.className = 'compact-name';
+  name.textContent = it.label;
+  tile.appendChild(name);
+  const dot = document.createElement('div');
+  dot.className = 'compact-dot dot-' + it.state + (it.state === 'planned' ? '' : ' clickable');
+  if (it.state !== 'planned'){
+    dot.addEventListener('click', e => {
+      e.stopPropagation();
+      requestToggle(it, it.state === 'disabled', null);
+    });
+  }
+  tile.appendChild(dot);
+  return tile;
+}
+function renderCompactMode(container, blocks){
+  container.className = 'integ-compact-wrap';
+  const solo = [];
+  blocks.forEach(b => {
+    if (b.kind === 'family'){
+      const meta = GROUP_META[b.group] || { label: b.group, logo: '' };
+      const wrap = document.createElement('div');
+      const head = document.createElement('div');
+      head.className = 'compact-famhead';
+      head.appendChild(logoBoxEl('fam-logo', meta.logo, meta.label, 'geral'));
+      const nm = document.createElement('span');
+      nm.className = 'compact-famhead-name';
+      nm.textContent = meta.label;
+      head.appendChild(nm);
+      wrap.appendChild(head);
+      const grid = document.createElement('div');
+      grid.className = 'compact-grid';
+      b.items.forEach(it => grid.appendChild(compactTileEl(it)));
+      wrap.appendChild(grid);
+      container.appendChild(wrap);
+    } else {
+      solo.push(b.item);
+    }
+  });
+  if (solo.length){
+    const wrap = document.createElement('div');
+    const grid = document.createElement('div');
+    grid.className = 'compact-grid';
+    solo.forEach(it => grid.appendChild(compactTileEl(it)));
+    wrap.appendChild(grid);
+    container.appendChild(wrap);
   }
 }
 
@@ -219,7 +499,8 @@ async function load(){
     const r = await fetch('/api/integrations', { credentials:'same-origin' });
     if (!r.ok) throw new Error('http ' + r.status);
     const d = await r.json();
-    render(d.integrations || []);
+    lastItems = d.integrations || [];
+    render(lastItems);
   }catch(e){
     $('listArea').innerHTML = '<div class="empty">Não foi possível carregar as integrações.</div>';
   }
@@ -243,19 +524,13 @@ function render(items){
       '<span class="country-name">' + COUNTRY_LABEL[country] + '</span>';
     block.appendChild(head);
 
-    ['geral', 'marketing', 'planned'].forEach(cat => {
-      const inCat = inCountry.filter(it => it.category === cat);
-      if (!inCat.length) return;
-      const label = document.createElement('div');
-      label.className = 'cat-label';
-      label.textContent = CATEGORY_LABEL[cat];
-      block.appendChild(label);
-
-      const grid = document.createElement('div');
-      grid.className = 'integ-grid';
-      inCat.forEach(it => grid.appendChild(integCard(it)));
-      block.appendChild(grid);
-    });
+    const container = document.createElement('div');
+    const blocks = buildBlocks(inCountry);
+    if (viewMode === 'colunas') renderFlowLikeMode(container, blocks, 'integ-columns');
+    else if (viewMode === 'linhas') renderRowsMode(container, blocks);
+    else if (viewMode === 'compacto') renderCompactMode(container, blocks);
+    else renderFlowLikeMode(container, blocks, 'integ-flow');
+    block.appendChild(container);
 
     area.appendChild(block);
   });
@@ -263,7 +538,20 @@ function render(items){
   if (!area.children.length) area.innerHTML = '<div class="empty">Nenhuma integração encontrada.</div>';
 }
 
+function syncViewSwitch(){
+  document.querySelectorAll('#viewSwitch .vs-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === viewMode));
+}
+$('viewSwitch').addEventListener('click', e => {
+  const btn = e.target.closest('.vs-btn');
+  if (!btn) return;
+  viewMode = btn.dataset.mode;
+  localStorage.setItem('coco_integ_view', viewMode);
+  syncViewSwitch();
+  if (lastItems.length) render(lastItems);
+});
+
 (async function(){
+  syncViewSwitch();
   await loadMe();
   await load();
 })();

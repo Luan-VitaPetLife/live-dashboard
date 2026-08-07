@@ -1158,51 +1158,55 @@ function computeIntegrationsList() {
   const backoffBRActive = backoffBRUntil > Date.now();
   const amazonPauseNote = min => `Pausada por ${min} min (cota da Amazon atingida). Volta sozinha.`;
 
+  // `group` identifica a PLATAFORMA por trás do canal (não o país nem a categoria) — usado pelo
+  // front (integracoes.html) pra agrupar visualmente, ex.: "Shopify" reúne shopify_br + yucaloo_br
+  // (duas lojas na mesma plataforma), "amazon" reúne a loja Amazon e o card de Amazon Ads (ainda
+  // planejado). Grupo com um item só é exibido como card avulso, sem cabeçalho de grupo.
   const items = [
     // ── Brasil · Geral ──
     // Logo com "/" na frente é servida direto da raiz de public/ (fora de logos-integracao/, ver
     // LOGO_BASE em integracoes.html) — Logo2.png é o ícone "CC" da própria Coco and Luna (mesmo
     // usado no topo da sidebar), não o logo genérico da plataforma Shopify: essa loja É a Coco and
     // Luna, então o logo do card deve identificar a MARCA, não a plataforma por trás dela.
-    { key: 'shopify_br', label: 'Shopify - Coco and Luna BR', country: 'br', category: 'geral', logo: '/Logo2.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
+    { key: 'shopify_br', label: 'Shopify - Coco and Luna BR', country: 'br', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
       ...integrationStatus({ key: 'shopify_br', configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') }) },
-    { key: 'yucaloo_br', label: 'Yucaloo BR', country: 'br', category: 'geral', logo: 'Yucaloo2.webp', detail: getYucalooTokens().br?.shop || '',
+    { key: 'yucaloo_br', label: 'Yucaloo BR', country: 'br', category: 'geral', group: 'shopify', logo: 'Yucaloo2.webp', detail: getYucalooTokens().br?.shop || '',
       ...integrationStatus({ key: 'yucaloo_br', configured: shopifyYucaloo.isConfigured('br'), authorized: Boolean(getYucalooTokens().br) }) },
-    { key: 'shopee', label: 'Shopee', country: 'br', category: 'geral', logo: 'logo-shopee.png', detail: db.shopeeTokens ? 'Loja autorizada' : '',
-      ...integrationStatus({ key: 'shopee', configured: shopee.isConfigured(), authorized: Boolean(getShopeeTokens()) }) },
-    { key: 'mercadolivre', label: 'Mercado Livre', country: 'br', category: 'geral', logo: 'Logotipo_MercadoLivre.png', detail: db.mlTokens ? 'Conta autorizada' : '',
+    { key: 'mercadolivre', label: 'Mercado Livre', country: 'br', category: 'geral', group: 'mercadolivre', logo: 'Logotipo_MercadoLivre.png', detail: db.mlTokens ? 'Conta autorizada' : '',
       ...integrationStatus({ key: 'mercadolivre', configured: ml.isConfigured(), authorized: Boolean(getMlTokens()) }) },
-    { key: 'amazon_br', label: 'Amazon BR', country: 'br', category: 'geral', logo: 'Amazon_logo.png', detail: 'Conta CocoandLuna',
+    { key: 'amazon_br', label: 'Amazon BR', country: 'br', category: 'geral', group: 'amazon', logo: 'Amazon_logo.png', detail: 'Conta CocoandLuna',
       ...integrationStatus({ key: 'amazon_br', configured: amazon.isConfiguredBR(), paused: backoffBRActive, pausedNote: backoffBRActive ? amazonPauseNote(Math.ceil((backoffBRUntil - Date.now()) / 60000)) : '' }) },
-    { key: 'bling', label: 'Bling', country: 'br', category: 'geral', logo: 'logo-bling1.png', detail: 'Informações de ERP para complementar dados dos outros canais',
+    { key: 'shopee', label: 'Shopee', country: 'br', category: 'geral', group: 'shopee', logo: 'logo-shopee.png', detail: db.shopeeTokens ? 'Loja autorizada' : '',
+      ...integrationStatus({ key: 'shopee', configured: shopee.isConfigured(), authorized: Boolean(getShopeeTokens()) }) },
+    { key: 'bling', label: 'Bling', country: 'br', category: 'geral', group: 'bling', logo: 'logo-bling1.png', detail: 'Informações de ERP para complementar dados dos outros canais',
       ...integrationStatus({ key: 'bling', configured: bling.isConfigured(), authorized: Boolean(db.blingTokens) }) },
 
     // ── Brasil · Marketing ──
-    { key: 'meta_br', label: 'Meta Ads BR', country: 'br', category: 'marketing', logo: 'logo-meta.png', detail: 'Conta Coco and Luna',
-      ...integrationStatus({ key: 'meta_br', configured: meta.isConfigured() }) },
-    { key: 'mercadolivre_ads', label: 'Mercado Ads', country: 'br', category: 'marketing', logo: 'Mercado-ADS.png', detail: 'Product Ads do Mercado Livre',
+    { key: 'mercadolivre_ads', label: 'Mercado Ads', country: 'br', category: 'marketing', group: 'mercadolivre', logo: 'Mercado-ADS.png', detail: 'Product Ads do Mercado Livre',
       ...integrationStatus({ key: 'mercadolivre_ads', configured: ml.isConfigured(), authorized: Boolean(getMlTokens()) }) },
+    { key: 'meta_br', label: 'Meta Ads BR', country: 'br', category: 'marketing', group: 'meta', logo: 'logo-meta.png', detail: 'Conta Coco and Luna',
+      ...integrationStatus({ key: 'meta_br', configured: meta.isConfigured() }) },
 
     // ── Brasil · Planejadas ──
-    { key: null, label: 'Amazon Ads BR', country: 'br', category: 'planned', logo: 'Amazon_Ads_Horizontal_SquidInk.png', detail: 'Ainda não conectada', state: 'planned', note: '' },
-    { key: null, label: 'TikTok Shop', country: 'br', category: 'planned', logo: 'logo-tiktok-shop.png', detail: 'Loja em configuração, sem pedidos ainda', state: 'planned', note: '' },
+    { key: null, label: 'Amazon Ads BR', country: 'br', category: 'planned', group: 'amazon', logo: 'Amazon_Ads_Horizontal_SquidInk.png', detail: 'Ainda não conectada', state: 'planned', note: '' },
+    { key: null, label: 'TikTok Shop', country: 'br', category: 'planned', group: 'tiktok', logo: 'logo-tiktok-shop.png', detail: 'Loja em configuração, sem pedidos ainda', state: 'planned', note: '' },
 
     // ── Estados Unidos · Geral ──
-    { key: 'shopify_us', label: 'Shopify - Coco and Luna EUA', country: 'us', category: 'geral', logo: '/Logo2.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
+    { key: 'shopify_us', label: 'Shopify - Coco and Luna EUA', country: 'us', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
       ...integrationStatus({ key: 'shopify_us', configured: has('SHOPIFY_US_STORE') && has('SHOPIFY_US_ADMIN_TOKEN') }) },
-    { key: 'yucaloo_us', label: 'Yucaloo EUA', country: 'us', category: 'geral', logo: 'Yucaloo2.webp', detail: getYucalooTokens().us?.shop || '',
+    { key: 'yucaloo_us', label: 'Yucaloo EUA', country: 'us', category: 'geral', group: 'shopify', logo: 'Yucaloo2.webp', detail: getYucalooTokens().us?.shop || '',
       ...integrationStatus({ key: 'yucaloo_us', configured: shopifyYucaloo.isConfigured('us'), authorized: Boolean(getYucalooTokens().us) }) },
-    { key: 'amazon_us', label: 'Amazon EUA', country: 'us', category: 'geral', logo: 'Amazon_logo.png', detail: 'Conta VITA PET LIFE',
+    { key: 'amazon_us', label: 'Amazon EUA', country: 'us', category: 'geral', group: 'amazon', logo: 'Amazon_logo.png', detail: 'Conta VITA PET LIFE',
       ...integrationStatus({ key: 'amazon_us', configured: amazon.isConfigured(), paused: backoffActive, pausedNote: backoffActive ? amazonPauseNote(Math.ceil((backoffUntil - Date.now()) / 60000)) : '' }) },
 
     // ── Estados Unidos · Marketing ──
-    { key: 'meta_us', label: 'Meta Ads EUA', country: 'us', category: 'marketing', logo: 'logo-meta.png', detail: 'Conta Vita Pet Life',
+    { key: 'meta_us', label: 'Meta Ads EUA', country: 'us', category: 'marketing', group: 'meta', logo: 'logo-meta.png', detail: 'Conta Vita Pet Life',
       ...integrationStatus({ key: 'meta_us', configured: meta.isConfigured(process.env.META_US_AD_ACCOUNT_ID) }) },
-    { key: 'google_ads', label: 'Google Ads', country: 'us', category: 'marketing', logo: 'google_ads_logo_icon.png', detail: has('GOOGLE_ADS_CUSTOMER_ID') ? 'Conta Coco and Luna' : '',
+    { key: 'google_ads', label: 'Google Ads', country: 'us', category: 'marketing', group: 'google', logo: 'google_ads_logo_icon.png', detail: has('GOOGLE_ADS_CUSTOMER_ID') ? 'Conta Coco and Luna' : '',
       ...integrationStatus({ key: 'google_ads', configured: googleads.isConfigured(), authorized: Boolean(db.googleAdsTokens) }) },
 
     // ── Estados Unidos · Planejadas ──
-    { key: null, label: 'Amazon Ads EUA', country: 'us', category: 'planned', logo: 'Amazon_Ads_Horizontal_SquidInk.png', detail: 'Ainda não conectada', state: 'planned', note: '' },
+    { key: null, label: 'Amazon Ads EUA', country: 'us', category: 'planned', group: 'amazon', logo: 'Amazon_Ads_Horizontal_SquidInk.png', detail: 'Ainda não conectada', state: 'planned', note: '' },
   ];
 
   // Achata { state, note } no objeto (integrationStatus devolve isso via spread acima).
