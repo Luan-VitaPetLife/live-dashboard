@@ -30,14 +30,21 @@
   .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
-  /* ── Content ── */
-  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;max-width:900px;width:100%}
+  /* ── Content — sem teto de largura, a tela inteira é usada (mesmo ajuste já feito em
+       integracoes.html) ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;width:100%}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
+  /* ── Grade de seções curtas (Geral/Integrações/Unificador/Login) lado a lado — quantas
+       colunas couberem, com piso de 320px por card. Usuários fica fora da grade, sempre
+       largura total, por ter uma lista que precisa de mais espaço horizontal. ── */
+  .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+  .section{display:flex;flex-direction:column;gap:10px}
+
   /* ── Section label + card ── */
-  .section-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:6px 0 -6px 2px}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+  .section-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;flex:1;display:flex;flex-direction:column}
   .card h2{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
   .card p.desc{font-size:12px;color:var(--sub);line-height:1.6}
   .card p.desc + p.desc{margin-top:8px}
@@ -127,48 +134,58 @@
       <span>Esta área é restrita a administradores. Algumas ações podem não estar disponíveis para o seu usuário.</span>
     </div>
 
-    <!-- ── SEÇÃO 1 · GERAL ── -->
-    <div class="section-label">Geral</div>
-    <div class="card">
-      <h2>Coco and Luna — Painel de vendas</h2>
-      <p class="desc">Este é o centro de configurações do sistema. Aqui ficam os ajustes que valem para todo o painel: controle de acesso e gerenciamento de usuários.</p>
-      <p class="hint"><i class="bi bi-info-circle"></i> As preferências visuais de cada tela — cores dos canais, período e frequência de atualização — continuam no ícone <i class="bi bi-gear-fill"></i> disponível no topo das próprias telas do painel.</p>
-    </div>
-
-    <!-- ── SEÇÃO 1B · INTEGRAÇÕES ── -->
-    <div class="section-label">Integrações</div>
-    <div class="card">
-      <h2>Canais conectados</h2>
-      <p class="desc">Veja o status de cada canal (Shopify, Shopee, Mercado Livre, Amazon, Meta Ads, Google Ads, Bling) e ligue ou desligue a sincronização automática de qualquer um deles.</p>
-      <div style="margin-top:14px"><a class="btn btn-primary" href="/integracoes" style="text-decoration:none"><i class="bi bi-diagram-3"></i> Ver integrações</a></div>
-    </div>
-
-    <!-- ── SEÇÃO 1C · UNIFICADOR ── -->
-    <div class="section-label">Unificador</div>
-    <div class="card">
-      <h2>Unificar produtos entre canais</h2>
-      <p class="desc">O mesmo produto físico às vezes aparece com nomes diferentes em cada canal (Shopify, Shopee, Mercado Livre, Amazon...). O Unificador junta manualmente esses produtos num grupo só — o grupo passa a valer em Revenue (Top produtos), Segmentos, Produtos e Estoque, sem precisar repetir a unificação em cada tela.</p>
-      <div class="switch-row">
-        <label class="ios-switch">
-          <input type="checkbox" class="ios-switch-input" id="groupsToggle" disabled>
-          <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
-        </label>
-        <span class="switch-status" id="groupsStatus">Carregando…</span>
+    <div class="settings-grid">
+      <!-- ── SEÇÃO 1 · GERAL ── -->
+      <div class="section">
+        <div class="section-label">Geral</div>
+        <div class="card">
+          <h2>Sobre o painel</h2>
+          <p class="desc">Este é o centro de configurações do sistema. Aqui ficam os ajustes que valem para todo o painel: controle de acesso e gerenciamento de usuários.</p>
+          <p class="hint"><i class="bi bi-info-circle"></i> As preferências visuais de cada tela (cores dos canais, período, frequência de atualização) ficam no ícone <i class="bi bi-gear-fill"></i> no topo de cada tela do painel.</p>
+        </div>
       </div>
-      <div style="margin-top:14px"><a class="btn btn-primary" href="/unificador" style="text-decoration:none"><i class="bi bi-link-45deg"></i> Abrir Unificador</a></div>
-    </div>
 
-    <!-- ── SEÇÃO 2 · ACESSO / LOGIN ── -->
-    <div class="section-label">Acesso · Login</div>
-    <div class="card">
-      <h2>Exigir login</h2>
-      <p class="desc">Quando <b>ligado</b>, todos precisam entrar com usuário e senha para abrir o painel. Quando <b>desligado</b>, a dashboard fica aberta a qualquer pessoa que tenha o link — use apenas em ambiente controlado (rede interna, uso pessoal).</p>
-      <div class="switch-row">
-        <label class="ios-switch">
-          <input type="checkbox" class="ios-switch-input" id="loginToggle" disabled>
-          <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
-        </label>
-        <span class="switch-status" id="loginStatus">Carregando…</span>
+      <!-- ── SEÇÃO 1B · INTEGRAÇÕES ── -->
+      <div class="section">
+        <div class="section-label">Integrações</div>
+        <div class="card">
+          <h2>Canais conectados</h2>
+          <p class="desc">Veja o status de cada canal (Shopify, Shopee, Mercado Livre, Amazon, Meta Ads, Google Ads, Bling) e ligue ou desligue a sincronização automática de qualquer um deles.</p>
+          <div style="margin-top:14px"><a class="btn btn-primary" href="/integracoes" style="text-decoration:none"><i class="bi bi-diagram-3"></i> Ver integrações</a></div>
+        </div>
+      </div>
+
+      <!-- ── SEÇÃO 1C · UNIFICADOR ── -->
+      <div class="section">
+        <div class="section-label">Unificador</div>
+        <div class="card">
+          <h2>Unificar produtos entre canais</h2>
+          <p class="desc">O mesmo produto físico às vezes aparece com nomes diferentes em cada canal (Shopify, Shopee, Mercado Livre, Amazon...). O Unificador junta manualmente esses produtos num grupo só. O grupo passa a valer em Revenue (Top produtos), Segmentos, Produtos e Estoque, sem precisar repetir a unificação em cada tela.</p>
+          <div class="switch-row">
+            <label class="ios-switch">
+              <input type="checkbox" class="ios-switch-input" id="groupsToggle" disabled>
+              <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
+            </label>
+            <span class="switch-status" id="groupsStatus">Carregando…</span>
+          </div>
+          <div style="margin-top:14px"><a class="btn btn-primary" href="/unificador" style="text-decoration:none"><i class="bi bi-link-45deg"></i> Abrir Unificador</a></div>
+        </div>
+      </div>
+
+      <!-- ── SEÇÃO 2 · ACESSO / LOGIN ── -->
+      <div class="section">
+        <div class="section-label">Acesso · Login</div>
+        <div class="card">
+          <h2>Exigir login</h2>
+          <p class="desc">Quando <b>ligado</b>, todos precisam entrar com usuário e senha para abrir o painel. Quando <b>desligado</b>, a dashboard fica aberta a qualquer pessoa que tenha o link. Use só em ambiente controlado, como rede interna ou uso pessoal.</p>
+          <div class="switch-row">
+            <label class="ios-switch">
+              <input type="checkbox" class="ios-switch-input" id="loginToggle" disabled>
+              <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
+            </label>
+            <span class="switch-status" id="loginStatus">Carregando…</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -308,7 +325,7 @@ function setLoginStatus(enabled){
 function setGroupsStatus(enabled){
   const el = $('groupsStatus');
   if(enabled){ el.textContent = 'Unificação ativa'; el.className = 'switch-status'; }
-  else{ el.textContent = 'Desligado — telas mostram produtos sem agrupar'; el.className = 'switch-status off'; }
+  else{ el.textContent = 'Desligado: telas mostram produtos sem agrupar'; el.className = 'switch-status off'; }
 }
 async function loadGroupsConfig(){
   try{
