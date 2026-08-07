@@ -1170,7 +1170,7 @@ function computeIntegrationsList() {
     // Luna, então o logo do card deve identificar a MARCA, não a plataforma por trás dela.
     { key: 'shopify_br', label: 'Shopify - Coco and Luna BR', country: 'br', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
       ...integrationStatus({ key: 'shopify_br', configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') }) },
-    { key: 'yucaloo_br', label: 'Yucaloo BR', country: 'br', category: 'geral', group: 'shopify', logo: 'Yucaloo2.webp', detail: getYucalooTokens().br?.shop || '',
+    { key: 'yucaloo_br', label: 'Yucaloo BR', country: 'br', category: 'geral', group: 'shopify', logo: 'Yucaloo2.png', detail: getYucalooTokens().br?.shop || '',
       ...integrationStatus({ key: 'yucaloo_br', configured: shopifyYucaloo.isConfigured('br'), authorized: Boolean(getYucalooTokens().br) }) },
     { key: 'mercadolivre', label: 'Mercado Livre', country: 'br', category: 'geral', group: 'mercadolivre', logo: 'Logotipo_MercadoLivre.png', detail: db.mlTokens ? 'Conta autorizada' : '',
       ...integrationStatus({ key: 'mercadolivre', configured: ml.isConfigured(), authorized: Boolean(getMlTokens()) }) },
@@ -1194,7 +1194,7 @@ function computeIntegrationsList() {
     // ── Estados Unidos · Geral ──
     { key: 'shopify_us', label: 'Shopify - Coco and Luna EUA', country: 'us', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
       ...integrationStatus({ key: 'shopify_us', configured: has('SHOPIFY_US_STORE') && has('SHOPIFY_US_ADMIN_TOKEN') }) },
-    { key: 'yucaloo_us', label: 'Yucaloo EUA', country: 'us', category: 'geral', group: 'shopify', logo: 'Yucaloo2.webp', detail: getYucalooTokens().us?.shop || '',
+    { key: 'yucaloo_us', label: 'Yucaloo EUA', country: 'us', category: 'geral', group: 'shopify', logo: 'Yucaloo2.png', detail: getYucalooTokens().us?.shop || '',
       ...integrationStatus({ key: 'yucaloo_us', configured: shopifyYucaloo.isConfigured('us'), authorized: Boolean(getYucalooTokens().us) }) },
     { key: 'amazon_us', label: 'Amazon EUA', country: 'us', category: 'geral', group: 'amazon', logo: 'Amazon_logo.png', detail: 'Conta VITA PET LIFE',
       ...integrationStatus({ key: 'amazon_us', configured: amazon.isConfigured(), paused: backoffActive, pausedNote: backoffActive ? amazonPauseNote(Math.ceil((backoffUntil - Date.now()) / 60000)) : '' }) },
