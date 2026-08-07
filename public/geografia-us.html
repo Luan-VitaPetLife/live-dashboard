@@ -244,8 +244,8 @@
       <span class="arr">▾</span>
       <div class="csel-pop">
         <div class="csel-opt active" data-value="todos">Todos</div>
-        <div class="csel-opt" data-value="shopify_us">Shopify US</div>
-        <div class="csel-opt" data-value="amazon">Amazon</div>
+        <div class="csel-opt" data-value="shopify_us">Shopify - Coco and Luna EUA</div>
+        <div class="csel-opt" data-value="amazon_us">Amazon EUA</div>
       </div>
     </div>
 
@@ -499,7 +499,7 @@ const CENTROIDS = {
 };
 
 // ── Channels ──
-const CHAN = { todos:'Todos os canais', shopify_us:'Shopify US', amazon:'Amazon' };
+const CHAN = { todos:'Todos os canais', shopify_us:'Shopify - Coco and Luna EUA', amazon_us:'Amazon EUA' };
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos' };
 
 // ── Formatting (USD) ──
@@ -508,8 +508,8 @@ function fmtInt(v) { return (Number(v)||0).toLocaleString('en-US') }
 function pctStr(n) { return (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:1,minimumFractionDigits:1})+'%' }
 
 // ── Canal breakdown helpers ──
-const CHAN_COLORS_MAP = { shopify:'#95BF47', shopee:'#EE4D2D', mercadolivre:'#FFE600', amazon:'#FF9900', shopify_us:'#7EAD3C' };
-const CHAN_LABELS_MAP = { shopify:'Shopify', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon', shopify_us:'Shopify US' };
+const CHAN_COLORS_MAP = { shopify:'#95BF47', shopee:'#EE4D2D', mercadolivre:'#FFE600', amazon:'#FF9900', amazon_us:'#FF9900', shopify_us:'#7EAD3C' };
+const CHAN_LABELS_MAP = { shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon BR', amazon_us:'Amazon EUA', shopify_us:'Shopify - Coco and Luna EUA' };
 function isChanMap() { return localStorage.getItem('coco_chan_map') !== '0'; }
 function isChanExpand() { return localStorage.getItem('coco_chan_expand') === '1'; }
 function togglePopupExpand(uid) {

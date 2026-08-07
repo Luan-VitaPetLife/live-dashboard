@@ -148,7 +148,10 @@ function integCard(it){
   const logoBox = document.createElement('div');
   logoBox.className = 'integ-logo';
   const img = document.createElement('img');
-  img.src = LOGO_BASE + it.logo;
+  // Logo começando com "/" é servida direto da raiz de public/ (ex: /Logo2.png, o ícone da
+  // própria Coco and Luna) em vez de logos-integracao/ — usado pros canais Shopify que são a
+  // marca em si, não um serviço de terceiro (ver server.js computeIntegrationsList).
+  img.src = it.logo.startsWith('/') ? it.logo : LOGO_BASE + it.logo;
   img.alt = it.label;
   img.onerror = function(){
     logoBox.innerHTML = '<i class="bi ' + (FALLBACK_ICON[it.category] || 'bi-app') + '"></i>';

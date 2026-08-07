@@ -515,7 +515,7 @@ let untilDate = localStorage.getItem('coco_until') || todayISO;
 
 // Canal — dropdown por mercado (mesmos canais do dashboard principal). O backend já
 // filtra os segmentos pelo parâmetro `channel` do /api/dashboard.
-const CH_LABELS = { todos:'Todos', shopify:'Shopify', shopee:'Shopee', mercadolivre:'Mercado Livre', shopify_us:'Shopify US', amazon_us:'Amazon' };
+const CH_LABELS = { todos:'Todos', shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', shopify_us:'Shopify - Coco and Luna EUA', amazon_us:'Amazon EUA' };
 const CH_BY_MARKET = { br:['todos','shopify','shopee','mercadolivre'], us:['todos','shopify_us','amazon_us'] };
 let channel = 'todos';
 // Estado de expansão dos "top produtos" por segmento (ver mais / ver menos).

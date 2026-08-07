@@ -268,9 +268,9 @@
       <span class="arr">▾</span>
       <div class="csel-pop">
         <div class="csel-opt active" data-value="todos">Todos</div>
-        <div class="csel-opt" data-value="shopify">Shopify</div>
+        <div class="csel-opt" data-value="shopify">Shopify - Coco and Luna BR</div>
         <div class="csel-opt" data-value="shopee">Shopee</div>
-        <div class="csel-opt" data-value="amazon">Amazon</div>
+        <div class="csel-opt" data-value="amazon">Amazon BR</div>
         <div class="csel-opt" data-value="mercadolivre">Mercado Livre</div>
       </div>
     </div>
@@ -548,7 +548,7 @@ const SUB_REGIONS = {
 };
 
 // ── Formatting ──
-const CHAN = { todos:'Todos os canais', shopify:'Shopify', shopee:'Shopee', amazon:'Amazon', mercadolivre:'Mercado Livre' };
+const CHAN = { todos:'Todos os canais', shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', amazon:'Amazon BR', mercadolivre:'Mercado Livre' };
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos' };
 function fmtBRL(v, dec=0) { return 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}) }
 function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
@@ -556,7 +556,7 @@ function pctStr(n) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFracti
 
 // ── Canal breakdown helpers ──
 const CHAN_COLORS_MAP = { shopify:'#95BF47', shopee:'#EE4D2D', mercadolivre:'#FFE600', amazon:'#FF9900', shopify_us:'#7EAD3C' };
-const CHAN_LABELS_MAP = { shopify:'Shopify', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon', shopify_us:'Shopify US' };
+const CHAN_LABELS_MAP = { shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon BR', shopify_us:'Shopify - Coco and Luna EUA' };
 function isChanMap() { return localStorage.getItem('coco_chan_map') !== '0'; }
 function isChanExpand() { return localStorage.getItem('coco_chan_expand') === '1'; }
 function togglePopupExpand(uid) {
