@@ -68,18 +68,34 @@
 
   /* ── Users list ── */
   .users-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-  .user-list{display:flex;flex-direction:column;gap:10px}
-  .user-row{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
+  .users-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+  /* Seletor de modo de visualização (mesmo padrão de integracoes.html) */
+  .view-switch{display:flex;gap:3px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:3px;flex-shrink:0}
+  .vs-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border:none;background:none;border-radius:7px;font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;font-family:inherit;white-space:nowrap}
+  .vs-btn:hover{color:var(--text)}
+  .vs-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+
   .avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;letter-spacing:.5px}
-  .user-info{flex:1;min-width:0}
   .user-name{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .user-handle{font-size:11px;color:var(--muted)}
   .user-pages{font-size:11px;color:var(--sub);margin-top:3px}
   .tag{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:3px 8px;border-radius:20px}
   .tag-admin{background:var(--rust);color:#fff}
   .tag-padrao{background:var(--surface);border:1px solid var(--border2);color:var(--sub)}
-  .user-actions{display:flex;gap:6px;flex-shrink:0}
   .empty{font-size:12px;color:var(--muted);padding:18px;text-align:center}
+
+  /* Modo Linhas: uma linha por usuário, largura total */
+  .user-list{display:flex;flex-direction:column;gap:10px}
+  .user-row{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
+  .user-row .user-info{flex:1;min-width:0}
+  .user-row .user-actions{display:flex;gap:6px;flex-shrink:0}
+
+  /* Modo Colunas: grade de cards, quantos couberem por linha */
+  .user-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+  .user-card{display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
+  .user-card-top{display:flex;align-items:flex-start;gap:12px}
+  .user-card .user-info{flex:1;min-width:0}
+  .user-card .user-actions{display:flex;gap:6px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:10px}
 
   /* ── Modal / form ── */
   .modal-overlay{position:fixed;inset:0;background:rgba(20,18,15,.5);z-index:400;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
@@ -91,6 +107,11 @@
   .field input:not([type=checkbox]):not([type=radio]),.field select{width:100%;font-family:inherit;font-size:13px;color:var(--text);padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none;transition:border-color .12s;appearance:none}
   .field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%239c9790' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:30px}
   .field input:focus,.field select:focus{border-color:var(--ink)}
+  /* Campo de senha com botão de mostrar/ocultar (mesmo padrão de login.html) */
+  .pw-wrap{position:relative}
+  .pw-wrap input{padding-right:38px}
+  .pw-toggle{position:absolute;top:0;right:0;height:100%;width:36px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;transition:color .15s}
+  .pw-toggle:hover{color:var(--sub)}
   .field .field-hint{font-size:10px;color:var(--muted);margin-top:4px}
   .pages-box{border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);padding:10px;max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
   .page-check{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:background .12s}
@@ -197,9 +218,15 @@
           <h2>Usuários do painel</h2>
           <p class="desc">Quem pode acessar e o que cada pessoa enxerga.</p>
         </div>
-        <button class="btn btn-primary" id="addUserBtn"><i class="bi bi-plus-lg"></i> Adicionar usuário</button>
+        <div class="users-head-actions">
+          <div class="view-switch" id="userViewSwitch">
+            <button type="button" class="vs-btn" data-mode="colunas"><i class="bi bi-grid-3x3-gap"></i> Colunas</button>
+            <button type="button" class="vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
+          </div>
+          <button class="btn btn-primary" id="addUserBtn"><i class="bi bi-plus-lg"></i> Adicionar usuário</button>
+        </div>
       </div>
-      <div class="user-list" id="userList">
+      <div id="userList">
         <div class="empty">Carregando usuários…</div>
       </div>
     </div>
@@ -221,7 +248,10 @@
     </div>
     <div class="field">
       <label>Senha</label>
-      <input type="password" id="fPassword" placeholder="Senha de acesso" autocomplete="new-password">
+      <div class="pw-wrap">
+        <input type="password" id="fPassword" placeholder="Senha de acesso" autocomplete="new-password">
+        <button type="button" class="pw-toggle" id="fPasswordToggle" aria-label="Mostrar senha"><i class="bi bi-eye"></i></button>
+      </div>
       <div class="field-hint" id="pwdHint" style="display:none">Deixe em branco para manter a senha atual.</div>
     </div>
     <div class="field">
@@ -383,19 +413,48 @@ $('loginToggle').addEventListener('change', async function(){
   }
 });
 
-/* ── Lista de usuários ── */
+/* ── Lista de usuários — modos Colunas (padrão) e Linhas, mesmo padrão de view-switch
+     já usado em integracoes.html. Sem "@usuário" nas duas visões: o handle não é usado
+     em lugar nenhum do app (só o nome de exibição), então só confundia. ── */
+let userViewMode = localStorage.getItem('coco_users_view') || 'colunas';
+let lastUsers = [];
+
+function syncUserViewSwitch(){
+  document.querySelectorAll('#userViewSwitch .vs-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === userViewMode));
+}
+$('userViewSwitch').addEventListener('click', e => {
+  const btn = e.target.closest('.vs-btn');
+  if(!btn) return;
+  userViewMode = btn.dataset.mode;
+  localStorage.setItem('coco_users_view', userViewMode);
+  syncUserViewSwitch();
+  renderUsers(lastUsers);
+});
+
 async function loadUsers(){
   const list = $('userList');
   try{
     const r = await fetch('/api/users', { credentials:'same-origin' });
     if(!r.ok) throw new Error('http '+r.status);
     const d = await r.json();
-    const users = Array.isArray(d.users) ? d.users : [];
-    if(!users.length){ list.innerHTML = '<div class="empty">Nenhum usuário cadastrado.</div>'; return; }
-    list.innerHTML = '';
-    users.forEach(u => list.appendChild(userRow(u)));
+    lastUsers = Array.isArray(d.users) ? d.users : [];
+    renderUsers(lastUsers);
   }catch(e){
     list.innerHTML = '<div class="empty">Não foi possível carregar os usuários.</div>';
+  }
+}
+
+function renderUsers(users){
+  const list = $('userList');
+  if(!users.length){ list.className = ''; list.innerHTML = '<div class="empty">Nenhum usuário cadastrado.</div>'; return; }
+  if(userViewMode === 'linhas'){
+    list.className = 'user-list';
+    list.innerHTML = '';
+    users.forEach(u => list.appendChild(userRowEl(u)));
+  }else{
+    list.className = 'user-grid';
+    list.innerHTML = '';
+    users.forEach(u => list.appendChild(userCardEl(u)));
   }
 }
 
@@ -407,15 +466,15 @@ function pagesSummary(u){
   return pages.length + ' páginas liberadas';
 }
 
-function userRow(u){
-  const row = document.createElement('div');
-  row.className = 'user-row';
+function avatarEl(u){
   const av = document.createElement('div');
   av.className = 'avatar';
   av.style.background = hashColor(u.name || u.username);
   av.textContent = initials(u.name || u.username);
-  row.appendChild(av);
+  return av;
+}
 
+function userInfoEl(u){
   const info = document.createElement('div');
   info.className = 'user-info';
   const isAdmin = u.role === 'admin';
@@ -423,10 +482,11 @@ function userRow(u){
     `<div class="user-name">${escapeHtml(u.name || u.username)}
        <span class="tag ${isAdmin?'tag-admin':'tag-padrao'}">${isAdmin?'Admin':'Padrão'}</span>
      </div>
-     <div class="user-handle">@${escapeHtml(u.username)}</div>
      <div class="user-pages"><i class="bi bi-window-stack"></i> ${escapeHtml(pagesSummary(u))}</div>`;
-  row.appendChild(info);
+  return info;
+}
 
+function userActionsEl(u){
   const actions = document.createElement('div');
   actions.className = 'user-actions';
   const edit = document.createElement('button');
@@ -441,8 +501,28 @@ function userRow(u){
   del.onclick = () => deleteUser(u);
   actions.appendChild(edit);
   actions.appendChild(del);
-  row.appendChild(actions);
+  return actions;
+}
+
+function userRowEl(u){
+  const row = document.createElement('div');
+  row.className = 'user-row';
+  row.appendChild(avatarEl(u));
+  row.appendChild(userInfoEl(u));
+  row.appendChild(userActionsEl(u));
   return row;
+}
+
+function userCardEl(u){
+  const card = document.createElement('div');
+  card.className = 'user-card';
+  const top = document.createElement('div');
+  top.className = 'user-card-top';
+  top.appendChild(avatarEl(u));
+  top.appendChild(userInfoEl(u));
+  card.appendChild(top);
+  card.appendChild(userActionsEl(u));
+  return card;
 }
 
 async function deleteUser(u){
@@ -491,6 +571,7 @@ function openModal(user){
   $('fPassword').value = '';
   $('fPassword').placeholder = user ? '••••••••' : 'Senha de acesso';
   $('pwdHint').style.display = user ? 'block' : 'none';
+  setPasswordVisible(false);
   $('fRole').value = user ? (user.role || 'padrao') : 'admin';
   renderPagesBox(user ? user.pages : []);
   syncRoleUI();
@@ -547,6 +628,17 @@ function escapeHtml(s){
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+/* ── Mostrar/ocultar senha (mesmo padrão de login.html) ── */
+function setPasswordVisible(visible){
+  $('fPassword').type = visible ? 'text' : 'password';
+  $('fPasswordToggle').querySelector('i').className = visible ? 'bi bi-eye-slash' : 'bi bi-eye';
+  $('fPasswordToggle').setAttribute('aria-label', visible ? 'Ocultar senha' : 'Mostrar senha');
+}
+$('fPasswordToggle').addEventListener('click', () => {
+  setPasswordVisible($('fPassword').type === 'password');
+  $('fPassword').focus();
+});
+
 /* ── Wiring ── */
 $('addUserBtn').addEventListener('click', ()=>openModal(null));
 $('modalCancel').addEventListener('click', closeModal);
@@ -557,6 +649,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal();
 
 /* ── Init ── */
 (async function(){
+  syncUserViewSwitch();
   await loadMe();
   await loadUsers();
   await loadGroupsConfig();
