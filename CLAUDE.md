@@ -1669,6 +1669,12 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   Corrigido: `CHANNELS_BR`/`CHANNELS_US` (+ `CH_META`, cor `#4466FF`/logo `logos-integracao/Yucaloo2.png`,
   mesmo padrão de `colors.js`) em `produtos.html`/`estoque.html`, e `CH_BY_MARKET` em `segmentos.html`.
   `index.html` já tinha sido corrigido antes (`MARKET_CHANNELS`, ver acima, "Badges de canal renomeados").
+  **Mesmo dia, mesmo motivo — Geografia também faltava** (reportado pelo Luan em seguida, "a sessão de
+  geografia não aparece com o canal da Yucaloo"): `geografia.html`/`geografia-us.html` têm o dropdown de
+  canal **hardcoded no HTML** (não gerado dinamicamente como `index.html`), então o mesmo gap se repetia
+  ali — mais `CHAN` (rótulo do topbar/rodapé) e `CHAN_COLORS_MAP`/`CHAN_LABELS_MAP` (breakdown "Por canal"
+  no popup/modal de estado). O mapa em si (`byState[s].byChannel[o.channel]` em `metrics.js`) já era
+  dinâmico e não precisou de mudança nenhuma no backend — só as 4 tabelas hardcoded do front.
   **`campanhas.html` continua sem, de propósito** — não tem uma lista de canais Shopify genérica, só
   cards fixos por integração de Ads (Meta BR/US, Mercado Livre, Google Ads); a Yucaloo não tem conta de
   Ads própria ainda, então não há nada pra mostrar lá (ver 4.20).
