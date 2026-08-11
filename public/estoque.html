@@ -280,11 +280,13 @@ const CH_META = {
   shopee:       { name: 'Shopee',                      color: '#EE4D2D', logo: 'logo_shopee.svg' },
   mercadolivre: { name: 'Mercado Livre',                color: '#FFE600', logo: 'logo_mercadolivre.png', logoFill: true },
   amazon:       { name: 'Amazon BR',                    color: '#111111', logo: 'logo_amazon.webp' },
+  yucaloo_br:   { name: 'Shopify - Yucaloo BR',         color: '#4466FF', logo: 'logos-integracao/Yucaloo2.png' },
   shopify_us:   { name: 'Shopify - Coco and Luna EUA',  color: '#7EAD3C', logo: 'logo_shopify.png' },
   amazon_us:    { name: 'Amazon EUA',                   color: '#FF9900', logo: 'logo_amazon.webp' },
+  yucaloo_us:   { name: 'Shopify - Yucaloo EUA',        color: '#4466FF', logo: 'logos-integracao/Yucaloo2.png' },
 };
-const CHANNELS_BR = ['shopify', 'shopee', 'amazon', 'mercadolivre'];
-const CHANNELS_US = ['shopify_us', 'amazon_us'];
+const CHANNELS_BR = ['shopify', 'yucaloo_br', 'shopee', 'amazon', 'mercadolivre'];
+const CHANNELS_US = ['shopify_us', 'yucaloo_us', 'amazon_us'];
 
 function contrastText(hex) {
   const h = (hex || '#000').replace('#', '');

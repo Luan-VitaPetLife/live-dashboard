@@ -320,11 +320,13 @@ const CH_META = {
   shopee:       { name: 'Shopee',                      color: '#EE4D2D', logo: 'logo_shopee.svg' },
   mercadolivre: { name: 'Mercado Livre',                color: '#FFE600', logo: 'logo_mercadolivre.png', logoFill: true },
   amazon:       { name: 'Amazon BR',                    color: '#111111', logo: 'logo_amazon.webp' },
+  yucaloo_br:   { name: 'Shopify - Yucaloo BR',         color: '#4466FF', logo: 'logos-integracao/Yucaloo2.png' },
   shopify_us:   { name: 'Shopify - Coco and Luna EUA',  color: '#7EAD3C', logo: 'logo_shopify.png' },
   amazon_us:    { name: 'Amazon EUA',                   color: '#FF9900', logo: 'logo_amazon.webp' },
+  yucaloo_us:   { name: 'Shopify - Yucaloo EUA',        color: '#4466FF', logo: 'logos-integracao/Yucaloo2.png' },
 };
-const CHANNELS_BR = ['shopify', 'shopee', 'amazon', 'mercadolivre'];
-const CHANNELS_US = ['shopify_us', 'amazon_us'];
+const CHANNELS_BR = ['shopify', 'yucaloo_br', 'shopee', 'amazon', 'mercadolivre'];
+const CHANNELS_US = ['shopify_us', 'yucaloo_us', 'amazon_us'];
 // Exportar quantidade vendida pra planilha: por enquanto só Shopify US (mesmo escopo do backend,
 // ver GET /api/products/export em server.js). Outros canais ganham o botão quando o backend abrir.
 const EXPORTABLE_PRODUCT_CHANNELS = new Set(['shopify_us']);
