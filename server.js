@@ -1168,7 +1168,7 @@ function computeIntegrationsList() {
     // LOGO_BASE em integracoes.html) — Logo2.png é o ícone "CC" da própria Coco and Luna (mesmo
     // usado no topo da sidebar), não o logo genérico da plataforma Shopify: essa loja É a Coco and
     // Luna, então o logo do card deve identificar a MARCA, não a plataforma por trás dela.
-    { key: 'shopify_br', label: 'Shopify - Coco and Luna BR', country: 'br', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
+    { key: 'shopify_br', label: 'Coco and Luna BR', country: 'br', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
       ...integrationStatus({ key: 'shopify_br', configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') }) },
     { key: 'yucaloo_br', label: 'Yucaloo BR', country: 'br', category: 'geral', group: 'shopify', logo: 'Yucaloo2.png', detail: getYucalooTokens().br?.shop || '',
       ...integrationStatus({ key: 'yucaloo_br', configured: shopifyYucaloo.isConfigured('br'), authorized: Boolean(getYucalooTokens().br) }) },
