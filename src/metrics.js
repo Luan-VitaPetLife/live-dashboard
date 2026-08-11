@@ -325,6 +325,24 @@ function applyProductGroups(list, groups, opts = {}) {
 // Amazon continuam só derivados de pedido (sem endpoint de catálogo integrado ainda).
 const SHOPIFY_CATALOG_CHANNELS = { br: ['shopify', 'yucaloo_br'], us: ['shopify_us', 'yucaloo_us'] };
 
+// Mescla o catálogo bruto da Shopify (kv.shopifyProductCatalog — produto cadastrado, mesmo sem
+// venda) em cima de um catalogByChannel derivado só de pedidos (aggregateProductsByChannel).
+// Sem isso, um canal Shopify sem NENHUM pedido no histórico inteiro (ex.: Yucaloo recém-conectada)
+// nem aparece em catalogByChannel — a chave do canal só nasce a partir de pedido real — e o card
+// em Produtos/Estoque fica sem produto nenhum, mesmo com o catálogo real cheio na Shopify.
+function mergeShopifyCatalog(catalogByChannel, market) {
+  const rawCatalog = getShopifyProductCatalog();
+  for (const channel of SHOPIFY_CATALOG_CHANNELS[market] || []) {
+    if (!catalogByChannel[channel]) catalogByChannel[channel] = { revenue: 0, orders: 0, products: {} };
+    const products = catalogByChannel[channel].products;
+    for (const p of rawCatalog[channel] || []) {
+      if (products[p.title]) continue;
+      products[p.title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: classifyType(p), image: p.image || null };
+    }
+  }
+  return catalogByChannel;
+}
+
 // Catálogo completo (todo o histórico, todos os canais) de um mercado, achatado numa lista só —
 // usado pela tela Unificador pra listar todo produto disponível pra agrupar manualmente.
 export function listProductCatalog({ market = 'br' } = {}) {
@@ -901,7 +919,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
   // Catálogo (todos os pedidos, sem filtro de período) — é uma tela de catálogo, então um produto
   // do marketplace continua listado mesmo sem venda no período escolhido (qty/receita ficam 0).
   const allOrders = getOrders({ channel: 'todos', market }).filter(o => !isCancelled(o));
-  const catalogByChannel = aggregateProductsByChannel(allOrders);
+  const catalogByChannel = mergeShopifyCatalog(aggregateProductsByChannel(allOrders), market);
 
   const finance = getProductFinance();
   const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações)
@@ -982,7 +1000,7 @@ export function computeStock({ market = 'br' } = {}) {
   // mais de 30 dias sumia do Estoque e o estoque/recebendo cadastrado manualmente pra ele ficava
   // inacessível pela UI (o dado continuava salvo em kv.productStock, só não tinha como editar).
   const allOrders = getOrders({ channel: 'todos', market }).filter(o => !isCancelled(o));
-  const catalogByChannel = aggregateProductsByChannel(allOrders);
+  const catalogByChannel = mergeShopifyCatalog(aggregateProductsByChannel(allOrders), market);
 
   // Amazon (BR/US) não traz título de item nos pedidos hoje (ver backlog item 6 do CLAUDE.md) —
   // sem isso a tabela ficaria vazia, então entra um produto placeholder editável manualmente
