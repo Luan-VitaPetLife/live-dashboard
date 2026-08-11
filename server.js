@@ -1192,7 +1192,7 @@ function computeIntegrationsList() {
     { key: null, label: 'TikTok Shop', country: 'br', category: 'planned', group: 'tiktok', logo: 'logo-tiktok-shop.png', detail: 'Loja em configuração, sem pedidos ainda', state: 'planned', note: '' },
 
     // ── Estados Unidos · Geral ──
-    { key: 'shopify_us', label: 'Shopify - Coco and Luna EUA', country: 'us', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
+    { key: 'shopify_us', label: 'Coco and Luna EUA', country: 'us', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
       ...integrationStatus({ key: 'shopify_us', configured: has('SHOPIFY_US_STORE') && has('SHOPIFY_US_ADMIN_TOKEN') }) },
     { key: 'yucaloo_us', label: 'Yucaloo EUA', country: 'us', category: 'geral', group: 'shopify', logo: 'Yucaloo2.png', detail: getYucalooTokens().us?.shop || '',
       ...integrationStatus({ key: 'yucaloo_us', configured: shopifyYucaloo.isConfigured('us'), authorized: Boolean(getYucalooTokens().us) }) },
