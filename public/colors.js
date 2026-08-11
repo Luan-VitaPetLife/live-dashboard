@@ -140,9 +140,16 @@
     hexInput.maxLength = 7;
     hexInput.placeholder = '#RRGGBB';
     hexInput.addEventListener('input', () => {
-      const v = hexInput.value.trim();
+      const raw = hexInput.value.trim();
+      const v = /^[0-9a-fA-F]{6}$/.test(raw) ? '#' + raw : raw;
       if (/^#[0-9a-fA-F]{6}$/.test(v)) { previewEl.style.background = v; pick(v, { keepOpen: true }); }
     });
+    hexInput.addEventListener('blur', () => {
+      const raw = hexInput.value.trim();
+      const v = /^[0-9a-fA-F]{6}$/.test(raw) ? '#' + raw : raw;
+      if (/^#[0-9a-fA-F]{6}$/i.test(v)) hexInput.value = v.toUpperCase();
+    });
+    hexInput.addEventListener('focus', () => hexInput.select());
     hexInput.addEventListener('keydown', e => { if (e.key === 'Enter') close(); });
     hexRow.appendChild(previewEl);
     hexRow.appendChild(hexInput);
@@ -204,8 +211,9 @@
   }
 
   // Monta as linhas .sp-row (canal/marketing) num container já existente no HTML da página —
-  // mesmo formato de sp-row/sp-row-left/sp-swatch/sp-row-label já usado em index.html, só troca
-  // o <input type="color"> final pelo novo trigger.
+  // um único indicador de cor por linha (o próprio .ccp-trigger, à direita), mesmo padrão já
+  // usado nos painéis de cor do mapa (geografia.html/geografia-us.html) — sem swatch estático
+  // duplicado à esquerda.
   function buildSection(container, defaults, prefix, getCurrent, onChange) {
     if (typeof container === 'string') container = document.getElementById(container);
     if (!container) return;
@@ -215,27 +223,23 @@
       const currentColor = getCurrent(k);
       const row = document.createElement('div');
       row.className = 'sp-row';
-      const left = document.createElement('div');
-      left.className = 'sp-row-left';
-      const swatch = document.createElement('div');
-      swatch.className = 'sp-swatch';
-      swatch.style.background = currentColor;
       const lbl = document.createElement('span');
       lbl.className = 'sp-row-label';
       lbl.textContent = label;
-      left.appendChild(swatch);
-      left.appendChild(lbl);
-      const trigger = makeTrigger(currentColor, hex => {
-        onChange(k, hex);
-        swatch.style.background = hex;
-      });
-      row.appendChild(left);
+      const trigger = makeTrigger(currentColor, hex => onChange(k, hex));
+      row.appendChild(lbl);
       row.appendChild(trigger);
       container.appendChild(row);
     }
   }
 
   load();
+  // Injeta o CSS do trigger/popover já no carregamento — antes disso, .ccp-trigger (criado por
+  // makeTrigger/buildSection, ou já presente no HTML das páginas de Geografia) fica sem estilo
+  // nenhum até o primeiro clique em algum trigger (injectStyle só rodava dentro de ensurePop,
+  // chamada de dentro do handler de clique) — o botão nativo sem CSS encolhe pro conteúdo vazio
+  // e vira um "pontinho" de poucos pixels em vez do quadrado de 40x28 com a cor.
+  injectStyle();
 
   window.CocoColors = {
     DEFAULT_CH, DEFAULT_MKT, ch, mkt,
