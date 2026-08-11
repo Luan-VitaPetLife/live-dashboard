@@ -322,6 +322,12 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Catálogo completo por canal, sem limite de top-N. Mescla pedidos do período com catálogo de
   todo o histórico — produto sem venda no período continua listado (qty/receita zeradas), porque é
   tela de catálogo, não de vendas.
+- Isso vale por canal só se o canal já teve ALGUM pedido no histórico inteiro — um canal Shopify
+  sem nenhum pedido ainda (ex.: Yucaloo recém-conectada) nem aparecia, porque a chave do canal só
+  nascia a partir de pedido real. Corrigido: `computeProducts`/`computeStock` (`metrics.js`) também
+  mesclam `kv.shopifyProductCatalog` (`mergeShopifyCatalog()`, mesma fonte que já alimentava o
+  Unificador) — canal Shopify (`SHOPIFY_CATALOG_CHANNELS`) sem pedido nenhum ainda mostra seu
+  catálogo real, com vendas zeradas, em vez de card vazio.
 - Colunas financeiras editáveis por produto: COG, Frete, Impostos %, Comissão % → Lucro/Lucro %.
   `Lucro = Receita − COG×Qtd − Frete×Qtd − Receita×Impostos% − Receita×Comissão%`. Sem COG
   preenchido (nem override nem padrão), lucro fica `null` ("—"), nunca assume custo zero.
