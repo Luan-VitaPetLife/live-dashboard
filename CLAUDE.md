@@ -1657,14 +1657,21 @@ Apesar de a conta VITA PET LIFE aparecer como participante do `A2Q3Y263D00KWC` (
   - **Não afetado por essa mudança:** `kv.yucalooTokens`, o handshake OAuth, o toggle de Integrações
     (`yucaloo_br`/`yucaloo_us`) — nada disso dependia do valor de `market`, só o `fetchOrders()` que
     grava os pedidos mudou.
-- **Ainda parcial, de propósito — nem tudo mostra a Yucaloo automaticamente:** telas que iteram uma
-  lista FIXA de canais conhecidos (em vez de descobrir canais dinamicamente pelos dados, como
-  `channelSplit` faz) — `CHANNELS_BR` em `produtos.html`/`estoque.html` (um card por canal),
-  `campanhas.html`, o dropdown de canal do `index.html` (`buildChannelDropdown()`) — **não** ganham
-  uma entrada "Yucaloo" só por causa dessa mudança; a receita dela entra nos agregados "Todos" dessas
-  telas, mas ela não vira um card/filtro dedicado ainda. Adicionar isso a cada tela é trabalho
-  separado, não pedido nesta rodada (o pedido foi "colocar os produtos junto com os outros", que já
-  está resolvido pro catálogo/Segmentos/receita geral).
+- **⚠️ Corrigido (11/08/2026) — Yucaloo faltava em telas com lista FIXA de canais:** `computeProducts`/
+  `computeStock` (`metrics.js`) sempre montaram `channels` dinamicamente a partir dos dados reais
+  (`chKeys = new Set([...Object.keys(byChannel), ...Object.keys(catalogByChannel)])`), então o backend
+  de `/api/products`/`/api/stock` já devolvia `channels.yucaloo_br`/`yucaloo_us` prontos — o problema
+  era só client-side: `CHANNELS_BR`/`CHANNELS_US` em `produtos.html`/`estoque.html` (a lista que decide
+  quais cards de canal desenhar) eram arrays fixos sem os dois canais, então o card nunca era renderizado
+  mesmo com dado disponível na API. `CH_BY_MARKET` em `segmentos.html` (dropdown "Canal") tinha o mesmo
+  problema — e também faltava `amazon` (Amazon BR) ali, corrigido junto por ser a mesma lista. Reportado
+  pelo Luan ("não todas as telas... têm essa opção 'Shopify - Yucaloo EUA' no pill de canais").
+  Corrigido: `CHANNELS_BR`/`CHANNELS_US` (+ `CH_META`, cor `#4466FF`/logo `logos-integracao/Yucaloo2.png`,
+  mesmo padrão de `colors.js`) em `produtos.html`/`estoque.html`, e `CH_BY_MARKET` em `segmentos.html`.
+  `index.html` já tinha sido corrigido antes (`MARKET_CHANNELS`, ver acima, "Badges de canal renomeados").
+  **`campanhas.html` continua sem, de propósito** — não tem uma lista de canais Shopify genérica, só
+  cards fixos por integração de Ads (Meta BR/US, Mercado Livre, Google Ads); a Yucaloo não tem conta de
+  Ads própria ainda, então não há nada pra mostrar lá (ver 4.20).
 - **Unificador mostrando só produto já vendido, corrigido (06/08/2026, mesmo dia — reportado pelo
   Luan: "mostrou apenas um tipo de areia, pois a outra ninguém pediu ainda"):** todo o app (Produtos,
   Estoque, Segmentos e, até então, o Unificador) sempre derivou "produto" a partir de pedidos —
