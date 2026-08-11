@@ -84,7 +84,7 @@ window.initCollapsibleNotice = initCollapsibleNotice;
     <span class="brand-name">Dashboard<br>Vita Pet Life · Coco and Luna</span>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
-    <a class="nav-item" data-page="index.html" href="/"><i class="bi bi-bar-chart-line nav-icon"></i> Revenue</a>
+    <a class="nav-item" data-page="index.html" href="/"><i class="bi bi-bar-chart-line nav-icon"></i> Visão geral</a>
     <a class="nav-item" data-page="segmentos.html" href="/segmentos"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
     <a class="nav-item" data-page="geografia.html" href="/geografia"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></a>
     <a class="nav-item" data-page="geografia-us.html" href="/geografia-us"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></a></div>
