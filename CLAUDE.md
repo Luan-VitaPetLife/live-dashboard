@@ -78,6 +78,7 @@ public/unificador.html   Agrupamento manual de produtos entre canais (admin)
 public/configuracoes.html Geral, login, gestão de usuários (admin)
 public/integracoes.html  Status + liga/desliga por integração (admin)
 public/login.html        Tela de login (standalone)
+public/404.html          Página de erro 404 (rota desconhecida), ilustração Feno_no_deserto.svg
 public/sidebar.js        Sidebar compartilhada (IIFE, injeta markup + CSS + comportamento)
 public/colors.js         Sistema de cores compartilhado (IIFE) + color picker
 ```
@@ -513,6 +514,20 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   decidir os project ID/token de cada site. Limitação já identificada: a API pública do Clarity só
   devolve métricas agregadas dos últimos 1–3 dias (sem histórico longo) e não expõe heatmaps nem
   gravações de sessão — isso continua só no painel deles.
+
+### Confiabilidade operacional (não é checklist de site público — SEO/CTA/meta description não se
+### aplicam aqui, a dashboard é interna e atrás de login; pedido do Luan em 17/08/2026)
+- ~~Página de erro 404~~ — feito (`public/404.html`, ilustração `Feno_no_deserto.svg`).
+- **Alerta quando um sync falha silenciosamente:** hoje o erro só aparece no log do Railway
+  (`console.error('Sync falhou:', ...)`, ver server.js) — ninguém é avisado ativamente. Um canal
+  parado de sincronizar por dias pode passar despercebido até alguém notar dado desatualizado.
+- **Log de auditoria de edição:** login/permissão por página já existem (`src/auth.js`), mas não há
+  registro de QUEM mudou um valor (COG, estoque manual, grupo do Unificador, config de
+  integração) nem QUANDO. Hoje só o valor final fica salvo.
+- **Rotina de backup do Postgres:** produção depende só do backup automático do Railway (se
+  houver algum ativo no plano atual — não confirmado). Sem plano de restauração testado.
+- **Teste em tela de celular:** a dashboard já tem CSS responsivo em várias telas, mas nunca foi
+  formalmente conferida ponta a ponta num celular de verdade.
 
 ## 10. Convenções
 
