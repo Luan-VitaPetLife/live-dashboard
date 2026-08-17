@@ -343,16 +343,46 @@ function mergeShopifyCatalog(catalogByChannel, market) {
   return catalogByChannel;
 }
 
+// Índice título → tags ATUAIS do catálogo bruto Shopify, por canal (kv.shopifyProductCatalog,
+// re-sincronizado a cada ciclo). Existe só pros canais Shopify (ver SHOPIFY_CATALOG_CHANNELS).
+function shopifyCatalogTagsByChannel(market) {
+  const raw = getShopifyProductCatalog();
+  const idx = {};
+  for (const channel of SHOPIFY_CATALOG_CHANNELS[market] || []) {
+    const map = {};
+    for (const p of raw[channel] || []) map[p.title] = p.tags || [];
+    idx[channel] = map;
+  }
+  return idx;
+}
+
+// Decide se um produto (canal + título) deve ficar oculto ("Ocultar produtos" no Unificador).
+// Prioriza a tag ATUAL do catálogo Shopify sobre a tag presa nos pedidos: `it.tags` de um pedido
+// vem do produto NA HORA em que o pedido foi buscado (ver shopify.js, product.tags via GraphQL) e
+// nunca é re-sincronizado depois — se uma tag como "Combo"/"Teste" foi removida da Shopify depois,
+// pedidos antigos já gravados continuam com ela presa pra sempre, e a união de tags feita em
+// aggregateProductsByChannel carregava esse resíduo junto indefinidamente. Resultado: um produto
+// com tags limpas HOJE continuava oculto pra sempre por causa de uma tag que nem existe mais
+// (reportado pelo Luan, 17/08/2026 — "Lisina para gatos - 120g" sumia de Produtos/Estoque mesmo
+// com tags atuais "Suplemento"/"Para gatos", sem nenhuma palavra-chave oculta batendo). Catálogo
+// bruto não existe pra Shopee/ML/Amazon (sem endpoint de catálogo, ver SHOPIFY_CATALOG_CHANNELS) —
+// nesses o único dado disponível continua sendo a tag do pedido.
+function isHiddenProduct(channel, title, orderTags, catalogTagsIdx, market) {
+  const catTags = catalogTagsIdx[channel]?.[title];
+  return isHiddenItem({ tags: catTags !== undefined ? catTags : (orderTags || []) }, market);
+}
+
 // Catálogo completo (todo o histórico, todos os canais) de um mercado, achatado numa lista só —
 // usado pela tela Unificador pra listar todo produto disponível pra agrupar manualmente.
 export function listProductCatalog({ market = 'br' } = {}) {
   const allOrders = getOrders({ channel: 'todos', market }).filter(o => !isCancelled(o));
   const byChannel = aggregateProductsByChannel(allOrders);
+  const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
   const items = [];
   const seen = new Set(); // "canal|||título" já coberto pela agregação de vendas
   for (const [channel, c] of Object.entries(byChannel)) {
     for (const [title, p] of Object.entries(c.products)) {
-      items.push({ title, channel, image: p.image, type: p.type, qty: p.avulsoQty + p.comboQty, revenue: p.revenue, hidden: isHiddenItem(p, market) });
+      items.push({ title, channel, image: p.image, type: p.type, qty: p.avulsoQty + p.comboQty, revenue: p.revenue, hidden: isHiddenProduct(channel, title, p.tags, catalogTagsIdx, market) });
       seen.add(channel + '|||' + title);
     }
   }
@@ -463,10 +493,12 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // Produto oculto (Unificador → "Ocultar produtos") não pode aparecer em nenhuma lista de produto
   // fora do card "Ocultos" — antes só computeSegments (Gato/Cão/"Onde os produtos vendem") respeitava
   // isso; Top Produtos, Produtos e Estoque continuavam mostrando o produto normalmente (reportado
-  // pelo Luan, 17/08/2026).
+  // pelo Luan, 17/08/2026). isHiddenProduct prioriza a tag atual do catálogo Shopify sobre a tag
+  // presa no pedido (ver isHiddenProduct).
+  const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
   let allProducts = Object.entries(productsByChannel)
     .flatMap(([ch, c]) => Object.entries(c.products)
-      .filter(([, p]) => !isHiddenItem(p, market))
+      .filter(([title, p]) => !isHiddenProduct(ch, title, p.tags, catalogTagsIdx, market))
       .map(([title, p]) => ({
         title, channel: ch, revenue: p.revenue, avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
       })));
@@ -929,15 +961,16 @@ export function computeProducts({ market = 'br', since, until } = {}) {
 
   const finance = getProductFinance();
   const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações)
+  const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
   const channels = {};
   const chKeys = new Set([...Object.keys(byChannel), ...Object.keys(catalogByChannel)]);
   for (const ch of chKeys) {
     const c = byChannel[ch] || { revenue: 0, orders: 0, products: {} };
     const catalogProducts = catalogByChannel[ch]?.products || {};
     // produto oculto (Unificador) some do catálogo completo, não só do período — ver nota em
-    // allProducts acima.
+    // allProducts acima. isHiddenProduct prioriza a tag atual do catálogo Shopify.
     const titles = [...new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)])]
-      .filter(title => !isHiddenItem({ tags: [...(c.products[title]?.tags || []), ...(catalogProducts[title]?.tags || [])] }, market));
+      .filter(title => !isHiddenProduct(ch, title, c.products[title]?.tags, catalogTagsIdx, market));
     const empty = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
     let products = [...titles]
       .map(title => {
@@ -1035,13 +1068,15 @@ export function computeStock({ market = 'br' } = {}) {
   const productGroupsMkt = activeProductGroups(market);
   const titleToGroup = {};
   for (const [name, members] of Object.entries(productGroupsMkt)) for (const m of members) titleToGroup[m] = name;
+  const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
 
   for (const ch of chKeys) {
     const c = byChannel[ch] || { revenue: 0, orders: 0, products: {} };
     const catalogProducts = catalogByChannel[ch]?.products || {};
     // produto oculto (Unificador) some do Estoque também — mesmo critério de computeProducts.
+    // isHiddenProduct prioriza a tag atual do catálogo Shopify.
     const titles = [...new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)])]
-      .filter(title => !isHiddenItem({ tags: [...(c.products[title]?.tags || []), ...(catalogProducts[title]?.tags || [])] }, market));
+      .filter(title => !isHiddenProduct(ch, title, c.products[title]?.tags, catalogTagsIdx, market));
     const products = [...titles]
       .map(title => {
         const cat = catalogProducts[title];
