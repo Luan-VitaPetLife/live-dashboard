@@ -337,7 +337,7 @@ function mergeShopifyCatalog(catalogByChannel, market) {
     const products = catalogByChannel[channel].products;
     for (const p of rawCatalog[channel] || []) {
       if (products[p.title]) continue;
-      products[p.title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: classifyType(p), image: p.image || null };
+      products[p.title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: classifyType(p), image: p.image || null, tags: p.tags || [] };
     }
   }
   return catalogByChannel;
@@ -460,10 +460,16 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // top 5 (topProducts) e a lista completa (topProductsAll) pra permitir expandir o card na revenue.
   const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações) — ver acima
   const productsByChannel = aggregateProductsByChannel(valid);
+  // Produto oculto (Unificador → "Ocultar produtos") não pode aparecer em nenhuma lista de produto
+  // fora do card "Ocultos" — antes só computeSegments (Gato/Cão/"Onde os produtos vendem") respeitava
+  // isso; Top Produtos, Produtos e Estoque continuavam mostrando o produto normalmente (reportado
+  // pelo Luan, 17/08/2026).
   let allProducts = Object.entries(productsByChannel)
-    .flatMap(([ch, c]) => Object.entries(c.products).map(([title, p]) => ({
-      title, channel: ch, revenue: p.revenue, avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
-    })));
+    .flatMap(([ch, c]) => Object.entries(c.products)
+      .filter(([, p]) => !isHiddenItem(p, market))
+      .map(([title, p]) => ({
+        title, channel: ch, revenue: p.revenue, avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
+      })));
   // Junta linhas de canais diferentes que pertencem ao mesmo grupo manual — sem grupo, cada
   // (canal, título) continua sua própria linha, como sempre foi.
   allProducts = applyProductGroups(allProducts, productGroupsMkt, {
@@ -928,7 +934,10 @@ export function computeProducts({ market = 'br', since, until } = {}) {
   for (const ch of chKeys) {
     const c = byChannel[ch] || { revenue: 0, orders: 0, products: {} };
     const catalogProducts = catalogByChannel[ch]?.products || {};
-    const titles = new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)]);
+    // produto oculto (Unificador) some do catálogo completo, não só do período — ver nota em
+    // allProducts acima.
+    const titles = [...new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)])]
+      .filter(title => !isHiddenItem({ tags: [...(c.products[title]?.tags || []), ...(catalogProducts[title]?.tags || [])] }, market));
     const empty = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, image: null };
     let products = [...titles]
       .map(title => {
@@ -1030,7 +1039,9 @@ export function computeStock({ market = 'br' } = {}) {
   for (const ch of chKeys) {
     const c = byChannel[ch] || { revenue: 0, orders: 0, products: {} };
     const catalogProducts = catalogByChannel[ch]?.products || {};
-    const titles = new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)]);
+    // produto oculto (Unificador) some do Estoque também — mesmo critério de computeProducts.
+    const titles = [...new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)])]
+      .filter(title => !isHiddenItem({ tags: [...(c.products[title]?.tags || []), ...(catalogProducts[title]?.tags || [])] }, market));
     const products = [...titles]
       .map(title => {
         const cat = catalogProducts[title];

@@ -138,8 +138,8 @@
   .ch-badge{font-size:9px;font-weight:700;letter-spacing:.3px;padding:2px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap}
   .row-remove{flex-shrink:0;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px 6px;border-radius:4px}
   .row-remove:hover{background:var(--border2);color:var(--red)}
-  .other-card-collapse{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:6px;font-size:12px;line-height:1}
-  .other-card-collapse:hover{background:var(--surface2);color:var(--text)}
+  .other-card-collapse{display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:var(--surface2);border:1px solid var(--border2);color:var(--sub);cursor:pointer;border-radius:50%;font-size:12px;line-height:1;transition:all .15s}
+  .other-card-collapse:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
   .group-add-foot{padding:10px 16px}
 
   /* ── Lista de produtos sem grupo ── */
@@ -287,7 +287,7 @@
 <div class="modal-overlay" id="hideModal" style="z-index:401">
   <div class="modal" style="max-width:460px">
     <h3>Ocultar produtos</h3>
-    <div class="sub">Produto cuja TAG bater com uma palavra-chave abaixo some dos cards normais de Segmentos (Gato/Cão/Outros) e de "Onde os produtos vendem" — vai só pro card "Ocultos" lá.</div>
+    <div class="sub">Produto cuja TAG bater com uma palavra-chave abaixo desaparece de toda a dashboard (Segmentos, Produtos, Estoque, Top produtos). Continua visível só na lista "Ocultos" aqui no Unificador.</div>
     <div class="hide-tags-list" id="hideTagsList"></div>
     <div class="hide-add-row">
       <input type="text" id="hideNewTag" placeholder="Ex: areia" autocomplete="off">
@@ -889,9 +889,10 @@ ungroupedCol.addEventListener('drop', e => {
   removeMember(dragFromGroup, dragTitle);
 });
 
-/* ── "Ocultar produtos" (Segmentos) — palavras-chave buscadas nas tags de cada item.
-   Controle centralizado aqui, a pedido do Luan ("essa função deve estar no unificador, que é
-   onde iremos controlar tudo"); o efeito (card "Ocultos") continua em segmentos.html. ── */
+/* ── "Ocultar produtos" — palavras-chave buscadas nas tags de cada item (ver isHiddenItem em
+   metrics.js). Controle centralizado aqui, a pedido do Luan ("essa função deve estar no
+   unificador, que é onde iremos controlar tudo"); o efeito vale em toda a dashboard (Segmentos,
+   Produtos, Estoque, Top produtos) — não só no card "Ocultos" de Segmentos. ── */
 let hideTags = [];
 async function loadHideTags(){
   try{
