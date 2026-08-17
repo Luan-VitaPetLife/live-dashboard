@@ -349,6 +349,13 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   - Impostos padrão: 2,64% fixo (Simples Nacional).
   - COG padrão: R$ 15,21 (produto com "lisina"/"lysine" no título), R$ 17,32 ("daily"/"taurina"/"espirulina").
   - Comissão padrão por canal: Shopee 18%, Mercado Livre 14%, Amazon 12%, Shopify 0%.
+  - Linha unificada pelo Unificador (`_grouped`, ver `applyProductGroups`): o campo nasce vazio (não
+    dá pra mostrar UM valor de membros com overrides possivelmente diferentes), mas continua
+    editável — grava o valor digitado em TODOS os membros do grupo dentro daquele canal
+    (`data-grouped`/`data-members` no input, `onFinanceEdit` faz um POST por membro). Antes o campo
+    ficava travado com "—" e a dica dizia pra editar "no produto individual", mas isso não tinha
+    como ser feito (o título individual não aparece mais em lugar nenhum uma vez agrupado) —
+    corrigido 17/08/2026.
 - Combo/bundle (tag `combo` ou Shopify Bundles) mescla no produto-base, não vira linha própria.
 - Exportar CSV: só Shopify US por enquanto (`GET /api/products/export`).
 
@@ -360,6 +367,10 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   `projected`, editável só aqui). Família = grupo manual do Unificador (prioridade) ou
   `classifyFamily()` por palavra-chave (Lysine/Daily) ou o próprio título.
   `totalMonthsOfStock = (stock+incoming+projected+orderNew+orderInProgress) / salesMonth`.
+- O card POR CANAL também respeita grupo manual do Unificador (`applyProductGroups`), igual ao
+  Panorama geral — faltava antes: o card por canal listava um título por SKU/listagem mesmo com um
+  grupo já juntando duplicatas do mesmo produto físico (comum em Amazon/Shopee, onde o mesmo
+  produto aparece com título ligeiramente diferente por listagem); corrigido 17/08/2026.
 - Sugestão de reposição: `<3` meses = urgente, `3–7` = atenção, `≥7` = aguardar.
 - Amazon BR sem nenhum item no catálogo recebe uma linha sintética "Produto TESTE" pra permitir
   cadastro manual de estoque mesmo sem nome de produto real.

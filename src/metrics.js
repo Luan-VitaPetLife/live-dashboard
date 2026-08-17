@@ -1077,7 +1077,7 @@ export function computeStock({ market = 'br' } = {}) {
     // isHiddenProduct prioriza a tag atual do catálogo Shopify.
     const titles = [...new Set([...Object.keys(c.products), ...Object.keys(catalogProducts)])]
       .filter(title => !isHiddenProduct(ch, title, c.products[title]?.tags, catalogTagsIdx, market));
-    const products = [...titles]
+    let products = [...titles]
       .map(title => {
         const cat = catalogProducts[title];
         const p = c.products[title] || { ...empty, type: cat?.type ?? null, image: cat?.image ?? null };
@@ -1088,13 +1088,24 @@ export function computeStock({ market = 'br' } = {}) {
         const ov = stockData[`${ch}|||${title}`] || {};
         const stock    = ov.stock != null ? Number(ov.stock) : 0;
         const incoming = ov.incoming != null ? Number(ov.incoming) : 0;
-        const monthsOfStock = salesMonth > 0 ? (stock + incoming) / salesMonth : null;
         return {
           title, type: p.type, image: p.image,
           avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
-          salesDaily, salesMonth, stock, incoming, monthsOfStock,
+          salesDaily, salesMonth, stock, incoming,
         };
-      })
+      });
+    // Grupo manual do Unificador (Configurações) DENTRO do canal — mesmo mecanismo já usado em
+    // Produtos (mergeProductRows), que faltava aqui: cada card de canal em Estoque mostrava um
+    // título por SKU/listagem, mesmo quando o Unificador já tinha um grupo juntando duplicatas do
+    // mesmo produto físico (comum em Amazon/Shopee, onde o mesmo produto aparece com título
+    // ligeiramente diferente por listagem). Só o "Panorama geral" (cross-canal) respeitava o grupo;
+    // o card por canal, não (reportado pelo Luan, 17/08/2026). monthsOfStock é recalculado depois
+    // do merge porque é uma razão, não soma diretamente.
+    products = applyProductGroups(products, productGroupsMkt, {
+      sumKeys: ['avulsoQty', 'comboQty', 'salesDaily', 'salesMonth', 'stock', 'incoming'],
+      objSumKeys: ['comboBySize'],
+      pickFirst: ['type', 'image'],
+    }).map(p => ({ ...p, monthsOfStock: p.salesMonth > 0 ? (p.stock + p.incoming) / p.salesMonth : null }))
       .sort((a, b) => b.salesMonth - a.salesMonth);
 
     const totals = products.reduce((a, p) => ({
