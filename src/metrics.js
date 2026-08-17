@@ -1016,9 +1016,11 @@ export function computeProducts({ market = 'br', since, until } = {}) {
   return { market, since, until, channels, updatedAt: load().lastSync };
 }
 
-// Estoque + produção por canal (para a tela de Estoque) — janela FIXA de 30 dias corridos pra
-// velocidade de venda (não depende de seletor de período na tela, ao contrário de Produtos).
-// Combina dado real (venda) com dado manual (estoque físico, a caminho, pedido ao laboratório).
+// Estoque + produção por canal (para a tela de Estoque) — período escolhido na tela (seletor igual
+// ao de Produtos, ver public/estoque.html); sem since/until explícitos, cai nos últimos 30 dias
+// corridos (mesmo padrão de sempre). Combina dado real (venda) com dado manual (estoque físico, a
+// caminho, pedido ao laboratório). windowDays vem do período de verdade (daySpan), não mais fixo
+// em 30 — usado pra converter vendas do período em vendas/dia (salesDaily).
 const STOCK_WINDOW_DAYS = 30;
 
 // Sugestão de reposição a partir do Tempo de Estoque com Produção (totalMonthsOfStock).
@@ -1030,9 +1032,10 @@ function stockSuggestion(months) {
   return 'aguardar';
 }
 
-export function computeStock({ market = 'br' } = {}) {
-  const until = isoUTC(new Date());
-  const since = isoUTC(addDays(parseISO(until), -(STOCK_WINDOW_DAYS - 1)));
+export function computeStock({ market = 'br', since, until } = {}) {
+  if (!until) until = isoUTC(new Date());
+  if (!since) since = isoUTC(addDays(parseISO(until), -(STOCK_WINDOW_DAYS - 1)));
+  const windowDays = daySpan(since, until);
   const orders = getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o));
   const byChannel = aggregateProductsByChannel(orders);
 
@@ -1084,7 +1087,7 @@ export function computeStock({ market = 'br' } = {}) {
         if (!p.type && cat?.type) p.type = cat.type;
         if (!p.image && cat?.image) p.image = cat.image;
         const salesMonth = p.avulsoQty + p.comboQty;
-        const salesDaily = salesMonth / STOCK_WINDOW_DAYS;
+        const salesDaily = salesMonth / windowDays;
         const ov = stockData[`${ch}|||${title}`] || {};
         const stock    = ov.stock != null ? Number(ov.stock) : 0;
         const incoming = ov.incoming != null ? Number(ov.incoming) : 0;
@@ -1140,7 +1143,7 @@ export function computeStock({ market = 'br' } = {}) {
   const stockAggData = getProductStockAgg();
   const aggProducts = Object.entries(aggMap).map(([family, a]) => {
     const salesMonth = a.avulsoQty + a.comboQty;
-    const salesDaily = salesMonth / STOCK_WINDOW_DAYS;
+    const salesDaily = salesMonth / windowDays;
     const ov = stockAggData[`${market}|||${family}`] || {};
     const orderInProgress = ov.orderInProgress != null ? Number(ov.orderInProgress) : 0;
     const orderNew        = ov.orderNew != null ? Number(ov.orderNew) : 0;
@@ -1192,5 +1195,5 @@ export function computeStock({ market = 'br' } = {}) {
     };
   }
 
-  return { market, windowDays: STOCK_WINDOW_DAYS, since, until, channels, agg: { products: aggProducts, totals: aggTotals, groupOrders }, updatedAt: load().lastSync };
+  return { market, windowDays, since, until, channels, agg: { products: aggProducts, totals: aggTotals, groupOrders }, updatedAt: load().lastSync };
 }
