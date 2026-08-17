@@ -151,12 +151,6 @@
   .camp-expand-inner{padding:16px 20px 20px}
   .camp-expand-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px}
   .camp-expand-title{font-size:12px;font-weight:600;color:var(--sub)}
-  .camp-compare-wrap{display:none}
-  .camp-compare-label{font-size:10px;color:var(--muted);white-space:nowrap}
-  .camp-cmp-check{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);cursor:pointer;padding:4px 10px;border-radius:12px;border:1px solid var(--border2);background:var(--surface);transition:all .12s;user-select:none}
-  .camp-cmp-check:hover{border-color:var(--ink);color:var(--text)}
-  .camp-cmp-check input[type=checkbox]{width:11px;height:11px;accent-color:var(--ink);cursor:pointer;flex-shrink:0}
-  .camp-cmp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
   /* ── Cards de campanha (no painel "Gastos") ── */
   .camp-campaigns{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
   .cmp-loading,.cmp-empty{font-size:12px;color:var(--muted);padding:14px 2px;grid-column:1/-1}
@@ -297,345 +291,10 @@
       </div>
     </div>
 
-    <!-- Channel cards -->
-    <div class="camp-grid">
-
-      <!-- ── Mercado Livre ─────────────────────────────── -->
-      <div class="camp-card ch-br" id="card-ml">
-        <div class="camp-card-main">
-          <div class="camp-ch-id">
-            <div class="camp-logo camp-logo-img camp-logo-fill"><img src="logo_mercadolivre.png" alt="Mercado Livre"></div>
-            <div>
-              <div class="camp-ch-name">Mercado Livre</div>
-              <div class="camp-ch-type">ML Product Ads</div>
-            </div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Vendas campanha</div>
-            <div class="camp-kpi-val" id="ml-sales">R$ 9.030</div>
-            <div class="camp-kpi-sub" id="ml-orders">52 pedidos</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Faturamento total</div>
-            <div class="camp-kpi-val" id="ml-revenue">—</div>
-            <div class="camp-kpi-sub">receita total do canal</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">ROAS</div>
-            <div class="camp-kpi-val" id="ml-roas">4,0×</div>
-            <div class="camp-kpi-sub" id="ml-spend">Gasto: R$ 2.231</div>
-          </div>
-          <div class="camp-chart-col">
-            <div class="camp-chart-label">
-              <span class="camp-chart-label-txt">Orgânico vs Campanha</span>
-              <div class="camp-mini-legend">
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:#d4a40a"></span>Camp.</span>
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:rgba(30,28,24,.14)"></span>Org.</span>
-              </div>
-            </div>
-            <div class="camp-mini-canvas-wrap"><canvas id="mini-ml"></canvas></div>
-          </div>
-          <div class="camp-expand-col">
-            <button class="camp-expand-btn" id="btn-ml" onclick="toggleExpand('ml')">
-              <i class="bi bi-chevron-down"></i> Campanhas
-            </button>
-          </div>
-        </div>
-        <div class="camp-expand-panel" id="expand-ml">
-          <div class="camp-expand-inner">
-            <div class="camp-expand-head">
-              <div class="camp-expand-title">Gasto da campanha no período — Mercado Livre</div>
-              <div class="camp-compare-wrap">
-                <span class="camp-compare-label">Comparar com:</span>
-                <label class="camp-cmp-check">
-                  <input type="checkbox" data-ch="meta_br" onchange="toggleCompare(this,'ml')">
-                  <span class="camp-cmp-dot" style="background:#1877F2"></span> Meta
-                </label>
-                <label class="camp-cmp-check">
-                  <input type="checkbox" data-ch="shopee" onchange="toggleCompare(this,'ml')">
-                  <span class="camp-cmp-dot" style="background:#EE4D2D"></span> Shopee
-                </label>
-              </div>
-            </div>
-            <div class="camp-campaigns" id="camps-ml"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Meta BR ───────────────────────────────────── -->
-      <div class="camp-card ch-br" id="card-meta_br">
-        <div class="camp-card-main">
-          <div class="camp-ch-id">
-            <div class="camp-logo camp-logo-img"><img src="logo_meta.png" alt="Meta"></div>
-            <div>
-              <div class="camp-ch-name">Meta Ads</div>
-              <div class="camp-ch-type">Instagram · Facebook</div>
-            </div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Vendas atribuídas</div>
-            <div class="camp-kpi-val" id="meta_br-sales">R$ 17.650</div>
-            <div class="camp-kpi-sub" id="meta_br-orders">147 pedidos</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Gasto total</div>
-            <div class="camp-kpi-val" id="meta_br-revenue">R$ 3.744</div>
-            <div class="camp-kpi-sub">último sync: hoje</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">ROAS</div>
-            <div class="camp-kpi-val" id="meta_br-roas">4,7×</div>
-            <div class="camp-kpi-sub">Conta BR (Coco and Luna)</div>
-          </div>
-          <div class="camp-chart-col">
-            <div class="camp-chart-label">
-              <span class="camp-chart-label-txt">Vendas atribuídas / dia</span>
-              <div class="camp-mini-legend">
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:#1877F2"></span>Camp.</span>
-              </div>
-            </div>
-            <div class="camp-mini-canvas-wrap"><canvas id="mini-meta_br"></canvas></div>
-          </div>
-          <div class="camp-expand-col">
-            <button class="camp-expand-btn" id="btn-meta_br" onclick="toggleExpand('meta_br')">
-              <i class="bi bi-chevron-down"></i> Campanhas
-            </button>
-          </div>
-        </div>
-        <div class="camp-expand-panel" id="expand-meta_br">
-          <div class="camp-expand-inner">
-            <div class="camp-expand-head">
-              <div class="camp-expand-title">Gasto da campanha no período — Meta Ads BR</div>
-              <div class="camp-compare-wrap">
-                <span class="camp-compare-label">Comparar com:</span>
-                <label class="camp-cmp-check">
-                  <input type="checkbox" data-ch="ml" onchange="toggleCompare(this,'meta_br')">
-                  <span class="camp-cmp-dot" style="background:#d4a40a"></span> Mercado Livre
-                </label>
-                <label class="camp-cmp-check">
-                  <input type="checkbox" data-ch="shopee" onchange="toggleCompare(this,'meta_br')">
-                  <span class="camp-cmp-dot" style="background:#EE4D2D"></span> Shopee
-                </label>
-              </div>
-            </div>
-            <div class="camp-campaigns" id="camps-meta_br"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Amazon BR ─────────────────────────────────── -->
-      <div class="camp-card ch-br" id="card-amazon_br">
-        <div class="camp-card-main">
-          <div class="camp-ch-id">
-            <div class="camp-logo camp-logo-img"><img src="logo_amazon.webp" alt="Amazon BR"></div>
-            <div>
-              <div class="camp-ch-name">Amazon BR</div>
-              <div class="camp-ch-type">Amazon Ads</div>
-            </div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Gasto Ads</div>
-            <div class="camp-kpi-val" id="amazon_br-sales">—</div>
-            <div class="camp-kpi-sub" id="amazon_br-orders">Ads indisponível via API</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Faturamento total</div>
-            <div class="camp-kpi-val" id="amazon_br-revenue">—</div>
-            <div class="camp-kpi-sub">receita total do canal</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">ROAS</div>
-            <div class="camp-kpi-val" id="amazon_br-roas">—</div>
-            <div class="camp-kpi-sub" id="amazon_br-spend">requer Amazon Ads API</div>
-          </div>
-          <div class="camp-chart-col">
-            <div class="camp-chart-label">
-              <span class="camp-chart-label-txt">Receita / dia</span>
-              <div class="camp-mini-legend">
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:#FF9900"></span>Amazon BR</span>
-              </div>
-            </div>
-            <div class="camp-mini-canvas-wrap"><canvas id="mini-amazon_br"></canvas></div>
-          </div>
-          <div class="camp-expand-col">
-            <button class="camp-expand-btn" id="btn-amazon_br" onclick="toggleExpand('amazon_br')">
-              <i class="bi bi-chevron-down"></i> Campanhas
-            </button>
-          </div>
-        </div>
-        <div class="camp-expand-panel" id="expand-amazon_br">
-          <div class="camp-expand-inner">
-            <div class="camp-expand-head">
-              <div class="camp-expand-title">Campanhas no período — Amazon BR</div>
-            </div>
-            <div class="camp-campaigns" id="camps-amazon_br"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Meta US ───────────────────────────────────── -->
-      <div class="camp-card ch-us" id="card-meta_us">
-        <div class="camp-card-main">
-          <div class="camp-ch-id">
-            <div class="camp-logo camp-logo-img"><img src="logo_meta.png" alt="Meta"></div>
-            <div>
-              <div class="camp-ch-name">Meta Ads</div>
-              <div class="camp-ch-type">Instagram · Facebook</div>
-            </div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Vendas atribuídas</div>
-            <div class="camp-kpi-val" id="meta_us-sales">$ 15.700</div>
-            <div class="camp-kpi-sub" id="meta_us-orders">137 orders</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Gasto total</div>
-            <div class="camp-kpi-val" id="meta_us-revenue">$ 3.394</div>
-            <div class="camp-kpi-sub">último sync: hoje</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">ROAS</div>
-            <div class="camp-kpi-val" id="meta_us-roas">4,6×</div>
-            <div class="camp-kpi-sub">Conta EUA</div>
-          </div>
-          <div class="camp-chart-col">
-            <div class="camp-chart-label">
-              <span class="camp-chart-label-txt">Vendas atribuídas / dia</span>
-              <div class="camp-mini-legend">
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:#1877F2"></span>Camp.</span>
-              </div>
-            </div>
-            <div class="camp-mini-canvas-wrap"><canvas id="mini-meta_us"></canvas></div>
-          </div>
-          <div class="camp-expand-col">
-            <button class="camp-expand-btn" id="btn-meta_us" onclick="toggleExpand('meta_us')">
-              <i class="bi bi-chevron-down"></i> Campanhas
-            </button>
-          </div>
-        </div>
-        <div class="camp-expand-panel" id="expand-meta_us">
-          <div class="camp-expand-inner">
-            <div class="camp-expand-head">
-              <div class="camp-expand-title">Gasto da campanha no período — Meta Ads EUA</div>
-              <div class="camp-compare-wrap">
-                <span class="camp-compare-label">Comparar com:</span>
-                <label class="camp-cmp-check">
-                  <input type="checkbox" data-ch="amazon" onchange="toggleCompare(this,'meta_us')">
-                  <span class="camp-cmp-dot" style="background:#FF9900"></span> Amazon EUA
-                </label>
-              </div>
-            </div>
-            <div class="camp-campaigns" id="camps-meta_us"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Google Ads (EUA) ─────────────────────────── -->
-      <div class="camp-card ch-us" id="card-google_us">
-        <div class="camp-card-main">
-          <div class="camp-ch-id">
-            <div class="camp-logo camp-logo-img"><img src="logo_google_ads.webp" alt="Google Ads"></div>
-            <div>
-              <div class="camp-ch-name">Google Ads</div>
-              <div class="camp-ch-type">Pesquisa · Display</div>
-            </div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Gasto Ads</div>
-            <div class="camp-kpi-val" id="google_us-sales">—</div>
-            <div class="camp-kpi-sub" id="google_us-orders">carregando…</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Vendas atribuídas</div>
-            <div class="camp-kpi-val" id="google_us-revenue">—</div>
-            <div class="camp-kpi-sub">conversões (Google Ads)</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">ROAS</div>
-            <div class="camp-kpi-val" id="google_us-roas">—</div>
-            <div class="camp-kpi-sub">retorno sobre gasto</div>
-          </div>
-          <div class="camp-chart-col">
-            <div class="camp-chart-label">
-              <span class="camp-chart-label-txt">Gasto por campanha</span>
-            </div>
-            <div class="camp-mini-canvas-wrap"><canvas id="mini-google_us"></canvas></div>
-          </div>
-          <div class="camp-expand-col">
-            <button class="camp-expand-btn" id="btn-google_us" onclick="toggleExpand('google_us')">
-              <i class="bi bi-chevron-down"></i> Campanhas
-            </button>
-          </div>
-        </div>
-        <div class="camp-expand-panel" id="expand-google_us">
-          <div class="camp-expand-inner">
-            <div class="camp-expand-head">
-              <div class="camp-expand-title">Campanhas no período — Google Ads</div>
-            </div>
-            <div class="camp-campaigns" id="camps-google_us"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Amazon US ─────────────────────────────────── -->
-      <div class="camp-card ch-us" id="card-amazon">
-        <div class="camp-card-main">
-          <div class="camp-ch-id">
-            <div class="camp-logo camp-logo-img"><img src="logo_amazon.webp" alt="Amazon EUA"></div>
-            <div>
-              <div class="camp-ch-name">Amazon EUA</div>
-              <div class="camp-ch-type">Sponsored Products</div>
-            </div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Vendas campanha</div>
-            <div class="camp-kpi-val" id="amazon-sales">$ 3.814</div>
-            <div class="camp-kpi-sub" id="amazon-orders">27 orders</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">Faturamento total</div>
-            <div class="camp-kpi-val" id="amazon-revenue">—</div>
-            <div class="camp-kpi-sub">receita total do canal</div>
-          </div>
-          <div class="camp-kpi-col">
-            <div class="camp-kpi-label">ROAS</div>
-            <div class="camp-kpi-val" id="amazon-roas">3,4×</div>
-            <div class="camp-kpi-sub" id="amazon-spend">Gasto: $ 1.116</div>
-          </div>
-          <div class="camp-chart-col">
-            <div class="camp-chart-label">
-              <span class="camp-chart-label-txt">Orgânico vs Campanha</span>
-              <div class="camp-mini-legend">
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:#FF9900"></span>Camp.</span>
-                <span class="camp-leg-item"><span class="camp-leg-sq" style="background:rgba(30,28,24,.14)"></span>Org.</span>
-              </div>
-            </div>
-            <div class="camp-mini-canvas-wrap"><canvas id="mini-amazon"></canvas></div>
-          </div>
-          <div class="camp-expand-col">
-            <button class="camp-expand-btn" id="btn-amazon" onclick="toggleExpand('amazon')">
-              <i class="bi bi-chevron-down"></i> Campanhas
-            </button>
-          </div>
-        </div>
-        <div class="camp-expand-panel" id="expand-amazon">
-          <div class="camp-expand-inner">
-            <div class="camp-expand-head">
-              <div class="camp-expand-title">Gasto da campanha no período — Amazon EUA</div>
-              <div class="camp-compare-wrap">
-                <span class="camp-compare-label">Comparar com:</span>
-                <label class="camp-cmp-check">
-                  <input type="checkbox" data-ch="meta_us" onchange="toggleCompare(this,'amazon')">
-                  <span class="camp-cmp-dot" style="background:#1877F2"></span> Meta
-                </label>
-              </div>
-            </div>
-            <div class="camp-campaigns" id="camps-amazon"></div>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /camp-grid -->
+    <!-- Channel cards — geradas via JS a partir de CAMP_CHANNELS (campCardTemplate): um único
+         card padrão reutilizado para todos os canais, em vez de 6 blocos de HTML quase-duplicados
+         com rótulos e ordem de colunas diferentes entre si. -->
+    <div class="camp-grid" id="campGrid"></div><!-- /camp-grid -->
   </div><!-- /content -->
 
   <footer id="footerDate" style="padding:0 28px 20px;font-size:11px;color:var(--muted)"></footer>
@@ -751,8 +410,76 @@ async function load() {
 }
 
 const setText  = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
-const setLabel = (cardId, idx, txt) => { const c = document.getElementById(cardId); if (!c) return; const ls = c.querySelectorAll('.camp-kpi-label'); if (ls[idx]) ls[idx].textContent = txt; };
-const toggleCompare = () => {}; // recurso de comparação removido (era mock)
+
+// ── Card padrão dos canais ──────────────────────────────────
+// Um único template para os 6 canais de campanha em vez de blocos de HTML repetidos com rótulos e
+// ordem de coluna diferentes entre si (era a causa dos cards "mostrarem a mesma informação com
+// texto diferente"). As 3 colunas de KPI são sempre, nesta ordem: Gasto Ads → receita → ROAS.
+// Nenhum valor começa com número de exemplo no HTML — tudo nasce em "—" e só é preenchido pelo
+// render(), então não existe mais texto fixo que não venha da API.
+const CAMP_CHANNELS = [
+  { key: 'ml',        mkt: 'br', logo: 'logo_mercadolivre.png', logoFill: true, name: 'Mercado Livre', type: 'ML Product Ads' },
+  { key: 'meta_br',   mkt: 'br', logo: 'logo_meta.png',                        name: 'Meta Ads',       type: 'Instagram · Facebook' },
+  { key: 'amazon_br', mkt: 'br', logo: 'logo_amazon.webp',                     name: 'Amazon BR',      type: 'Amazon Ads' },
+  { key: 'meta_us',   mkt: 'us', logo: 'logo_meta.png',                        name: 'Meta Ads',       type: 'Instagram · Facebook' },
+  { key: 'google_us', mkt: 'us', logo: 'logo_google_ads.webp',                 name: 'Google Ads',     type: 'Pesquisa · Display' },
+  { key: 'amazon',    mkt: 'us', logo: 'logo_amazon.webp',                     name: 'Amazon EUA',     type: 'Sponsored Products' },
+];
+
+function campCardTemplate(cfg) {
+  const chClass = cfg.mkt === 'br' ? 'ch-br' : 'ch-us';
+  const logoClass = 'camp-logo camp-logo-img' + (cfg.logoFill ? ' camp-logo-fill' : '');
+  return `
+  <div class="camp-card ${chClass}" id="card-${cfg.key}">
+    <div class="camp-card-main">
+      <div class="camp-ch-id">
+        <div class="${logoClass}"><img src="${cfg.logo}" alt="${cfg.name}"></div>
+        <div>
+          <div class="camp-ch-name">${cfg.name}</div>
+          <div class="camp-ch-type">${cfg.type}</div>
+        </div>
+      </div>
+      <div class="camp-kpi-col">
+        <div class="camp-kpi-label">Gasto Ads</div>
+        <div class="camp-kpi-val" id="${cfg.key}-spend">—</div>
+        <div class="camp-kpi-sub" id="${cfg.key}-spend-sub">—</div>
+      </div>
+      <div class="camp-kpi-col">
+        <div class="camp-kpi-label" id="${cfg.key}-rev-label">Faturamento total</div>
+        <div class="camp-kpi-val" id="${cfg.key}-revenue">—</div>
+        <div class="camp-kpi-sub" id="${cfg.key}-rev-sub">—</div>
+      </div>
+      <div class="camp-kpi-col">
+        <div class="camp-kpi-label">ROAS</div>
+        <div class="camp-kpi-val" id="${cfg.key}-roas">—</div>
+        <div class="camp-kpi-sub" id="${cfg.key}-roas-sub">retorno sobre gasto</div>
+      </div>
+      <div class="camp-chart-col">
+        <div class="camp-chart-label">
+          <span class="camp-chart-label-txt">Receita / dia</span>
+          <div class="camp-mini-legend"></div>
+        </div>
+        <div class="camp-mini-canvas-wrap"><canvas id="mini-${cfg.key}"></canvas></div>
+      </div>
+      <div class="camp-expand-col">
+        <button class="camp-expand-btn" id="btn-${cfg.key}" onclick="toggleExpand('${cfg.key}')">
+          <i class="bi bi-chevron-down"></i> Campanhas
+        </button>
+      </div>
+    </div>
+    <div class="camp-expand-panel" id="expand-${cfg.key}">
+      <div class="camp-expand-inner">
+        <div class="camp-expand-head">
+          <div class="camp-expand-title">Campanhas no período</div>
+        </div>
+        <div class="camp-campaigns" id="camps-${cfg.key}"></div>
+      </div>
+    </div>
+  </div>`;
+}
+function buildCampGrid() {
+  document.getElementById('campGrid').innerHTML = CAMP_CHANNELS.map(campCardTemplate).join('');
+}
 
 // ── Render ────────────────────────────────────────────────
 async function render() {
@@ -823,34 +550,44 @@ async function render() {
   setText('kpiRevenue', fmtMoney(faturamentoGeral));
   setText('kpiRoas', gastoGeral > 0 ? (vendasGeral / gastoGeral).toFixed(2).replace('.', ',') + '×' : '—');
 
-  // ── Meta (BR/US) ──
+  // ── Meta (BR/US) ── canal só de Ads, não tem "faturamento próprio": a receita mostrada é sempre
+  // a atribuída às campanhas, nunca um total de vendas do canal (Meta não vende nada sozinho).
   const metaKey = market === 'br' ? 'meta_br' : 'meta_us';
-  setText(`${metaKey}-sales`, metaAvail ? fmtMoney(metaRev) : '—');
-  setText(`${metaKey}-orders`, metaAvail ? `${fmtInt(metaClicks)} cliques` : 'Meta Ads não conectado');
-  setText(`${metaKey}-revenue`, metaAvail ? fmtMoney(metaSpend) : '—');
+  setText(`${metaKey}-spend`, metaAvail ? fmtMoney(metaSpend) : '—');
+  setText(`${metaKey}-spend-sub`, metaAvail ? `${fmtInt(metaClicks)} cliques` : 'Meta Ads não conectado');
+  setText(`${metaKey}-rev-label`, 'Vendas atribuídas');
+  setText(`${metaKey}-revenue`, metaAvail ? fmtMoney(metaRev) : '—');
+  setText(`${metaKey}-rev-sub`, 'receita das campanhas no período');
   setText(`${metaKey}-roas`, metaAvail && metaRoas > 0 ? metaRoas.toFixed(1).replace('.', ',') + '×' : '—');
+  setText(`${metaKey}-roas-sub`, metaAvail ? 'vendas atribuídas ÷ gasto' : 'retorno sobre gasto');
 
   if (market === 'br') {
-    // ── Mercado Livre ──
-    setLabel('card-ml', 0, 'Gasto Ads');
-    setText('ml-sales', mlAvail ? fmtMoney(mlSpend) : '—');
-    setText('ml-orders', mlAvail ? `${fmtInt(mlClicks)} cliques` : 'Mercado Ads não conectado');
+    // ── Mercado Livre ── canal de vendas de verdade: "Faturamento total" é a receita do canal
+    // inteiro (todos os pedidos), não só a atribuída a Ads.
+    setText('ml-spend', mlAvail ? fmtMoney(mlSpend) : '—');
+    setText('ml-spend-sub', mlAvail ? `${fmtInt(mlClicks)} cliques` : 'Mercado Ads não conectado');
+    setText('ml-rev-label', 'Faturamento total');
     setText('ml-revenue', fmtMoney(mlChannelRevenue));
+    setText('ml-rev-sub', 'receita total do canal');
     setText('ml-roas', mlAvail && mlRoas > 0 ? mlRoas.toFixed(1).replace('.', ',') + '×' : '—');
-    setText('ml-spend', mlAvail ? 'receita total ÷ gasto' : 'reautorize com escopo de Ads');
-    // ── Amazon BR ──
-    setText('amazon_br-sales', '—');
-    setText('amazon_br-orders', 'Ads indisponível via API');
+    setText('ml-roas-sub', mlAvail ? 'receita total ÷ gasto' : 'reautorize com escopo de Ads');
+    // ── Amazon BR ── sem API de Ads própria, mostra só o faturamento real do canal.
+    setText('amazon_br-spend', '—');
+    setText('amazon_br-spend-sub', 'Ads indisponível via API');
+    setText('amazon_br-rev-label', 'Faturamento total');
     setText('amazon_br-revenue', fmtMoney(cs.amazon || 0));
+    setText('amazon_br-rev-sub', 'receita total do canal');
     setText('amazon_br-roas', '—');
-    setText('amazon_br-spend', 'requer Amazon Ads API');
+    setText('amazon_br-roas-sub', 'requer Amazon Ads API');
   } else {
     // ── Amazon US ──
-    setText('amazon-sales', '—');
-    setText('amazon-orders', 'Ads indisponível via API');
+    setText('amazon-spend', '—');
+    setText('amazon-spend-sub', 'Ads indisponível via API');
+    setText('amazon-rev-label', 'Faturamento total');
     setText('amazon-revenue', fmtMoney(cs.amazon_us || 0));
+    setText('amazon-rev-sub', 'receita total do canal');
     setText('amazon-roas', '—');
-    setText('amazon-spend', 'requer Amazon Ads API');
+    setText('amazon-roas-sub', 'requer Amazon Ads API');
     // ── Google Ads (EUA) ──
     loadGoogleCard();
   }
@@ -866,24 +603,32 @@ async function render() {
   }
 
   // re-renderiza painéis de campanha abertos (mercado/período mudou)
-  ['ml','meta_br','amazon_br','meta_us','amazon','google_us'].forEach(key => {
+  CAMP_CHANNELS.forEach(({ key }) => {
     if (document.getElementById('expand-' + key)?.dataset.open === '1') renderCampaigns(key);
   });
 }
 
 // ── Google Ads (EUA) — card próprio, alimentado por /api/campaigns ──
+// Assim como Meta, é canal só de Ads: a receita é sempre a atribuída às campanhas.
 async function loadGoogleCard() {
-  setText('google_us-orders', 'carregando…');
+  // Gráfico do Google é gasto por campanha (barras nomeadas), não uma série diária, então não
+  // passa por drawMini/setCardHeader como os outros cards — o rótulo é fixado aqui.
+  const chartLabel = document.querySelector('#card-google_us .camp-chart-label-txt');
+  if (chartLabel) chartLabel.textContent = 'Gasto por campanha';
+  setText('google_us-rev-label', 'Vendas atribuídas');
+  setText('google_us-spend-sub', 'carregando…');
   let data;
   try { data = await loadCampaigns(); }
-  catch (e) { setText('google_us-orders', 'falha ao carregar'); return; }
+  catch (e) { setText('google_us-spend-sub', 'falha ao carregar'); return; }
 
   const g = data.channels?.google;
   if (!g?.available) {
-    setText('google_us-sales', '—');
-    setText('google_us-orders', 'Google Ads não conectado');
+    setText('google_us-spend', '—');
+    setText('google_us-spend-sub', 'Google Ads não conectado');
     setText('google_us-revenue', '—');
+    setText('google_us-rev-sub', 'receita das campanhas no período');
     setText('google_us-roas', '—');
+    setText('google_us-roas-sub', 'retorno sobre gasto');
     return;
   }
 
@@ -893,10 +638,12 @@ async function loadGoogleCard() {
   const clicks  = camps.reduce((s, c) => s + (c.clicks  || 0), 0);
   const roas    = spend > 0 ? revenue / spend : 0;
 
-  setText('google_us-sales', fmtMoney(spend));
-  setText('google_us-orders', camps.length ? `${fmtInt(clicks)} cliques` : 'sem campanhas no período');
+  setText('google_us-spend', fmtMoney(spend));
+  setText('google_us-spend-sub', camps.length ? `${fmtInt(clicks)} cliques` : 'sem campanhas no período');
   setText('google_us-revenue', fmtMoney(revenue));
+  setText('google_us-rev-sub', 'receita das campanhas no período');
   setText('google_us-roas', roas > 0 ? roas.toFixed(1).replace('.', ',') + '×' : '—');
+  setText('google_us-roas-sub', 'vendas atribuídas ÷ gasto');
 
   const canvas = document.getElementById('mini-google_us');
   if (!canvas) return;
@@ -1082,6 +829,7 @@ document.getElementById('spReset').addEventListener('click', () => {
 
 // ── Init ─────────────────────────────────────────────────
 (function init(){
+  buildCampGrid();
   document.getElementById('mktBtnBr').classList.toggle('active', market === 'br');
   document.getElementById('mktBtnUs').classList.toggle('active', market === 'us');
   document.body.classList.toggle('market-us', market === 'us');
