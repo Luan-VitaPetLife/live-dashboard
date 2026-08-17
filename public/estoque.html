@@ -39,6 +39,23 @@
   .filter-pill .lbl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
   .filter-pill .val{font-weight:600;color:var(--text)}
   .filter-pill .arr{color:var(--muted);font-size:9px;margin-left:1px;transition:transform .15s}
+  /* ── Period picker popup (mesmo padrão de produtos.html/campanhas.html) ── */
+  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+  .period-pop.open{display:flex}
+  .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s;font-family:inherit}
+  .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
+  .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .pp-divider{height:1px;background:var(--border)}
+  .pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .pp-dates{display:flex;flex-direction:column;gap:8px}
+  .pp-field{display:flex;align-items:center;gap:10px}
+  .pp-field label{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+  .pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);appearance:none;outline:none;transition:border-color .12s}
+  .pp-field input[type=date]:focus{border-color:var(--ink)}
+  .pp-err{font-size:10px;color:var(--red);min-height:12px}
+  .pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit}
+  .pp-apply:hover{opacity:.85}
   .sync-btn,.settings-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s}
   .sync-btn:hover,.settings-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
   .settings-btn{padding:0 12px;font-size:14px;line-height:1}
@@ -226,13 +243,38 @@
         <div class="csel-opt" data-value="0">Desligar</div>
       </div>
     </div>
+
+    <!-- Period -->
+    <div style="position:relative" id="periodWrap">
+      <div class="filter-pill" id="periodPill" onclick="togglePeriodPop()">
+        <span class="lbl">Período</span>
+        <span class="val" id="periodValue">30 dias</span>
+        <span class="arr">▾</span>
+      </div>
+      <div class="period-pop" id="periodPop">
+        <div class="pp-presets">
+          <button data-preset="today" onclick="selectPreset(this,'Hoje')">Hoje</button>
+          <button data-preset="7d" onclick="selectPreset(this,'7 dias')">7 dias</button>
+          <button data-preset="30d" class="active" onclick="selectPreset(this,'30 dias')">30 dias</button>
+          <button data-preset="month" onclick="selectPreset(this,'Este mês')">Este mês</button>
+        </div>
+        <div class="pp-divider"></div>
+        <div class="pp-section-label">Intervalo personalizado</div>
+        <div class="pp-dates">
+          <div class="pp-field"><label>De</label><input type="date" id="dateFrom"></div>
+          <div class="pp-field"><label>Até</label><input type="date" id="dateTo"></div>
+        </div>
+        <div class="pp-err" id="ppErr"></div>
+        <button class="pp-apply" onclick="applyRange()">Aplicar intervalo</button>
+      </div>
+    </div>
   </div>
 
   <div class="content">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
         <div class="page-title">Estoque</div>
-        <div class="page-sub" id="pageSub">Coco and Luna · janela fixa de 30 dias</div>
+        <div class="page-sub" id="pageSub">Coco and Luna · últimos 30 dias</div>
       </div>
       <div class="layout-toggle" id="layoutToggle">
         <button class="layout-btn" data-layout="row" onclick="setLayout('row')" title="Linha — uma tabela abaixo da outra"><i class="bi bi-list-ul"></i></button>
@@ -308,6 +350,20 @@ function contrastText(hex) {
 let market = localStorage.getItem('coco_market') || 'br';
 let current = null;
 let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
+
+// ── Period (seletor de período, mesmo padrão de produtos.html/campanhas.html) ──
+// Antes a tela usava sempre uma janela fixa de 30 dias no backend (sem seletor); agora o período é
+// escolhido aqui, igual às outras telas — mas o catálogo continua mesclando produto sem venda no
+// período (qty zerada), então nenhum produto some da lista só por não ter vendido, como já
+// combinado antes (pedido do Luan, 17/08/2026).
+function rangeForPreset(p) {
+  const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
+  if (p === 'today') return { since: iso(today), until: iso(today), label: 'Hoje' };
+  if (p === '7d')   { const s = new Date(today); s.setDate(s.getDate() - 6); return { since: iso(s), until: iso(today), label: '7 dias' }; }
+  if (p === 'month'){ const s = new Date(today.getFullYear(), today.getMonth(), 1); return { since: iso(s), until: iso(today), label: 'Este mês' }; }
+  const s = new Date(today); s.setDate(s.getDate() - 29); return { since: iso(s), until: iso(today), label: '30 dias' };
+}
+let state = rangeForPreset('30d');
 
 // "Unificar" deixou de ser uma opção local desta tela (06/07 → 05/08/2026): o grupo manual agora é
 // global (tela Unificador, dentro de Configurações) e o backend já devolve `agg.products` agrupado
@@ -517,6 +573,41 @@ function setMarket(m) {
   applyDefaultCollapse(getOrderedChannels(m));
   load();
 }
+
+// ── Period picker ─────────────────────────────────────────
+function togglePeriodPop() {
+  document.getElementById('periodPop').classList.toggle('open');
+  document.getElementById('periodPill').classList.toggle('open');
+}
+function selectPreset(btn, label) {
+  document.querySelectorAll('.pp-presets button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state = rangeForPreset(btn.dataset.preset);
+  document.getElementById('periodValue').textContent = label;
+  document.getElementById('periodPop').classList.remove('open');
+  document.getElementById('periodPill').classList.remove('open');
+  load();
+}
+function applyRange() {
+  const from = document.getElementById('dateFrom').value;
+  const to = document.getElementById('dateTo').value;
+  const err = document.getElementById('ppErr');
+  if (!from || !to) { err.textContent = 'Preencha as duas datas'; return; }
+  if (from > to) { err.textContent = 'A data inicial deve ser anterior à final'; return; }
+  err.textContent = '';
+  state = { since: from, until: to, label: `${from.slice(8)}.${from.slice(5,7)} – ${to.slice(8)}.${to.slice(5,7)}` };
+  document.getElementById('periodValue').textContent = state.label;
+  document.getElementById('periodPop').classList.remove('open');
+  document.getElementById('periodPill').classList.remove('open');
+  load();
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('periodWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('periodPop').classList.remove('open');
+    document.getElementById('periodPill').classList.remove('open');
+  }
+});
 
 const setText = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
 
@@ -803,8 +894,8 @@ function render() {
   const d = current; if (!d) return;
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   setText('lastUpdate', 'sync: ' + updated);
-  setText('pageSub', `Coco and Luna · vendas reais dos últimos ${d.windowDays || 30} dias (${rangeLabelShort(d.since, d.until)})`);
-  setText('footerDate', `Coco and Luna · últimos ${d.windowDays || 30} dias · última sincronização: ${updated}`);
+  setText('pageSub', `Coco and Luna · ${state.label} (${rangeLabelShort(d.since, d.until)}) · vendas reais do período`);
+  setText('footerDate', `Coco and Luna · período ${state.label} · última sincronização: ${updated}`);
   renderAggCard();
   const channels = getOrderedChannels(market);
   document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
@@ -815,7 +906,7 @@ function render() {
 // ── Carregamento ──────────────────────────────────────────
 async function load() {
   try {
-    const r = await fetch(`/api/stock?market=${market}`);
+    const r = await fetch(`/api/stock?market=${market}&since=${state.since}&until=${state.until}`);
     current = await r.json();
   } catch (e) { console.warn('Estoque: falha ao carregar', e); return; }
   render();

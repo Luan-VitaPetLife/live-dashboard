@@ -503,11 +503,12 @@ app.post('/api/products/finance', (req, res) => {
   res.json({ ok: true });
 });
 
-// Estoque + produção por canal (para a tela de Estoque) — janela fixa de 30 dias, sem cache.
+// Estoque + produção por canal (para a tela de Estoque) — período do seletor da tela; sem
+// since/until, cai nos últimos 30 dias corridos (ver computeStock). Sem cache.
 app.get('/api/stock', (req, res) => {
   try {
-    const { market = 'br' } = req.query;
-    res.json(computeStock({ market }));
+    const { market = 'br', since, until } = req.query;
+    res.json(computeStock({ market, since, until }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

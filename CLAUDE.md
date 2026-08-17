@@ -360,8 +360,13 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Exportar CSV: só Shopify US por enquanto (`GET /api/products/export`).
 
 ### Estoque (`public/estoque.html`)
-- Híbrido: venda real (calculada) + estoque/produção manual. Janela fixa de 30 dias pra
-  velocidade de venda (sem seletor de período).
+- Híbrido: venda real (calculada) + estoque/produção manual. Seletor de período igual ao de
+  Produtos (mesmo componente `.period-pop`); sem `since`/`until` na URL, `computeStock()` cai nos
+  últimos 30 dias corridos (mesmo default de sempre). `windowDays` no retorno da API é o tamanho
+  real do período (`daySpan`), não mais fixo em 30 — usado pra converter vendas do período em
+  vendas/dia. Produto sem venda no período continua listado (mesclado do catálogo bruto Shopify,
+  igual a Produtos, ver 4.13) — pedido do Luan (17/08/2026) ao adicionar o seletor: não pode sumir
+  produto só por não ter vendido no período escolhido.
 - Dois níveis: por canal (`kv.productStock`: só `stock`/`incoming`, editável) e agregado por
   família de produto somando todos os canais (`kv.productStockAgg`: `orderInProgress`/`orderNew`/
   `projected`, editável só aqui). Família = grupo manual do Unificador (prioridade) ou
@@ -457,7 +462,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 
 - `GET /api/dashboard?channel=&metric=&since=&until=&market=br|us` — payload principal
 - `GET /api/campaigns?market=&since=&until=` — campanha a campanha, ao vivo, cache 5min
-- `GET /api/products?market=&since=&until=` / `GET /api/stock?market=`
+- `GET /api/products?market=&since=&until=` / `GET /api/stock?market=&since=&until=`
 - `GET /api/orders/search?market=&q=` / `GET /api/orders/export?...`
 - `POST /api/sync` / `GET /api/status`
 - `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
