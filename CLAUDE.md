@@ -296,7 +296,12 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 ### Ocultar produtos
 - Palavras-chave testadas só contra TAG do item (`kv.productHiddenTags`, por mercado), geridas no
   Unificador. Item que bate vira segmento `'hidden'` em vez de cat/dog/other, some de
-  `productGeo`/Segmentos normais e aparece só no card "Ocultos".
+  `productGeo`/Segmentos normais e aparece só no card "Ocultos" (Unificador e Segmentos).
+- Filtro vale em toda a dashboard, não só em Segmentos: `computeDashboard` (Top Produtos),
+  `computeProducts` (Produtos) e `computeStock` (Estoque) também excluem o produto via
+  `isHiddenItem`, checando as tags tanto do item vendido quanto do catálogo bruto Shopify
+  (`mergeShopifyCatalog` carrega `tags` pra isso). Antes só Segmentos respeitava a tag oculta e o
+  produto continuava aparecendo normalmente em Produtos/Estoque/Top Produtos (corrigido 17/08/2026).
 
 ### Geografia (`geografia.html`/`geografia-us.html`)
 - Leaflet 1.9.4, tile CartoDB Voyager. Dois modos: coroplético (polígono colorido por intensidade)
