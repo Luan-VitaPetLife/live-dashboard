@@ -124,7 +124,10 @@
   .prod-thumb-ph{width:34px;height:34px;border-radius:6px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
   .prod-name-col{min-width:0}
   .prod-name-line{display:flex;align-items:center;gap:7px;min-width:0}
-  .prod-name{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Tela tem 10 colunas (4 delas com input), pouco espaço sobrando comparado à Estoque — cap maior
+     que o valor anterior (340px, cortava com "..." mesmo tendo espaço de sobra visível, reportado
+     pelo Luan, 17/08/2026), mas mais conservador que o de Estoque por causa das colunas extras. */
+  .prod-name{max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .prod-type-tag{font-size:9px;font-weight:700;letter-spacing:.3px;color:var(--sage);background:rgba(106,140,110,.12);border-radius:4px;padding:2px 6px;flex-shrink:0;white-space:nowrap}
   .prod-combo{font-size:10px;color:var(--muted);margin-top:2px}
   /* Linha unificada pelo Unificador (Configurações) — só exibição, gestão fica em /unificador */
