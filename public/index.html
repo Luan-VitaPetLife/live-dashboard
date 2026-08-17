@@ -551,7 +551,7 @@
         <div class="card" id="cardSalesSplit"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Orgânico x Campanha</div><div class="ct-sub" id="ssSub">Por canal</div></div></div>
           <div class="ss-grid" id="ssGrid"></div>
-          <div class="card-note">Campanha = origem Meta (Instagram/Facebook) + Destaque do Mercado Livre. Canais sem esse tipo de atribuição (Shopee, Amazon) aparecem 100% orgânicos.</div>
+          <div class="card-note">Campanha = pedido com origem paga identificada (Meta Ads sempre, mais Destaque do Mercado Livre no Brasil). Sem essa atribuição, o pedido conta como orgânico.</div>
         </div></div>
       </div>
 
@@ -868,11 +868,16 @@ function render(d) {
     document.getElementById('mktTitle').textContent = ch === 'mercadolivre' ? 'Distribuição por tipo' : 'Marketing por origem';
     document.getElementById('mktSub').textContent   = ch === 'mercadolivre' ? 'Clássico vs Destaque' : isMkt ? 'Receita do canal' : 'Receita atribuída';
     document.getElementById('mktCenterSub').textContent = ch === 'mercadolivre' ? 'Total ML' : isMkt ? 'Total' : 'Atribuída';
+    // Nota do card: nada de promessa de canal que não está de fato no roadmap (ver CLAUDE.md
+    // "A fazer" — só Amazon Ads e TikTok Shop são integrações planejadas; Shopee não tem Ads
+    // prometido em lugar nenhum). Google Ads também não some daqui por falta de conexão: é uma
+    // exclusão deliberada deste payload (fica só em Campanhas), então "em breve" seria mentira,
+    // inclusive no Brasil, onde Google Ads nem existe.
     document.getElementById('mktNote').textContent =
       ch === 'mercadolivre' ? 'Clássico = listagem grátis · Destaque = listagem paga' :
-      ch === 'shopee'       ? 'Receita orgânica da Shopee · Ads em breve' :
-      (ch === 'amazon' || ch === 'amazon_us') ? 'Receita orgânica da Amazon · Ads em breve' :
-      k.adCost > 0          ? 'Meta Ads conectado · Google Ads em breve' : 'Meta Ads conectado · sincronize para ver os dados';
+      ch === 'shopee'       ? 'Receita orgânica da Shopee · plataforma não expõe dados de Ads via API' :
+      (ch === 'amazon' || ch === 'amazon_us') ? 'Receita orgânica da Amazon · Ads ainda não integrado' :
+      k.adCost > 0          ? 'Meta Ads conectado · outros canais de Ads ficam na tela de Campanhas' : 'Meta Ads ainda sem dados · sincronize para atualizar';
   }
   // ROAS/ACOS — mostra só o que faz sentido pro canal selecionado (antes sempre misturava
   // Meta+ML, mesmo com Shopee/Amazon escolhido, o que não tinha relação nenhuma com o canal).
