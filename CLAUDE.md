@@ -298,10 +298,19 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   Unificador. Item que bate vira segmento `'hidden'` em vez de cat/dog/other, some de
   `productGeo`/Segmentos normais e aparece só no card "Ocultos" (Unificador e Segmentos).
 - Filtro vale em toda a dashboard, não só em Segmentos: `computeDashboard` (Top Produtos),
-  `computeProducts` (Produtos) e `computeStock` (Estoque) também excluem o produto via
-  `isHiddenItem`, checando as tags tanto do item vendido quanto do catálogo bruto Shopify
-  (`mergeShopifyCatalog` carrega `tags` pra isso). Antes só Segmentos respeitava a tag oculta e o
-  produto continuava aparecendo normalmente em Produtos/Estoque/Top Produtos (corrigido 17/08/2026).
+  `computeProducts` (Produtos) e `computeStock` (Estoque) também excluem o produto (antes só
+  Segmentos respeitava a tag oculta e o produto continuava aparecendo normalmente em
+  Produtos/Estoque/Top Produtos, corrigido 17/08/2026).
+- `isHiddenProduct` (não `isHiddenItem` direto) decide isso nesses três lugares, priorizando a tag
+  ATUAL do catálogo Shopify (`kv.shopifyProductCatalog`, re-sincronizado a cada ciclo) sobre a tag
+  presa no pedido. `it.tags` de um pedido vem do produto na hora em que o pedido foi buscado (ver
+  shopify.js) e nunca é re-sincronizado depois — se uma tag como "Combo"/"Teste" foi removida da
+  Shopify depois, pedidos antigos continuam com ela presa pra sempre, e a união de tags em
+  `aggregateProductsByChannel` carregava esse resíduo pra sempre junto. Sem a prioridade do
+  catálogo, um produto com tags limpas HOJE continuava oculto por causa de uma tag que nem existe
+  mais (reportado pelo Luan, 17/08/2026 — "Lisina para gatos 120g", tags atuais limpas, sumia de
+  Produtos/Estoque mesmo assim). Canal sem catálogo (Shopee/ML/Amazon) cai no fallback de sempre: só
+  a tag do pedido mesmo.
 
 ### Geografia (`geografia.html`/`geografia-us.html`)
 - Leaflet 1.9.4, tile CartoDB Voyager. Dois modos: coroplético (polígono colorido por intensidade)
