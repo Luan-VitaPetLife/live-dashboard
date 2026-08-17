@@ -1267,6 +1267,17 @@ app.post('/api/me/password', (req, res) => {
   res.json({ ok: true });
 });
 
+// Catch-all 404 — precisa ficar depois de toda rota/static acima (Express casa middleware na
+// ordem). API mantém erro em JSON (consistente com o resto de /api/*); asset estático que não
+// existe (express.static já tentou e chamou next()) continua com 404 puro, sem sentido devolver a
+// página bonita no lugar de uma imagem/script quebrado. Navegação de página (GET normal) cai na
+// página ilustrada — ver public/404.html.
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Rota não encontrada.' });
+  if (STATIC_ASSET_RE.test(req.path)) return res.status(404).end();
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+});
+
 await initStore();
 auth.initAuth();
 
