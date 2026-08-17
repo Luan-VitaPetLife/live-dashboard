@@ -138,7 +138,12 @@
   .prod-thumb-ph{width:34px;height:34px;border-radius:6px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
   .prod-name-col{min-width:0}
   .prod-name-line{display:flex;align-items:center;gap:7px;min-width:0}
-  .prod-name{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Compartilhado pelo card por canal (6 colunas numéricas) e pelo Panorama geral (11 colunas,
+     menos espaço sobrando) — cap bem mais alto que o valor anterior (280px, cortava com "..." mesmo
+     tendo espaço de sobra visível, reportado pelo Luan, 17/08/2026), mas conservador o bastante pra
+     não apertar as colunas numéricas do Panorama geral, que tem menos espaço livre que o card por
+     canal. */
+  .prod-name{max-width:440px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .prod-type-tag{font-size:9px;font-weight:700;letter-spacing:.3px;color:var(--sage);background:rgba(106,140,110,.12);border-radius:4px;padding:2px 6px;flex-shrink:0;white-space:nowrap}
   .prod-combo{font-size:10px;color:var(--muted);margin-top:2px}
   .prod-num{white-space:nowrap;font-variant-numeric:tabular-nums}
