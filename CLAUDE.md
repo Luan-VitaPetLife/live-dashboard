@@ -78,7 +78,7 @@ public/unificador.html   Agrupamento manual de produtos entre canais (admin)
 public/configuracoes.html Geral, login, gestão de usuários (admin)
 public/integracoes.html  Status + liga/desliga por integração (admin)
 public/login.html        Tela de login (standalone)
-public/404.html          Página de erro 404 (rota desconhecida), ilustração Feno_no_deserto.svg
+public/404.html          Página de erro 404 (rota desconhecida), ilustração 404.png
 public/sidebar.js        Sidebar compartilhada (IIFE, injeta markup + CSS + comportamento)
 public/colors.js         Sistema de cores compartilhado (IIFE) + color picker
 ```
@@ -522,7 +522,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 
 ### Confiabilidade operacional (não é checklist de site público — SEO/CTA/meta description não se
 ### aplicam aqui, a dashboard é interna e atrás de login; pedido do Luan em 17/08/2026)
-- ~~Página de erro 404~~ — feito (`public/404.html`, ilustração `Feno_no_deserto.svg`).
+- ~~Página de erro 404~~ — feito (`public/404.html`, ilustração `404.png`, trocada de
+  `Feno_no_deserto.svg` a pedido do Luan em 18/08/2026).
 - **Alerta quando um sync falha silenciosamente:** hoje o erro só aparece no log do Railway
   (`console.error('Sync falhou:', ...)`, ver server.js) — ninguém é avisado ativamente. Um canal
   parado de sincronizar por dias pode passar despercebido até alguém notar dado desatualizado.
