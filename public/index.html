@@ -854,6 +854,11 @@ const EC_TOOLTIP = {
   backgroundColor: cssVar('--surface'), borderColor:'rgba(30,28,24,0.12)', borderWidth:1,
   padding:[10,12], extraCssText:'border-radius:8px;box-shadow:0 8px 20px rgba(30,28,24,.14);',
   textStyle:{ color:cssVar('--sub'), fontSize:11, fontFamily:AXIS_FONT.fontFamily },
+  // appendToBody: o tooltip do ECharts por padrão é um elemento DOM dentro do próprio container do
+  // gráfico — se o mouse passa perto da borda do card, ele fica cortado pelo overflow:hidden do
+  // .card (mesma família de bug do corte no hover dos anéis, só que essa nem chega a aparecer
+  // truncada, some inteira). appendToBody joga o tooltip pro <body>, fora desse contexto de corte.
+  appendToBody: true, confine: true,
 };
 
 // Preenchimento em degradê sob a linha (do tom sólido no topo até transparente) — efeito comum em
@@ -989,7 +994,7 @@ function render(d) {
     grid:{ left:8, right:8, top:12, bottom:22, containLabel:true },
     xAxis:{ type:'category', data:t.labels, boundaryGap:false, axisLine:{show:false}, axisTick:{show:false}, axisLabel:AXIS_FONT, splitLine:{show:false} },
     yAxis:{ type:'value', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,0.06)'}}, axisLabel:{ ...AXIS_FONT, formatter:v=>money?fmtMoneyShort(v):fmtInt(v) } },
-    tooltip:{ trigger:'axis', ...EC_TOOLTIP, formatter: params => {
+    tooltip:{ trigger:'axis', axisPointer:{ type:'line', lineStyle:{ color:'rgba(30,28,24,0.15)', width:1 } }, ...EC_TOOLTIP, formatter: params => {
       if (!params.length) return '';
       const head = `<div style="font-weight:700;color:${cssVar('--text')};margin-bottom:4px">${params[0].axisValueLabel}</div>`;
       return head + params.map(p => `<div>${p.marker} ${p.seriesName}: ${money?fmtMoney(p.value,2):fmtInt(p.value)}</div>`).join('');
@@ -1105,7 +1110,7 @@ function render(d) {
       { type:'value', position:'left', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,0.06)'}}, axisLabel:AXIS_FONT },
       { type:'value', position:'right', axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}, axisLabel:{ ...AXIS_FONT, formatter:'{value}%' } },
     ],
-    tooltip:{ trigger:'axis', ...EC_TOOLTIP, formatter: params => {
+    tooltip:{ trigger:'axis', axisPointer:{ type:'shadow', shadowStyle:{ color:'rgba(30,28,24,0.05)' } }, ...EC_TOOLTIP, formatter: params => {
       if (!params.length) return '';
       const head = `<div style="font-weight:700;color:${cssVar('--text')};margin-bottom:4px">${params[0].axisValueLabel}</div>`;
       return head + params.map(p => `<div>${p.marker} ${p.seriesName==='Conversão' ? 'Conversão: '+p.value.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%' : 'Sessões: '+fmtInt(p.value)}</div>`).join('');
