@@ -884,7 +884,7 @@ function renderLegend(containerId, items) {
   }).join('');
 }
 
-function drawDonut(id, data, colors) {
+function drawDonut(id, data, colors, labels) {
   const total = data.reduce((a,b) => a+(Number(b)||0), 0);
   if (total <= 0) {
     setEChart(id, { series:[{ type:'pie', radius:['70%','100%'], silent:true, label:{show:false}, emphasis:{disabled:true},
@@ -897,13 +897,15 @@ function drawDonut(id, data, colors) {
   // 92% (não 100%) pra sobrar espaço dentro do próprio canvas pro "grow" do hover — sem essa
   // folga a fatia em destaque é cortada pelo limite do canvas, mesmo bug do Chart.js (18/08/2026).
   setEChart(id, {
-    tooltip:{ show:false },
+    tooltip:{ trigger:'item', ...EC_TOOLTIP, formatter: p =>
+      `<div style="font-weight:700;color:${cssVar('--text')};margin-bottom:2px">${p.marker} ${p.name||'—'}</div>` +
+      `<div>${fmtMoney(p.value)} · ${pctStr(p.percent)}</div>` },
     series:[{
       type:'pie', radius:['70%','92%'], avoidLabelOverlap:false, padAngle:2,
       itemStyle:{ borderColor:'#faf8f4', borderWidth:2, borderRadius:4 },
       label:{ show:false }, labelLine:{ show:false },
       emphasis:{ scale:true, scaleSize:6 },
-      data: data.map((v,i) => ({ value:v, itemStyle:{ color:colors[i] } })),
+      data: data.map((v,i) => ({ value:v, name:labels?.[i] ?? '', itemStyle:{ color:colors[i] } })),
     }],
   });
 }
@@ -1018,7 +1020,7 @@ function render(d) {
     ? ['shopify_us','yucaloo_us','amazon_us']
     : ['shopify','yucaloo_br','shopee','mercadolivre','amazon'];
   const cTotal = chOrder.reduce((a,k) => a+(cs[k]||0), 0);
-  drawDonut('channelChart', chOrder.map(k=>cs[k]||0), chOrder.map(k=>CocoColors.ch[k]?.bg||'#999'));
+  drawDonut('channelChart', chOrder.map(k=>cs[k]||0), chOrder.map(k=>CocoColors.ch[k]?.bg||'#999'), chOrder.map(k=>CocoColors.ch[k]?.label||CHAN[k]||k));
   document.getElementById('chCenter').textContent = fmtMoneyShort(cTotal);
   document.getElementById('channelRows').innerHTML = cTotal > 0 ? chOrder.map(k => {
     const v = cs[k]||0;
@@ -1029,7 +1031,7 @@ function render(d) {
 
   // Marketing
   const mTotal = d.marketing.reduce((a,e)=>a+e.value, 0);
-  drawDonut('mktChart', d.marketing.map(e=>e.value), d.marketing.map(e=>CocoColors.mkt[e.name]||'#b0a898'));
+  drawDonut('mktChart', d.marketing.map(e=>e.value), d.marketing.map(e=>CocoColors.mkt[e.name]||'#b0a898'), d.marketing.map(e=>e.name));
   document.getElementById('mktCenter').textContent = fmtMoneyShort(mTotal);
   document.getElementById('mktRows').innerHTML = d.marketing.length
     ? d.marketing.map(e=>{ const pc=mTotal>0?(e.value/mTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%'; return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${CocoColors.mkt[e.name]||'#b0a898'}"></div>${e.name}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(e.value)}</span></div></div>`; }).join('')
@@ -1066,7 +1068,7 @@ function render(d) {
   ssChannels.forEach(ch => {
     const s = ssc[ch] || { campaign: 0, organic: 0 };
     const total = s.campaign + s.organic;
-    drawDonut(`ssPie-${ch}`, [s.campaign, s.organic], [ssRust, ssSage]);
+    drawDonut(`ssPie-${ch}`, [s.campaign, s.organic], [ssRust, ssSage], ['Campanha','Orgânico']);
     const campPct = total > 0 ? Math.round(s.campaign / total * 100) : 0;
     const orgPct  = total > 0 ? 100 - campPct : 100;
     document.getElementById(`ssLeg-${ch}`).innerHTML = total > 0
