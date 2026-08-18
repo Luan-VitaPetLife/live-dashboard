@@ -869,7 +869,10 @@ function drawDonut(id, data, colors) {
     // spacing/borderRadius (Chart.js 4) separam e arredondam as pontas de cada fatia — dá o
     // acabamento "pill" que gráficos de anel mais modernos usam; hoverOffset faz a fatia se
     // destacar levemente ao passar o mouse, no lugar do anel estático de antes.
-    : { type:'doughnut', data:{ datasets:[{ data, backgroundColor:colors, borderColor:'#faf8f4', borderWidth:2, borderRadius:4, spacing:2, hoverOffset:8 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false} } } };
+    // layout.padding reserva o mesmo espaço do hoverOffset ao redor do canvas — sem isso a fatia
+    // que se destaca ao passar o mouse ultrapassa a borda do canvas e fica cortada pelo card
+    // (overflow:hidden), reportado pelo Luan em 18/08/2026.
+    : { type:'doughnut', data:{ datasets:[{ data, backgroundColor:colors, borderColor:'#faf8f4', borderWidth:2, borderRadius:4, spacing:2, hoverOffset:8 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', layout:{padding:8}, plugins:{ legend:{display:false}, tooltip:{enabled:false} } } };
   setChart(id, cfg);
 }
 
