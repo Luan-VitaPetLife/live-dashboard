@@ -12,7 +12,7 @@ import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
 import * as shopifyYucaloo from './shopifyYucaloo.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, getAmazonRetentionConfig } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -249,19 +249,30 @@ async function doSync() {
     }
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
 
-  // Poda de retenção da Amazon: mantém só os últimos AMAZON_RETENTION_DAYS dias do
-  // canal de maior volume (~1000 pedidos/dia US), para o banco não crescer sem limite.
-  // **Opt-in: padrão 0 (DESLIGADA)** — de propósito, para um deploy nunca apagar dados
-  // sozinho (a poda com padrão agressivo quase apagou 9 meses recém-recuperados em
-  // 10/07/2026). Defina AMAZON_RETENTION_DAYS no Railway para ativar (ex.: 365 = janela
-  // móvel de 1 ano). Só Amazon; Shopify/Shopee/ML ficam completos. Ver CLAUDE.md 4.7.7.
+  // Poda de retenção da Amazon: mantém só os últimos N dias, por mercado (BR/EUA configurados
+  // separadamente na tela Integrações, kv.amazonRetentionConfig — pedido do Luan 18/08/2026,
+  // Amazon EUA sozinha tem ~342 mil pedidos/ano, Amazon BR só ~200). Mercado sem config própria
+  // ainda cai no legado AMAZON_RETENTION_DAYS (env var) — preserva o comportamento já ativo em
+  // produção (365, BR+US juntos) até o usuário mudar algo pela tela.
+  // **A primeira poda de uma janela nova nunca acontece sozinha aqui** — mudar o número na tela
+  // só grava a config depois de o usuário confirmar (ver POST /api/amazon/retention, que já
+  // aplica a poda inicial na hora, com prévia de quantos pedidos seriam apagados). Este bloco só
+  // continua a poda incremental de dia-a-dia depois disso (a poda com padrão agressivo quase
+  // apagou 9 meses recém-recuperados em 10/07/2026 — daí o cuidado). Só Amazon; Shopify/
+  // Shopee/ML ficam completos. Ver CLAUDE.md 4.7.7.
   try {
-    const retentionDays = Number(process.env.AMAZON_RETENTION_DAYS || 0);
-    if (retentionDays > 0) {
-      const cutoff = new Date(Date.now() - retentionDays * 864e5).toISOString();
-      const pruned = pruneOrders({ channels: ['amazon', 'amazon_us'], olderThanIso: cutoff });
-      if (pruned) report.amazonPruned = pruned;
+    const legacyDefault = Number(process.env.AMAZON_RETENTION_DAYS || 0);
+    const retentionCfg = getAmazonRetentionConfig();
+    const CHANNEL_BY_MARKET = { br: 'amazon', us: 'amazon_us' };
+    let pruned = 0;
+    for (const mkt of ['br', 'us']) {
+      const days = retentionCfg[mkt] ?? legacyDefault;
+      if (days > 0) {
+        const cutoff = new Date(Date.now() - days * 864e5).toISOString();
+        pruned += pruneOrders({ channels: [CHANNEL_BY_MARKET[mkt]], olderThanIso: cutoff });
+      }
     }
+    if (pruned) report.amazonPruned = pruned;
   } catch (e) { report.errors.push('amazon.prune: ' + e.message); }
 
   setLastSync(new Date().toISOString());

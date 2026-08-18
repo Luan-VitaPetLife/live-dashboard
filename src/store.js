@@ -51,6 +51,7 @@ const EMPTY = {
   authConfig: null,   // { enabled: bool } — null = ainda não inicializado (initAuth semeia)
   authSessions: {},   // { token: { userId, createdAt, expiresAt } }
   integrationsConfig: {}, // { [chave]: { enabled: bool } } — liga/desliga por integração, ver tela Integrações
+  amazonRetentionConfig: {}, // { br: dias|undefined, us: dias|undefined } — janela de retenção por mercado, ver tela Integrações. Mercado ausente cai no legado AMAZON_RETENTION_DAYS (env var), ver sync.js.
 };
 
 let cache = null;
@@ -154,6 +155,7 @@ export async function initStore() {
       if (r.key === 'authConfig')            cache.authConfig            = r.value;
       if (r.key === 'authSessions')          cache.authSessions          = r.value;
       if (r.key === 'integrationsConfig')    cache.integrationsConfig    = r.value;
+      if (r.key === 'amazonRetentionConfig') cache.amazonRetentionConfig = r.value;
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -268,6 +270,28 @@ export function pruneOrders({ channels, olderThanIso }) {
     }
   }
   return removed;
+}
+
+// Prévia (sem apagar nada) de quanto uma poda removeria — usado pela tela de Integrações antes
+// de aplicar uma janela de retenção nova, pra mostrar "isso vai apagar N pedidos" e pedir
+// confirmação explícita em vez de deixar a primeira poda de um valor novo acontecer sozinha
+// no próximo sync (ver CLAUDE.md — poda agressiva quase apagou 9 meses em 10/07/2026).
+export function countOrdersOlderThan({ channel, olderThanIso }) {
+  const db = load();
+  let count = 0;
+  for (const o of Object.values(db.orders)) {
+    if (o.channel === channel && o.createdAt && o.createdAt < olderThanIso) count++;
+  }
+  return count;
+}
+
+// Janela de retenção da Amazon por mercado — ver tela Integrações. Mercado sem chave própria
+// aqui cai no legado AMAZON_RETENTION_DAYS (env var), ver sync.js: preserva o comportamento já
+// ativo em produção (365 dias, BR+US juntos) até o usuário mudar algo pela tela.
+export function getAmazonRetentionConfig() { return load().amazonRetentionConfig || {}; }
+export function setAmazonRetentionConfig(cfg) {
+  const db = load(); db.amazonRetentionConfig = cfg; saveJson();
+  if (USE_PG) pgKv('amazonRetentionConfig', cfg);
 }
 
 // Preenche items[] (títulos de produto) em pedidos JÁ existentes, sem tocar em
