@@ -12,7 +12,7 @@ import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
 import * as shopifyYucaloo from './shopifyYucaloo.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -22,6 +22,16 @@ function defaultWindow(days = 60) {
   const since = new Date(today); since.setDate(since.getDate() - days);
   const iso = d => d.toISOString().slice(0, 10);
   return { since: iso(since), until: iso(today) };
+}
+
+// Grava sessões da Yucaloo no balde dela (por mercado) — kv.yucalooSessionsDaily, separado do
+// sessions_daily da Coco and Luna pra não colidir chave de data (ver store.js).
+function storeYucalooSessions(mkt, rows) {
+  const all = getYucalooSessionsDaily();
+  const byDate = { ...(all[mkt] || {}) };
+  for (const r of rows) byDate[r.date] = r;
+  all[mkt] = byDate;
+  setYucalooSessionsDaily(all);
 }
 
 let syncInFlight = false;
@@ -84,6 +94,15 @@ async function doSync() {
       upsertOrders(orders);
       report.yucaloo_br = orders.length;
     } catch (e) { report.errors.push('yucaloo_br.orders: ' + e.message); }
+
+    // Yucaloo BR — sessões diárias (loja Shopify própria, balde separado da Coco and Luna —
+    // ver storeYucalooSessions/CLAUDE.md). Card "Tráfego & conversão" da Visão geral, pedido
+    // do Luan 18/08/2026.
+    try {
+      const sessions = await shopifyYucaloo.fetchSessionsDaily('br', 90);
+      storeYucalooSessions('br', sessions);
+      report.yucaloo_br_sessions = sessions.length;
+    } catch (e) { report.errors.push('yucaloo_br.sessions: ' + e.message); }
 
     try {
       const catalog = await shopifyYucaloo.fetchProductCatalog('br');
@@ -187,6 +206,12 @@ async function doSync() {
       upsertOrders(orders);
       report.yucaloo_us = orders.length;
     } catch (e) { report.errors.push('yucaloo_us.orders: ' + e.message); }
+
+    try {
+      const sessions = await shopifyYucaloo.fetchSessionsDaily('us', 90);
+      storeYucalooSessions('us', sessions);
+      report.yucaloo_us_sessions = sessions.length;
+    } catch (e) { report.errors.push('yucaloo_us.sessions: ' + e.message); }
 
     try {
       const catalog = await shopifyYucaloo.fetchProductCatalog('us');

@@ -110,13 +110,24 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Quantidade/receita por produto usa `LineItem.currentQuantity` (não `quantity`, que inclui
   devolvido) e desconta reembolso do `discountedTotalSet` via `order.refunds`.
 
-### Sessões / funil (só Shopify)
+### Sessões / funil (só lojas Shopify — Coco and Luna + Yucaloo)
 - ShopifyQL: `FROM sessions SHOW sessions, online_store_visitors, sessions_with_cart_additions,
   sessions_that_reached_checkout, sessions_that_completed_checkout TIMESERIES day`.
 - Resposta vem em `shopifyqlQuery.tableData.rows`; `parseErrors` pode ser `[]` (truthy) — checar
   `.length`, não truthiness.
 - Precisa dos escopos `read_analytics` + `read_reports`. Sem `read_analytics`, `shopifyqlQuery`
   simplesmente some do schema, sem erro.
+- Yucaloo tem loja Shopify própria, então também tem sessão real (o app dela já pede
+  `read_analytics`/`read_reports` no SCOPE, ver shopifyYucaloo.js) — gravada num balde **separado**
+  (`kv.yucalooSessionsDaily`, `{[market]:{[date]:row}}`, `setYucalooSessionsDaily`/
+  `getYucalooSessionsDaily` em store.js), não na tabela `sessions_daily` (que tem `date` como chave
+  primária SEM dimensão de canal — gravar ali por cima misturaria/sobrescreveria os dias da Coco
+  and Luna). `aggregateSessions()` (metrics.js) soma os dois baldes por canal selecionado: canal
+  `shopify`/`shopify_us` → só Coco and Luna; `yucaloo_br`/`yucaloo_us` → só Yucaloo; `todos` → soma
+  as duas lojas do mercado. Cards "Tráfego & conversão" e "Funil de conversão" (index.html) ficam
+  visíveis pra Yucaloo também (`isYucaloo` em `updateCardVisibility`), com a logo da loja
+  (`logos-integracao/cocoandluna.webp`/`Yucaloo1.png`) no subtítulo do card de tráfego pra deixar
+  claro de qual loja é o número. Pedido do Luan, 18/08/2026.
 
 ### Marketing
 - Atribuição por origem (`order.customerJourneySummary.lastVisit.source`) é atribuição, não custo.

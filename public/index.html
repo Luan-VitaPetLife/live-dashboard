@@ -132,6 +132,7 @@
   .card-pad{padding:16px 24px}
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
   .ct-title{font-size:12px;font-weight:600} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
+  .ct-sub-logo{height:11px;width:auto;vertical-align:-1.5px;margin-right:5px;opacity:.85}
   .donut-center-wrap{position:relative;height:160px;margin-bottom:14px}
   /* ECharts precisa de um container com tamanho explícito (ao contrário do <canvas>, que tinha um
      tamanho intrínseco padrão) — os anéis (Canais, Marketing, Orgânico x Campanha) agora montam
@@ -1083,18 +1084,24 @@ function render(d) {
     document.getElementById(`ssTotal-${ch}`).textContent = fmtMoney(total);
   });
 
-  // Traffic
+  // Traffic — Yucaloo tem loja Shopify própria (ver aggregateSessions em metrics.js), então
+  // entra no mesmo card com logo própria pra deixar claro de qual loja é o dado. Pedido do
+  // Luan, 18/08/2026.
   const tf = d.traffic;
   const hasTraffic =
-    (d.market === 'br' && (d.channel === 'todos' || d.channel === 'shopify')) ||
-    (d.market === 'us' && (d.channel === 'todos' || d.channel === 'shopify_us'));
+    (d.market === 'br' && (d.channel === 'todos' || d.channel === 'shopify' || d.channel === 'yucaloo_br')) ||
+    (d.market === 'us' && (d.channel === 'todos' || d.channel === 'shopify_us' || d.channel === 'yucaloo_us'));
   const trafficSubEl = document.getElementById('trafficSub');
-  if (d.market === 'us' && (d.channel === 'todos' || d.channel === 'shopify_us')) {
-    trafficSubEl.textContent = 'Shopify - Coco and Luna EUA · período selecionado';
-  } else if (d.market === 'us') {
-    trafficSubEl.textContent = 'Dados de sessão disponíveis apenas para Shopify - Coco and Luna EUA';
+  const mktLabel = d.market === 'us' ? 'EUA' : 'BR';
+  const brandLogo = b => `<img class="ct-sub-logo" src="logos-integracao/${b === 'coco' ? 'cocoandluna.webp' : 'Yucaloo1.png'}" alt="">`;
+  if (d.channel === 'shopify' || d.channel === 'shopify_us') {
+    trafficSubEl.innerHTML = brandLogo('coco') + `Shopify - Coco and Luna ${mktLabel} · período selecionado`;
+  } else if (d.channel === 'yucaloo_br' || d.channel === 'yucaloo_us') {
+    trafficSubEl.innerHTML = brandLogo('yucaloo') + `Shopify - Yucaloo ${mktLabel} · período selecionado`;
+  } else if (d.channel === 'todos') {
+    trafficSubEl.innerHTML = brandLogo('coco') + brandLogo('yucaloo') + `Coco and Luna + Yucaloo ${mktLabel} · período selecionado`;
   } else {
-    trafficSubEl.textContent = hasTraffic ? 'Shopify - Coco and Luna BR · período selecionado' : 'Dados de sessão disponíveis apenas para Shopify - Coco and Luna BR';
+    trafficSubEl.textContent = `Dados de sessão disponíveis apenas para Shopify (Coco and Luna ou Yucaloo) ${mktLabel}`;
   }
   document.getElementById('mSessions').textContent = fmtInt(tf.sessions);
   document.getElementById('mSessionsMeta').textContent = tf.visitors?(tf.sessions/tf.visitors).toLocaleString('pt-BR',{maximumFractionDigits:1})+' por visitante':' ';
@@ -1308,6 +1315,7 @@ const ALWAYS_VISIBLE_CARD_IDS = ['kpiStrip','trend','topProducts','recentOrders'
 function updateCardVisibility() {
   const isTodos = channel === 'todos';
   const isShopify = channel === 'shopify' || channel === 'shopify_us';
+  const isYucaloo = channel === 'yucaloo_br' || channel === 'yucaloo_us';
   const setWrap = (wrap, visible) => {
     if (!wrap) return false;
     const userHidden = hiddenByUser.has(wrap.dataset.cardId);
@@ -1323,8 +1331,11 @@ function updateCardVisibility() {
   const channelSplitVisible = show('cardChannelSplit', isTodos);
   const marketingVisible    = show('cardMarketing',    isTodos || isShopify);
   show('cardSalesSplit',   true);
-  show('cardTraffic',      isTodos || isShopify);
-  show('cardFunnel',       isTodos || isShopify);
+  // Yucaloo tem loja Shopify própria (ver aggregateSessions em metrics.js) — mesma dados de
+  // sessão que Coco and Luna, então os dois cards que dependem disso acompanham. Pedido do
+  // Luan, 18/08/2026.
+  show('cardTraffic',      isTodos || isShopify || isYucaloo);
+  show('cardFunnel',       isTodos || isShopify || isYucaloo);
   show('cardMlBreakdown',  channel === 'mercadolivre');
 
   ALWAYS_VISIBLE_CARD_IDS.forEach(id => {
