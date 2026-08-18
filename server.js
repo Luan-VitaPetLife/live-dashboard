@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -732,6 +732,56 @@ app.post('/api/amazon/cleanup-market-leak', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Retenção de histórico da Amazon por mercado (BR/EUA separados) — tela Integrações, pedido do
+// Luan 18/08/2026 (Amazon EUA sozinha soma ~342 mil pedidos/ano, muito mais que os outros
+// canais). GET devolve a janela efetiva hoje (config salva ou o legado AMAZON_RETENTION_DAYS) +
+// total de pedidos por mercado, pra dar contexto na tela. POST muda a janela E já aplica a poda
+// na hora — de propósito: é a única ação que efetivamente apaga pedido aqui, então só roda a
+// pedido explícito do usuário (depois de ele ver a prévia), nunca sozinha no próximo sync (ver
+// sync.js e o quase-desastre de 10/07/2026 documentado lá).
+const AMAZON_RETENTION_CHANNEL = { br: 'amazon', us: 'amazon_us' };
+app.get('/api/amazon/retention', requireAdmin, (_req, res) => {
+  const cfg = getAmazonRetentionConfig();
+  const legacyDefault = Number(process.env.AMAZON_RETENTION_DAYS || 0);
+  const out = {};
+  for (const mkt of ['br', 'us']) {
+    out[mkt] = {
+      days: cfg[mkt] ?? legacyDefault,
+      configured: cfg[mkt] !== undefined,
+      totalOrders: getOrders({ channel: AMAZON_RETENTION_CHANNEL[mkt], market: mkt }).length,
+    };
+  }
+  res.json(out);
+});
+
+app.get('/api/amazon/retention/preview', requireAdmin, (req, res) => {
+  const market = req.query.market === 'br' ? 'br' : 'us';
+  const days = Number(req.query.days || 0);
+  if (!(days > 0)) return res.status(400).json({ error: 'days precisa ser maior que zero.' });
+  const channel = AMAZON_RETENTION_CHANNEL[market];
+  const cutoff = new Date(Date.now() - days * 864e5).toISOString();
+  const wouldDelete = countOrdersOlderThan({ channel, olderThanIso: cutoff });
+  const totalOrders = getOrders({ channel, market }).length;
+  res.json({ market, days, wouldDelete, totalOrders });
+});
+
+app.post('/api/amazon/retention', requireAdmin, (req, res) => {
+  const market = req.body?.market === 'br' ? 'br' : req.body?.market === 'us' ? 'us' : null;
+  const days = Number(req.body?.days);
+  if (!market) return res.status(400).json({ error: 'market precisa ser "br" ou "us".' });
+  if (!(days >= 0)) return res.status(400).json({ error: 'days precisa ser um número ≥ 0 (0 = sem limite).' });
+  const cfg = getAmazonRetentionConfig();
+  cfg[market] = days;
+  setAmazonRetentionConfig(cfg);
+  let deleted = 0;
+  if (days > 0) {
+    const channel = AMAZON_RETENTION_CHANNEL[market];
+    const cutoff = new Date(Date.now() - days * 864e5).toISOString();
+    deleted = pruneOrders({ channels: [channel], olderThanIso: cutoff });
+  }
+  res.json({ ok: true, market, days, deleted });
 });
 
 // Correção pontual (28/07/2026): só pedido com pagamento de verdade conta como venda

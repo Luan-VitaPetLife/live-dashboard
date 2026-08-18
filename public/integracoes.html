@@ -49,6 +49,29 @@
   .vs-btn:hover{color:var(--text)}
   .vs-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
 
+  /* ── Retenção de histórico da Amazon (admin) ── */
+  .ret-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+  .ret-panel-title{font-size:13px;font-weight:600}
+  .ret-panel-sub{font-size:11px;color:var(--sub);margin-top:2px;line-height:1.5;max-width:640px}
+  .ret-rows{display:flex;flex-direction:column;gap:8px}
+  .ret-row{display:flex;align-items:center;gap:14px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm)}
+  .ret-row-label{font-size:12px;font-weight:600;width:70px;flex-shrink:0}
+  .ret-row-sub{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:2px}
+  .ret-row-input{display:flex;align-items:center;gap:6px;margin-left:auto}
+  .ret-row-input input[type=number]{width:64px;font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);outline:none;transition:border-color .12s}
+  .ret-row-input input[type=number]:focus{border-color:var(--ink)}
+  .ret-row-input span{font-size:11px;color:var(--sub)}
+  .ret-btn{font-size:11px;font-weight:600;padding:8px 14px;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer;transition:opacity .12s;white-space:nowrap;font-family:inherit}
+  .ret-btn:hover{opacity:.85}
+  .ret-btn:disabled{opacity:.5;cursor:default}
+  .ret-divider{height:1px;background:var(--border2)}
+  .ret-backfill-label{font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .ret-backfill-row{display:flex;align-items:center;gap:8px}
+  .ret-backfill-row select{font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none}
+  .ret-backfill-row input[type=number]{width:64px;font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none}
+  .ret-backfill-unit{font-size:11px;color:var(--sub)}
+  .ret-backfill-status{font-size:11px;color:var(--sub);margin-top:8px;min-height:14px}
+
   /* ── País — espaçamento próprio acima/abaixo de cada bloco + divisor entre os países ── */
   .country-block{display:flex;flex-direction:column;gap:16px;padding:22px 0}
   .country-block+.country-block{border-top:1px solid var(--border2)}
@@ -195,6 +218,28 @@
         <button type="button" class="vs-btn" data-mode="colunas"><i class="bi bi-layout-three-columns"></i> Colunas</button>
         <button type="button" class="vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
         <button type="button" class="vs-btn" data-mode="compacto"><i class="bi bi-grid-1x2"></i> Compacto</button>
+      </div>
+    </div>
+
+    <div class="ret-panel" id="retPanel">
+      <div>
+        <div class="ret-panel-title">Amazon — Retenção de histórico</div>
+        <div class="ret-panel-sub" id="retPanelSub">Carregando…</div>
+      </div>
+      <div class="ret-rows" id="retRows"></div>
+      <div class="ret-divider"></div>
+      <div>
+        <div class="ret-backfill-label">Buscar mais histórico (Reports API)</div>
+        <div class="ret-backfill-row">
+          <select id="backfillMarket">
+            <option value="us">EUA</option>
+            <option value="br">BR</option>
+          </select>
+          <input type="number" id="backfillDays" value="90" min="1" max="730">
+          <span class="ret-backfill-unit">dias</span>
+          <button class="ret-btn" id="backfillBtn" onclick="runBackfill()">Buscar</button>
+        </div>
+        <div class="ret-backfill-status" id="backfillStatus"></div>
       </div>
     </div>
 
@@ -556,10 +601,112 @@ $('viewSwitch').addEventListener('click', e => {
   if (lastItems.length) render(lastItems);
 });
 
+// ── Retenção de histórico da Amazon (BR/EUA separados) ────
+// A poda em si só acontece a pedido explícito (aqui ou no próximo sync, depois que o usuário já
+// confirmou uma vez) — nunca sozinha ao só mudar o número no campo. Ver server.js/CLAUDE.md.
+const RET_MARKET_LABEL = { br: 'BR', us: 'EUA' };
+async function loadRetention(){
+  try{
+    const r = await fetch('/api/amazon/retention', { credentials:'same-origin' });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const d = await r.json();
+    $('retPanelSub').textContent = 'Controla quantos dias de pedidos ficam guardados por mercado — o resto é apagado do banco pra aliviar o espaço. Amazon EUA costuma ter muito mais volume que os outros canais.';
+    $('retRows').innerHTML = ['us','br'].map(mkt => {
+      const info = d[mkt] || { days: 0, totalOrders: 0 };
+      const cap = mkt === 'us' ? 'Us' : 'Br';
+      return `<div class="ret-row">
+        <div class="ret-row-label">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${info.totalOrders.toLocaleString('pt-BR')} pedidos hoje</span></div>
+        <div class="ret-row-input"><input type="number" id="retDays${cap}" min="0" value="${info.days}"><span>dias (0 = sem limite)</span></div>
+        <button class="ret-btn" id="retApply${cap}" onclick="applyRetention('${mkt}')">Aplicar</button>
+      </div>`;
+    }).join('');
+  }catch(e){
+    $('retPanelSub').textContent = 'Não foi possível carregar a configuração de retenção.';
+  }
+}
+async function applyRetention(market){
+  const cap = market === 'us' ? 'Us' : 'Br';
+  const input = $('retDays' + cap), btn = $('retApply' + cap);
+  const days = Number(input.value);
+  if (!(days >= 0)){ toast('Dias precisa ser um número válido.', true); return; }
+  btn.disabled = true;
+  try{
+    if (days > 0){
+      const pr = await fetch(`/api/amazon/retention/preview?market=${market}&days=${days}`, { credentials:'same-origin' });
+      const pd = await pr.json();
+      if (!pr.ok) throw new Error(pd.error || 'falha ao calcular prévia');
+      if (pd.wouldDelete > 0){
+        const ok = confirm(`Isso vai apagar ${pd.wouldDelete.toLocaleString('pt-BR')} de ${pd.totalOrders.toLocaleString('pt-BR')} pedidos da Amazon ${RET_MARKET_LABEL[market]}, mantendo só os últimos ${days} dias. Essa ação não tem volta. Confirmar?`);
+        if (!ok){ btn.disabled = false; return; }
+      }
+    }
+    const r = await fetch('/api/amazon/retention', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ market, days }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
+    toast(d.deleted > 0
+      ? `${d.deleted.toLocaleString('pt-BR')} pedidos apagados. Janela agora: ${days === 0 ? 'sem limite' : days + ' dias'}.`
+      : `Janela salva: ${days === 0 ? 'sem limite' : days + ' dias'}.`);
+    loadRetention();
+  }catch(e){
+    toast('Erro: ' + (e.message || 'falha de rede'), true);
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+// ── Backfill de histórico (Reports API) — envolve o endpoint que já existia sem tela ──
+let backfillPolling = null;
+async function runBackfill(){
+  const market = $('backfillMarket').value;
+  const days = Number($('backfillDays').value || 90);
+  const btn = $('backfillBtn');
+  btn.disabled = true;
+  try{
+    const r = await fetch(`/api/amazon/backfill?days=${days}&market=${market}`, { method:'POST', credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
+    toast(d.message || 'Backfill iniciado.');
+    pollBackfillStatus();
+  }catch(e){
+    toast('Erro: ' + (e.message || 'falha de rede'), true);
+    btn.disabled = false;
+  }
+}
+async function pollBackfillStatus(){
+  if (backfillPolling) clearInterval(backfillPolling);
+  const tick = async () => {
+    try{
+      const r = await fetch('/api/status', { credentials:'same-origin' });
+      const d = await r.json();
+      const b = d.amazon?.backfill;
+      if (!b) return;
+      $('backfillStatus').textContent = b.status === 'running'
+        ? `Buscando (${RET_MARKET_LABEL[b.market] || b.market}, ${b.days}d)… ${b.message || ''}`
+        : b.status === 'done' ? `Concluído: ${b.message || ''}`
+        : b.status === 'error' ? `Erro: ${b.message || ''}`
+        : '';
+      if (b.status !== 'running'){
+        clearInterval(backfillPolling);
+        backfillPolling = null;
+        $('backfillBtn').disabled = false;
+        if (b.status === 'done') loadRetention();
+      }
+    }catch(e){}
+  };
+  tick();
+  backfillPolling = setInterval(tick, 4000);
+}
+
 (async function(){
   syncViewSwitch();
   await loadMe();
   await load();
+  loadRetention();
+  pollBackfillStatus();
 })();
 </script>
 </body>
