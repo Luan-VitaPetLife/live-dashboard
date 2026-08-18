@@ -23,6 +23,7 @@ const pool = USE_PG
 const EMPTY = {
   orders: {},
   sessionsDaily: {},
+  yucalooSessionsDaily: {}, // { [market]: { [date]: {sessions,visitors,cart,checkout,completed} } } — loja Shopify própria da Yucaloo, balde separado do sessionsDaily da Coco and Luna pra não colidir chave de data (ver aggregateSessions em metrics.js)
   metaInsightsDaily: {},
   metaUSInsightsDaily: {},
   shopeeTokens: null,
@@ -139,6 +140,7 @@ export async function initStore() {
       if (r.key === 'productHiddenTags')    cache.productHiddenTags    = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
       if (r.key === 'metaUSInsightsDaily')  cache.metaUSInsightsDaily  = r.value;
+      if (r.key === 'yucalooSessionsDaily') cache.yucalooSessionsDaily = r.value;
       if (r.key === 'lastSync')             cache.lastSync             = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
       if (r.key === 'amazonBackoff')         cache.amazonBackoff         = Number(r.value);
       if (r.key === 'amazonBRBackoff')       cache.amazonBRBackoff       = Number(r.value);
@@ -498,6 +500,17 @@ export function upsertSessionsDaily(rows, market = 'br') {
     }
   }
 }
+
+// Sessões da loja Shopify da Yucaloo (própria, separada da Coco and Luna) — balde à parte porque
+// sessions_daily (Postgres) é uma tabela com `date` como chave primária só do mercado, sem
+// dimensão de canal; gravar aqui na mesma tabela sobrescreveria o dia da Coco and Luna. Formato:
+// { [market]: { [date]: {sessions,visitors,cart,checkout,completed} } }, mesmo padrão do
+// metaInsightsDaily/metaUSInsightsDaily (kv genérico, não tabela dedicada).
+export function setYucalooSessionsDaily(data) {
+  const db = load(); db.yucalooSessionsDaily = data; saveJson();
+  if (USE_PG) pgKv('yucalooSessionsDaily', data);
+}
+export function getYucalooSessionsDaily() { return load().yucalooSessionsDaily || {}; }
 
 export function getSessionsDaily(market = 'br') {
   const all = load().sessionsDaily;

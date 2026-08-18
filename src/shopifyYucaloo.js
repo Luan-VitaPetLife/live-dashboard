@@ -18,7 +18,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import { getYucalooTokens, setYucalooTokens } from './store.js';
-import { fetchOrders as fetchShopifyOrders, fetchProductCatalog as fetchShopifyProductCatalog } from './shopify.js';
+import { fetchOrders as fetchShopifyOrders, fetchProductCatalog as fetchShopifyProductCatalog, fetchSessionsDaily as fetchShopifySessionsDaily } from './shopify.js';
 
 // read_all_orders exige read_orders junto (a Shopify recusa o OAuth com
 // "missing_read_orders_scope" se só o primeiro vier) — confirmado ao vivo
@@ -118,6 +118,14 @@ export async function fetchOrders(sinceISO, untilISO, mkt) {
     channel: `yucaloo_${mkt}`,
     tz: mkt === 'us' ? 'Z' : '-03:00',
   });
+}
+
+// Sessões/funil da loja Shopify da Yucaloo — mesmo mecanismo (ShopifyQL) do shopify.js, só que
+// contra a loja/token da Yucaloo. O escopo read_analytics/read_reports já é pedido no SCOPE acima.
+export async function fetchSessionsDaily(mkt, days = 90) {
+  const t = getYucalooTokens()[mkt];
+  if (!t?.accessToken) return []; // ainda não conectado — não quebra o sync
+  return fetchShopifySessionsDaily(days, { store: t.shop, token: t.accessToken });
 }
 
 // Catálogo bruto de produtos da Yucaloo (vendidos ou não) — ver shopify.js fetchProductCatalog.

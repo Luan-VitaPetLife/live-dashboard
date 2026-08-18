@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
 import { normalizeBrState } from './br-states.js';
 
@@ -149,17 +149,26 @@ function isHiddenItem(it, market) {
   return hideWords.some(w => tags.some(t => t.includes(String(w).toLowerCase())));
 }
 
-function aggregateSessions(since, until, market = 'br') {
-  const daily = getSessionsDaily(market);
+const EMPTY_SESSION_ROW = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0 };
+// channel decide qual loja Shopify entra na soma: 'todos' combina Coco and Luna + Yucaloo (mesmo
+// mercado), um canal específico ('shopify'/'shopify_us' ou 'yucaloo_br'/'yucaloo_us') mostra só a
+// loja dele. Pedido do Luan (18/08/2026): Yucaloo também tem card de Tráfego & conversão.
+function aggregateSessions(since, until, market = 'br', channel = 'todos') {
+  const includeCoco    = channel === 'todos' || channel === 'shopify' || channel === 'shopify_us';
+  const includeYucaloo = channel === 'todos' || channel === 'yucaloo_br' || channel === 'yucaloo_us';
+  const cocoDaily    = includeCoco    ? getSessionsDaily(market) : {};
+  const yucalooDaily = includeYucaloo ? (getYucalooSessionsDaily()[market] || {}) : {};
   let s = 0, v = 0, c = 0, ck = 0, cp = 0;
   let d = parseISO(since); const end = parseISO(until);
   const series = [];
   while (d <= end) {
-    const k = isoUTC(d); const r = daily[k];
-    const row = r || { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0 };
-    s += row.sessions; v += row.visitors; c += row.cart; ck += row.checkout; cp += row.completed;
+    const k = isoUTC(d);
+    const rCoco = cocoDaily[k] || EMPTY_SESSION_ROW, rYuc = yucalooDaily[k] || EMPTY_SESSION_ROW;
+    const sessions = rCoco.sessions + rYuc.sessions, visitors = rCoco.visitors + rYuc.visitors;
+    const cart = rCoco.cart + rYuc.cart, checkout = rCoco.checkout + rYuc.checkout, completed = rCoco.completed + rYuc.completed;
+    s += sessions; v += visitors; c += cart; ck += checkout; cp += completed;
     const [yy, mm, dd] = k.split('-');
-    series.push({ label: `${dd}/${mm}`, sessions: row.sessions, conv: row.sessions ? row.completed / row.sessions : 0 });
+    series.push({ label: `${dd}/${mm}`, sessions, conv: sessions ? completed / sessions : 0 });
     d = addDays(d, 1);
   }
   return { sessions: s, visitors: v, cart: c, checkout: ck, completed: cp, conv: s ? cp / s : 0, series };
@@ -435,12 +444,13 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // tendência
   const buckets = buildBuckets(since, until, grain);
   const idx = new Map(buckets.map((b, i) => [b.key, i]));
-  // Sessões via ShopifyQL: BR (channel shopify/todos) e US (channel shopify_us/todos).
+  // Sessões via ShopifyQL: BR (channel shopify/yucaloo_br/todos) e US (channel
+  // shopify_us/yucaloo_us/todos) — Yucaloo tem loja Shopify própria, ver aggregateSessions.
   const hasSessionData =
-    (market === 'br' && (channel === 'todos' || channel === 'shopify')) ||
-    (market === 'us' && (channel === 'todos' || channel === 'shopify_us'));
+    (market === 'br' && (channel === 'todos' || channel === 'shopify' || channel === 'yucaloo_br')) ||
+    (market === 'us' && (channel === 'todos' || channel === 'shopify_us' || channel === 'yucaloo_us'));
   const emptySess = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0, conv: 0, series: buckets.map(b => ({ label: b.label, sessions: 0, conv: 0 })) };
-  const sess = hasSessionData ? aggregateSessions(since, until, market) : emptySess;
+  const sess = hasSessionData ? aggregateSessions(since, until, market, channel) : emptySess;
   let trendLabels, trendData, trendTotal, trendFmt = metric === 'receita' ? 'money' : 'int';
   let trendByChannel = null;
   if (metric === 'sessoes') {
@@ -665,7 +675,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o), products: productTitles(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
 
   // conversão anterior
-  const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil, market) : emptySess;
+  const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil, market, channel) : emptySess;
 
   // Meta Ads — gasto e ROAS no período (separado por mercado)
   const metaDaily = market === 'us' ? getMetaUSInsightsDaily() : getMetaInsightsDaily();
