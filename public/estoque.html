@@ -65,13 +65,11 @@
   .csel{position:relative}
   .csel.open .arr{transform:rotate(180deg)}
   .csel.open{border-color:var(--ink)}
-  .csel-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+  .csel-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:6px;z-index:500;display:none;flex-direction:column;gap:2px}
   .csel.open .csel-pop{display:flex}
-  .csel-opt{padding:9px 14px;font-size:12px;color:var(--sub);cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:8px}
+  .csel-opt{padding:8px 12px;font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;border-radius:var(--radius-sm);transition:all .12s}
   .csel-opt:hover{background:var(--surface2);color:var(--text)}
-  .csel-opt.active{color:var(--text);font-weight:600}
-  .csel-opt.active::before{content:'✓';color:var(--ink);font-size:11px;font-weight:700}
-  .csel-opt:not(.active)::before{content:'';display:inline-block;width:11px}
+  .csel-opt.active{background:var(--ink);color:var(--side-text)}
   .sp-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:600;display:none;backdrop-filter:blur(2px)}
   .sp-overlay.open{display:block}
   .sp-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:640px;max-width:94vw;max-height:85vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.3);z-index:700;display:none;flex-direction:column;overflow:hidden}

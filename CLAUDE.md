@@ -406,7 +406,12 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   nunca duplicar CSS/markup deles numa página nova, sempre incluir o script.
 - Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
   nativo. Frequência de atualização (`localStorage('coco_refresh')`) é compartilhada entre todas
-  as páginas.
+  as páginas. Estado ativo do item é fundo escuro (`background:var(--ink)`), não checkmark — era
+  inconsistente (segmentos.html usava um `.chan-pop` próprio com esse visual, as outras 6 páginas
+  com `.csel-opt` usavam `✓`); padronizado no visual do segmentos.html (preferência do Luan,
+  18/08/2026) mantendo o nome de classe `.csel-opt` nas 6 páginas pra não mexer em handler de
+  clique. `segmentos.html` continua com sua própria implementação (`.chan-pop`) por baixo — só
+  igualado visualmente, não o código; um canal novo em `.csel-opt` não precisa de checkmark.
 - Arrastar para reordenar cards (Produtos/Estoque): a API nativa de Drag and Drop do HTML5 causou
   vários bugs (arraste não iniciava, duas cópias visuais do card) — foi trocada por um arraste
   customizado por ponteiro (`mousedown`/`mousemove`/`mouseup` + clone `position:fixed` seguindo o
