@@ -1117,7 +1117,7 @@ function render(d) {
     } },
     series:[
       { name:'Sessões', type:'bar', data:tf.series.map(p=>p.sessions), yAxisIndex:0, barMaxWidth:26, itemStyle:{ color:'rgba(176,168,152,.55)', borderRadius:[4,4,0,0] }, emphasis:{ itemStyle:{ color:'rgba(176,168,152,.8)' } } },
-      { name:'Conversão', type:'line', data:tf.series.map(p=>p.conv*100), yAxisIndex:1, symbol:'circle', symbolSize:5, lineStyle:{ color:cssVar('--line1'), width:2 }, itemStyle:{ color:cssVar('--line1') } },
+      { name:'Conversão', type:'line', data:tf.series.map(p=>p.conv*100), yAxisIndex:1, smooth:.3, symbol:'circle', symbolSize:6, lineStyle:{ color:cssVar('--line1'), width:2 }, itemStyle:{ color:cssVar('--line1') } },
     ],
   });
   renderLegend('trafficLegend', [{ label:'Sessões', color:'rgba(176,168,152,.55)', sq:true }, { label:'Conversão (%)', color:'var(--line1)' }]);

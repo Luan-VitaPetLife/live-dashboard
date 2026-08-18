@@ -37,6 +37,12 @@
   .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
   .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
 
+  /* ── Alternar tipo de gráfico dos cards de canal (barra x linha) ── */
+  .chart-toggle-wrap{display:flex;align-items:center;gap:4px}
+  .chart-type-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s;font-size:13px}
+  .chart-type-btn:hover{border-color:var(--ink);color:var(--text)}
+  .chart-type-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+
   /* ── Filter pill ── */
   .filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none;position:relative}
   .filter-pill:hover,.filter-pill.open{border-color:var(--ink);color:var(--text)}
@@ -214,6 +220,11 @@
         <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
     </div>
+
+    <div class="chart-toggle-wrap" id="chartTypeToggle">
+      <button class="chart-type-btn active" data-type="bar" onclick="setCampChartType('bar')" title="Barras"><i class="bi bi-bar-chart-line"></i></button>
+      <button class="chart-type-btn" data-type="line" onclick="setCampChartType('line')" title="Linha"><i class="bi bi-graph-up"></i></button>
+    </div>
     <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">Dados mockados</span></div>
 
     <button class="sync-btn" id="syncBtn" title="Buscar dados novos agora"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
@@ -359,6 +370,36 @@ function setEChart(id, option) {
   return inst;
 }
 const campCache = {}; // cache de campanhas por market|since|until
+
+// Dado diário de gasto/receita por canal costuma ser bem espinhoso (dia sem campanha ativa = 0,
+// vizinho de um pico) — em barra fica "estranho" com pouco espaço entre elas. Linha suavizada com
+// área em degradê (mesmo tratamento da Tendência na Visão geral) lê melhor esse tipo de série.
+let campChartType = localStorage.getItem('coco_camp_charttype') || 'bar';
+function setCampChartType(t) {
+  campChartType = t;
+  localStorage.setItem('coco_camp_charttype', t);
+  document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === t));
+  if (current) render();
+}
+function hexToRgba(hex, a) {
+  const h = hex.replace('#','');
+  const n = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
+  const r = parseInt(n.slice(0,2),16), g = parseInt(n.slice(2,4),16), b = parseInt(n.slice(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function areaGradient(color) {
+  return { type:'linear', x:0, y:0, x2:0, y2:1, colorStops:[
+    { offset:0, color:hexToRgba(color, 0.28) },
+    { offset:1, color:hexToRgba(color, 0) },
+  ] };
+}
+// Monta a série do mini-gráfico conforme o tipo escolhido (barra x linha) — reaproveitado por
+// drawMini() e pelo card do Google Ads.
+function miniSeries(data, color, hoverColor) {
+  return campChartType === 'line'
+    ? { type:'line', data, smooth:.3, symbol:'circle', symbolSize:4, lineStyle:{ color, width:2 }, itemStyle:{ color }, areaStyle:{ color:areaGradient(color) } }
+    : { type:'bar', data, barMaxWidth:22, itemStyle:{ color, borderRadius:[3,3,0,0] }, emphasis:{ itemStyle:{ color:hoverColor||color } } };
+}
 
 function rangeForPreset(p) {
   const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
@@ -671,14 +712,14 @@ async function loadGoogleCard() {
   const labels = camps.map(c => (c.name.length > 14 ? c.name.slice(0, 14) + '…' : c.name));
   setEChart('mini-google_us', {
     grid: { left:0, right:0, top:2, bottom:0 },
-    xAxis: { type:'category', data:labels, show:false },
+    xAxis: { type:'category', data:labels, show:false, boundaryGap: campChartType !== 'line' },
     yAxis: { type:'value', show:false },
-    tooltip: { trigger:'axis', axisPointer:{ type:'shadow', shadowStyle:{ color:'rgba(30,28,24,0.05)' } },
+    tooltip: { trigger:'axis', axisPointer: campChartType === 'line' ? { type:'line', lineStyle:{ color:'rgba(30,28,24,0.15)' } } : { type:'shadow', shadowStyle:{ color:'rgba(30,28,24,0.05)' } },
       backgroundColor:'#faf8f4', borderColor:'rgba(30,28,24,0.12)', borderWidth:1, padding:10,
       extraCssText:'border-radius:8px;box-shadow:0 8px 20px rgba(30,28,24,.14);', appendToBody:true, confine:true,
       textStyle:{ fontFamily:EC_FONT_FAMILY, fontSize:11 },
       formatter: params => params.length ? `${params[0].axisValueLabel}<br>${params[0].marker} ${fmtMoney(params[0].value)}` : '' },
-    series: [{ type:'bar', data: camps.map(c => c.spend || 0), barMaxWidth:22, itemStyle:{ color:'#4285F4', borderRadius:[3,3,0,0] }, emphasis:{ itemStyle:{ color:'#5b95f5' } } }],
+    series: [miniSeries(camps.map(c => c.spend || 0), '#4285F4', '#5b95f5')],
   });
 }
 
@@ -694,14 +735,16 @@ function drawMini(key, labels, data, color, headerTxt, legendTxt) {
   if (!document.getElementById('mini-' + key)) return;
   setEChart('mini-' + key, {
     grid: { left:0, right:0, top:2, bottom:0 },
-    xAxis: { type:'category', data:labels, show:false },
+    xAxis: { type:'category', data:labels, show:false, boundaryGap: campChartType !== 'line' },
     yAxis: { type:'value', show:false },
-    tooltip: { trigger:'axis', axisPointer:{ type:'shadow', shadowStyle:{ color:'rgba(30,28,24,0.05)' } },
+    tooltip: { trigger:'axis', axisPointer: campChartType === 'line' ? { type:'line', lineStyle:{ color:'rgba(30,28,24,0.15)' } } : { type:'shadow', shadowStyle:{ color:'rgba(30,28,24,0.05)' } },
       backgroundColor:'#faf8f4', borderColor:'rgba(30,28,24,0.12)', borderWidth:1, padding:10,
       extraCssText:'border-radius:8px;box-shadow:0 8px 20px rgba(30,28,24,.14);', appendToBody:true, confine:true,
       textStyle:{ fontFamily:EC_FONT_FAMILY, fontSize:11 },
-      formatter: params => params.length ? `${params[0].axisValueLabel}<br>${params[0].marker} ${params[0].value.toLocaleString('pt-BR')}` : '' },
-    series: [{ type:'bar', data, barMaxWidth:22, itemStyle:{ color, borderRadius:[3,3,0,0] } }],
+      // key===valor monetário em todo card de canal (Gasto Meta, Receita ML/Amazon) — sempre com
+      // R$/US$ no tooltip, nunca número cru (pedido do Luan, 18/08/2026).
+      formatter: params => params.length ? `${params[0].axisValueLabel}<br>${params[0].marker} ${fmtMoney(params[0].value)}` : '' },
+    series: [miniSeries(data, color)],
   });
 }
 
@@ -851,6 +894,7 @@ document.getElementById('spReset').addEventListener('click', () => {
   document.getElementById('mktBtnBr').classList.toggle('active', market === 'br');
   document.getElementById('mktBtnUs').classList.toggle('active', market === 'us');
   document.body.classList.toggle('market-us', market === 'us');
+  document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === campChartType));
   document.getElementById('refreshVal').textContent = refreshMin === 0 ? 'Desligar' : `${refreshMin} min`;
   document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => o.classList.toggle('active', Number(o.dataset.value) === refreshMin));
   applyRefresh();
