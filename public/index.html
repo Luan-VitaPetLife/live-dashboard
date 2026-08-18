@@ -132,7 +132,7 @@
   .card-pad{padding:16px 24px}
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
   .ct-title{font-size:12px;font-weight:600} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
-  .ct-sub-logo{height:11px;width:auto;vertical-align:-1.5px;margin-right:5px;opacity:.85}
+  .ct-sub-logo{height:16px;width:auto;vertical-align:-3.5px;margin-right:5px;opacity:.9}
   .donut-center-wrap{position:relative;height:160px;margin-bottom:14px}
   /* ECharts precisa de um container com tamanho explícito (ao contrário do <canvas>, que tinha um
      tamanho intrínseco padrão) — os anéis (Canais, Marketing, Orgânico x Campanha) agora montam
@@ -1094,12 +1094,14 @@ function render(d) {
   const trafficSubEl = document.getElementById('trafficSub');
   const mktLabel = d.market === 'us' ? 'EUA' : 'BR';
   const brandLogo = b => `<img class="ct-sub-logo" src="logos-integracao/${b === 'coco' ? 'cocoandluna.webp' : 'Yucaloo1.png'}" alt="">`;
+  // A logo já entrega qual marca é — repetir "Coco and Luna"/"Yucaloo" no texto ao lado é
+  // redundante (pedido do Luan, 18/08/2026), o texto fica só com Shopify + mercado + período.
   if (d.channel === 'shopify' || d.channel === 'shopify_us') {
-    trafficSubEl.innerHTML = brandLogo('coco') + `Shopify - Coco and Luna ${mktLabel} · período selecionado`;
+    trafficSubEl.innerHTML = brandLogo('coco') + `Shopify - ${mktLabel} · período selecionado`;
   } else if (d.channel === 'yucaloo_br' || d.channel === 'yucaloo_us') {
-    trafficSubEl.innerHTML = brandLogo('yucaloo') + `Shopify - Yucaloo ${mktLabel} · período selecionado`;
+    trafficSubEl.innerHTML = brandLogo('yucaloo') + `Shopify - ${mktLabel} · período selecionado`;
   } else if (d.channel === 'todos') {
-    trafficSubEl.innerHTML = brandLogo('coco') + brandLogo('yucaloo') + `Coco and Luna + Yucaloo ${mktLabel} · período selecionado`;
+    trafficSubEl.innerHTML = brandLogo('coco') + brandLogo('yucaloo') + `Shopify - ${mktLabel} · período selecionado`;
   } else {
     trafficSubEl.textContent = `Dados de sessão disponíveis apenas para Shopify (Coco and Luna ou Yucaloo) ${mktLabel}`;
   }
