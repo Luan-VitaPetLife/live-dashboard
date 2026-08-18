@@ -823,7 +823,32 @@ function cssVar(name) { return getComputedStyle(document.documentElement).getPro
 Chart.defaults.color = cssVar('--muted');
 Chart.defaults.borderColor = 'rgba(30,28,24,0.08)';
 Chart.defaults.font.size = 11;
-const tip = { backgroundColor:cssVar('--surface'), borderColor:'rgba(30,28,24,0.12)', borderWidth:1, titleColor:cssVar('--text'), bodyColor:cssVar('--sub'), padding:10, cornerRadius:6 };
+Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
+Chart.defaults.animation.easing = 'easeOutQuart';
+Chart.defaults.animation.duration = 500;
+const tip = { backgroundColor:cssVar('--surface'), borderColor:'rgba(30,28,24,0.12)', borderWidth:1, titleColor:cssVar('--text'), bodyColor:cssVar('--sub'), titleFont:{weight:'700'}, padding:12, cornerRadius:8, boxPadding:5, usePointStyle:true };
+
+// Preenchimento em degradê sob a linha (do tom sólido no topo até transparente) — efeito comum em
+// libs de gráfico mais "premium" (AmCharts etc.), aqui feito só com Chart.js/canvas nativo, sem
+// trocar de lib. Scriptable option: no primeiro layout o chartArea ainda não existe, Chart.js
+// chama de novo assim que ele fica disponível.
+function hexToRgba(hex, a) {
+  const h = hex.replace('#','');
+  const n = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
+  const r = parseInt(n.slice(0,2),16), g = parseInt(n.slice(2,4),16), b = parseInt(n.slice(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function areaGradient(color) {
+  return (context) => {
+    const { chart } = context;
+    const { ctx, chartArea } = chart;
+    if (!chartArea) return null;
+    const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    g.addColorStop(0, hexToRgba(color, 0.22));
+    g.addColorStop(1, hexToRgba(color, 0));
+    return g;
+  };
+}
 
 // Monta uma linha de legenda (.legend-row > .legend-item) a partir de uma lista de itens —
 // reaproveitado pela Tendência e por Tráfego & conversão em vez de cada card montar o markup na mão.
@@ -841,7 +866,10 @@ function drawDonut(id, data, colors) {
   const total = data.reduce((a,b) => a+(Number(b)||0), 0);
   const cfg = total <= 0
     ? { type:'doughnut', data:{ labels:['Sem dados'], datasets:[{ data:[1], backgroundColor:['#e6e1d6'], borderColor:'#faf8f4', borderWidth:3 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false} } } }
-    : { type:'doughnut', data:{ datasets:[{ data, backgroundColor:colors, borderColor:'#faf8f4', borderWidth:3 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false} } } };
+    // spacing/borderRadius (Chart.js 4) separam e arredondam as pontas de cada fatia — dá o
+    // acabamento "pill" que gráficos de anel mais modernos usam; hoverOffset faz a fatia se
+    // destacar levemente ao passar o mouse, no lugar do anel estático de antes.
+    : { type:'doughnut', data:{ datasets:[{ data, backgroundColor:colors, borderColor:'#faf8f4', borderWidth:2, borderRadius:4, spacing:2, hoverOffset:8 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false} } } };
   setChart(id, cfg);
 }
 
@@ -913,7 +941,7 @@ function render(d) {
   // Trend
   const t = d.trend, money = t.fmt === 'money';
   const line1 = cssVar('--line1'), line2 = cssVar('--line2'), surface = cssVar('--surface');
-  const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:line1, borderWidth:1.5, tension:.4, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:surface, pointBorderColor:line1, pointBorderWidth:1.5, fill:false }];
+  const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:line1, borderWidth:2, tension:.4, pointRadius:3, pointHoverRadius:5, pointHoverBorderWidth:2, pointBackgroundColor:surface, pointBorderColor:line1, pointBorderWidth:1.5, fill:'origin', backgroundColor:areaGradient(line1) }];
   // "Custo ads" é gasto do Meta Ads (Instagram/Facebook) — só atribuído a Shopify (ver 4.4/isCampaignOrder).
   // Mostrar essa linha com Shopee/Mercado Livre/Amazon selecionado sugeria (errado) que o canal tinha
   // custo de ads próprio, quando na verdade é o gasto do Meta da conta inteira aparecendo por engano.
@@ -1025,7 +1053,7 @@ function render(d) {
   document.getElementById('mCartMeta').textContent = tf.sessions?pctStr(tf.cart/tf.sessions*100)+' das sessões':' ';
   document.getElementById('mConv').textContent = (tf.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
   document.getElementById('trafficVal').textContent = fmtInt(tf.sessions)+' SESSÕES';
-  setChart('trafficChart', { data:{ labels:tf.series.map(p=>p.label), datasets:[ { type:'bar', label:'Sessões', data:tf.series.map(p=>p.sessions), backgroundColor:'rgba(176,168,152,.55)', borderRadius:2, yAxisID:'y', order:2 }, { type:'line', label:'Conversão', data:tf.series.map(p=>p.conv*100), borderColor:cssVar('--line1'), borderWidth:1.5, tension:.4, pointRadius:2, yAxisID:'y1', order:1, fill:false } ] }, options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{label:c=>c.dataset.label==='Conversão'?' Conversão: '+c.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':' Sessões: '+fmtInt(c.parsed.y)}} }, scales:{ x:{grid:{display:false},ticks:{maxTicksLimit:12}}, y:{position:'left',beginAtZero:true,grid:{color:'rgba(30,28,24,0.06)'}}, y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>v+'%'}} } } });
+  setChart('trafficChart', { data:{ labels:tf.series.map(p=>p.label), datasets:[ { type:'bar', label:'Sessões', data:tf.series.map(p=>p.sessions), backgroundColor:'rgba(176,168,152,.55)', hoverBackgroundColor:'rgba(176,168,152,.8)', borderRadius:4, borderSkipped:false, maxBarThickness:26, yAxisID:'y', order:2 }, { type:'line', label:'Conversão', data:tf.series.map(p=>p.conv*100), borderColor:cssVar('--line1'), borderWidth:2, tension:.4, pointRadius:2, pointHoverRadius:4, yAxisID:'y1', order:1, fill:false } ] }, options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{label:c=>c.dataset.label==='Conversão'?' Conversão: '+c.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':' Sessões: '+fmtInt(c.parsed.y)}} }, scales:{ x:{grid:{display:false},ticks:{maxTicksLimit:12}}, y:{position:'left',beginAtZero:true,grid:{color:'rgba(30,28,24,0.06)'}}, y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>v+'%'}} } } });
   renderLegend('trafficLegend', [{ label:'Sessões', color:'rgba(176,168,152,.55)', sq:true }, { label:'Conversão (%)', color:'var(--line1)' }]);
 
   // Funnel — mostra % do total de sessões e queda vs. a etapa anterior em cada degrau, além da

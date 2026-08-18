@@ -333,6 +333,9 @@ function fmtMoney(v, mkt = market) {
 }
 
 // ── State ─────────────────────────────────────────────────
+Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
+Chart.defaults.animation.easing = 'easeOutQuart';
+
 let market = localStorage.getItem('coco_market') || 'br';
 let current = null;            // último payload da API
 const miniCharts = {};
@@ -651,12 +654,12 @@ async function loadGoogleCard() {
   const labels = camps.map(c => (c.name.length > 14 ? c.name.slice(0, 14) + '…' : c.name));
   miniCharts.google_us = new Chart(canvas, {
     type: 'bar',
-    data: { labels, datasets: [{ data: camps.map(c => c.spend || 0), backgroundColor: '#4285F4', borderWidth: 0 }] },
+    data: { labels, datasets: [{ data: camps.map(c => c.spend || 0), backgroundColor: '#4285F4', hoverBackgroundColor: '#5b95f5', borderWidth: 0, borderRadius: 3, borderSkipped: false, maxBarThickness: 22 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmtMoney(ctx.raw) } } },
+      plugins: { legend: { display: false }, tooltip: { padding: 10, cornerRadius: 8, callbacks: { label: ctx => ' ' + fmtMoney(ctx.raw) } } },
       scales: { x: { display: false }, y: { display: false, beginAtZero: true } },
-      animation: { duration: 300 }, elements: { bar: { borderRadius: 1 } },
+      animation: { duration: 350, easing: 'easeOutQuart' },
     },
   });
 }
@@ -674,15 +677,15 @@ function drawMini(key, labels, data, color, headerTxt, legendTxt) {
   if (miniCharts[key]) miniCharts[key].destroy();
   miniCharts[key] = new Chart(canvas, {
     type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: color, borderWidth: 0 }] },
+    data: { labels, datasets: [{ data, backgroundColor: color, borderWidth: 0, borderRadius: 3, borderSkipped: false, maxBarThickness: 22 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { mode: 'index', callbacks: { label: ctx => ` ${ctx.raw.toLocaleString('pt-BR')}` } },
+        tooltip: { mode: 'index', padding: 10, cornerRadius: 8, callbacks: { label: ctx => ` ${ctx.raw.toLocaleString('pt-BR')}` } },
       },
       scales: { x: { display: false }, y: { display: false, beginAtZero: true } },
-      animation: { duration: 300 }, elements: { bar: { borderRadius: 1 } },
+      animation: { duration: 350, easing: 'easeOutQuart' },
     },
   });
 }
