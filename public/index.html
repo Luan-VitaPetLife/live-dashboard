@@ -6,6 +6,9 @@
 <title>Dashboard — Coco and Luna</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
 <link rel="stylesheet" href="switch.css">
 <style>
@@ -15,7 +18,7 @@
     --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--tan:#c4b49a;--ink:#2d2a26;
     --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--line1:#2d2a26;--line2:#b0a898;--radius:10px;--radius-sm:6px; }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
 
   /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
 
@@ -823,7 +826,7 @@ function cssVar(name) { return getComputedStyle(document.documentElement).getPro
 Chart.defaults.color = cssVar('--muted');
 Chart.defaults.borderColor = 'rgba(30,28,24,0.08)';
 Chart.defaults.font.size = 11;
-Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
+Chart.defaults.font.family = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
 Chart.defaults.animation.easing = 'easeOutQuart';
 Chart.defaults.animation.duration = 500;
 const tip = { backgroundColor:cssVar('--surface'), borderColor:'rgba(30,28,24,0.12)', borderWidth:1, titleColor:cssVar('--text'), bodyColor:cssVar('--sub'), titleFont:{weight:'700'}, padding:12, cornerRadius:8, boxPadding:5, usePointStyle:true };
