@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Segmentos — Coco and Luna</title>
 <link rel="icon" href="favicon.png" type="image/png">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
@@ -102,7 +102,7 @@
   .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;display:flex;flex-direction:column;align-items:center;gap:16px}
   .chart-card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);align-self:flex-start}
   .donut-wrap{position:relative;width:200px;height:200px}
-  .donut-wrap canvas{position:absolute;inset:0}
+  .donut-canvas{position:absolute;inset:0}
   .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
   .donut-center-val{font-size:22px;font-weight:700;color:var(--ink)}
   .donut-center-sub{font-size:10px;color:var(--sub);font-weight:500}
@@ -409,7 +409,7 @@
       <div class="chart-card">
         <div class="chart-card-title">Distribuição</div>
         <div class="donut-wrap">
-          <canvas id="segChart"></canvas>
+          <div class="donut-canvas" id="segChart"></div>
           <div class="donut-center">
             <div class="donut-center-val" id="totalUnits">—</div>
             <div class="donut-center-sub">unidades</div>
@@ -548,10 +548,30 @@ function setLive(state, msg) {
 }
 
 // ── Chart ──
-Chart.defaults.font.family = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
-Chart.defaults.animation.easing = 'easeOutQuart';
+const EC_FONT_FAMILY = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
+const echartsInst = {};
+// ResizeObserver único cobre todos os gráficos — troca o auto-resize que o Chart.js fazia sozinho
+// (responsive:true).
+const echartsRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const inst = echartsInst[entry.target.id];
+    if (inst && !inst.isDisposed()) inst.resize();
+  }
+}) : null;
+function setEChart(id, option) {
+  const dom = document.getElementById(id);
+  if (!dom) return null;
+  const prev = echartsInst[id];
+  // O anel de Distribuição fica fixo, mas a barra de Geografia recria o <div> via innerHTML toda
+  // vez que o painel de produto reabre — a instância antiga fica órfã (dom desconectado) e precisa
+  // ser descartada antes de montar uma nova.
+  if (prev && !prev.isDisposed() && prev.getDom() !== dom) prev.dispose();
+  const inst = (prev && !prev.isDisposed() && prev.getDom() === dom) ? prev : echarts.init(dom);
+  if (inst !== prev) { echartsInst[id] = inst; echartsRO?.observe(dom); }
+  inst.setOption(option, true);
+  return inst;
+}
 
-let segChartInst = null;
 const SEG_COLORS = { cat:'#c4793a', dog:'#4a7ab8', other:'#c4b49a' };
 const SEG_LABELS = { cat:'Gato', dog:'Cão', other:'Outros' };
 
@@ -561,22 +581,20 @@ function renderChart(segs) {
   const data  = keys.map(k => segs[k].units);
   const colors = keys.map(k => SEG_COLORS[k]);
   const labels = keys.map(k => SEG_LABELS[k]);
-  const ctx = document.getElementById('segChart').getContext('2d');
-  if (segChartInst) segChartInst.destroy();
-  segChartInst = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#faf8f4', borderRadius: 4, spacing: 2, hoverOffset: 8 }] },
-    options: {
-      cutout: '68%',
-      // reserva o mesmo espaço do hoverOffset ao redor do canvas, senão a fatia em destaque
-      // ultrapassa a borda e fica cortada pelo card (overflow:hidden) — reportado 18/08/2026.
-      layout: { padding: 8 },
-      plugins: { legend: { display: false }, tooltip: {
-        padding: 12, cornerRadius: 8, boxPadding: 5, usePointStyle: true,
-        callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString('pt-BR')} un (${(ctx.parsed / ctx.dataset.data.reduce((a,b)=>a+b,0)*100).toFixed(1)}%)` }
-      }},
-      animation: { duration: 500 },
-    },
+  // raio máximo em 92% (não 100%) pra sobrar espaço pro "grow" do hover (emphasis.scaleSize) sem
+  // ser cortado pelo limite do canvas — mesmo ajuste feito no anel de Canais da Visão geral.
+  setEChart('segChart', {
+    tooltip: { trigger:'item', backgroundColor:'#faf8f4', borderColor:'rgba(30,28,24,0.12)', borderWidth:1,
+      padding:12, extraCssText:'border-radius:8px;box-shadow:0 8px 20px rgba(30,28,24,.14);', appendToBody:true, confine:true,
+      textStyle:{ fontFamily:EC_FONT_FAMILY, fontSize:11 },
+      formatter: p => `${p.marker} ${p.name}: ${p.value.toLocaleString('pt-BR')} un (${p.percent.toFixed(1)}%)` },
+    series: [{
+      type:'pie', radius:['68%','92%'], avoidLabelOverlap:false, padAngle:2,
+      itemStyle:{ borderColor:'#faf8f4', borderWidth:2, borderRadius:4 },
+      label:{ show:false }, labelLine:{ show:false },
+      emphasis:{ scale:true, scaleSize:6 },
+      data: data.map((v,i) => ({ value:v, name:labels[i], itemStyle:{ color:colors[i] } })),
+    }],
   });
 }
 
@@ -973,7 +991,7 @@ function destroyGeoMap() {
   if (geoMapInst) { try { geoMapInst.remove(); } catch(e) {} geoMapInst = null; }
 }
 function destroyGeoBarChart() {
-  if (geoBarChartInst) { try { geoBarChartInst.destroy(); } catch(e) {} geoBarChartInst = null; }
+  if (geoBarChartInst) { try { geoBarChartInst.dispose(); } catch(e) {} geoBarChartInst = null; }
 }
 function destroyGeoModalMap() {
   if (geoModalMapInst) { try { geoModalMapInst.remove(); } catch(e) {} geoModalMapInst = null; }
@@ -1029,26 +1047,27 @@ function geoTableHtml(p) {
   </table>`;
 }
 
-// ── Modo Gráfico (barra horizontal, Chart.js já carregado nesta página) ──
+// ── Modo Gráfico (barra horizontal, ECharts já carregado nesta página) ──
 function geoChartHtml(p) {
   if (!p.byState.length) return '<div class="geo-empty">Sem estado de entrega registrado</div>';
-  return `<div class="geo-chart-wrap"><canvas id="geoBarChart"></canvas></div>`;
+  return `<div class="geo-chart-wrap" id="geoBarChart"></div>`;
 }
 function geoRenderBarChart(p) {
-  const canvas = document.getElementById('geoBarChart');
-  if (!canvas) return;
+  const dom = document.getElementById('geoBarChart');
+  if (!dom) return;
   destroyGeoBarChart();
   const top = p.byState.slice(0, GEO_CHART_MAX);
-  canvas.parentElement.style.height = Math.max(120, top.length * 26) + 'px';
-  geoBarChartInst = new Chart(canvas.getContext('2d'), {
-    type: 'bar',
-    data: { labels: top.map(s => s.state), datasets: [{ data: top.map(s => s.qty), backgroundColor: '#c4793a', hoverBackgroundColor: '#d6884a', borderRadius: 4, borderSkipped: false, maxBarThickness: 18 }] },
-    options: {
-      indexAxis: 'y',
-      plugins: { legend: { display: false }, tooltip: { padding: 10, cornerRadius: 8, callbacks: { label: ctx => ` ${stateLabel(ctx.label)}: ${ctx.parsed.x.toLocaleString('pt-BR')} un` } } },
-      scales: { x: { beginAtZero: true, grid: { color: 'rgba(30,28,24,.08)' } }, y: { grid: { display: false } } },
-      animation: { duration: 350, easing: 'easeOutQuart' },
-    },
+  dom.style.height = Math.max(120, top.length * 26) + 'px';
+  geoBarChartInst = echarts.init(dom);
+  geoBarChartInst.setOption({
+    grid: { left:8, right:8, top:8, bottom:8, containLabel:true },
+    xAxis: { type:'value', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,.08)'}}, axisLabel:{ fontFamily:EC_FONT_FAMILY, fontSize:11, color:'#9c9790' } },
+    yAxis: { type:'category', data: top.map(s => s.state), inverse:true, axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}, axisLabel:{ fontFamily:EC_FONT_FAMILY, fontSize:11, color:'#9c9790' } },
+    tooltip: { trigger:'item', backgroundColor:'#faf8f4', borderColor:'rgba(30,28,24,0.12)', borderWidth:1, padding:10,
+      extraCssText:'border-radius:8px;box-shadow:0 8px 20px rgba(30,28,24,.14);', appendToBody:true, confine:true,
+      textStyle:{ fontFamily:EC_FONT_FAMILY, fontSize:11 },
+      formatter: tp => `${tp.marker} ${stateLabel(tp.name)}: ${tp.value.toLocaleString('pt-BR')} un` },
+    series: [{ type:'bar', data: top.map(s => s.qty), barMaxWidth:18, itemStyle:{ color:'#c4793a', borderRadius:[0,4,4,0] }, emphasis:{ itemStyle:{ color:'#d6884a' } } }],
   });
 }
 
