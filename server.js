@@ -635,25 +635,31 @@ let backfillRunning = false;
 // Extraído do handler abaixo pra ser reaproveitado por /api/amazon/history (painel unificado de
 // retenção+histórico em Integrações) — mesmo job em background, mesma forma de acompanhar
 // progresso (GET /api/status → amazon.backfill).
-function startBackfillJob(market, days) {
+function startBackfillJob(market, days, startedBy) {
   backfillRunning = true;
-  setAmazonBackfill({ status: 'running', market, days, orders: 0, message: 'iniciando', startedAt: new Date().toISOString() });
+  // Progresso aproximado: a Amazon exige relatório por janela de 30 dias (REPORT_CHUNK_DAYS em
+  // amazon.js) — cada onChunk é uma janela concluída, então chunk/totalChunks já dá uma % real
+  // pro widget de progresso, sem precisar mexer no amazon.js.
+  const totalChunks = Math.max(1, Math.ceil(days / 30));
+  let chunksDone = 0;
+  setAmazonBackfill({ status: 'running', market, days, orders: 0, progressPct: 0, message: 'iniciando', startedBy, startedAt: new Date().toISOString() });
 
   (async () => {
     let orders = 0;
     try {
       await amazon.backfillOrders({
         market, days,
-        onProgress: message => setAmazonBackfill({ status: 'running', market, days, orders, message, startedAt: new Date().toISOString() }),
+        onProgress: message => setAmazonBackfill({ status: 'running', market, days, orders, progressPct: Math.round(chunksDone / totalChunks * 100), message, startedBy, startedAt: new Date().toISOString() }),
         onChunk: chunk => {
           upsertOrders(chunk);           // grava lote a lote: uma falha adiante não perde o que já veio
           orders += chunk.length;
-          setAmazonBackfill({ status: 'running', market, days, orders, message: `${orders} pedidos gravados`, startedAt: new Date().toISOString() });
+          chunksDone++;
+          setAmazonBackfill({ status: 'running', market, days, orders, progressPct: Math.round(Math.min(chunksDone, totalChunks) / totalChunks * 100), message: `${orders} pedidos gravados`, startedBy, startedAt: new Date().toISOString() });
         },
       });
-      setAmazonBackfill({ status: 'done', market, days, orders, message: `concluído — ${orders} pedidos`, finishedAt: new Date().toISOString() });
+      setAmazonBackfill({ status: 'done', market, days, orders, progressPct: 100, message: `concluído — ${orders} pedidos`, startedBy, finishedAt: new Date().toISOString() });
     } catch (e) {
-      setAmazonBackfill({ status: 'error', market, days, orders, message: e.message, finishedAt: new Date().toISOString() });
+      setAmazonBackfill({ status: 'error', market, days, orders, message: e.message, startedBy, finishedAt: new Date().toISOString() });
       console.error('Backfill Amazon falhou:', e.message);
     } finally {
       backfillRunning = false;
@@ -667,7 +673,7 @@ app.post('/api/amazon/backfill', (req, res) => {
   const days   = Math.min(Number(req.query.days || 90), 730);
   const market = req.query.market === 'br' ? 'br' : 'us';
 
-  startBackfillJob(market, days);
+  startBackfillJob(market, days, req.authUser?.name || req.authUser?.username || null);
 
   res.json({ ok: true, message: `Backfill de ${days} dias (${market.toUpperCase()}) iniciado. Acompanhe em GET /api/status.` });
 });
@@ -697,18 +703,19 @@ app.post('/api/amazon/images', (req, res) => {
     return res.json({ ok: true, message: 'Nenhum ASIN novo para buscar (já cacheado, ou pedidos ainda sem ASIN — rode o backfill primeiro).' });
   }
 
+  const startedBy = req.authUser?.name || req.authUser?.username || null;
   imagesJobRunning = true;
-  setAmazonImagesJob({ status: 'running', market, total: asins.length, found: 0, message: 'iniciando', startedAt: new Date().toISOString() });
+  setAmazonImagesJob({ status: 'running', market, total: asins.length, found: 0, message: 'iniciando', startedBy, startedAt: new Date().toISOString() });
 
   (async () => {
     try {
       const found = await amazon.fetchProductImages(asins, market, message =>
-        setAmazonImagesJob({ status: 'running', market, total: asins.length, found: 0, message, startedAt: new Date().toISOString() })
+        setAmazonImagesJob({ status: 'running', market, total: asins.length, found: 0, message, startedBy, startedAt: new Date().toISOString() })
       );
       setAmazonProductImages({ ...getAmazonProductImages(), ...Object.fromEntries(found) });
-      setAmazonImagesJob({ status: 'done', market, total: asins.length, found: found.size, message: `concluído — ${found.size}/${asins.length} imagens encontradas`, finishedAt: new Date().toISOString() });
+      setAmazonImagesJob({ status: 'done', market, total: asins.length, found: found.size, message: `concluído — ${found.size}/${asins.length} imagens encontradas`, startedBy, finishedAt: new Date().toISOString() });
     } catch (e) {
-      setAmazonImagesJob({ status: 'error', market, total: asins.length, found: 0, message: e.message, finishedAt: new Date().toISOString() });
+      setAmazonImagesJob({ status: 'error', market, total: asins.length, found: 0, message: e.message, startedBy, finishedAt: new Date().toISOString() });
       console.error('Busca de imagens Amazon falhou:', e.message);
     } finally {
       imagesJobRunning = false;
@@ -817,7 +824,7 @@ app.post('/api/amazon/history', requireAdmin, (req, res) => {
   }
   if (plan.action === 'backfill') {
     if (backfillRunning) return res.status(409).json({ error: 'Já existe uma busca de histórico em andamento — espere terminar e aplique de novo.' });
-    startBackfillJob(market, days);
+    startBackfillJob(market, days, req.authUser?.name || req.authUser?.username || null);
     return res.json({ ok: true, action: 'backfill_started', market, days });
   }
   res.json({ ok: true, action: plan.action, market, days });
@@ -838,12 +845,12 @@ app.get('/api/backup/status', requireAdmin, async (_req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.post('/api/backup/run', requireAdmin, async (_req, res) => {
+app.post('/api/backup/run', requireAdmin, async (req, res) => {
   if (backupRunning) return res.status(409).json({ error: 'Backup já em andamento.' });
   if (!isBackupConfigured()) return res.status(400).json({ error: 'Backup não configurado (faltam B2_KEY_ID/B2_APPLICATION_KEY/B2_BUCKET_NAME).' });
   backupRunning = true;
   try {
-    const result = await runBackup();
+    const result = await runBackup(req.authUser?.name || req.authUser?.username || null);
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -880,11 +887,12 @@ app.post('/api/amazon/fetch-items', (req, res) => {
   if (itemsRunning) return res.status(409).json({ error: 'Busca de itens já em andamento.' });
   const market = req.query.market === 'us' ? 'us' : 'br';
   const limit  = Math.min(Number(req.query.limit || 1000), 5000);
+  const startedBy = req.authUser?.name || req.authUser?.username || null;
   itemsRunning = true;
-  itemsStatus  = { status: 'running', market, message: 'iniciando', startedAt: new Date().toISOString() };
-  enrichAmazonItems({ market, limit, onProgress: m => { itemsStatus = { status: 'running', market, message: m, startedAt: itemsStatus.startedAt }; } })
-    .then(r => { itemsStatus = { status: 'done', market, result: r, finishedAt: new Date().toISOString() }; console.log('Amazon itens:', r); })
-    .catch(e => { itemsStatus = { status: 'error', market, message: e.message, finishedAt: new Date().toISOString() }; console.error('Amazon itens falhou:', e.message); })
+  itemsStatus  = { status: 'running', market, message: 'iniciando', startedBy, startedAt: new Date().toISOString() };
+  enrichAmazonItems({ market, limit, onProgress: m => { itemsStatus = { status: 'running', market, message: m, startedBy, startedAt: itemsStatus.startedAt }; } })
+    .then(r => { itemsStatus = { status: 'done', market, result: r, startedBy, finishedAt: new Date().toISOString() }; console.log('Amazon itens:', r); })
+    .catch(e => { itemsStatus = { status: 'error', market, message: e.message, startedBy, finishedAt: new Date().toISOString() }; console.error('Amazon itens falhou:', e.message); })
     .finally(() => { itemsRunning = false; });
   res.json({ ok: true, message: `Busca de itens (${market.toUpperCase()}, até ${limit}) iniciada. Acompanhe em GET /api/status → amazon.items.` });
 });
@@ -1248,6 +1256,33 @@ app.get('/api/status', (_req, res) => {
     },
     lastSync: db.lastSync || null,
   });
+});
+
+// Lista normalizada dos processos em segundo plano (backfill/imagens/itens da Amazon, geografia
+// via Bling, backup) — alimenta o widget flutuante (jobs-widget.js, compartilhado em toda
+// página) em vez de cada página ter que saber os detalhes de cada job específico. Cada job já
+// carrega quem disparou (startedBy, capturado no POST que iniciou), pedido do Luan 18/08/2026.
+function normalizeJob(id, label, raw) {
+  if (!raw) return null;
+  return {
+    id, label, status: raw.status, message: raw.message || null,
+    progressPct: typeof raw.progressPct === 'number' ? raw.progressPct : null,
+    startedBy: raw.startedBy || null,
+    startedAt: raw.startedAt || null, finishedAt: raw.finishedAt || null,
+  };
+}
+app.get('/api/jobs', (_req, res) => {
+  const backfill = getAmazonBackfill();
+  const images = getAmazonImagesJob();
+  const backupSt = getBackupStatus();
+  const jobs = [
+    normalizeJob('amazon-backfill', `Buscar histórico Amazon ${backfill?.market === 'us' ? 'EUA' : 'BR'}`, backfill),
+    normalizeJob('amazon-images', `Buscar imagens Amazon ${images?.market === 'us' ? 'EUA' : 'BR'}`, images),
+    normalizeJob('amazon-items', `Reconciliar itens Amazon ${itemsStatus?.market === 'us' ? 'EUA' : 'BR'}`, itemsStatus),
+    normalizeJob('bling-geo', 'Geografia via Bling', geoStatus),
+    normalizeJob('backup', 'Backup do banco', backupSt),
+  ].filter(Boolean);
+  res.json({ jobs });
 });
 
 // ── Tela Integrações (dentro de Configurações, somente admin) ──────────────────

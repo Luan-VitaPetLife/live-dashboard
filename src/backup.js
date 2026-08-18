@@ -124,7 +124,7 @@ function buildSnapshotBuffer() {
   return zlib.gzipSync(Buffer.from(json, 'utf8'));
 }
 
-export async function runBackup() {
+export async function runBackup(startedBy = null) {
   if (!isConfigured()) throw new Error('Backup não configurado (B2_KEY_ID / B2_APPLICATION_KEY / B2_BUCKET_NAME ausentes no ambiente).');
   const startedAt = new Date().toISOString();
   try {
@@ -147,11 +147,11 @@ export async function runBackup() {
       }
     }
 
-    const status = { status: 'done', fileName, sizeBytes: gz.length, pruned, startedAt, finishedAt: new Date().toISOString() };
+    const status = { status: 'done', fileName, sizeBytes: gz.length, pruned, startedBy, startedAt, finishedAt: new Date().toISOString() };
     setBackupStatus(status);
     return status;
   } catch (e) {
-    const status = { status: 'error', message: e.message, startedAt, finishedAt: new Date().toISOString() };
+    const status = { status: 'error', message: e.message, startedBy, startedAt, finishedAt: new Date().toISOString() };
     setBackupStatus(status);
     throw e;
   }

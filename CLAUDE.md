@@ -83,6 +83,7 @@ public/login.html        Tela de login (standalone)
 public/404.html          Página de erro 404 (rota desconhecida), ilustração 404.png
 public/sidebar.js        Sidebar compartilhada (IIFE, injeta markup + CSS + comportamento)
 public/colors.js         Sistema de cores compartilhado (IIFE) + color picker
+public/jobs-widget.js    Card flutuante de processos em segundo plano (IIFE), toda página
 ```
 
 Fluxo: `sync.js` busca pedidos/sessões → grava no `store` → `metrics.js` calcula → `/api/*`
@@ -419,8 +420,19 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   valor do item — ver "Receita" acima. Sem isso, produto devolvido continuava contando venda.
 
 ### Padrões de UI compartilhados
-- Sidebar (`sidebar.js`) e sistema de cores (`colors.js`) são componentes injetados via IIFE —
-  nunca duplicar CSS/markup deles numa página nova, sempre incluir o script.
+- Sidebar (`sidebar.js`), sistema de cores (`colors.js`) e o widget de processos em segundo plano
+  (`jobs-widget.js`) são componentes injetados via IIFE — nunca duplicar CSS/markup deles numa
+  página nova, sempre incluir o script (`jobs-widget.js` logo depois de `sidebar.js`, em toda
+  página exceto `login.html`).
+- **Widget de processos** (`jobs-widget.js`, pedido do Luan 18/08/2026): card flutuante e
+  arrastável (posição em `localStorage`) que aparece sozinho quando algo está rodando em segundo
+  plano (backfill/imagens/itens da Amazon, geografia via Bling, backup) e some sozinho ~8s depois
+  de terminar. Consome `GET /api/jobs` (server.js, agrega os status já existentes de cada job —
+  não duplica lógica) a cada 3s. Mostra quem disparou cada processo (`startedBy`, capturado no
+  handler do POST que iniciou via `req.authUser`; jobs automáticos/agendados ficam `null` →
+  aparece como "automático"). Continua visível ao trocar de página porque toda página recarrega o
+  mesmo script — a posição arrastada e se está minimizado ficam salvos, não o estado do job em si
+  (isso vem sempre fresco do servidor).
 - Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
   nativo. Frequência de atualização (`localStorage('coco_refresh')`) é compartilhada entre todas
   as páginas. Estado ativo do item é fundo escuro (`background:var(--ink)`), não checkmark — era
@@ -506,7 +518,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `GET /api/campaigns?market=&since=&until=` — campanha a campanha, ao vivo, cache 5min
 - `GET /api/products?market=&since=&until=` / `GET /api/stock?market=&since=&until=`
 - `GET /api/orders/search?market=&q=` / `GET /api/orders/export?...`
-- `POST /api/sync` / `GET /api/status`
+- `POST /api/sync` / `GET /api/status` / `GET /api/jobs` — status agregado dos jobs em segundo
+  plano, alimenta o widget flutuante (`jobs-widget.js`)
 - `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
 - `GET/POST /api/amazon/history` (admin) · `GET /api/amazon/history/preview` — histórico por
   mercado (poda OU busca, decide sozinho), ver tela Integrações
