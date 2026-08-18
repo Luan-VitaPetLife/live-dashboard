@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard — Coco and Luna</title>
 <link rel="icon" href="favicon.png" type="image/png">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
@@ -133,6 +133,10 @@
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
   .ct-title{font-size:12px;font-weight:600} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
   .donut-center-wrap{position:relative;height:160px;margin-bottom:14px}
+  /* ECharts precisa de um container com tamanho explícito (ao contrário do <canvas>, que tinha um
+     tamanho intrínseco padrão) — os anéis (Canais, Marketing, Orgânico x Campanha) agora montam
+     num <div> que precisa herdar 100% do wrap posicionado. */
+  .donut-canvas{width:100%;height:100%;position:relative}
   .donut-center-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
   .dcl-val{font-size:18px;font-weight:300;letter-spacing:-.5px;line-height:1} .dcl-sub{font-size:9px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px}
   .donut-rows{display:flex;flex-direction:column}
@@ -486,7 +490,7 @@
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div><div class="ct-val" id="trendVal">—</div></div>
-          <div class="ch220"><canvas id="trendChart"></canvas></div>
+          <div class="ch220" id="trendChart"></div>
           <div class="legend-row" id="trendLegend"></div>
           <div id="trendDrilldown" class="trend-drilldown" style="display:none"></div>
         </div></div>
@@ -496,7 +500,7 @@
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card" id="cardChannelSplit"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title">Canais</div><div class="ct-sub">Receita por canal</div></div></div>
-          <div class="donut-center-wrap"><canvas id="channelChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="chCenter">—</div><div class="dcl-sub">Total</div></div></div>
+          <div class="donut-center-wrap"><div class="donut-canvas" id="channelChart"></div><div class="donut-center-label"><div class="dcl-val" id="chCenter">—</div><div class="dcl-sub">Total</div></div></div>
           <div class="donut-rows" id="channelRows"></div>
         </div></div>
       </div>
@@ -511,7 +515,7 @@
             <div class="metric-cell"><div class="mc-type">Add. carrinho</div><div class="mc-val" id="mCart">—</div><div class="mc-meta" id="mCartMeta">&nbsp;</div></div>
             <div class="metric-cell"><div class="mc-type">Conversão</div><div class="mc-val pos" id="mConv">—</div><div class="mc-meta">sessão → compra</div></div>
           </div>
-          <div class="ch180"><canvas id="trafficChart"></canvas></div>
+          <div class="ch180" id="trafficChart"></div>
           <div class="legend-row" id="trafficLegend"></div>
         </div></div>
       </div>
@@ -543,7 +547,7 @@
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card" id="cardMarketing"><div class="card-pad">
           <div class="card-top"><div><div class="ct-title" id="mktTitle">Marketing por origem</div><div class="ct-sub" id="mktSub">Receita atribuída</div></div></div>
-          <div class="donut-center-wrap"><canvas id="mktChart"></canvas><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
+          <div class="donut-center-wrap"><div class="donut-canvas" id="mktChart"></div><div class="donut-center-label"><div class="dcl-val" id="mktCenter">—</div><div class="dcl-sub" id="mktCenterSub">Atribuída</div></div></div>
           <div class="donut-rows" id="mktRows"></div>
           <div class="card-note" id="mktNote">Meta Ads conectado · Google Ads em breve</div>
         </div></div>
@@ -757,12 +761,32 @@ const MARKET_CHANNELS = {
   ],
 };
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos', sessoes:'Sessões' };
-const charts = {};
+const echartsInst = {};
 let lastData = null;
 let topProductsExpanded = false;
 function toggleTopProducts() { topProductsExpanded = !topProductsExpanded; if (lastData) render(lastData); }
 
-function setChart(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
+// ResizeObserver único cobre todos os gráficos — troca o auto-resize que o Chart.js fazia sozinho
+// (responsive:true). Reage tanto a resize de janela quanto ao recolher/expandir a sidebar (que muda
+// a largura do card sem disparar resize da janela).
+const echartsRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const inst = echartsInst[entry.target.id];
+    if (inst && !inst.isDisposed()) inst.resize();
+  }
+}) : null;
+function setEChart(id, option) {
+  const dom = document.getElementById(id);
+  if (!dom) return null;
+  const prev = echartsInst[id];
+  // Os anéis de "Orgânico x Campanha" recriam o <div> via innerHTML a cada render — a instância
+  // antiga fica órfã (dom desconectado) e precisa ser descartada antes de montar uma nova.
+  if (prev && !prev.isDisposed() && prev.getDom() !== dom) prev.dispose();
+  const inst = (prev && !prev.isDisposed() && prev.getDom() === dom) ? prev : echarts.init(dom);
+  if (inst !== prev) { echartsInst[id] = inst; echartsRO?.observe(dom); }
+  inst.setOption(option, true);
+  return inst;
+}
 
 function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
 function parseISO(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d) }
@@ -820,21 +844,21 @@ function setLive(s, t) {
 }
 
 // Lê o valor computado de uma variável CSS do :root — fonte única de verdade pras cores usadas
-// dentro de strings de configuração do Chart.js (que não resolvem var() em todo contexto).
+// dentro de options do ECharts (que não resolvem var() em todo contexto).
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
-Chart.defaults.color = cssVar('--muted');
-Chart.defaults.borderColor = 'rgba(30,28,24,0.08)';
-Chart.defaults.font.size = 11;
-Chart.defaults.font.family = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
-Chart.defaults.animation.easing = 'easeOutQuart';
-Chart.defaults.animation.duration = 500;
-const tip = { backgroundColor:cssVar('--surface'), borderColor:'rgba(30,28,24,0.12)', borderWidth:1, titleColor:cssVar('--text'), bodyColor:cssVar('--sub'), titleFont:{weight:'700'}, padding:12, cornerRadius:8, boxPadding:5, usePointStyle:true };
+const AXIS_FONT = { color:cssVar('--muted'), fontSize:11, fontFamily:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" };
+// Base do tooltip reaproveitada por todo gráfico ECharts — cor/borda/raio consistentes com o
+// resto da dashboard, texto principal em --text (formatter monta o HTML) e secundário em --sub.
+const EC_TOOLTIP = {
+  backgroundColor: cssVar('--surface'), borderColor:'rgba(30,28,24,0.12)', borderWidth:1,
+  padding:[10,12], extraCssText:'border-radius:8px;box-shadow:0 8px 20px rgba(30,28,24,.14);',
+  textStyle:{ color:cssVar('--sub'), fontSize:11, fontFamily:AXIS_FONT.fontFamily },
+};
 
 // Preenchimento em degradê sob a linha (do tom sólido no topo até transparente) — efeito comum em
-// libs de gráfico mais "premium" (AmCharts etc.), aqui feito só com Chart.js/canvas nativo, sem
-// trocar de lib. Scriptable option: no primeiro layout o chartArea ainda não existe, Chart.js
-// chama de novo assim que ele fica disponível.
+// libs de gráfico mais "premium", nativo no ECharts via areaStyle.color com um descritor de
+// gradiente linear (x/y de 0 a 1 = relativo à própria área desenhada, sem precisar de canvas/ctx).
 function hexToRgba(hex, a) {
   const h = hex.replace('#','');
   const n = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
@@ -842,15 +866,10 @@ function hexToRgba(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 function areaGradient(color) {
-  return (context) => {
-    const { chart } = context;
-    const { ctx, chartArea } = chart;
-    if (!chartArea) return null;
-    const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-    g.addColorStop(0, hexToRgba(color, 0.22));
-    g.addColorStop(1, hexToRgba(color, 0));
-    return g;
-  };
+  return { type:'linear', x:0, y:0, x2:0, y2:1, colorStops:[
+    { offset:0, color:hexToRgba(color, 0.22) },
+    { offset:1, color:hexToRgba(color, 0) },
+  ] };
 }
 
 // Monta uma linha de legenda (.legend-row > .legend-item) a partir de uma lista de itens —
@@ -867,16 +886,26 @@ function renderLegend(containerId, items) {
 
 function drawDonut(id, data, colors) {
   const total = data.reduce((a,b) => a+(Number(b)||0), 0);
-  const cfg = total <= 0
-    ? { type:'doughnut', data:{ labels:['Sem dados'], datasets:[{ data:[1], backgroundColor:['#e6e1d6'], borderColor:'#faf8f4', borderWidth:3 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false} } } }
-    // spacing/borderRadius (Chart.js 4) separam e arredondam as pontas de cada fatia — dá o
-    // acabamento "pill" que gráficos de anel mais modernos usam; hoverOffset faz a fatia se
-    // destacar levemente ao passar o mouse, no lugar do anel estático de antes.
-    // layout.padding reserva o mesmo espaço do hoverOffset ao redor do canvas — sem isso a fatia
-    // que se destaca ao passar o mouse ultrapassa a borda do canvas e fica cortada pelo card
-    // (overflow:hidden), reportado pelo Luan em 18/08/2026.
-    : { type:'doughnut', data:{ datasets:[{ data, backgroundColor:colors, borderColor:'#faf8f4', borderWidth:2, borderRadius:4, spacing:2, hoverOffset:8 }] }, options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', layout:{padding:8}, plugins:{ legend:{display:false}, tooltip:{enabled:false} } } };
-  setChart(id, cfg);
+  if (total <= 0) {
+    setEChart(id, { series:[{ type:'pie', radius:['70%','100%'], silent:true, label:{show:false}, emphasis:{disabled:true},
+      data:[{ value:1, name:'Sem dados', itemStyle:{ color:'#e6e1d6' } }] }] });
+    return;
+  }
+  // borderRadius arredonda a ponta de cada fatia, padAngle abre um respiro entre elas — o
+  // acabamento "pill" que gráficos de anel mais modernos usam. emphasis.scaleSize é o equivalente
+  // ECharts do hoverOffset do Chart.js (a fatia cresce ao passar o mouse); raio externo fica em
+  // 92% (não 100%) pra sobrar espaço dentro do próprio canvas pro "grow" do hover — sem essa
+  // folga a fatia em destaque é cortada pelo limite do canvas, mesmo bug do Chart.js (18/08/2026).
+  setEChart(id, {
+    tooltip:{ show:false },
+    series:[{
+      type:'pie', radius:['70%','92%'], avoidLabelOverlap:false, padAngle:2,
+      itemStyle:{ borderColor:'#faf8f4', borderWidth:2, borderRadius:4 },
+      label:{ show:false }, labelLine:{ show:false },
+      emphasis:{ scale:true, scaleSize:6 },
+      data: data.map((v,i) => ({ value:v, itemStyle:{ color:colors[i] } })),
+    }],
+  });
 }
 
 function render(d) {
@@ -947,24 +976,32 @@ function render(d) {
   // Trend
   const t = d.trend, money = t.fmt === 'money';
   const line1 = cssVar('--line1'), line2 = cssVar('--line2'), surface = cssVar('--surface');
-  const ds = [{ label:METRIC_LABEL[d.metric], data:t.data, borderColor:line1, borderWidth:2, tension:.4, pointRadius:3, pointHoverRadius:5, pointHoverBorderWidth:2, pointBackgroundColor:surface, pointBorderColor:line1, pointBorderWidth:1.5, fill:'origin', backgroundColor:areaGradient(line1) }];
+  const ds = [{ name:METRIC_LABEL[d.metric], type:'line', data:t.data, smooth:.3, symbol:'circle', symbolSize:6, itemStyle:{ color:line1, borderColor:surface, borderWidth:1.5 }, lineStyle:{ color:line1, width:2 }, areaStyle:{ color:areaGradient(line1) }, emphasis:{ focus:'series', scale:false } }];
   // "Custo ads" é gasto do Meta Ads (Instagram/Facebook) — só atribuído a Shopify (ver 4.4/isCampaignOrder).
   // Mostrar essa linha com Shopee/Mercado Livre/Amazon selecionado sugeria (errado) que o canal tinha
   // custo de ads próprio, quando na verdade é o gasto do Meta da conta inteira aparecendo por engano.
   // Mesma regra já usada pelo card "Marketing por origem" (cardMarketing: isTodos || isShopify).
   const showAdsLine = d.metric === 'receita' && (d.channel === 'todos' || d.channel === 'shopify' || d.channel === 'shopify_us');
-  if (showAdsLine) ds.push({ label:'Custo ads', data:t.metaSpendDaily || t.data.map(()=>0), borderColor:line2, borderWidth:1.5, borderDash:[5,4], tension:.4, pointRadius:0, fill:false });
-  setChart('trendChart', { type:'line', data:{ labels:t.labels, datasets:ds }, options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{ label:c=>' '+c.dataset.label+': '+(money?fmtMoney(c.parsed.y,2):fmtInt(c.parsed.y)) }} }, scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ grid:{color:'rgba(30,28,24,0.06)'}, ticks:{callback:v=>money?fmtMoneyShort(v):fmtInt(v)} } } } });
+  if (showAdsLine) ds.push({ name:'Custo ads', type:'line', data:t.metaSpendDaily || t.data.map(()=>0), smooth:.3, symbol:'none', lineStyle:{ color:line2, width:1.5, type:[5,4] } });
+  const trendInst = setEChart('trendChart', {
+    grid:{ left:8, right:8, top:12, bottom:22, containLabel:true },
+    xAxis:{ type:'category', data:t.labels, boundaryGap:false, axisLine:{show:false}, axisTick:{show:false}, axisLabel:AXIS_FONT, splitLine:{show:false} },
+    yAxis:{ type:'value', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,0.06)'}}, axisLabel:{ ...AXIS_FONT, formatter:v=>money?fmtMoneyShort(v):fmtInt(v) } },
+    tooltip:{ trigger:'axis', ...EC_TOOLTIP, formatter: params => {
+      if (!params.length) return '';
+      const head = `<div style="font-weight:700;color:${cssVar('--text')};margin-bottom:4px">${params[0].axisValueLabel}</div>`;
+      return head + params.map(p => `<div>${p.marker} ${p.seriesName}: ${money?fmtMoney(p.value,2):fmtInt(p.value)}</div>`).join('');
+    } },
+    series: ds,
+  });
   // Click → drilldown de canais
   document.getElementById('trendDrilldown').style.display = 'none';
-  const _tc = charts['trendChart'];
-  document.getElementById('trendChart').onclick = e => {
-    if (!isChanDetail() || !_tc) return;
-    const pts = _tc.getElementsAtEventForMode(e, 'index', {intersect:false}, true);
-    if (!pts.length) return;
-    const i = pts[0].index;
+  trendInst?.off('click');
+  trendInst?.on('click', params => {
+    if (!isChanDetail()) return;
+    const i = params.dataIndex;
     showTrendDrilldown(t.labels[i], t.data[i], t.byChannel?.[i]||{}, money, d.metric);
-  };
+  });
   document.getElementById('trendTitle').textContent = 'Tendência · ' + METRIC_LABEL[d.metric];
   document.getElementById('trendSub').textContent = (d.period.grain==='hour'?'Por hora · ':'Por dia · ') + label.toLowerCase();
   document.getElementById('trendVal').textContent = (money?fmtMoney(t.total):fmtInt(t.total)) + ' ' + METRIC_LABEL[d.metric].toUpperCase();
@@ -1021,7 +1058,7 @@ function render(d) {
   ssGridEl.innerHTML = ssChannels.map(ch => `
     <div class="ss-cell">
       <div class="ss-cell-title">${CocoColors.ch[ch]?.label || CHAN[ch] || ch}</div>
-      <div class="ss-pie-wrap"><canvas id="ssPie-${ch}"></canvas></div>
+      <div class="ss-pie-wrap"><div class="donut-canvas" id="ssPie-${ch}"></div></div>
       <div class="ss-cell-legend" id="ssLeg-${ch}"></div>
       <div class="ss-cell-total" id="ssTotal-${ch}">—</div>
     </div>`).join('') + singleKpisHtml;
@@ -1059,7 +1096,23 @@ function render(d) {
   document.getElementById('mCartMeta').textContent = tf.sessions?pctStr(tf.cart/tf.sessions*100)+' das sessões':' ';
   document.getElementById('mConv').textContent = (tf.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
   document.getElementById('trafficVal').textContent = fmtInt(tf.sessions)+' SESSÕES';
-  setChart('trafficChart', { data:{ labels:tf.series.map(p=>p.label), datasets:[ { type:'bar', label:'Sessões', data:tf.series.map(p=>p.sessions), backgroundColor:'rgba(176,168,152,.55)', hoverBackgroundColor:'rgba(176,168,152,.8)', borderRadius:4, borderSkipped:false, maxBarThickness:26, yAxisID:'y', order:2 }, { type:'line', label:'Conversão', data:tf.series.map(p=>p.conv*100), borderColor:cssVar('--line1'), borderWidth:2, tension:.4, pointRadius:2, pointHoverRadius:4, yAxisID:'y1', order:1, fill:false } ] }, options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{ legend:{display:false}, tooltip:{...tip, callbacks:{label:c=>c.dataset.label==='Conversão'?' Conversão: '+c.parsed.y.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':' Sessões: '+fmtInt(c.parsed.y)}} }, scales:{ x:{grid:{display:false},ticks:{maxTicksLimit:12}}, y:{position:'left',beginAtZero:true,grid:{color:'rgba(30,28,24,0.06)'}}, y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>v+'%'}} } } });
+  setEChart('trafficChart', {
+    grid:{ left:8, right:8, top:12, bottom:22, containLabel:true },
+    xAxis:{ type:'category', data:tf.series.map(p=>p.label), axisLine:{show:false}, axisTick:{show:false}, axisLabel:AXIS_FONT, splitLine:{show:false} },
+    yAxis:[
+      { type:'value', position:'left', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,0.06)'}}, axisLabel:AXIS_FONT },
+      { type:'value', position:'right', axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}, axisLabel:{ ...AXIS_FONT, formatter:'{value}%' } },
+    ],
+    tooltip:{ trigger:'axis', ...EC_TOOLTIP, formatter: params => {
+      if (!params.length) return '';
+      const head = `<div style="font-weight:700;color:${cssVar('--text')};margin-bottom:4px">${params[0].axisValueLabel}</div>`;
+      return head + params.map(p => `<div>${p.marker} ${p.seriesName==='Conversão' ? 'Conversão: '+p.value.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%' : 'Sessões: '+fmtInt(p.value)}</div>`).join('');
+    } },
+    series:[
+      { name:'Sessões', type:'bar', data:tf.series.map(p=>p.sessions), yAxisIndex:0, barMaxWidth:26, itemStyle:{ color:'rgba(176,168,152,.55)', borderRadius:[4,4,0,0] }, emphasis:{ itemStyle:{ color:'rgba(176,168,152,.8)' } } },
+      { name:'Conversão', type:'line', data:tf.series.map(p=>p.conv*100), yAxisIndex:1, symbol:'circle', symbolSize:5, lineStyle:{ color:cssVar('--line1'), width:2 }, itemStyle:{ color:cssVar('--line1') } },
+    ],
+  });
   renderLegend('trafficLegend', [{ label:'Sessões', color:'rgba(176,168,152,.55)', sq:true }, { label:'Conversão (%)', color:'var(--line1)' }]);
 
   // Funnel — mostra % do total de sessões e queda vs. a etapa anterior em cada degrau, além da
