@@ -332,6 +332,11 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   divergência.
 - KPI do topo ("Vendas Atribuídas Geral") soma Meta + Mercado Livre (Destaque/premium) + Google Ads.
 - Mercado Livre e Meta BR só aparecem no mercado BR; Meta US e Google Ads só no mercado US.
+- KPI "Faturamento Geral" é `kpis.revenue` de `/api/dashboard` (canal `'todos'`) — receita da loja
+  INTEIRA no período (todo canal, orgânico incluso), não soma dos cards de Ads abaixo. Não bate com
+  a soma de Mercado Livre + Meta + Amazon BR por design; confundiu o Luan (18/08/2026, "de onde vem
+  esse R$10k") por ficar ao lado de "Vendas Atribuídas Geral"/"ROAS Geral" (que são soma dos
+  canais de Ads) — sub-label deixado explícito ("todos os canais, não só Ads") pra não repetir.
 
 ### Produtos (`public/produtos.html`)
 - Catálogo completo por canal, sem limite de top-N. Mescla pedidos do período com catálogo de
