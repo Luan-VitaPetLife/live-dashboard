@@ -211,19 +211,23 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   generalizada pra qualquer canal: se `total === 0` mas algum item tem preço de catálogo (ex.
   pedido de atacado/fulfillment onde quem cobra é o parceiro, não a loja), o fator também é 0 —
   zera a receita fantasma, preserva a unidade vendida.
-- Retenção: janela móvel por mercado (BR/EUA separados, `kv.amazonRetentionConfig` — antes era só
-  `AMAZON_RETENTION_DAYS`, uma env var aplicada aos dois juntos; Amazon EUA sozinha soma bem mais
-  volume que Amazon BR, então precisava de número próprio, ver Integrações → "Amazon — Retenção de
-  histórico", 18/08/2026). Mercado sem config salva ainda cai no legado `AMAZON_RETENTION_DAYS`
-  (produção: 365) — preserva o comportamento de antes até o usuário mudar algo pela tela. A poda
-  de um valor NOVO nunca acontece sozinha: `POST /api/amazon/retention` mostra uma prévia
-  (`GET .../retention/preview`, "isso vai apagar N de M pedidos") e só aplica com confirmação
-  explícita do usuário — depois disso, a poda incremental de dia-a-dia segue automática a cada
-  sync (mesmo mecanismo de antes, `pruneOrders`). Cuidado documentado por bom motivo: uma poda com
-  padrão agressivo quase apagou 9 meses de dado recém-recuperado em 10/07/2026.
-- Buscar mais histórico (backfill) também ganhou tela — `POST /api/amazon/backfill?days=N&market=`
-  já existia só como endpoint; Integrações agora tem um campo de dias + mercado que chama ele e
-  acompanha o progresso via `GET /api/status` → `amazon.backfill` (mesmo endpoint de sempre).
+- Histórico por mercado (BR/EUA separados, `kv.amazonRetentionConfig`) — painel único em
+  Integrações → "Amazon — Histórico", **um campo só**: "dias de histórico desejado". Duas telas
+  separadas (retenção que apaga + busca que soma) confundiam — "isso soma com aquilo?" (pergunta
+  real do Luan, 18/08/2026) — unificado num único número que decide sozinho a ação certa
+  (`GET/POST /api/amazon/history`, `planAmazonHistory()` em server.js):
+  - pedido mais antigo hoje é MAIS VELHO que o número → sobra dado → **poda** (mostra prévia,
+    "isso vai apagar N de M pedidos", só aplica com confirmação explícita — é a única ação que
+    apaga pedido de verdade; poda com padrão agressivo já quase apagou 9 meses de dado
+    recém-recuperado, 10/07/2026, daí o cuidado);
+  - pedido mais antigo é MAIS NOVO que o número (ou não existe nenhum ainda) → falta dado →
+    **backfill automático** (reaproveita `POST /api/amazon/backfill?days=N&market=`, que já
+    existia só como endpoint sem tela; não precisa de confirmação, só soma). Refaz a janela
+    inteira em vez de só o trecho novo — mais simples, upsert por id não duplica.
+  Mercado sem config salva ainda cai no legado `AMAZON_RETENTION_DAYS` (produção: 365) — preserva
+  o comportamento de antes até o usuário mudar algo pela tela. A config salva também é o que
+  `sync.js` usa pra poda incremental automática do dia-a-dia (mesmo mecanismo de sempre,
+  `pruneOrders`) — uma fonte de verdade só.
 - Mistura de mercado: o relatório de backfill/reconciliação pode trazer linhas dos dois mercados
   juntas (as contas são vinculadas) — `ordersFromRows()` valida o mercado real por linha via
   `ship-country` (não moeda, não `ship-state` — siglas de UF BR colidem com estados US). Limpeza
@@ -504,8 +508,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `GET /api/orders/search?market=&q=` / `GET /api/orders/export?...`
 - `POST /api/sync` / `GET /api/status`
 - `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
-- `GET/POST /api/amazon/retention` (admin) · `GET /api/amazon/retention/preview` — janela de
-  retenção por mercado, ver tela Integrações
+- `GET/POST /api/amazon/history` (admin) · `GET /api/amazon/history/preview` — histórico por
+  mercado (poda OU busca, decide sozinho), ver tela Integrações
 - `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
 - `GET /shopee/connect` · `GET /mercadolivre/connect` · `GET /googleads/connect`
 - `GET /shopify-yucaloo/:mkt(br|us)/{connect,callback}` — chamadas pela própria Shopify

@@ -632,12 +632,10 @@ app.post('/api/amazon-br/force-sync', async (_req, res) => {
 // cada janela de 30 dias é um relatório que a Amazon monta e nós baixamos) e responde
 // na hora. Progresso em GET /api/status → amazon.backfill. Ver CLAUDE.md 4.7.3.
 let backfillRunning = false;
-app.post('/api/amazon/backfill', (req, res) => {
-  if (backfillRunning) return res.status(409).json({ error: 'Backfill já em andamento.' });
-
-  const days   = Math.min(Number(req.query.days || 90), 730);
-  const market = req.query.market === 'br' ? 'br' : 'us';
-
+// Extraído do handler abaixo pra ser reaproveitado por /api/amazon/history (painel unificado de
+// retenção+histórico em Integrações) — mesmo job em background, mesma forma de acompanhar
+// progresso (GET /api/status → amazon.backfill).
+function startBackfillJob(market, days) {
   backfillRunning = true;
   setAmazonBackfill({ status: 'running', market, days, orders: 0, message: 'iniciando', startedAt: new Date().toISOString() });
 
@@ -661,6 +659,15 @@ app.post('/api/amazon/backfill', (req, res) => {
       backfillRunning = false;
     }
   })();
+}
+
+app.post('/api/amazon/backfill', (req, res) => {
+  if (backfillRunning) return res.status(409).json({ error: 'Backfill já em andamento.' });
+
+  const days   = Math.min(Number(req.query.days || 90), 730);
+  const market = req.query.market === 'br' ? 'br' : 'us';
+
+  startBackfillJob(market, days);
 
   res.json({ ok: true, message: `Backfill de ${days} dias (${market.toUpperCase()}) iniciado. Acompanhe em GET /api/status.` });
 });
@@ -735,54 +742,85 @@ app.post('/api/amazon/cleanup-market-leak', (req, res) => {
   }
 });
 
-// Retenção de histórico da Amazon por mercado (BR/EUA separados) — tela Integrações, pedido do
+// Histórico da Amazon por mercado (BR/EUA separados) — painel único em Integrações, pedido do
 // Luan 18/08/2026 (Amazon EUA sozinha soma ~342 mil pedidos/ano, muito mais que os outros
-// canais). GET devolve a janela efetiva hoje (config salva ou o legado AMAZON_RETENTION_DAYS) +
-// total de pedidos por mercado, pra dar contexto na tela. POST muda a janela E já aplica a poda
-// na hora — de propósito: é a única ação que efetivamente apaga pedido aqui, então só roda a
-// pedido explícito do usuário (depois de ele ver a prévia), nunca sozinha no próximo sync (ver
-// sync.js e o quase-desastre de 10/07/2026 documentado lá).
+// canais). Um campo só, "dias de histórico desejado" — nada de "retenção" e "buscar mais
+// histórico" como dois controles separados (confundia: o usuário perguntou se um somava com o
+// outro). GET devolve a janela hoje + quantos dias o pedido mais antigo já cobre, pra tela poder
+// mostrar o estado atual. /preview diz de antemão qual ação o número resultaria (podar, buscar
+// mais, ou nada), sem fazer nada — POST decide e executa a mesma coisa de verdade:
+//   • pedido mais antigo é MAIS VELHO que o pedido → sobra dado, poda (só a poda pede prévia +
+//     confirmação no frontend antes de chamar aqui — é a única ação que apaga pedido de verdade,
+//     mesmo cuidado do quase-desastre de 10/07/2026 documentado em sync.js);
+//   • pedido mais antigo é MAIS NOVO que o pedido (ou não existe nenhum ainda) → falta dado,
+//     dispara backfill (só soma, não precisa de confirmação) — reaproveita o job de
+//     startBackfillJob(), reconstrói a janela inteira em vez de só o trecho novo (mais simples;
+//     upsert por id não duplica, só reprocessa relatório que já tinha sido baixado antes).
+// A config salva (kv.amazonRetentionConfig) também é o que sync.js usa pra poda automática do
+// dia-a-dia — um valor só, uma fonte de verdade.
 const AMAZON_RETENTION_CHANNEL = { br: 'amazon', us: 'amazon_us' };
-app.get('/api/amazon/retention', requireAdmin, (_req, res) => {
+function oldestOrderAgeDays(channel, market) {
+  const orders = getOrders({ channel, market });
+  if (!orders.length) return null;
+  let oldest = orders[0].createdAt;
+  for (const o of orders) if (o.createdAt < oldest) oldest = o.createdAt;
+  return Math.floor((Date.now() - new Date(oldest).getTime()) / 864e5);
+}
+function planAmazonHistory(market, days) {
+  const channel = AMAZON_RETENTION_CHANNEL[market];
+  const totalOrders = getOrders({ channel, market }).length;
+  const oldestOrderDays = oldestOrderAgeDays(channel, market);
+  if (days === 0) return { action: 'unlimited', totalOrders, oldestOrderDays };
+  if (oldestOrderDays === null) return { action: 'backfill', missingDays: days, totalOrders, oldestOrderDays };
+  if (oldestOrderDays > days) {
+    const cutoff = new Date(Date.now() - days * 864e5).toISOString();
+    return { action: 'prune', wouldDelete: countOrdersOlderThan({ channel, olderThanIso: cutoff }), totalOrders, oldestOrderDays };
+  }
+  if (oldestOrderDays < days) return { action: 'backfill', missingDays: days - oldestOrderDays, totalOrders, oldestOrderDays };
+  return { action: 'noop', totalOrders, oldestOrderDays };
+}
+
+app.get('/api/amazon/history', requireAdmin, (_req, res) => {
   const cfg = getAmazonRetentionConfig();
   const legacyDefault = Number(process.env.AMAZON_RETENTION_DAYS || 0);
   const out = {};
   for (const mkt of ['br', 'us']) {
-    out[mkt] = {
-      days: cfg[mkt] ?? legacyDefault,
-      configured: cfg[mkt] !== undefined,
-      totalOrders: getOrders({ channel: AMAZON_RETENTION_CHANNEL[mkt], market: mkt }).length,
-    };
+    const days = cfg[mkt] ?? legacyDefault;
+    out[mkt] = { days, ...planAmazonHistory(mkt, days) };
   }
   res.json(out);
 });
 
-app.get('/api/amazon/retention/preview', requireAdmin, (req, res) => {
+app.get('/api/amazon/history/preview', requireAdmin, (req, res) => {
   const market = req.query.market === 'br' ? 'br' : 'us';
-  const days = Number(req.query.days || 0);
-  if (!(days > 0)) return res.status(400).json({ error: 'days precisa ser maior que zero.' });
-  const channel = AMAZON_RETENTION_CHANNEL[market];
-  const cutoff = new Date(Date.now() - days * 864e5).toISOString();
-  const wouldDelete = countOrdersOlderThan({ channel, olderThanIso: cutoff });
-  const totalOrders = getOrders({ channel, market }).length;
-  res.json({ market, days, wouldDelete, totalOrders });
+  const days = Number(req.query.days);
+  if (!(days >= 0)) return res.status(400).json({ error: 'days precisa ser um número ≥ 0.' });
+  res.json({ market, days, ...planAmazonHistory(market, days) });
 });
 
-app.post('/api/amazon/retention', requireAdmin, (req, res) => {
+app.post('/api/amazon/history', requireAdmin, (req, res) => {
   const market = req.body?.market === 'br' ? 'br' : req.body?.market === 'us' ? 'us' : null;
   const days = Number(req.body?.days);
   if (!market) return res.status(400).json({ error: 'market precisa ser "br" ou "us".' });
   if (!(days >= 0)) return res.status(400).json({ error: 'days precisa ser um número ≥ 0 (0 = sem limite).' });
+
   const cfg = getAmazonRetentionConfig();
   cfg[market] = days;
   setAmazonRetentionConfig(cfg);
-  let deleted = 0;
-  if (days > 0) {
+
+  const plan = planAmazonHistory(market, days);
+  if (plan.action === 'prune') {
     const channel = AMAZON_RETENTION_CHANNEL[market];
     const cutoff = new Date(Date.now() - days * 864e5).toISOString();
-    deleted = pruneOrders({ channels: [channel], olderThanIso: cutoff });
+    const deleted = pruneOrders({ channels: [channel], olderThanIso: cutoff });
+    return res.json({ ok: true, action: 'pruned', market, days, deleted });
   }
-  res.json({ ok: true, market, days, deleted });
+  if (plan.action === 'backfill') {
+    if (backfillRunning) return res.status(409).json({ error: 'Já existe uma busca de histórico em andamento — espere terminar e aplique de novo.' });
+    startBackfillJob(market, days);
+    return res.json({ ok: true, action: 'backfill_started', market, days });
+  }
+  res.json({ ok: true, action: plan.action, market, days });
 });
 
 // Backup diário do banco pra Backblaze B2 (ver src/backup.js) — sem plano Pro no Railway não
