@@ -52,6 +52,7 @@ const EMPTY = {
   authSessions: {},   // { token: { userId, createdAt, expiresAt } }
   integrationsConfig: {}, // { [chave]: { enabled: bool } } — liga/desliga por integração, ver tela Integrações
   amazonRetentionConfig: {}, // { br: dias|undefined, us: dias|undefined } — janela de retenção por mercado, ver tela Integrações. Mercado ausente cai no legado AMAZON_RETENTION_DAYS (env var), ver sync.js.
+  backupStatus: null, // último resultado do backup pra Backblaze B2 — ver src/backup.js
 };
 
 let cache = null;
@@ -156,6 +157,7 @@ export async function initStore() {
       if (r.key === 'authSessions')          cache.authSessions          = r.value;
       if (r.key === 'integrationsConfig')    cache.integrationsConfig    = r.value;
       if (r.key === 'amazonRetentionConfig') cache.amazonRetentionConfig = r.value;
+      if (r.key === 'backupStatus')          cache.backupStatus          = r.value;
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -292,6 +294,63 @@ export function getAmazonRetentionConfig() { return load().amazonRetentionConfig
 export function setAmazonRetentionConfig(cfg) {
   const db = load(); db.amazonRetentionConfig = cfg; saveJson();
   if (USE_PG) pgKv('amazonRetentionConfig', cfg);
+}
+
+// Snapshot completo do store pra backup — mesmo formato do data/db.json usado no dev local (JSON
+// puro de orders/sessionsDaily/kv), só que serializado sob demanda em produção (onde saveJson()
+// não escreve nada em disco, ver USE_PG). Ver src/backup.js.
+export function getFullSnapshot() { return load(); }
+
+export function getBackupStatus() { return load().backupStatus; }
+export function setBackupStatus(status) {
+  const db = load(); db.backupStatus = status; saveJson();
+  if (USE_PG) pgKv('backupStatus', status);
+}
+
+// Restaura o store inteiro a partir de um snapshot (formato de getFullSnapshot/backup.js) —
+// scripts/restore-backup.mjs. Operação rara e deliberada (nunca chamada no fluxo normal do
+// servidor): TRUNCATE + reinsert em vez do upsert incremental do dia-a-dia, porque um restore
+// precisa realmente voltar pro estado exato do backup, inclusive removendo o que foi criado
+// depois dele. authSessions não faz parte do snapshot (ver backup.js) — todo mundo precisa
+// logar de novo depois de um restore, o que já é o comportamento esperado.
+export async function restoreSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object' || !snapshot.orders) {
+    throw new Error('Snapshot inválido (esperado um objeto com pelo menos a chave "orders").');
+  }
+  cache = { ...structuredClone(EMPTY), ...structuredClone(snapshot) };
+  indexDirty = true;
+  saveJson();
+
+  if (!USE_PG) return { mode: 'json', orders: Object.keys(cache.orders).length };
+
+  await pool.query('CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, data JSONB NOT NULL); CREATE TABLE IF NOT EXISTS sessions_daily (date TEXT PRIMARY KEY, data JSONB NOT NULL); CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB);');
+  await pool.query('TRUNCATE orders, sessions_daily, kv');
+
+  const orderRows = Object.entries(cache.orders);
+  for (let i = 0; i < orderRows.length; i += PG_BATCH) {
+    const batch = orderRows.slice(i, i + PG_BATCH);
+    const values = batch.map((_, j) => `($${j * 2 + 1},$${j * 2 + 2})`).join(',');
+    const params = [];
+    for (const [id, data] of batch) params.push(id, data);
+    await pool.query(`INSERT INTO orders(id,data) VALUES ${values}`, params);
+  }
+
+  const sessionRows = Object.entries(cache.sessionsDaily || {});
+  for (let i = 0; i < sessionRows.length; i += PG_BATCH) {
+    const batch = sessionRows.slice(i, i + PG_BATCH);
+    const values = batch.map((_, j) => `($${j * 2 + 1},$${j * 2 + 2})`).join(',');
+    const params = [];
+    for (const [date, data] of batch) params.push(date, data);
+    await pool.query(`INSERT INTO sessions_daily(date,data) VALUES ${values}`, params);
+  }
+
+  const { orders, sessionsDaily, ...kvFields } = cache;
+  for (const [key, value] of Object.entries(kvFields)) {
+    if (value === null || value === undefined) continue;
+    await pool.query('INSERT INTO kv(key,value) VALUES($1,$2::jsonb)', [key, JSON.stringify(value)]);
+  }
+
+  return { mode: 'postgres', orders: orderRows.length, sessions: sessionRows.length, kvKeys: Object.keys(kvFields).length };
 }
 
 // Preenche items[] (títulos de produto) em pedidos JÁ existentes, sem tocar em

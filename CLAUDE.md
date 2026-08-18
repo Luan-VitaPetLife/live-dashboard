@@ -67,6 +67,8 @@ src/metrics.js           Calcula o payload da dashboard por mercado
 src/us-states.js         normalizeUsState(): reduz grafias de estado dos EUA a 2 letras
 src/auth.js              Login: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página
 src/sync.js              Orquestra a busca de todos os canais e grava no store
+src/backup.js            Backup diário do banco pra Backblaze B2 (API nativa, sem SDK)
+scripts/restore-backup.mjs  Restaura o banco a partir de um backup do B2 (destrutivo, pede confirmação)
 public/index.html        Dashboard principal (Revenue)
 public/campanhas.html    Gastos reais por canal + campanhas
 public/produtos.html     Catálogo completo por canal
@@ -482,6 +484,9 @@ Railway — nunca colar valor aqui, só o nome da variável e pra que serve.
 | `GOOGLE_ADS_CUSTOMER_ID` | Só EUA |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Só se o developer token foi gerado sob uma MCC |
 | `DATABASE_URL` | Postgres — Railway NÃO injeta sozinho, setar `${{Postgres.DATABASE_URL}}` |
+| `B2_KEY_ID` / `B2_APPLICATION_KEY` / `B2_BUCKET_NAME` | Backup diário do banco (Backblaze B2) — ver `src/backup.js` |
+| `BACKUP_RETENTION_DAYS` | Quantos backups diários manter no B2 (padrão 30) |
+| `BACKUP_EVERY_HOURS` | Intervalo mínimo entre backups automáticos (padrão 24) |
 
 Armadilhas conhecidas: `read_analytics` ausente faz `shopifyqlQuery` sumir do schema sem erro.
 Amazon `CreatedBefore` precisa ficar ≥2min no passado. IAM User precisa de `sts:AssumeRole` no
@@ -501,6 +506,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
 - `GET/POST /api/amazon/retention` (admin) · `GET /api/amazon/retention/preview` — janela de
   retenção por mercado, ver tela Integrações
+- `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
 - `GET /shopee/connect` · `GET /mercadolivre/connect` · `GET /googleads/connect`
 - `GET /shopify-yucaloo/:mkt(br|us)/{connect,callback}` — chamadas pela própria Shopify
 - `POST /api/login` / `POST /api/logout` / `GET /api/me`
@@ -559,8 +565,16 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - **Log de auditoria de edição:** login/permissão por página já existem (`src/auth.js`), mas não há
   registro de QUEM mudou um valor (COG, estoque manual, grupo do Unificador, config de
   integração) nem QUANDO. Hoje só o valor final fica salvo.
-- **Rotina de backup do Postgres:** produção depende só do backup automático do Railway (se
-  houver algum ativo no plano atual — não confirmado). Sem plano de restauração testado.
+- ~~Rotina de backup do Postgres~~ — feito (18/08/2026). Confirmado com o Luan: sem plano Pro no
+  Railway não existe backup/PITR automático (só um manual antigo, 1 mês). `src/backup.js`: snapshot
+  diário do store inteiro (mesmo formato JSON do `data/db.json` local, gzip) pra **Backblaze B2**
+  (10GB grátis, ~$0,005/GB/mês depois disso — com retenção de 30 dias o uso fica bem abaixo do
+  grátis). API nativa do B2 direto via `fetch` (sem SDK, mesma regra do resto do projeto — igual o
+  SigV4 feito à mão da Amazon). Roda sozinho 1x/dia (`runBackupIfDue()`, mesmo padrão de
+  auto-throttle do `reconcileAmazonNames`) + botão manual em Integrações → "Backup do banco".
+  Restauração testada de ponta a ponta (`scripts/restore-backup.mjs`, baixa do B2 + `TRUNCATE`
+  + reinsere tudo — pede confirmação digitada "RESTAURAR", é destrutivo por design). `authSessions`
+  fica de fora do snapshot de propósito (token efêmero, restaurar só exige login de novo).
 - **Teste em tela de celular:** a dashboard já tem CSS responsivo em várias telas, mas nunca foi
   formalmente conferida ponta a ponta num celular de verdade.
 

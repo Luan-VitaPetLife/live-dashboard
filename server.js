@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -17,6 +17,7 @@ import * as googleads from './src/googleads.js';
 import * as bling from './src/bling.js';
 import * as shopifyYucaloo from './src/shopifyYucaloo.js';
 import * as auth from './src/auth.js';
+import { runBackup, runBackupIfDue, isConfigured as isBackupConfigured, listBackups } from './src/backup.js';
 import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -784,6 +785,35 @@ app.post('/api/amazon/retention', requireAdmin, (req, res) => {
   res.json({ ok: true, market, days, deleted });
 });
 
+// Backup diário do banco pra Backblaze B2 (ver src/backup.js) — sem plano Pro no Railway não
+// existe backup automático do Postgres. GET devolve status configurado + último resultado +
+// lista dos backups guardados hoje no bucket. POST dispara um backup na hora (ex.: testar a
+// configuração antes de esperar o job automático).
+let backupRunning = false;
+app.get('/api/backup/status', requireAdmin, async (_req, res) => {
+  try {
+    const configured = isBackupConfigured();
+    const last = getBackupStatus();
+    const files = configured ? await listBackups() : [];
+    res.json({ configured, running: backupRunning, last, files: files.map(f => ({ fileName: f.fileName, sizeBytes: f.contentLength, uploadedAt: new Date(f.uploadTimestamp).toISOString() })) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post('/api/backup/run', requireAdmin, async (_req, res) => {
+  if (backupRunning) return res.status(409).json({ error: 'Backup já em andamento.' });
+  if (!isBackupConfigured()) return res.status(400).json({ error: 'Backup não configurado (faltam B2_KEY_ID/B2_APPLICATION_KEY/B2_BUCKET_NAME).' });
+  backupRunning = true;
+  try {
+    const result = await runBackup();
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    backupRunning = false;
+  }
+});
+
 // Correção pontual (28/07/2026): só pedido com pagamento de verdade conta como venda
 // (CLAUDE.md 4.1) — pedido já gravado com status "sem pagamento" (Pending/
 // PendingAvailability na Amazon, PENDING/AUTHORIZED no Shopify, confirmed/
@@ -1378,4 +1408,16 @@ app.listen(PORT, () => {
   };
   setTimeout(runBlingGeo, 4 * 60 * 1000);       // 4 min após subir (depois do job de nomes)
   setInterval(runBlingGeo, 6 * 60 * 60 * 1000); // a cada 6h (throttle interno também limita)
+
+  // Backup diário pra Backblaze B2 (ver src/backup.js) — sem plano Pro no Railway não existe
+  // backup automático do Postgres. runBackupIfDue() só roda de fato se já passou
+  // BACKUP_EVERY_HOURS desde o último (padrão 24h); sem B2_KEY_ID/etc configurado, no-op
+  // silencioso (não quebra o boot em ambiente sem backup configurado ainda, ex.: dev local).
+  const runBackupJob = () => {
+    runBackupIfDue()
+      .then(r => { if (r) console.log('Backup:', r.fileName, r.sizeBytes + ' bytes'); })
+      .catch(e => console.error('Backup falhou:', e.message));
+  };
+  setTimeout(runBackupJob, 5 * 60 * 1000);        // 5 min após subir
+  setInterval(runBackupJob, 6 * 60 * 60 * 1000);  // checa a cada 6h (throttle interno limita a 1x/dia)
 });

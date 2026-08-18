@@ -71,6 +71,9 @@
   .ret-backfill-row input[type=number]{width:64px;font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none}
   .ret-backfill-unit{font-size:11px;color:var(--sub)}
   .ret-backfill-status{font-size:11px;color:var(--sub);margin-top:8px;min-height:14px}
+  .backup-file-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;font-size:11px;color:var(--sub);background:var(--surface2);border-radius:var(--radius-sm)}
+  .backup-file-row+.backup-file-row{margin-top:4px}
+  .backup-file-name{font-weight:600;color:var(--text)}
 
   /* ── País — espaçamento próprio acima/abaixo de cada bloco + divisor entre os países ── */
   .country-block{display:flex;flex-direction:column;gap:16px;padding:22px 0}
@@ -241,6 +244,19 @@
         </div>
         <div class="ret-backfill-status" id="backfillStatus"></div>
       </div>
+    </div>
+
+    <div class="ret-panel" id="backupPanel">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+        <div>
+          <div class="ret-panel-title">Backup do banco (Backblaze B2)</div>
+          <div class="ret-panel-sub" id="backupPanelSub">Carregando…</div>
+        </div>
+        <button class="ret-btn" id="backupRunBtn" onclick="runBackupNow()">Fazer backup agora</button>
+      </div>
+      <div class="ret-backfill-status" id="backupStatusMsg"></div>
+      <div class="ret-divider" id="backupFilesDivider" style="display:none"></div>
+      <div id="backupFilesList"></div>
     </div>
 
     <div id="listArea">
@@ -701,12 +717,61 @@ async function pollBackfillStatus(){
   backfillPolling = setInterval(tick, 4000);
 }
 
+// ── Backup do banco (Backblaze B2) — ver src/backup.js ────
+function fmtBytes(n){
+  if (!n) return '0 KB';
+  return n > 1024*1024 ? (n/1024/1024).toFixed(1) + ' MB' : (n/1024).toFixed(0) + ' KB';
+}
+async function loadBackupStatus(){
+  try{
+    const r = await fetch('/api/backup/status', { credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
+    if (!d.configured){
+      $('backupPanelSub').textContent = 'Não configurado — faltam B2_KEY_ID / B2_APPLICATION_KEY / B2_BUCKET_NAME nas variáveis do servidor.';
+      $('backupRunBtn').disabled = true;
+      return;
+    }
+    $('backupRunBtn').disabled = d.running;
+    const last = d.last;
+    $('backupPanelSub').textContent = !last ? 'Configurado, ainda sem nenhum backup rodado.'
+      : last.status === 'done' ? `Último backup: ${new Date(last.finishedAt).toLocaleString('pt-BR')} · ${fmtBytes(last.sizeBytes)}${last.pruned ? ` · ${last.pruned} antigo(s) removido(s)` : ''}`
+      : `Última tentativa falhou (${new Date(last.finishedAt).toLocaleString('pt-BR')}): ${last.message}`;
+    $('backupFilesDivider').style.display = d.files.length ? '' : 'none';
+    $('backupFilesList').innerHTML = d.files.slice(0, 10).map(f => `
+      <div class="backup-file-row">
+        <span class="backup-file-name">${escapeHtml(f.fileName.replace('db-backup/',''))}</span>
+        <span>${fmtBytes(Number(f.sizeBytes))} · ${new Date(f.uploadedAt).toLocaleDateString('pt-BR')}</span>
+      </div>`).join('');
+  }catch(e){
+    $('backupPanelSub').textContent = 'Não foi possível carregar o status do backup.';
+  }
+}
+async function runBackupNow(){
+  const btn = $('backupRunBtn');
+  btn.disabled = true;
+  $('backupStatusMsg').textContent = 'Rodando backup…';
+  try{
+    const r = await fetch('/api/backup/run', { method:'POST', credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
+    $('backupStatusMsg').textContent = `Backup concluído: ${fmtBytes(d.sizeBytes)}.`;
+    toast('Backup concluído.');
+    loadBackupStatus();
+  }catch(e){
+    $('backupStatusMsg').textContent = 'Erro: ' + (e.message || 'falha de rede');
+    toast('Erro ao rodar backup: ' + (e.message || 'falha de rede'), true);
+    btn.disabled = false;
+  }
+}
+
 (async function(){
   syncViewSwitch();
   await loadMe();
   await load();
   loadRetention();
   pollBackfillStatus();
+  loadBackupStatus();
 })();
 </script>
 </body>
