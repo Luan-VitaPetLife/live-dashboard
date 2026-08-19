@@ -640,6 +640,22 @@ function checkCancelled(jobId) {
   if (cancelFlags[jobId]) { cancelFlags[jobId] = false; throw new JobCancelledError('Cancelado pelo usuário'); }
 }
 
+// Um "running" persistido sobrevive a um reinício do servidor no meio do processo (deploy no
+// meio de um backfill, por exemplo — ver CLAUDE.md 4.7.3) porque a flag *Running em memória zera
+// sozinha ao reiniciar, mas ninguém nunca escreve por cima do status salvo em kv. Usado tanto por
+// GET /api/status quanto por GET /api/jobs — precisavam concordar: antes só /api/jobs (o widget)
+// detectava isso, então o painel de Integrações (que lê /api/status pra saber se pode reativar o
+// botão "Aplicar") ficava com o botão travado pra sempre olhando pro mesmo job fantasma que o
+// widget já mostrava como erro (relatado pelo Luan, 19/08/2026 — via CLAUDE.md "Campanhas": os
+// dois lugares que mostram o mesmo dado nunca podem discordar).
+const STALE_AFTER_MS = { 'amazon-backfill': 45 * 60 * 1000, 'amazon-images': 20 * 60 * 1000, 'amazon-items': 20 * 60 * 1000, 'bling-geo': 10 * 60 * 1000, 'backup': 10 * 60 * 1000 };
+function destaleJob(jobId, raw) {
+  if (!raw || raw.status !== 'running' || !raw.startedAt) return raw;
+  const age = Date.now() - Date.parse(raw.startedAt);
+  if (age <= (STALE_AFTER_MS[jobId] || 30 * 60 * 1000)) return raw;
+  return { ...raw, status: 'error', message: 'Interrompido — sem resposta por tempo demais (provável reinício do servidor no meio do processo). Pode tentar de novo.' };
+}
+
 // Backfill histórico da Amazon via Reports API. Roda em background (leva minutos:
 // cada janela de 30 dias é um relatório que a Amazon monta e nós baixamos) e responde
 // na hora. Progresso em GET /api/status → amazon.backfill. Ver CLAUDE.md 4.7.3.
@@ -1253,9 +1269,9 @@ app.get('/api/status', (_req, res) => {
       backoffActive,
       backoffUntil:  backoffActive ? new Date(backoffUntil).toISOString() : null,
       nextSyncIn:    backoffActive ? `${Math.ceil((backoffUntil - Date.now()) / 60000)} min` : 'agora',
-      backfill:      getAmazonBackfill(),
-      images:        getAmazonImagesJob(),
-      items:         itemsStatus,
+      backfill:      destaleJob('amazon-backfill', getAmazonBackfill()),
+      images:        destaleJob('amazon-images', getAmazonImagesJob()),
+      items:         destaleJob('amazon-items', itemsStatus),
     },
     amazon_br: {
       configured:  amazon.isConfiguredBR(),
@@ -1288,7 +1304,7 @@ app.get('/api/status', (_req, res) => {
       configured: bling.isConfigured(),
       hasCreds:   has('BLING_CLIENT_ID') && has('BLING_CLIENT_SECRET') && has('BLING_REDIRECT_URL'),
       authorized: Boolean(db.blingTokens),
-      geo: geoStatus, // última rodada de reconcileGeoFromBling (preenche state via Bling)
+      geo: destaleJob('bling-geo', geoStatus), // última rodada de reconcileGeoFromBling (preenche state via Bling)
     },
     lastSync: db.lastSync || null,
   });
@@ -1298,36 +1314,24 @@ app.get('/api/status', (_req, res) => {
 // via Bling, backup) — alimenta o widget flutuante (jobs-widget.js, compartilhado em toda
 // página) em vez de cada página ter que saber os detalhes de cada job específico. Cada job já
 // carrega quem disparou (startedBy, capturado no POST que iniciou), pedido do Luan 18/08/2026.
-// "running" preso há tempo demais quase sempre é status fantasma sobrando de um deploy/reinício
-// no meio do processo (a flag *Running em memória zera sozinha ao reiniciar, mas o status
-// persistido em kv não é tocado por ninguém) — sem isso o widget mostrava "iniciando" pra sempre
-// e dava a impressão de um processo travado ou de tarefa nova toda hora (relatado pelo Luan,
-// 19/08/2026). Job concluído/erro/cancelado também some da lista sozinho depois de um tempo, pra
-// uma execução de teste de semanas atrás não continuar aparecendo em toda página pra sempre.
-const STALE_AFTER_MS = { 'amazon-backfill': 45 * 60 * 1000, 'amazon-images': 20 * 60 * 1000, 'amazon-items': 20 * 60 * 1000, 'bling-geo': 10 * 60 * 1000, 'backup': 10 * 60 * 1000 };
+// Job concluído/erro/cancelado some da lista sozinho depois de um tempo (destaleJob acima só
+// cuida do "running" fantasma) — pra uma execução de teste de semanas atrás não continuar
+// aparecendo em toda página pra sempre (relatado pelo Luan, 19/08/2026, como "fica criando
+// tarefa nova sem eu pedir": na real eram jobs antigos nunca esquecidos).
 const FORGET_FINISHED_AFTER_MS = 15 * 60 * 1000;
-function normalizeJob(id, label, raw) {
+function normalizeJob(id, label, rawIn) {
+  const raw = destaleJob(id, rawIn);
   if (!raw) return null;
-  let status = raw.status;
-  let message = raw.message || null;
-  const now = Date.now();
-  if (status === 'running' && raw.startedAt) {
-    const age = now - Date.parse(raw.startedAt);
-    if (age > (STALE_AFTER_MS[id] || 30 * 60 * 1000)) {
-      status = 'error';
-      message = 'Interrompido — sem resposta por tempo demais (provável reinício do servidor no meio do processo). Pode tentar de novo.';
-    }
-  }
-  if (status !== 'running' && raw.finishedAt) {
-    const age = now - Date.parse(raw.finishedAt);
+  if (raw.status !== 'running' && raw.finishedAt) {
+    const age = Date.now() - Date.parse(raw.finishedAt);
     if (age > FORGET_FINISHED_AFTER_MS) return null;
   }
   return {
-    id, label, status, message,
+    id, label, status: raw.status, message: raw.message || null,
     progressPct: typeof raw.progressPct === 'number' ? raw.progressPct : null,
     startedBy: raw.startedBy || null,
     startedAt: raw.startedAt || null, finishedAt: raw.finishedAt || null,
-    cancelable: status === 'running' && CANCELABLE_JOB_IDS.has(id),
+    cancelable: raw.status === 'running' && CANCELABLE_JOB_IDS.has(id),
   };
 }
 app.get('/api/jobs', (_req, res) => {

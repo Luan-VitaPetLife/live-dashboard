@@ -56,7 +56,9 @@
   .ret-rows{display:flex;flex-direction:column;gap:8px}
   .ret-row{padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm)}
   .ret-row-main{display:flex;align-items:center;gap:14px}
-  .ret-row-label{font-size:12px;font-weight:600;width:70px;flex-shrink:0}
+  .ret-row-logo{width:20px;height:20px;object-fit:contain;flex-shrink:0}
+  .ret-row-label{font-size:12px;font-weight:600;width:96px;flex-shrink:0;display:flex;align-items:center;gap:8px}
+  .ret-row-label-text{display:flex;flex-direction:column;gap:1px}
   .ret-row-sub{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:2px}
   .ret-row-status{font-size:10px;color:var(--sub);margin-top:6px;min-height:12px}
   .ret-row-input{display:flex;align-items:center;gap:6px;margin-left:auto}
@@ -623,7 +625,7 @@ async function loadHistory(){
       const cap = mkt === 'us' ? 'Us' : 'Br';
       return `<div class="ret-row">
         <div class="ret-row-main">
-          <div class="ret-row-label">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${info.totalOrders.toLocaleString('pt-BR')} pedidos · ${retCoverageText(info)}</span></div>
+          <div class="ret-row-label"><img class="ret-row-logo" src="logos-integracao/Amazon_logo.png" alt=""><span class="ret-row-label-text">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${info.totalOrders.toLocaleString('pt-BR')} pedidos · ${retCoverageText(info)}</span></span></div>
           <div class="ret-row-input"><input type="number" id="retDays${cap}" min="0" value="${info.days}"><span>dias (0 = sem limite)</span></div>
           <button class="ret-btn" id="retApply${cap}" onclick="applyHistory('${mkt}')">Aplicar</button>
         </div>

@@ -437,21 +437,34 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   - Barra de progresso: cheia e sólida em concluído/erro/cancelado; só fica "correndo" (indeterminada)
     enquanto o processo está rodando sem uma % conhecida ainda (iniciando) — bug relatado pelo Luan
     19/08/2026, job já concluído aparecia com a barra animada e parcialmente cheia, parecendo travado.
-  - `GET /api/jobs` também descarta jobs velhos: um status `running` sem atualização há mais de
-    `STALE_AFTER_MS[jobId]` (server.js, 10–45min por tipo) vira `error` com mensagem de
-    "interrompido" em vez de aparecer preso em "iniciando" pra sempre — sintoma real de um
-    deploy/reinício no meio do processo (a flag `*Running` em memória zera sozinha ao reiniciar,
-    mas o status persistido em `kv` não é tocado por ninguém). Job concluído/erro/cancelado some
-    da lista sozinho 15min depois de terminar, pra uma execução de teste antiga não continuar
-    aparecendo em toda página pra sempre (o Luan relatou isso como "fica criando tarefa nova sem eu
-    pedir", 19/08/2026 — na real eram jobs fantasmas/antigos nunca limpos, não jobs novos de verdade).
-  - Botão × cancela um job (com `confirm()`), só nos três com ponto seguro pra checar a flag no
-    meio do loop: `amazon-backfill`, `amazon-images`, `amazon-items` (`CANCELABLE_JOB_IDS`,
-    server.js). Cancelamento cooperativo via `JobCancelledError`/`checkCancelled(jobId)`: a
-    callback de progresso de cada um checa a flag e lança, o que sobe até o catch do job e vira
-    status `cancelled` — o que já foi processado até ali fica salvo (upsert incremental, mesmo
-    princípio de sempre). `bling-geo` e `backup` não entram (terminam em segundos, não vale o
-    risco de interromper no meio de um upload/gravação) — o × nem aparece pra eles.
+  - `destaleJob(jobId, raw)` (server.js): um status `running` sem atualização há mais de
+    `STALE_AFTER_MS[jobId]` (10–45min por tipo) vira `error` com mensagem de "interrompido" em vez
+    de aparecer preso em "iniciando" pra sempre — sintoma real de um deploy/reinício no meio do
+    processo (a flag `*Running` em memória zera sozinha ao reiniciar, mas o status persistido em
+    `kv` não é tocado por ninguém). Usado tanto por `GET /api/jobs` (`normalizeJob`) quanto por
+    `GET /api/status` — os dois PRECISAM concordar, mesmo princípio já documentado em "Campanhas"
+    (nunca ter duas fontes pro mesmo dado). Bug real já causado por isso (19/08/2026): só
+    `/api/jobs` tinha a checagem, então o botão "Aplicar" do histórico Amazon EUA em Integrações
+    (que lê `/api/status`) ficava travado pra sempre olhando pro mesmo job fantasma que o widget já
+    mostrava como erro. `GET /api/jobs` também esquece job concluído/erro/cancelado sozinho 15min
+    depois de terminar, pra uma execução de teste antiga não continuar aparecendo em toda página pra
+    sempre (o Luan relatou isso como "fica criando tarefa nova sem eu pedir", 19/08/2026 — na real
+    eram jobs fantasmas/antigos nunca limpos, não jobs novos de verdade).
+  - Botão × por job: em job rodando, cancela (com `confirm()`) — só nos três com ponto seguro pra
+    checar a flag no meio do loop: `amazon-backfill`, `amazon-images`, `amazon-items`
+    (`CANCELABLE_JOB_IDS`, server.js). Cancelamento cooperativo via
+    `JobCancelledError`/`checkCancelled(jobId)`: a callback de progresso de cada um checa a flag e
+    lança, o que sobe até o catch do job e vira status `cancelled` — o que já foi processado até
+    ali fica salvo (upsert incremental, mesmo princípio de sempre). `bling-geo` e `backup` não
+    entram (terminam em segundos, não vale o risco de interromper no meio de um upload/gravação).
+    Em job já concluído/erro/cancelado, o mesmo × vira "fechar" (sem `confirm()` — só some da lista
+    no navegador, `dismissedJobKeys` client-side por `id+finishedAt`, uma execução nova do mesmo
+    job volta a aparecer). O cabeçalho do widget também ganhou um × pra fechar o card inteiro
+    (`dismissed`/`dismissedKnownIds`, jobs-widget.js) — diferente de minimizar, só volta a aparecer
+    sozinho quando surge um job rodando que não existia no momento do fechamento. Pedido do Luan,
+    19/08/2026: "não consigo simplesmente fechar ela ou a tarefa que eu deu erro".
+  - Painel "Amazon — Histórico" (Integrações): logo da Amazon (`Amazon_logo.png`) ao lado do rótulo
+    BR/EUA em cada linha, mesmo padrão de logo já usado no card de Tráfego & conversão.
 - Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
   nativo. Frequência de atualização (`localStorage('coco_refresh')`) é compartilhada entre todas
   as páginas. Estado ativo do item é fundo escuro (`background:var(--ink)`), não checkmark — era
