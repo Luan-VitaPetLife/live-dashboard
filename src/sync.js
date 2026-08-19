@@ -12,7 +12,7 @@ import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
 import * as shopifyYucaloo from './shopifyYucaloo.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, setMlAdCosts, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, getAmazonRetentionConfig } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, getMlAdCostsDaily, setMlAdCostsDaily, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, getAmazonRetentionConfig } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -32,6 +32,31 @@ function storeYucalooSessions(mkt, rows) {
   for (const r of rows) byDate[r.date] = r;
   all[mkt] = byDate;
   setYucalooSessionsDaily(all);
+}
+
+// Mantém kv.mlAdCostsDaily em dia — sempre reconfirma os últimos ML_ADS_RECENT_DAYS (o dia de
+// hoje ainda está em andamento, gasto sobe ao longo do dia) e preenche até ML_ADS_MAX_BACKFILL
+// dias que ainda faltam na janela padrão, um pouco a cada ciclo em vez de tudo de uma vez (evita
+// um estouro de chamadas na primeira vez que isso roda). Devolve o gasto total do dia mais
+// recente só pra aparecer em report.ml_ads_spend (diagnóstico), não é usado em cálculo nenhum.
+const ML_ADS_RECENT_DAYS = 2;
+const ML_ADS_MAX_BACKFILL = 10;
+async function syncMlAdCostsDaily() {
+  const existing = getMlAdCostsDaily();
+  const { since } = defaultWindow();
+  const allDays = [];
+  for (let d = new Date(since + 'T00:00:00Z'); d <= new Date(); d.setUTCDate(d.getUTCDate() + 1)) {
+    allDays.push(d.toISOString().slice(0, 10));
+  }
+  const recent = allDays.slice(-ML_ADS_RECENT_DAYS);
+  const recentSet = new Set(recent);
+  const missing = allDays.filter(day => !existing[day] && !recentSet.has(day)).slice(0, ML_ADS_MAX_BACKFILL);
+  const toFetch = [...recent, ...missing];
+
+  const fetched = await ml.fetchAdCostsForDays(toFetch);
+  Object.assign(existing, fetched);
+  if (Object.keys(fetched).length) setMlAdCostsDaily(existing);
+  return fetched[recent[recent.length - 1]]?.spend || 0;
 }
 
 let syncInFlight = false;
@@ -129,12 +154,12 @@ async function doSync() {
     } catch (e) { report.errors.push('mercadolivre.orders: ' + e.message); }
   } else { report.disabled.push('mercadolivre'); }
 
-  // Mercado Livre — custo de anúncios (Product Ads API; retorna zeros se sem acesso)
+  // Mercado Livre — custo de anúncios por dia (Product Ads API; retorna zeros se sem acesso).
+  // Ver syncMlAdCostsDaily abaixo — dia a dia em vez de um valor único preso na janela do sync
+  // (bug antigo do ROAS/ACOS da Visão geral não respeitar o período, CLAUDE.md backlog).
   if (isIntegrationEnabled('mercadolivre_ads')) {
     try {
-      const adCosts = await ml.fetchAdCosts(since, until);
-      setMlAdCosts({ since, until, ...adCosts });
-      report.ml_ads_spend = adCosts.spend;
+      report.ml_ads_spend = await syncMlAdCostsDaily();
     } catch (e) { report.errors.push('mercadolivre.ads: ' + e.message); }
   } else { report.disabled.push('mercadolivre_ads'); }
 

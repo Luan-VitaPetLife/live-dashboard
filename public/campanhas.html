@@ -570,8 +570,9 @@ async function render() {
   // filtrada pelo período certo, que já alimenta os cards de campanha individuais logo abaixo) —
   // nunca mais de /api/dashboard pra essa tela. Antes, o card do Mercado Livre e o "Gasto Total"
   // geral liam mlBreakdown.adCost, um valor ÚNICO gravado pelo sync periódico numa janela fixa de
-  // 60 dias (kv.mlAdCosts, ver sync.js/CLAUDE.md) — por isso o "Gasto Ads" do ML nunca mudava com
-  // o período escolhido na tela, e o card resumo (ex: R$2.588) não batia com a soma das campanhas
+  // 60 dias (mesmo bug já corrigido pro dashboard principal com kv.mlAdCostsDaily, ver sync.js/
+  // metrics.js/CLAUDE.md) — por isso o "Gasto Ads" do ML nunca mudava com o período escolhido na
+  // tela, e o card resumo (ex: R$2.588) não batia com a soma das campanhas
   // mostradas embaixo dele (ex: R$290). O Meta tinha uma incoerência parecida, de origem diferente:
   // "Vendas atribuídas" vinha de kpis.metaRevenue (atribuição por origem do pedido no Shopify —
   // ver CLAUDE.md 4.4), um número bem menor que a soma da "Receita" que a própria Meta reporta

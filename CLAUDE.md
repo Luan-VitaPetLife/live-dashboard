@@ -164,6 +164,21 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   Precisa da permissão "Mercado Ads" no app + token re-autorizado; sem isso, 403 → zeros graciosos.
 - `mlBreakdown`: `{ organic, premium, adCost, adClicks, roas }`.
 - Re-autorizar via `/mercadolivre/connect` depois de cada novo deploy (token não sobrevive sozinho).
+- **Gasto do Mercado Ads por dia** (`fetchAdCostsForDays(days)`, sync.js `syncMlAdCostsDaily()`):
+  resolve o advertiser UMA vez e chama `campaigns/search` com `date_from=date_to=o mesmo dia`, um
+  dia por vez — reaproveita o parser já testado (`c.metrics || c`) em vez de arriscar
+  `aggregation_type=DAILY` (a API tem esse parâmetro, confirmado por busca, mas sem formato de
+  resposta documentado publicamente; adivinhar errado deturparia histórico de gasto sem ninguém
+  perceber, então preferimos o caminho mais lento e verificável). Guardado em
+  `kv.mlAdCostsDaily` (`{ [data]: {spend,clicks,impressions} }`, mesmo padrão do
+  `metaInsightsDaily`). Cada sync sempre reconfirma os últimos `ML_ADS_RECENT_DAYS` (2 — o dia de
+  hoje ainda está em andamento) e preenche até `ML_ADS_MAX_BACKFILL` (10) dias que ainda faltam na
+  janela de 60 dias, um pouco a cada ciclo em vez de tudo de uma vez (evita estourar chamadas na
+  primeira vez que isso roda). `mlBreakdown.adCost`/`.adClicks` (metrics.js) somam esse balde
+  dentro do período `since..until` selecionado na tela — antes vinha de um valor único
+  (`kv.mlAdCosts`, removido) preso na janela fixa do sync, então o ROAS/ACOS da Visão geral não
+  mudava com o período escolhido (bug do backlog "toggle Mercado Ads", corrigido 19/08/2026 — o
+  toggle em si já tinha sido removido antes, só a causa raiz ficou pra trás).
 
 ### Amazon SP-API (`src/amazon.js`)
 - Endpoint único `sellingpartnerapi-na.amazon.com` (região NA) serve BR e US. Auth: LWA token →
@@ -700,12 +715,12 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   Código pronto (`POST /api/amazon/images`).
 - **Amazon Ads e TikTok Shop:** integrações ainda não construídas, aparecem só como "Planejadas"
   na tela de Integrações.
-- **Toggle "Incluir Mercado Ads" no dashboard principal não respeita o período selecionado:**
-  lê `mlBreakdown.adCost`, um valor preso na janela fixa de 60 dias do sync periódico (mesma causa
-  já corrigida em Campanhas, que usa `/api/campaigns` ao vivo). Não corrigido aqui porque
-  `/api/dashboard` é, por design, o único endpoint que nunca depende de chamada externa em tempo
-  de request — corrigir exige ou quebrar esse princípio ou sincronizar o gasto do ML como série
-  diária (não confirmado se a API de Mercado Ads suporta isso).
+- ~~Toggle "Incluir Mercado Ads" no dashboard principal não respeita o período selecionado~~ —
+  feito (19/08/2026). O toggle em si já não existia mais (virou obrigatório a pedido do Luan, ver
+  Marketing abaixo); o que sobrava era a causa raiz: `mlBreakdown.adCost` lia um valor único preso
+  na janela fixa de 60 dias do sync periódico. Resolvido com série diária (`kv.mlAdCostsDaily`,
+  mesmo padrão do `metaInsightsDaily`) em vez de quebrar o princípio de `/api/dashboard` nunca
+  chamar API externa na hora — ver seção "Mercado Livre" (`fetchAdCostsForDays`) mais abaixo.
 - **Yucaloo sem conta de Ads própria:** não tem card em Campanhas nem ROAS calculado. Revisitar
   quando a marca tiver conta de anúncios própria.
 - **Decisão pendente:** pedidos `PENDING` (Pix/boleto aguardando) contam como receita hoje — Luan

@@ -1064,6 +1064,9 @@ function render(d) {
   // BR — deixou de ser opcional a pedido do Luan, "não deve ser uma escolha, é obrigatório").
   // Shopify/Shopify US: só Meta Ads (é quem leva tráfego pra lá). Mercado Livre: só Mercado
   // Ads dele mesmo (Meta não direciona venda pro ML). Shopee/Amazon: sem rastreamento de Ads ainda.
+  // d.mlBreakdown.adCost (metrics.js) soma kv.mlAdCostsDaily dentro do período selecionado — não
+  // é mais um valor único preso na janela fixa do sync (bug corrigido 19/08/2026, mesmo princípio
+  // do metaSpendDaily do Meta Ads logo acima).
   const ml = d.mlBreakdown || {};
   let roasVal = 0, roasAvail = false, roasLabel = '';
   if (d.channel === 'mercadolivre') {

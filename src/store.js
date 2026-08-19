@@ -28,7 +28,7 @@ const EMPTY = {
   metaUSInsightsDaily: {},
   shopeeTokens: null,
   mlTokens: null,
-  mlAdCosts: null,
+  mlAdCostsDaily: {},
   googleAdsTokens: null,
   blingTokens: null,
   yucalooTokens: {}, // { [market]: { shop, accessToken, scope, obtainedAt } } — OAuth via Dev Dashboard, ver shopifyYucaloo.js
@@ -129,7 +129,7 @@ export async function initStore() {
     for (const r of kv.rows) {
       if (r.key === 'shopeeTokens')         cache.shopeeTokens         = r.value;
       if (r.key === 'mlTokens')             cache.mlTokens             = r.value;
-      if (r.key === 'mlAdCosts')            cache.mlAdCosts            = r.value;
+      if (r.key === 'mlAdCostsDaily')       cache.mlAdCostsDaily       = r.value;
       if (r.key === 'googleAdsTokens')      cache.googleAdsTokens      = r.value;
       if (r.key === 'blingTokens')           cache.blingTokens           = r.value;
       if (r.key === 'yucalooTokens')         cache.yucalooTokens         = r.value;
@@ -632,12 +632,15 @@ export function setMlTokens(tokens) {
 }
 export function getMlTokens() { return load().mlTokens; }
 
-// ── ML Ads Costs ─────────────────────────────
-export function setMlAdCosts(data) {
-  const db = load(); db.mlAdCosts = data; saveJson();
-  if (USE_PG) pgKv('mlAdCosts', data);
+// ── Mercado Ads — gasto por dia ───────────────
+// { [data]: { spend, clicks, impressions } } — mesmo padrão do metaInsightsDaily. Substituiu um
+// valor único preso na janela fixa do sync (kv.mlAdCosts, removido) — o ROAS/ACOS da Visão geral
+// somava esse valor fixo mesmo trocando o período selecionado. Ver sync.js/CLAUDE.md.
+export function setMlAdCostsDaily(data) {
+  const db = load(); db.mlAdCostsDaily = data; saveJson();
+  if (USE_PG) pgKv('mlAdCostsDaily', data);
 }
-export function getMlAdCosts() { return load().mlAdCosts || null; }
+export function getMlAdCostsDaily() { return load().mlAdCostsDaily || {}; }
 
 // ── Tokens Google Ads ─────────────────────────
 export function setGoogleAdsTokens(tokens) {
