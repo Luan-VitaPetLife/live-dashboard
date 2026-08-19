@@ -228,7 +228,7 @@
         <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
     </div>
-    <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">—</span></div>
+    <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">Carregando…</span></div>
 
     <button class="sync-btn" id="syncBtn" title="Buscar dados novos agora"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações de cores"><i class="bi bi-gear-fill"></i></button>
@@ -896,7 +896,10 @@ function renderAggCard() {
 function render() {
   const d = current; if (!d) return;
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
-  setText('lastUpdate', 'sync: ' + updated);
+  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html;
+  // aqui ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho (pedido do Luan, 19/08/2026).
+  const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
+  setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
   setText('pageSub', `Coco and Luna · ${state.label} (${rangeLabelShort(d.since, d.until)}) · vendas reais do período`);
   setText('footerDate', `Coco and Luna · período ${state.label} · última sincronização: ${updated}`);
   renderAggCard();

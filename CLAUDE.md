@@ -367,6 +367,10 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   a soma de Mercado Livre + Meta + Amazon BR por design; confundiu o Luan (18/08/2026, "de onde vem
   esse R$10k") por ficar ao lado de "Vendas Atribuídas Geral"/"ROAS Geral" (que são soma dos
   canais de Ads) — sub-label deixado explícito ("todos os canais, não só Ads") pra não repetir.
+- Toggle de tipo de gráfico dos cards de canal (barra × linha, `.chart-type-btn`) fica acima da
+  lista de canais (`.camp-grid-tools`, logo antes de `#campGrid`), não no header — o header é só
+  filtro/config da página inteira, esse toggle controla só os mini-gráficos dos cards abaixo dele.
+  Pedido do Luan, 19/08/2026.
 
 ### Produtos (`public/produtos.html`)
 - Catálogo completo por canal, sem limite de top-N. Mescla pedidos do período com catálogo de
@@ -528,6 +532,14 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   18/08/2026) mantendo o nome de classe `.csel-opt` nas 6 páginas pra não mexer em handler de
   clique. `segmentos.html` continua com sua própria implementação (`.chan-pop`) por baixo — só
   igualado visualmente, não o código; um canal novo em `.csel-opt` não precisa de checkmark.
+- **Texto de última sincronização no header** (`#lastUpdate`, ao lado da bolinha `.ldot`): padrão é
+  `"Ao vivo · HH:MM"` (`Atualizando…`/`Erro` enquanto carrega/falha, `Carregando…` como texto
+  inicial antes do primeiro load) — já era assim em index.html/geografia.html/geografia-us.html/
+  segmentos.html. `campanhas.html`/`estoque.html`/`produtos.html` ainda mostravam
+  `"sync: DD/MM/AAAA, HH:MM:SS"` (cru, sem estado de loading/erro) — igualado ao padrão dos outros
+  4 (só o texto/formato; não ganharam a máquina de estado completa da bolinha, que era um trabalho
+  maior). Pedido do Luan, 19/08/2026: "deve ser um padrão entre todos os headers". O rodapé
+  (`#footerDate`) continua com data/hora completa — só o header precisa ser curto.
 - Arrastar para reordenar cards (Produtos/Estoque): a API nativa de Drag and Drop do HTML5 causou
   vários bugs (arraste não iniciava, duas cópias visuais do card) — foi trocada por um arraste
   customizado por ponteiro (`mousedown`/`mousemove`/`mouseup` + clone `position:fixed` seguindo o
