@@ -12,13 +12,23 @@
 //  a barra de progresso continua na tela"). Redimensionável pelas bordas;
 //  cada job em andamento tem um × pra cancelar (com confirmação) e cada
 //  job já terminado tem um × pra fechar (sem confirmação — só some da
-//  lista); o cabeçalho também tem um × pra fechar o widget inteiro —
-//  pedido do Luan, 19/08/2026.
+//  lista); o cabeçalho também tem um × pra fechar o widget inteiro. Fechar
+//  (job avulso ou o widget inteiro) sobrevive a trocar de página dentro da
+//  mesma aba (sessionStorage) — pedido do Luan, 19/08/2026.
 // ─────────────────────────────────────────────
 (function () {
   const POS_KEY = 'coco_jobs_widget_pos';
   const SIZE_KEY = 'coco_jobs_widget_size';
   const COLLAPSED_KEY = 'coco_jobs_widget_collapsed';
+  // Fechar (× de um job ou o × do cabeçalho) precisa sobreviver a trocar de página — antes só
+  // vivia em variável de memória, então voltava tudo do zero a cada navegação (relatado pelo
+  // Luan, 19/08/2026: "fecho e troco de página, ele volta a aparecer"). sessionStorage em vez de
+  // localStorage de propósito: precisa durar a navegação dentro da mesma aba/sessão, mas não pode
+  // durar PARA SEMPRE — se durasse, fechar um "amazon-backfill" hoje esconderia silenciosamente
+  // um "amazon-backfill" novo disparado daqui a uma semana (mesmo id, execução diferente); fechar
+  // a aba/navegador já limpa isso sozinho.
+  const DISMISSED_ALL_KEY = 'coco_jobs_widget_dismissed_all';
+  const DISMISSED_JOBS_KEY = 'coco_jobs_widget_dismissed_jobs';
   const POLL_MS = 3000;
   const HIDE_AFTER_DONE_MS = 8000;
   const MIN_W = 240, MIN_H = 130;
@@ -221,6 +231,7 @@
       e.stopPropagation();
       dismissed = true;
       dismissedKnownIds = new Set(lastRawJobs.map(j => j.id));
+      saveDismissedAll(true, dismissedKnownIds);
       widget.classList.remove('jw-show');
     });
 
@@ -246,6 +257,7 @@
       const dismissBtn = e.target.closest('.jw-job-dismiss[data-dismiss-id]');
       if (dismissBtn) {
         dismissedJobKeys.add(dismissBtn.dataset.dismissId + '|' + (dismissBtn.dataset.dismissFinished || ''));
+        saveDismissedJobs(dismissedJobKeys);
         render(lastRawJobs);
       }
     });
@@ -288,16 +300,42 @@
       + '</div>';
   }
 
+  function loadDismissedAll() {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(DISMISSED_ALL_KEY) || 'null');
+      if (raw && Array.isArray(raw.ids)) return { dismissed: true, ids: new Set(raw.ids) };
+    } catch (e) {}
+    return { dismissed: false, ids: new Set() };
+  }
+  function saveDismissedAll(isDismissed, idsSet) {
+    try {
+      if (isDismissed) sessionStorage.setItem(DISMISSED_ALL_KEY, JSON.stringify({ ids: [...idsSet] }));
+      else sessionStorage.removeItem(DISMISSED_ALL_KEY);
+    } catch (e) {}
+  }
+  function loadDismissedJobs() {
+    try {
+      const arr = JSON.parse(sessionStorage.getItem(DISMISSED_JOBS_KEY) || '[]');
+      if (Array.isArray(arr)) return new Set(arr);
+    } catch (e) {}
+    return new Set();
+  }
+  function saveDismissedJobs(set) {
+    try { sessionStorage.setItem(DISMISSED_JOBS_KEY, JSON.stringify([...set])); } catch (e) {}
+  }
+
   let lastAnyRunning = false;
   let hideTimer = null;
   let lastRawJobs = [];
   // Fechar o widget inteiro (×) só "pega de novo" quando aparece um job rodando que não estava
-  // na lista no momento do fechamento — ver comentário no listener do jwClose acima.
-  let dismissed = false;
-  let dismissedKnownIds = new Set();
+  // na lista no momento do fechamento — ver comentário no listener do jwClose abaixo. Restaurado
+  // do sessionStorage pra sobreviver a trocar de página dentro da mesma aba.
+  const initialDismissedAll = loadDismissedAll();
+  let dismissed = initialDismissedAll.dismissed;
+  let dismissedKnownIds = initialDismissedAll.ids;
   // Fechar um job já concluído/erro/cancelado individualmente (× na linha) — chave por
   // id+finishedAt, então uma execução NOVA do mesmo job (finishedAt diferente) volta a aparecer.
-  let dismissedJobKeys = new Set();
+  let dismissedJobKeys = loadDismissedJobs();
 
   function render(rawJobs) {
     lastRawJobs = rawJobs;
@@ -308,7 +346,7 @@
 
     if (dismissed) {
       const hasNewRunning = rawJobs.some(j => j.status === 'running' && !dismissedKnownIds.has(j.id));
-      if (hasNewRunning) dismissed = false;
+      if (hasNewRunning) { dismissed = false; saveDismissedAll(false, dismissedKnownIds); }
     }
 
     const jobs = rawJobs.filter(j => j.status === 'running' || !dismissedJobKeys.has(j.id + '|' + (j.finishedAt || '')));
