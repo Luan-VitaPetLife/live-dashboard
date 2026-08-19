@@ -1002,12 +1002,21 @@ function render(d) {
     } },
     series: ds,
   });
-  // Click → drilldown de canais
+  // Click → drilldown de canais. Usa getZr() (canvas bruto) + convertFromPixel em vez do 'click'
+  // de série do ECharts: esse último só dispara em cima do traço/ponto exatos, e a área
+  // preenchida acima da linha (bem comum num dia de valor baixo, sobra bastante espaço em
+  // branco no card) não conta como "em cima da série" — ficava parecendo quebrado, clique só
+  // funcionava se acertasse o pixel certo. O Chart.js antigo (getElementsAtEventForMode 'index')
+  // reagia a clique em qualquer lugar da coluna; convertFromPixel reproduz isso. Bug relatado
+  // pelo Luan, 19/08/2026, depois da migração pra ECharts.
   document.getElementById('trendDrilldown').style.display = 'none';
-  trendInst?.off('click');
-  trendInst?.on('click', params => {
+  trendInst?.getZr().off('click');
+  trendInst?.getZr().on('click', params => {
     if (!isChanDetail()) return;
-    const i = params.dataIndex;
+    const pt = trendInst.convertFromPixel({ seriesIndex: 0 }, [params.offsetX, params.offsetY]);
+    if (!pt) return;
+    const i = Math.round(pt[0]);
+    if (!(i >= 0) || i >= t.labels.length) return;
     showTrendDrilldown(t.labels[i], t.data[i], t.byChannel?.[i]||{}, money, d.metric);
   });
   document.getElementById('trendTitle').textContent = 'Tendência · ' + METRIC_LABEL[d.metric];

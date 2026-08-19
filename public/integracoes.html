@@ -623,7 +623,7 @@ async function loadHistory(){
     const r = await fetch('/api/amazon/history', { credentials:'same-origin' });
     if (!r.ok) throw new Error('http ' + r.status);
     const d = await r.json();
-    $('retPanelSub').textContent = 'Um número por mercado: quantos dias de pedido você quer ter guardado. Menos que hoje apaga o excesso (pede confirmação); mais que hoje busca o que falta na Amazon sozinho.';
+    $('retPanelSub').textContent = 'Digite quantos dias de pedidos você quer manter guardados. Um número menor apaga o excesso (pede confirmação); um número maior busca na Amazon o que estiver faltando.';
     $('retRows').innerHTML = ['us','br'].map(mkt => {
       const info = d[mkt] || { days: 0, totalOrders: 0, oldestOrderDays: null };
       const cap = mkt === 'us' ? 'Us' : 'Br';
