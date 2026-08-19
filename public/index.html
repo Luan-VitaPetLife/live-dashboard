@@ -279,6 +279,11 @@
     .metric-row{grid-template-columns:1fr 1fr}
     .tbl th:nth-child(3),.tbl td:nth-child(3),
     .tbl th:nth-child(4),.tbl td:nth-child(4){display:none}
+    /* A faixa de indicadores vira 2 colunas nesse tamanho (ver .kpi-strip-grid abaixo) — o texto
+       "vs. período anterior" ao lado do selo verde/vermelho não cabia mais numa linha só e
+       quebrava no meio, com o selo flutuando meio solto ao lado de um parágrafo de 2 linhas
+       (reportado pelo Luan, 19/08/2026, "pills verdes estranhos"). Empilhado, cada um fica legível. */
+    .kc-delta{flex-direction:column;align-items:flex-start;gap:2px}
   }
   @media(max-width:520px){
     .filter-pill .lbl{display:none}
@@ -839,6 +844,11 @@ function showTrendDrilldown(label, val, byChannel, money, metric) {
     <button class="drill-close" onclick="document.getElementById('trendDrilldown').style.display='none'" title="Fechar"><i class="bi bi-x-lg"></i></button>
   </div>${rows}`;
   el.style.display='block';
+  // No mobile os cards empilham em largura total — clicar no gráfico lá em cima e o resultado
+  // aparecer só depois de rolar a tela pra baixo parecia quebrado (reportado pelo Luan,
+  // 19/08/2026: "eu clico no gráfico lá em cima, e o card aparece lá embaixo"). `block:'nearest'`
+  // não mexe em nada se já estiver visível (desktop já vê sem rolar).
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ── App state ──
