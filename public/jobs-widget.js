@@ -9,9 +9,11 @@
 //  depois de tudo terminar. Continua visível ao navegar pra outra página
 //  (cada página carrega o script de novo, mas a posição/tamanho ficam em
 //  localStorage — pedido do Luan, 18/08/2026: "quando sair dessa página,
-//  a barra de progresso continua na tela"). Redimensionável pelas bordas
-//  e cada job tem um × pra cancelar (com confirmação) — pedido do Luan,
-//  19/08/2026.
+//  a barra de progresso continua na tela"). Redimensionável pelas bordas;
+//  cada job em andamento tem um × pra cancelar (com confirmação) e cada
+//  job já terminado tem um × pra fechar (sem confirmação — só some da
+//  lista); o cabeçalho também tem um × pra fechar o widget inteiro —
+//  pedido do Luan, 19/08/2026.
 // ─────────────────────────────────────────────
 (function () {
   const POS_KEY = 'coco_jobs_widget_pos';
@@ -43,9 +45,11 @@
     + '@keyframes jwSpin{to{transform:rotate(360deg)}}'
     + '.jw-title{font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;'
     + 'text-overflow:ellipsis;flex:1}'
-    + '.jw-toggle{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;'
+    + '.jw-toggle,.jw-close{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;'
     + 'width:18px;height:18px;line-height:1;flex-shrink:0;padding:0}'
     + '.jw-toggle:hover{color:var(--text)}'
+    + '.jw-close{font-size:15px}'
+    + '.jw-close:hover{color:var(--red,#9b3a3a)}'
     + '.jw-body{flex:1;min-height:0;overflow-y:auto;padding:4px}'
     + '.jw-job{padding:8px 10px;border-radius:8px}'
     + '.jw-job+.jw-job{margin-top:2px}'
@@ -80,6 +84,7 @@
     + '<span class="jw-spinner"></span>'
     + '<span class="jw-title" id="jwTitle">Processos</span>'
     + '<button class="jw-toggle" id="jwToggle" title="Minimizar/expandir">–</button>'
+    + '<button class="jw-close" id="jwClose" title="Fechar">×</button>'
     + '</div>'
     + '<div class="jw-body" id="jwBody"></div>'
     + '</div>';
@@ -97,6 +102,7 @@
     const widget = document.getElementById('jobsWidget');
     const head = document.getElementById('jwHead');
     const toggleBtn = document.getElementById('jwToggle');
+    const closeBtn = document.getElementById('jwClose');
     const body = document.getElementById('jwBody');
 
     // Posição/tamanho arrastados/redimensionados persistem entre páginas (localStorage) — sem
@@ -137,7 +143,7 @@
     // porque é um elemento só, não uma lista reordenável.
     let dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
     head.addEventListener('pointerdown', e => {
-      if (e.target === toggleBtn) return;
+      if (e.target === toggleBtn || e.target === closeBtn) return;
       dragging = true;
       const rect = widget.getBoundingClientRect();
       startX = e.clientX; startY = e.clientY;
@@ -207,18 +213,38 @@
       });
     });
 
-    // Cancelar um job (delegado no body, que é recriado a cada render) — confirmação antes de
-    // mandar, pedido do Luan 19/08/2026.
+    // Fechar o widget inteiro — pedido do Luan 19/08/2026 ("não consigo simplesmente fechar
+    // ela"). Diferente de minimizar: some de vez, e só volta a aparecer sozinho quando surgir um
+    // job rodando que não existia no momento do fechamento (senão o próprio ato de fechar nunca
+    // "pegaria" durante um processo longo, e o × ficaria inútil).
+    closeBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      dismissed = true;
+      dismissedKnownIds = new Set(lastRawJobs.map(j => j.id));
+      widget.classList.remove('jw-show');
+    });
+
+    // Cancelar um job em andamento (confirmação antes) ou fechar um já concluído/erro/cancelado
+    // (sem confirmação — não desfaz nada, só some da lista; some pra sempre até um novo job desse
+    // tipo rodar) — delegado no body, que é recriado a cada render. Pedido do Luan 19/08/2026:
+    // "não consigo fechar... a tarefa que deu erro".
     body.addEventListener('click', e => {
-      const btn = e.target.closest('.jw-job-cancel');
-      if (!btn) return;
-      const id = btn.dataset.cancelId;
-      const label = btn.dataset.cancelLabel || 'esse processo';
-      if (!confirm(`Cancelar "${label}"? O que já foi feito até agora fica salvo.`)) return;
-      btn.disabled = true;
-      fetch('/api/jobs/' + id + '/cancel', { method: 'POST', credentials: 'same-origin' })
-        .then(poll)
-        .catch(() => { btn.disabled = false; });
+      const cancelBtn = e.target.closest('.jw-job-cancel[data-cancel-id]');
+      if (cancelBtn) {
+        const id = cancelBtn.dataset.cancelId;
+        const label = cancelBtn.dataset.cancelLabel || 'esse processo';
+        if (!confirm(`Cancelar "${label}"? O que já foi feito até agora fica salvo.`)) return;
+        cancelBtn.disabled = true;
+        fetch('/api/jobs/' + id + '/cancel', { method: 'POST', credentials: 'same-origin' })
+          .then(poll)
+          .catch(() => { cancelBtn.disabled = false; });
+        return;
+      }
+      const dismissBtn = e.target.closest('.jw-job-dismiss[data-dismiss-id]');
+      if (dismissBtn) {
+        dismissedJobKeys.add(dismissBtn.dataset.dismissId + '|' + (dismissBtn.dataset.dismissFinished || ''));
+        render(lastRawJobs);
+      }
     });
 
     return widget;
@@ -245,13 +271,15 @@
       : error ? 'Erro: ' + (job.message || '')
       : cancelled ? 'Cancelado' + (job.message ? ': ' + job.message : '')
       : (job.message || 'em andamento…');
-    const cancelBtn = job.cancelable
+    const actionBtn = job.cancelable
       ? `<button class="jw-job-cancel" data-cancel-id="${esc(job.id)}" data-cancel-label="${esc(job.label)}" title="Cancelar">×</button>`
+      : !running
+      ? `<button class="jw-job-cancel jw-job-dismiss" data-dismiss-id="${esc(job.id)}" data-dismiss-finished="${esc(job.finishedAt || '')}" title="Fechar">×</button>`
       : '';
 
     return '<div class="jw-job ' + statusClass + '">'
       + '<div class="jw-job-top"><span class="jw-job-label">' + esc(job.label) + '</span>'
-      + '<span class="jw-job-by">' + by + '</span>' + cancelBtn + '</div>'
+      + '<span class="jw-job-by">' + by + '</span>' + actionBtn + '</div>'
       + '<div class="jw-bar-wrap"><div class="' + barClass + '" style="' + barWidth + '"></div></div>'
       + '<div class="jw-job-msg">' + esc(msg) + '</div>'
       + '</div>';
@@ -259,12 +287,28 @@
 
   let lastAnyRunning = false;
   let hideTimer = null;
+  let lastRawJobs = [];
+  // Fechar o widget inteiro (×) só "pega de novo" quando aparece um job rodando que não estava
+  // na lista no momento do fechamento — ver comentário no listener do jwClose acima.
+  let dismissed = false;
+  let dismissedKnownIds = new Set();
+  // Fechar um job já concluído/erro/cancelado individualmente (× na linha) — chave por
+  // id+finishedAt, então uma execução NOVA do mesmo job (finishedAt diferente) volta a aparecer.
+  let dismissedJobKeys = new Set();
 
-  function render(jobs) {
+  function render(rawJobs) {
+    lastRawJobs = rawJobs;
     const widget = document.getElementById('jobsWidget');
     if (!widget) return;
     const body = document.getElementById('jwBody');
     const title = document.getElementById('jwTitle');
+
+    if (dismissed) {
+      const hasNewRunning = rawJobs.some(j => j.status === 'running' && !dismissedKnownIds.has(j.id));
+      if (hasNewRunning) dismissed = false;
+    }
+
+    const jobs = rawJobs.filter(j => j.status === 'running' || !dismissedJobKeys.has(j.id + '|' + (j.finishedAt || '')));
     const running = jobs.filter(j => j.status === 'running');
     const anyRunning = running.length > 0;
 
@@ -278,7 +322,8 @@
       ? (running.length === 1 ? running[0].label : running.length + ' processos em andamento')
       : 'Processos concluídos';
     widget.querySelector('.jw-spinner').style.display = anyRunning ? '' : 'none';
-    widget.classList.add('jw-show');
+    if (dismissed) widget.classList.remove('jw-show');
+    else widget.classList.add('jw-show');
 
     if (anyRunning) {
       lastAnyRunning = true;
