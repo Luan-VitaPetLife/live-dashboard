@@ -228,39 +228,50 @@ export async function fetchOrders(sinceISO, untilISO) {
 // Retorna zeros graciosamente se o app não tiver permissão de Mercado Ads (403) ou sem campanhas.
 const ADS_HEADERS = { 'Api-Version': '1' };
 
-export async function fetchAdCosts(sinceISO, untilISO) {
-  const EMPTY_COSTS = { spend: 0, clicks: 0, impressions: 0 };
-  if (!isConfigured() || !getMlTokens()) return EMPTY_COSTS;
+// Busca o gasto de uma lista de DIAS específicos (date_from=date_to=o mesmo dia, uma chamada por
+// dia), reaproveitando a resolução do advertiser (evita repetir GET /advertising/advertisers uma
+// vez por dia). Alimenta kv.mlAdCostsDaily (sync.js) — dia a dia em vez de um valor único preso
+// na janela do sync, mesmo padrão do Meta Ads (metaInsightsDaily), pra o ROAS/ACOS da Visão geral
+// respeitar o período escolhido (ver CLAUDE.md backlog "Mercado Ads"). Feito com dias avulsos em
+// vez de aggregation_type=DAILY (que a API tem, mas sem formato de resposta documentado
+// publicamente — arriscado adivinhar o formato e deturpar histórico de gasto sem perceber);
+// isso reaproveita o mesmo parser de sempre, já testado. Um dia com erro não derruba os outros.
+export async function fetchAdCostsForDays(days) {
+  const out = {};
+  if (!isConfigured() || !getMlTokens() || !days.length) return out;
+  let advertiser;
   try {
-    // 1. Descobrir o advertiser de Product Ads (PADS) ligado a esta conta.
-    const advertiser = await getPadsAdvertiser();
-    if (!advertiser?.advertiser_id) {
-      console.warn('ML Ads: nenhum advertiser PADS vinculado a esta conta.');
-      return EMPTY_COSTS;
-    }
-    const { advertiser_id, site_id } = advertiser;
-
-    // 2. Métricas agregadas das campanhas no período.
-    const data = await apiGet(
-      `/marketplace/advertising/${site_id}/advertisers/${advertiser_id}/product_ads/campaigns/search`,
-      { date_from: sinceISO, date_to: untilISO, metrics: 'clicks,prints,cost', limit: 100 },
-      ADS_HEADERS,
-    );
-
-    const results = data.results || [];
-    const acc = results.reduce((a, c) => {
-      const m = c.metrics || c; // métricas podem vir aninhadas em "metrics" ou no próprio item
-      a.spend       += Number(m.cost   ?? 0);
-      a.clicks      += Number(m.clicks ?? 0);
-      a.impressions += Number(m.prints ?? m.impressions ?? 0);
-      return a;
-    }, { spend: 0, clicks: 0, impressions: 0 });
-
-    return acc;
+    advertiser = await getPadsAdvertiser();
   } catch (e) {
-    console.warn('ML Ads API indisponível (verifique permissão de Mercado Ads no app + reautorize):', e.message);
-    return EMPTY_COSTS;
+    console.warn('ML Ads: falha ao resolver advertiser —', e.message);
+    return out;
   }
+  if (!advertiser?.advertiser_id) {
+    console.warn('ML Ads: nenhum advertiser PADS vinculado a esta conta.');
+    return out;
+  }
+  const { advertiser_id, site_id } = advertiser;
+
+  for (const day of days) {
+    try {
+      const data = await apiGet(
+        `/marketplace/advertising/${site_id}/advertisers/${advertiser_id}/product_ads/campaigns/search`,
+        { date_from: day, date_to: day, metrics: 'clicks,prints,cost', limit: 100 },
+        ADS_HEADERS,
+      );
+      const results = data.results || [];
+      out[day] = results.reduce((a, c) => {
+        const m = c.metrics || c; // métricas podem vir aninhadas em "metrics" ou no próprio item
+        a.spend       += Number(m.cost   ?? 0);
+        a.clicks      += Number(m.clicks ?? 0);
+        a.impressions += Number(m.prints ?? m.impressions ?? 0);
+        return a;
+      }, { spend: 0, clicks: 0, impressions: 0 });
+    } catch (e) {
+      console.warn(`ML Ads (${day}) indisponível:`, e.message);
+    }
+  }
+  return out;
 }
 
 // Resolve o advertiser de Product Ads (PADS) ligado à conta. null se não houver/sem permissão.

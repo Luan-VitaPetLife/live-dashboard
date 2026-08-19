@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCosts, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode } from './us-states.js';
 import { normalizeBrState } from './br-states.js';
 
@@ -731,10 +731,13 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     roas: 0,
   };
   if (market === 'br') {
-    const mlAds = getMlAdCosts();
-    if (mlAds && mlAds.spend) {
-      mlBreakdown.adCost = mlAds.spend;
-      mlBreakdown.adClicks = mlAds.clicks || 0;
+    // Soma dia a dia dentro do período selecionado (kv.mlAdCostsDaily) — mesmo padrão já usado
+    // pro gasto do Meta Ads logo acima (metaDaily). Antes usava um valor único preso na janela
+    // fixa de 60 dias do sync automático (kv.mlAdCosts, removido): o ROAS/ACOS ficava sempre com
+    // o mesmo gasto não importa o período escolhido na tela. Ver CLAUDE.md backlog "Mercado Ads".
+    const mlDaily = getMlAdCostsDaily();
+    { let d = parseISO(since); const end = parseISO(until);
+      while (d <= end) { const k = isoUTC(d); const m = mlDaily[k]; if (m) { mlBreakdown.adCost += m.spend; mlBreakdown.adClicks += m.clicks; } d = addDays(d, 1); }
     }
     mlBreakdown.roas = mlBreakdown.adCost > 0
       ? (mlBreakdown.organic + mlBreakdown.premium) / mlBreakdown.adCost
