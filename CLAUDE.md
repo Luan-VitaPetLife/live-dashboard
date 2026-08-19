@@ -507,6 +507,19 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     pelo canal selecionado) — as duas fontes de verdade precisam concordar, senão um refresh de
     dado desfazia o expandido no ciclo seguinte; a condição virou `trendExpanded ||
     !channelSplitVisible`.
+- **Card Tráfego & conversão (index.html) — mesmo padrão "Geral" × "Por canal" + expandir do
+  card Tendência** (pedido do Luan, 19/08/2026), mas aqui "por canal" é sempre Coco and Luna ×
+  Yucaloo (as duas únicas marcas com dado de sessão — Shopee/ML/Amazon não têm nenhum) em vez da
+  lista de canais de venda. `aggregateSessions()` (metrics.js) já calculava `rCoco`/`rYuc` por dia
+  separadamente só pra somar; passou a devolver também `seriesCoco`/`seriesYucaloo` (mesmo formato
+  de `series`) no objeto de retorno, sempre calculado (não só quando channel="todos" — custa quase
+  nada por cima do que já era somado). `computeDashboard` repassa os dois em `traffic.seriesCoco`/
+  `traffic.seriesYucaloo`. No "Por canal" o eixo secundário de Conversão some (fica só sessões, uma
+  linha por marca) — mesma decisão de simplificar tomada pro Tendência (vários eixos/séries ao
+  mesmo tempo vira poluição). Cores reaproveitadas do mapeamento por canal já usado no card
+  "Canais" (`CocoColors.ch.shopify`/`shopify_us` pra Coco and Luna, `.yucaloo_br`/`yucaloo_us` pra
+  Yucaloo — market-dependent), nada novo. Toggle some sozinho fora de canal="todos", igual ao da
+  Tendência (um canal específico já filtrado zeraria a outra marca o tempo todo).
 - Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
   nativo. Frequência de atualização (`localStorage('coco_refresh')`) é compartilhada entre todas
   as páginas. Estado ativo do item é fundo escuro (`background:var(--ink)`), não checkmark — era

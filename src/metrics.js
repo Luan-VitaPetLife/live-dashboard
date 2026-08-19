@@ -160,7 +160,12 @@ function aggregateSessions(since, until, market = 'br', channel = 'todos') {
   const yucalooDaily = includeYucaloo ? (getYucalooSessionsDaily()[market] || {}) : {};
   let s = 0, v = 0, c = 0, ck = 0, cp = 0;
   let d = parseISO(since); const end = parseISO(until);
-  const series = [];
+  // seriesCoco/seriesYucaloo: mesmo formato de `series`, mas cada marca sozinha — alimenta o
+  // toggle "Por canal" do card Tráfego & conversão (index.html), pedido do Luan 19/08/2026,
+  // mesmo padrão já usado no card Tendência. Sempre calculado (não só quando channel="todos") —
+  // custa quase nada por cima do que já era somado, e evita duplicar a lógica quando o filtro
+  // muda; o front decide se usa ou não.
+  const series = [], seriesCoco = [], seriesYucaloo = [];
   while (d <= end) {
     const k = isoUTC(d);
     const rCoco = cocoDaily[k] || EMPTY_SESSION_ROW, rYuc = yucalooDaily[k] || EMPTY_SESSION_ROW;
@@ -168,10 +173,13 @@ function aggregateSessions(since, until, market = 'br', channel = 'todos') {
     const cart = rCoco.cart + rYuc.cart, checkout = rCoco.checkout + rYuc.checkout, completed = rCoco.completed + rYuc.completed;
     s += sessions; v += visitors; c += cart; ck += checkout; cp += completed;
     const [yy, mm, dd] = k.split('-');
-    series.push({ label: `${dd}/${mm}`, sessions, conv: sessions ? completed / sessions : 0 });
+    const label = `${dd}/${mm}`;
+    series.push({ label, sessions, conv: sessions ? completed / sessions : 0 });
+    seriesCoco.push({ label, sessions: rCoco.sessions, conv: rCoco.sessions ? rCoco.completed / rCoco.sessions : 0 });
+    seriesYucaloo.push({ label, sessions: rYuc.sessions, conv: rYuc.sessions ? rYuc.completed / rYuc.sessions : 0 });
     d = addDays(d, 1);
   }
-  return { sessions: s, visitors: v, cart: c, checkout: ck, completed: cp, conv: s ? cp / s : 0, series };
+  return { sessions: s, visitors: v, cart: c, checkout: ck, completed: cp, conv: s ? cp / s : 0, series, seriesCoco, seriesYucaloo };
 }
 
 function normSource(s) { if (!s || !s.trim()) return 'Direto'; const t = s.trim(); return t[0].toUpperCase() + t.slice(1); }
@@ -449,7 +457,8 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const hasSessionData =
     (market === 'br' && (channel === 'todos' || channel === 'shopify' || channel === 'yucaloo_br')) ||
     (market === 'us' && (channel === 'todos' || channel === 'shopify_us' || channel === 'yucaloo_us'));
-  const emptySess = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0, conv: 0, series: buckets.map(b => ({ label: b.label, sessions: 0, conv: 0 })) };
+  const emptySeries = buckets.map(b => ({ label: b.label, sessions: 0, conv: 0 }));
+  const emptySess = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0, conv: 0, series: emptySeries, seriesCoco: emptySeries, seriesYucaloo: emptySeries };
   const sess = hasSessionData ? aggregateSessions(since, until, market, channel) : emptySess;
   let trendLabels, trendData, trendTotal, trendFmt = metric === 'receita' ? 'money' : 'int';
   let trendByChannel = null;
@@ -747,7 +756,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     salesSplit,
     salesSplitByChannel,
     marketing: mktEntries.map(([name, value]) => ({ name, value })),
-    traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series },
+    traffic: { sessions: sess.sessions, visitors: sess.visitors, cart: sess.cart, conversion: sess.conv, series: sess.series, seriesCoco: sess.seriesCoco, seriesYucaloo: sess.seriesYucaloo },
     funnel: { sessions: sess.sessions, cart: sess.cart, checkout: sess.checkout, completed: sess.completed },
     topProducts,
     topProductsAll: allProducts,
