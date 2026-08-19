@@ -20,7 +20,7 @@
   body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
 
   /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
-  body.sidebar-hidden .main{margin-left:0}
+  body.sidebar-hidden .main{margin-left:64px}
   @media(max-width:768px){ .main{margin-left:0} .content{padding:16px} }
 
   .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}

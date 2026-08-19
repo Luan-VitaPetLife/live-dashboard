@@ -430,6 +430,22 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   IIFE — nunca duplicar CSS/markup deles numa página nova, sempre incluir o script
   (`confirm-modal.js` logo depois de `sidebar.js`, `jobs-widget.js` logo depois desse, em toda
   página exceto `login.html`).
+- **Sidebar colapsada = faixa de ícones (64px), não mais some da tela** (pedido do Luan,
+  19/08/2026, a partir de uma referência visual). Antes "esconder" fazia `transform:translateX(
+  -100%)` — a sidebar sumia por completo e um botão flutuante fora dela (`.sidebar-open-btn`)
+  reaparecia sobre o conteúdo da página pra reabrir; no `campanhas.html` ele ficava literalmente
+  em cima dos botões Brasil/EUA (bug relatado pelo Luan, mesmo dia). Agora colapsa via
+  `width:180px→64px` (`body.sidebar-hidden .sidebar`), sempre visível — o botão de
+  abrir/fechar (`#sidebarToggle`) mora DENTRO da sidebar nos dois estados, nunca mais um elemento
+  solto por cima da página; `.sidebar-open-btn` só existe pro caso mobile (sidebar de verdade some
+  via `transform`, overlay). Colapsada: texto de cada item (`.nav-text`) some, ícone fica
+  centralizado, hover mostra um balão com o rótulo (`content:attr(data-label)`, sem JS pra montar
+  tooltip — cada `.nav-item`/`#sideUser` carrega `data-label` já pronto). Logo vira só o ícone
+  (`favicon.png`, quadrado, no lugar do `Logo2.png` que é uma faixa larga). **Os 64px do rail
+  precisam bater com `body.sidebar-hidden .main{margin-left:64px}` em CADA página** (12 arquivos,
+  não centralizado) — as duas medidas são independentes e nada as amarra automaticamente; um canal
+  novo de layout ou uma página nova precisa lembrar de repetir esse valor, senão o conteúdo desliza
+  por baixo do rail (ou sobra um vão vazio de 64px quando expandida).
 - **Pop-up de confirmação** (`confirm-modal.js`, pedido do Luan 19/08/2026: o `confirm()` nativo
   do navegador — a barra cinza "site diz" — "não poderia acontecer"). `window.cocoConfirm(msg,
   {title, confirmText, cancelText, danger}) → Promise<boolean>` substitui todo `confirm()` nativo
