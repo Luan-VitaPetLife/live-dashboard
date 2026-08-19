@@ -37,7 +37,10 @@
   .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
   .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
 
-  /* ── Alternar tipo de gráfico dos cards de canal (barra x linha) ── */
+  /* ── Alternar tipo de gráfico dos cards de canal (barra x linha) — fica acima da lista de
+       canais, não mais no header (pedido do Luan, 19/08/2026). ── */
+  .camp-grid-tools{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .camp-grid-tools-label{font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)}
   .chart-toggle-wrap{display:flex;align-items:center;gap:4px}
   .chart-type-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s;font-size:13px}
   .chart-type-btn:hover{border-color:var(--ink);color:var(--text)}
@@ -221,11 +224,7 @@
       </button>
     </div>
 
-    <div class="chart-toggle-wrap" id="chartTypeToggle">
-      <button class="chart-type-btn active" data-type="bar" onclick="setCampChartType('bar')" title="Barras"><i class="bi bi-bar-chart-line"></i></button>
-      <button class="chart-type-btn" data-type="line" onclick="setCampChartType('line')" title="Linha"><i class="bi bi-graph-up"></i></button>
-    </div>
-    <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">Dados mockados</span></div>
+    <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">Carregando…</span></div>
 
     <button class="sync-btn" id="syncBtn" title="Buscar dados novos agora"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações de cores"><i class="bi bi-gear-fill"></i></button>
@@ -302,6 +301,16 @@
         <div class="kc-label">ROAS Geral</div>
         <div class="kc-roas" id="kpiRoas">—</div>
         <div class="kc-sub" id="kpiRoasSub">retorno sobre gasto</div>
+      </div>
+    </div>
+
+    <!-- Tipo de gráfico dos canais — tirado do header e colocado aqui, mais perto do que
+         controla (pedido do Luan, 19/08/2026). -->
+    <div class="camp-grid-tools">
+      <span class="camp-grid-tools-label">Gráfico dos canais</span>
+      <div class="chart-toggle-wrap" id="chartTypeToggle">
+        <button class="chart-type-btn active" data-type="bar" onclick="setCampChartType('bar')" title="Barras"><i class="bi bi-bar-chart-line"></i></button>
+        <button class="chart-type-btn" data-type="line" onclick="setCampChartType('line')" title="Linha"><i class="bi bi-graph-up"></i></button>
       </div>
     </div>
 
@@ -550,7 +559,10 @@ async function render() {
   const k = d.kpis || {}, ml = d.mlBreakdown || {}, cs = d.channelSplit || {};
   const labels = d.trend?.labels || [], tb = d.trend?.byChannel || [];
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
-  setText('lastUpdate', 'sync: ' + updated);
+  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html;
+  // aqui ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho (pedido do Luan, 19/08/2026).
+  const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
+  setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
   setText('pageSub', 'Coco and Luna · ' + state.label);
   setText('footerDate', `Coco and Luna · período ${state.label} · última sincronização: ${updated}`);
 
