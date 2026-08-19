@@ -56,8 +56,11 @@
   .ret-rows{display:flex;flex-direction:column;gap:8px}
   .ret-row{padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm)}
   .ret-row-main{display:flex;align-items:center;gap:14px}
-  .ret-row-logo{width:20px;height:20px;object-fit:contain;flex-shrink:0}
-  .ret-row-label{font-size:12px;font-weight:600;width:96px;flex-shrink:0;display:flex;align-items:center;gap:8px}
+  /* Altura fixa + largura livre, não caixa quadrada — mesmo motivo do .fam-head-logo acima:
+     Amazon_logo.png é uma faixa larga (ícone+nome, ~3.5:1), não um ícone quadrado; forçar
+     20x20 deixava a logo minúscula com vão vazio ao redor (reportado pelo Luan, 19/08/2026). */
+  .ret-row-logo{height:24px;width:auto;flex-shrink:0}
+  .ret-row-label{font-size:12px;font-weight:600;width:170px;flex-shrink:0;display:flex;align-items:center;gap:10px}
   .ret-row-label-text{display:flex;flex-direction:column;gap:1px}
   .ret-row-sub{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:2px}
   .ret-row-status{font-size:10px;color:var(--sub);margin-top:6px;min-height:12px}
@@ -201,6 +204,7 @@
 <body>
 
 <script src="sidebar.js"></script>
+<script src="confirm-modal.js"></script>
 <script src="jobs-widget.js"></script>
 
 <div class="main">
@@ -312,7 +316,7 @@ async function requestToggle(it, desired, revert){
   const question = desired
     ? 'Ativar ' + it.label + ' (' + COUNTRY_LABEL[it.country] + ')? A sincronização automática volta a rodar no próximo ciclo.'
     : 'Desativar ' + it.label + ' (' + COUNTRY_LABEL[it.country] + ')? A sincronização automática para de buscar dados novos desse canal. O que já está salvo continua no painel normalmente.';
-  if (!confirm(question)){ if (revert) revert(); return; }
+  if (!(await cocoConfirm(question, { title: desired ? 'Ativar integração' : 'Desativar integração' }))){ if (revert) revert(); return; }
   try{
     const r = await fetch('/api/integrations/' + encodeURIComponent(it.key) + '/toggle', {
       method:'POST', credentials:'same-origin',
@@ -648,7 +652,10 @@ async function applyHistory(market){
     if (!pr.ok) throw new Error(plan.error || 'falha ao calcular prévia');
 
     if (plan.action === 'prune' && plan.wouldDelete > 0){
-      const ok = confirm(`Isso vai apagar ${plan.wouldDelete.toLocaleString('pt-BR')} de ${plan.totalOrders.toLocaleString('pt-BR')} pedidos da Amazon ${RET_MARKET_LABEL[market]}, mantendo só os últimos ${days} dias. Essa ação não tem volta. Confirmar?`);
+      const ok = await cocoConfirm(
+        `Isso vai apagar ${plan.wouldDelete.toLocaleString('pt-BR')} de ${plan.totalOrders.toLocaleString('pt-BR')} pedidos da Amazon ${RET_MARKET_LABEL[market]}, mantendo só os últimos ${days} dias. Essa ação não tem volta.`,
+        { title: 'Apagar histórico antigo', confirmText: 'Apagar', danger: true }
+      );
       if (!ok){ btn.disabled = false; return; }
     }
 

@@ -185,6 +185,7 @@
 <body>
 
 <script src="sidebar.js"></script>
+<script src="confirm-modal.js"></script>
 <script src="jobs-widget.js"></script>
 <script src="colors.js"></script>
 
@@ -732,7 +733,7 @@ async function removeMember(name, title){
   }catch(e){ toast('Erro: ' + (e.message||'falha de rede'), true); }
 }
 async function deleteGroup(name){
-  if(!confirm(`Desfazer a unificação de "${name}"? Os produtos voltam a aparecer separados.`)) return;
+  if(!(await cocoConfirm(`Os produtos voltam a aparecer separados.`, { title: `Desfazer a unificação de "${name}"?` }))) return;
   try{
     const r = await fetch(`/api/product-groups?market=${encodeURIComponent(market)}&name=${encodeURIComponent(name)}`, { method:'DELETE', credentials:'same-origin' });
     const d = await r.json();

@@ -228,12 +228,15 @@
     // (sem confirmação — não desfaz nada, só some da lista; some pra sempre até um novo job desse
     // tipo rodar) — delegado no body, que é recriado a cada render. Pedido do Luan 19/08/2026:
     // "não consigo fechar... a tarefa que deu erro".
-    body.addEventListener('click', e => {
+    body.addEventListener('click', async e => {
       const cancelBtn = e.target.closest('.jw-job-cancel[data-cancel-id]');
       if (cancelBtn) {
         const id = cancelBtn.dataset.cancelId;
         const label = cancelBtn.dataset.cancelLabel || 'esse processo';
-        if (!confirm(`Cancelar "${label}"? O que já foi feito até agora fica salvo.`)) return;
+        const ok = window.cocoConfirm
+          ? await window.cocoConfirm('O que já foi feito até agora fica salvo.', { title: `Cancelar "${label}"?`, confirmText: 'Cancelar processo', danger: true })
+          : confirm(`Cancelar "${label}"? O que já foi feito até agora fica salvo.`);
+        if (!ok) return;
         cancelBtn.disabled = true;
         fetch('/api/jobs/' + id + '/cancel', { method: 'POST', credentials: 'same-origin' })
           .then(poll)

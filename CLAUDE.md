@@ -84,6 +84,7 @@ public/404.html          Página de erro 404 (rota desconhecida), ilustração 4
 public/sidebar.js        Sidebar compartilhada (IIFE, injeta markup + CSS + comportamento)
 public/colors.js         Sistema de cores compartilhado (IIFE) + color picker
 public/jobs-widget.js    Card flutuante de processos em segundo plano (IIFE), toda página
+public/confirm-modal.js  Pop-up de confirmação (substitui confirm() nativo, IIFE), toda página
 ```
 
 Fluxo: `sync.js` busca pedidos/sessões → grava no `store` → `metrics.js` calcula → `/api/*`
@@ -421,9 +422,17 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 
 ### Padrões de UI compartilhados
 - Sidebar (`sidebar.js`), sistema de cores (`colors.js`) e o widget de processos em segundo plano
-  (`jobs-widget.js`) são componentes injetados via IIFE — nunca duplicar CSS/markup deles numa
-  página nova, sempre incluir o script (`jobs-widget.js` logo depois de `sidebar.js`, em toda
+  (`jobs-widget.js`) e o pop-up de confirmação (`confirm-modal.js`) são componentes injetados via
+  IIFE — nunca duplicar CSS/markup deles numa página nova, sempre incluir o script
+  (`confirm-modal.js` logo depois de `sidebar.js`, `jobs-widget.js` logo depois desse, em toda
   página exceto `login.html`).
+- **Pop-up de confirmação** (`confirm-modal.js`, pedido do Luan 19/08/2026: o `confirm()` nativo
+  do navegador — a barra cinza "site diz" — "não poderia acontecer"). `window.cocoConfirm(msg,
+  {title, confirmText, cancelText, danger}) → Promise<boolean>` substitui todo `confirm()` nativo
+  usado pra ações destrutivas/importantes (desativar integração, apagar histórico Amazon, excluir
+  usuário/tipo/grupo, cancelar um job). `danger:true` deixa o botão de confirmar vermelho (ações
+  que realmente apagam dado). Sempre `await` — a função que chama precisa ser `async` (todos os
+  callers já eram).
 - **Widget de processos** (`jobs-widget.js`, pedido do Luan 18/08/2026): card flutuante,
   arrastável e redimensionável pelas bordas/cantos (posição e tamanho em `localStorage`) que
   aparece sozinho quando algo está rodando em segundo plano (backfill/imagens/itens da Amazon,

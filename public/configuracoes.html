@@ -140,6 +140,7 @@
 <body>
 
 <script src="sidebar.js"></script>
+<script src="confirm-modal.js"></script>
 <script src="jobs-widget.js"></script>
 
 <div class="main">
@@ -530,7 +531,7 @@ function userCardEl(u){
 }
 
 async function deleteUser(u){
-  if(!confirm(`Excluir o usuário "${u.name || u.username}"? Esta ação não pode ser desfeita.`)) return;
+  if(!(await cocoConfirm('Esta ação não pode ser desfeita.', { title: `Excluir o usuário "${u.name || u.username}"?`, confirmText: 'Excluir', danger: true }))) return;
   try{
     const r = await fetch('/api/users/' + encodeURIComponent(u.id), { method:'DELETE', credentials:'same-origin' });
     if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || 'http '+r.status); }

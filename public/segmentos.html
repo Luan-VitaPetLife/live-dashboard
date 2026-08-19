@@ -348,6 +348,7 @@
 <body>
 
 <script src="sidebar.js"></script>
+<script src="confirm-modal.js"></script>
 <script src="jobs-widget.js"></script>
 
 <div class="main">
@@ -1606,7 +1607,7 @@ async function trRemoveKeyword(name, keyword) {
   loadData();
 }
 async function trDeleteType(name) {
-  if (!confirm(`Excluir o tipo "${name}"? Os produtos voltam a cair em "Outros".`)) return;
+  if (!(await cocoConfirm('Os produtos voltam a cair em "Outros".', { title: `Excluir o tipo "${name}"?`, confirmText: 'Excluir', danger: true }))) return;
   const r = await fetch(`/api/product-types?market=${encodeURIComponent(market)}&name=${encodeURIComponent(name)}`, { method: 'DELETE', credentials: 'same-origin' });
   const d = await r.json();
   if (!r.ok) return;
