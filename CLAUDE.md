@@ -471,7 +471,14 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     job volta a aparecer). O cabeçalho do widget também ganhou um × pra fechar o card inteiro
     (`dismissed`/`dismissedKnownIds`, jobs-widget.js) — diferente de minimizar, só volta a aparecer
     sozinho quando surge um job rodando que não existia no momento do fechamento. Pedido do Luan,
-    19/08/2026: "não consigo simplesmente fechar ela ou a tarefa que eu deu erro".
+    19/08/2026: "não consigo simplesmente fechar ela ou a tarefa que eu deu erro". Os dois estados
+    de fechado (`dismissedJobKeys` e `dismissed`/`dismissedKnownIds`) ficam em `sessionStorage`
+    (`coco_jobs_widget_dismissed_jobs`/`_all`), não em variável de memória — senão sumia de volta
+    sozinho ao trocar de página, porque cada página reexecuta o script do zero (bug real relatado
+    pelo Luan, 19/08/2026, no dia seguinte ao ship). `sessionStorage` e não `localStorage` de
+    propósito: precisa sobreviver à navegação dentro da mesma aba, mas não pode durar pra sempre —
+    um fechamento permanente esconderia silenciosamente uma execução nova e genuína do mesmo tipo
+    de job dias depois (mesmo `id`, execução diferente); fechar a aba/navegador já limpa sozinho.
   - Painel "Amazon — Histórico" (Integrações): logo da Amazon (`Amazon_logo.png`) ao lado do rótulo
     BR/EUA em cada linha, mesmo padrão de logo já usado no card de Tráfego & conversão.
 - Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
