@@ -53,6 +53,7 @@ const EMPTY = {
   integrationsConfig: {}, // { [chave]: { enabled: bool } } — liga/desliga por integração, ver tela Integrações
   amazonRetentionConfig: {}, // { br: dias|undefined, us: dias|undefined } — janela de retenção por mercado, ver tela Integrações. Mercado ausente cai no legado AMAZON_RETENTION_DAYS (env var), ver sync.js.
   backupStatus: null, // último resultado do backup pra Backblaze B2 — ver src/backup.js
+  channelHealth: {}, // { [canal]: { failingSince, alerted, lastError } } — ver src/alerts.js
 };
 
 let cache = null;
@@ -158,6 +159,7 @@ export async function initStore() {
       if (r.key === 'integrationsConfig')    cache.integrationsConfig    = r.value;
       if (r.key === 'amazonRetentionConfig') cache.amazonRetentionConfig = r.value;
       if (r.key === 'backupStatus')          cache.backupStatus          = r.value;
+      if (r.key === 'channelHealth')         cache.channelHealth         = r.value;
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -302,6 +304,13 @@ export function setAmazonRetentionConfig(cfg) {
 export function getFullSnapshot() { return load(); }
 
 export function getBackupStatus() { return load().backupStatus; }
+
+// Saúde por canal (alerta de sync travado) — ver src/alerts.js.
+export function getChannelHealth() { return load().channelHealth || {}; }
+export function setChannelHealth(health) {
+  const db = load(); db.channelHealth = health; saveJson();
+  if (USE_PG) pgKv('channelHealth', health);
+}
 export function setBackupStatus(status) {
   const db = load(); db.backupStatus = status; saveJson();
   if (USE_PG) pgKv('backupStatus', status);

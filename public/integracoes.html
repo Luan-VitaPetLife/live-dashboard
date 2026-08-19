@@ -249,6 +249,17 @@
       <div id="backupFilesList"></div>
     </div>
 
+    <div class="ret-panel" id="alertsPanel">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+        <div>
+          <div class="ret-panel-title">Alerta de sincronização (Telegram)</div>
+          <div class="ret-panel-sub" id="alertsPanelSub">Carregando…</div>
+        </div>
+        <button class="ret-btn" id="alertsTestBtn" onclick="testAlertNow()">Enviar teste</button>
+      </div>
+      <div class="ret-backfill-status" id="alertsStatusMsg"></div>
+    </div>
+
     <div id="listArea">
       <div class="empty">Carregando integrações…</div>
     </div>
@@ -757,6 +768,40 @@ async function runBackupNow(){
   }
 }
 
+// ── Alerta de sincronização (Telegram) — ver src/alerts.js. Reaproveita GET /api/status
+// (mesma checagem já usada pra Bling/Amazon/etc.) em vez de um endpoint só pra isso. ────
+async function loadAlertsStatus(){
+  try{
+    const r = await fetch('/api/status', { credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok) throw new Error('http ' + r.status);
+    const configured = d.alerts?.configured;
+    $('alertsTestBtn').disabled = !configured;
+    $('alertsPanelSub').textContent = configured
+      ? 'Configurado — avisa no Telegram quando um canal fica travado sem sincronizar por horas.'
+      : 'Não configurado — faltam TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID nas variáveis do servidor.';
+  }catch(e){
+    $('alertsPanelSub').textContent = 'Não foi possível carregar o status do alerta.';
+  }
+}
+async function testAlertNow(){
+  const btn = $('alertsTestBtn');
+  btn.disabled = true;
+  $('alertsStatusMsg').textContent = 'Enviando…';
+  try{
+    const r = await fetch('/api/alerts/test', { method:'POST', credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
+    $('alertsStatusMsg').textContent = 'Enviado — confira o Telegram.';
+    toast('Alerta de teste enviado.');
+  }catch(e){
+    $('alertsStatusMsg').textContent = 'Erro: ' + (e.message || 'falha de rede');
+    toast('Erro ao enviar alerta: ' + (e.message || 'falha de rede'), true);
+  }finally{
+    btn.disabled = false;
+  }
+}
+
 (async function(){
   syncViewSwitch();
   await loadMe();
@@ -773,6 +818,7 @@ async function runBackupNow(){
     }
   }catch(e){}
   loadBackupStatus();
+  loadAlertsStatus();
 })();
 </script>
 </body>
