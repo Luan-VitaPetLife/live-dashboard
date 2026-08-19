@@ -77,25 +77,28 @@ window.initCollapsibleNotice = initCollapsibleNotice;
 <div id="sidebarOverlay" class="sidebar-overlay"></div>
 <nav class="sidebar">
   <div class="sidebar-header">
-    <button id="sidebarToggle" class="sidebar-close-btn" title="Fechar menu"><i class="bi bi-layout-sidebar-reverse"></i></button>
+    <button id="sidebarToggle" class="sidebar-close-btn" title="Fechar/expandir menu"><i class="bi bi-layout-sidebar-reverse"></i></button>
   </div>
   <div class="brand">
-    <a href="/" style="display:block;line-height:0"><img src="Logo2.png" alt="Coco and Luna" class="brand-logo"></a>
+    <a href="/" class="brand-link">
+      <img src="Logo2.png" alt="Coco and Luna" class="brand-logo">
+      <img src="favicon.png" alt="Coco and Luna" class="brand-icon">
+    </a>
     <span class="brand-name">Dashboard<br>Vita Pet Life · Coco and Luna</span>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
-    <a class="nav-item" data-page="index.html" href="/"><i class="bi bi-bar-chart-line nav-icon"></i> Visão geral</a>
-    <a class="nav-item" data-page="segmentos.html" href="/segmentos"><i class="bi bi-pie-chart nav-icon"></i> Segmentos</a>
-    <a class="nav-item" data-page="geografia.html" href="/geografia"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></a>
-    <a class="nav-item" data-page="geografia-us.html" href="/geografia-us"><i class="bi bi-map nav-icon"></i> Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></a></div>
+    <a class="nav-item" data-page="index.html" data-label="Visão geral" href="/"><i class="bi bi-bar-chart-line nav-icon"></i><span class="nav-text">Visão geral</span></a>
+    <a class="nav-item" data-page="segmentos.html" data-label="Segmentos" href="/segmentos"><i class="bi bi-pie-chart nav-icon"></i><span class="nav-text">Segmentos</span></a>
+    <a class="nav-item" data-page="geografia.html" data-label="Geografia BR" href="/geografia"><i class="bi bi-map nav-icon"></i><span class="nav-text">Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></span></a>
+    <a class="nav-item" data-page="geografia-us.html" data-label="Geografia EUA" href="/geografia-us"><i class="bi bi-map nav-icon"></i><span class="nav-text">Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></span></a></div>
   <div class="nav-group"><div class="nav-label">Operações</div>
-    <a class="nav-item" data-page="produtos.html" href="/produtos"><i class="bi bi-box-seam nav-icon"></i> Produtos</a>
-    <a class="nav-item" data-page="estoque.html" href="/estoque"><i class="bi bi-layers nav-icon"></i> Estoque</a>
-    <a class="nav-item"><i class="bi bi-wallet2 nav-icon"></i> Financeiro</a></div>
+    <a class="nav-item" data-page="produtos.html" data-label="Produtos" href="/produtos"><i class="bi bi-box-seam nav-icon"></i><span class="nav-text">Produtos</span></a>
+    <a class="nav-item" data-page="estoque.html" data-label="Estoque" href="/estoque"><i class="bi bi-layers nav-icon"></i><span class="nav-text">Estoque</span></a>
+    <a class="nav-item" data-label="Financeiro"><i class="bi bi-wallet2 nav-icon"></i><span class="nav-text">Financeiro</span></a></div>
   <div class="nav-group"><div class="nav-label">Marketing</div>
-    <a class="nav-item" data-page="campanhas.html" href="/campanhas"><i class="bi bi-megaphone nav-icon"></i> Campanhas</a></div>
+    <a class="nav-item" data-page="campanhas.html" data-label="Campanhas" href="/campanhas"><i class="bi bi-megaphone nav-icon"></i><span class="nav-text">Campanhas</span></a></div>
   <div class="nav-group" id="navGroupSistema"><div class="nav-label">Sistema</div>
-    <a class="nav-item" data-page="configuracoes.html" href="/configuracoes" id="navConfig" style="display:none"><i class="bi bi-gear nav-icon"></i> Configurações</a></div>
+    <a class="nav-item" data-page="configuracoes.html" data-label="Configurações" href="/configuracoes" id="navConfig" style="display:none"><i class="bi bi-gear nav-icon"></i><span class="nav-text">Configurações</span></a></div>
   <div class="side-user" id="sideUser" style="display:none"></div>
 </nav>
 <button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-layout-sidebar"></i></button>`;
@@ -105,28 +108,55 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   // de tema (--side-*, --border2, etc.) definidas no :root de cada página. As páginas de
   // Geografia sobrescrevem só o z-index (`body .sidebar{z-index:3000}`, maior especificidade)
   // por causa das camadas do Leaflet. Ver CLAUDE.md (backlog "CSS da sidebar duplicado").
+  // Colapsada, a sidebar não some mais da tela (era transform:translateX(-100%), some por
+  // completo, e um botão flutuante fora dela — .sidebar-open-btn — reaparecia por cima do
+  // conteúdo da página pra reabrir; ficava em cima dos seletores de país em campanhas.html,
+  // reportado pelo Luan 19/08/2026). Agora colapsa pra uma faixa fina só de ícones (width
+  // 180px→64px, padrão pedido pelo Luan a partir de uma referência visual) — o botão de
+  // abrir/fechar continua dentro da própria sidebar nos dois estados, nunca mais um elemento
+  // solto flutuando por cima da página. Os 64px aqui precisam bater com o `margin-left` de
+  // `body.sidebar-hidden .main` em cada página (ver CLAUDE.md) — as duas precisam concordar,
+  // senão o conteúdo da página desliza por baixo da faixa de ícones (ou sobra um vão vazio).
   const baseCss = `
-.sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:transform .25s cubic-bezier(.4,0,.2,1)}
-.brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px}
+.sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:width .25s cubic-bezier(.4,0,.2,1)}
+.brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px;transition:padding .2s}
+.brand-link{display:block;line-height:0}
 .brand-logo{width:72px;height:auto}
-.brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center}
+.brand-icon{display:none;width:30px;height:30px;border-radius:8px}
+.brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center;white-space:nowrap}
 .nav-group{margin-bottom:24px}
-.nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px}
-.nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:all .15s;text-decoration:none}
+.nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px;white-space:nowrap}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:background .15s,color .15s;text-decoration:none;position:relative}
 .nav-item:hover{background:var(--side-hover);color:var(--side-text)}
 .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
 .nav-icon{font-size:15px;width:16px;text-align:center;flex-shrink:0;line-height:1;opacity:.75}
-.sidebar-header{display:flex;justify-content:flex-end;padding:6px 10px 0}
-.sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(240,235,224,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
+.nav-text{white-space:nowrap}
+.sidebar-header{display:flex;justify-content:flex-end;padding:6px 10px 0;transition:padding .2s}
+.sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(240,235,224,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s;flex-shrink:0}
 .sidebar-close-btn:hover{background:rgba(240,235,224,.12);color:rgba(240,235,224,.9)}
 .sidebar-open-btn{display:none;position:fixed;left:12px;top:11px;z-index:300;width:36px;height:32px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(30,28,24,.1);transition:all .15s}
 .sidebar-open-btn:hover{border-color:var(--ink);color:var(--text)}
-body.sidebar-hidden .sidebar-open-btn{display:flex}
 body.sidebar-mobile-open .sidebar-open-btn{display:none!important}
 .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;opacity:0;pointer-events:none;transition:opacity .25s}
 body.sidebar-mobile-open .sidebar-overlay{opacity:1;pointer-events:auto}
 body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
-body.sidebar-hidden .sidebar{transform:translateX(-100%)}
+
+/* ── Estado colapsado (desktop): faixa de 64px só com ícones, mesmo padrão da referência que o
+     Luan trouxe (19/08/2026) — logo vira só o ícone, textos somem, hover mostra um balão com o
+     rótulo (mesmo texto do item, via data-label, sem precisar de JS pra montar tooltip). ── */
+body.sidebar-hidden .sidebar{width:64px}
+body.sidebar-hidden .sidebar-header{justify-content:center;padding:6px 0 0}
+body.sidebar-hidden .brand{padding:18px 8px 20px}
+body.sidebar-hidden .brand-logo{display:none}
+body.sidebar-hidden .brand-icon{display:block}
+body.sidebar-hidden .brand-name{display:none}
+body.sidebar-hidden .nav-label{display:none}
+body.sidebar-hidden .nav-group{margin-bottom:14px}
+body.sidebar-hidden .nav-item{justify-content:center;padding:9px 0}
+body.sidebar-hidden .nav-text{display:none}
+body.sidebar-hidden .nav-item::after{content:attr(data-label);position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:10px;background:#000;color:#fff;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:500;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:210}
+body.sidebar-hidden .nav-item:hover::after{opacity:1}
+
 @media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar-open-btn{display:flex}}
 `;
   const css = baseCss
@@ -140,6 +170,11 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
     + '.sidebar .side-user-role.admin{color:var(--side-text)}'
     + '.sidebar .side-logout{background:none;border:none;color:var(--side-muted);cursor:pointer;font-size:14px;padding:4px;line-height:1}'
     + '.sidebar .side-logout:hover{color:var(--side-text)}'
+    // Colapsada: só o avatar (mesmo padrão de "ícone só + tooltip" dos itens de navegação acima).
+    + 'body.sidebar-hidden .sidebar .side-user{padding:12px 0;justify-content:center;position:relative}'
+    + 'body.sidebar-hidden .sidebar .side-user-info,body.sidebar-hidden .sidebar .side-logout{display:none}'
+    + 'body.sidebar-hidden .sidebar .side-user::after{content:attr(data-label);position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:10px;background:#000;color:#fff;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:500;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:210}'
+    + 'body.sidebar-hidden .sidebar .side-user:hover::after{opacity:1}'
     // pageLoaderHtml() — anel colorido animado (ver função no topo do arquivo).
     + '.page-loader{display:flex;align-items:center;justify-content:center;padding:18px 0}'
     + '.page-loader .pl{width:48px;height:48px}'
@@ -321,6 +356,7 @@ body.sidebar-hidden .sidebar{transform:translateX(-100%)}
     const box = document.getElementById('sideUser');
     if (box && user) {
       const isAdmin = user.role === 'admin';
+      box.dataset.label = user.name || user.username || ''; // tooltip da sidebar colapsada
       const avatar = document.createElement('div');
       avatar.className = 'side-avatar';
       avatar.style.background = avatarColor(user.name);
