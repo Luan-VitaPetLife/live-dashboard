@@ -109,9 +109,29 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 ### Receita
 - ShopifyQL (`FROM sales`) conta pedidos cancelados/expirados e não tem como filtrar por status —
   por isso receita/pedidos/ticket/tendência/top-produtos vêm da API GraphQL de pedidos, não do
-  ShopifyQL. `isCancelled`: `cancelledAt != null` OU `displayFinancialStatus ∈ {EXPIRED,VOIDED,CANCELLED}`.
-  Valor do pedido = `currentTotalPriceSet.shopMoney.amount` (já vem líquido de devolução).
-- Pedidos `PENDING` (Pix/boleto aguardando) hoje contam como receita — decisão em aberto, ver seção 9.
+  ShopifyQL. `isCancelled` (metrics.js) é só `o.cancelled` — cada canal já decide isso na origem
+  (ver abaixo), não recalculado aqui.
+- **Só pedido com pagamento de verdade recebido conta como venda** (decisão de negócio,
+  28/07/2026 — resolve a antiga "decisão em aberto" sobre `PENDING`). `cancelled: true` em TODOS
+  os canais cobre tanto cancelamento de verdade quanto "nunca foi pago" — os dois saem juntos de
+  receita/pedidos/ticket/produtos/geografia (mesmo flag, filtrado em todo lugar por
+  `isCancelled`). Por canal:
+  - Shopify (BR/US/Yucaloo, `shopify.js`, `CANCELLED` set): `EXPIRED`, `VOIDED`, `CANCELLED`,
+    `PENDING` (Pix/boleto aguardando, pode falhar), `AUTHORIZED` (cartão autorizado mas NÃO
+    capturado, dinheiro ainda não foi cobrado) — `cancelledAt` também conta.
+    `PAID`/`PARTIALLY_PAID`/`PARTIALLY_REFUNDED`/`REFUNDED` continuam contando (teve pagamento
+    real; devolução já se ajusta sozinha, ver mais abaixo).
+  - Shopee (`shopee.js`): `CANCELLED`, `UNPAID`, `INVOICE_PENDING`.
+  - Mercado Livre (`mercadolivre.js`): `cancelled`, `invalid`, `confirmed`, `payment_required`,
+    `payment_in_process`.
+  - Amazon (`amazon.js`, Orders API e Reports API): `Canceled`/`Cancelled`, `Pending`,
+    `PendingAvailability`.
+  - `UNPAID_STATUS_BY_CHANNEL` (store.js) é só um subconjunto — mesmos status acima, mas
+    separados por "não pago" (rótulo "Em aberto" na busca de pedidos) de cancelamento de verdade,
+    cosmético (`statusLabelPt`), não afeta nenhum cálculo. `fixUnpaidOrders()`
+    (`POST /api/orders/fix-unpaid`) corrigiu o `cancelled` de pedidos já gravados ANTES dessa
+    decisão existir (sync incremental não retoca pedido que não mudou de status sozinho) — já
+    rodou em produção, `fixed:0` (nenhum pedido pra corrigir), nada pendente aqui.
 - Quantidade/receita por produto usa `LineItem.currentQuantity` (não `quantity`, que inclui
   devolvido) e desconta reembolso do `discountedTotalSet` via `order.refunds`.
 
@@ -723,8 +743,6 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   chamar API externa na hora — ver seção "Mercado Livre" (`fetchAdCostsForDays`) mais abaixo.
 - **Yucaloo sem conta de Ads própria:** não tem card em Campanhas nem ROAS calculado. Revisitar
   quando a marca tiver conta de anúncios própria.
-- **Decisão pendente:** pedidos `PENDING` (Pix/boleto aguardando) contam como receita hoje — Luan
-  decide se quer só pagos.
 - **Microsoft Clarity:** o Luan tem Clarity conectado nos 4 sites (Coco BR/EUA, Yucaloo BR/EUA) e
   quer avaliar trazer os dados pra uma página própria da dashboard. Ainda não iniciado — falta
   decidir os project ID/token de cada site. Limitação já identificada: a API pública do Clarity só
