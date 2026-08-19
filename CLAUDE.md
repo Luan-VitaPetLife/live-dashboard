@@ -68,6 +68,7 @@ src/us-states.js         normalizeUsState(): reduz grafias de estado dos EUA a 2
 src/auth.js              Login: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página
 src/sync.js              Orquestra a busca de todos os canais e grava no store
 src/backup.js            Backup diário do banco pra Backblaze B2 (API nativa, sem SDK)
+src/alerts.js            Alerta no Telegram quando um canal fica travado sem sincronizar
 scripts/restore-backup.mjs  Restaura o banco a partir de um backup do B2 (destrutivo, pede confirmação)
 public/index.html        Dashboard principal (Revenue)
 public/campanhas.html    Gastos reais por canal + campanhas
@@ -642,6 +643,8 @@ Railway — nunca colar valor aqui, só o nome da variável e pra que serve.
 | `B2_KEY_ID` / `B2_APPLICATION_KEY` / `B2_BUCKET_NAME` | Backup diário do banco (Backblaze B2) — ver `src/backup.js` |
 | `BACKUP_RETENTION_DAYS` | Quantos backups diários manter no B2 (padrão 30) |
 | `BACKUP_EVERY_HOURS` | Intervalo mínimo entre backups automáticos (padrão 24) |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Alerta quando um canal fica travado sem sincronizar — ver `src/alerts.js` |
+| `ALERT_STALE_HOURS` | Horas de falha seguida antes do primeiro alerta (padrão 6) |
 
 Armadilhas conhecidas: `read_analytics` ausente faz `shopifyqlQuery` sumir do schema sem erro.
 Amazon `CreatedBefore` precisa ficar ≥2min no passado. IAM User precisa de `sts:AssumeRole` no
@@ -664,6 +667,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `GET/POST /api/amazon/history` (admin) · `GET /api/amazon/history/preview` — histórico por
   mercado (poda OU busca, decide sozinho), ver tela Integrações
 - `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
+- `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
 - `GET /shopee/connect` · `GET /mercadolivre/connect` · `GET /googleads/connect`
 - `GET /shopify-yucaloo/:mkt(br|us)/{connect,callback}` — chamadas pela própria Shopify
 - `POST /api/login` / `POST /api/logout` / `GET /api/me`
@@ -716,9 +720,18 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 ### aplicam aqui, a dashboard é interna e atrás de login; pedido do Luan em 17/08/2026)
 - ~~Página de erro 404~~ — feito (`public/404.html`, ilustração `404.png`, trocada de
   `Feno_no_deserto.svg` a pedido do Luan em 18/08/2026).
-- **Alerta quando um sync falha silenciosamente:** hoje o erro só aparece no log do Railway
-  (`console.error('Sync falhou:', ...)`, ver server.js) — ninguém é avisado ativamente. Um canal
-  parado de sincronizar por dias pode passar despercebido até alguém notar dado desatualizado.
+- ~~Alerta quando um sync falha silenciosamente~~ — feito (19/08/2026). `src/alerts.js`: Telegram
+  via `fetch` direto (sem SDK, mesma regra do B2/SigV4 da Amazon). Só entra no sync AUTOMÁTICO
+  (`setInterval` em server.js) — um "Sincronizar agora" manual já mostra o erro na hora pra quem
+  clicou. Não alerta na primeira falha isolada (rate limit passageiro, blip de rede): agrupa os
+  erros de `report.errors` (sync.js) pelo prefixo antes do primeiro `.` — um canal com 3
+  sub-operações falhando (orders/sessions/catalog) vira UM alerta, não três — e só dispara depois
+  de `ALERT_STALE_HOURS` (padrão 6h) falhando sem parar (`kv.channelHealth`, `failingSince`/
+  `alerted` por canal). Manda um segundo aviso quando o canal volta a sincronizar (só se o
+  primeiro alerta de problema já tinha saído, senão fica calado). Canal desligado pela tela
+  Integrações não conta como falha. Painel em Integrações (mesmo padrão do card de Backup): status
+  configurado/não + botão "Enviar teste" (`POST /api/alerts/test`), pra confirmar
+  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` sem esperar um canal ficar horas travado de verdade.
 - **Log de auditoria de edição:** login/permissão por página já existem (`src/auth.js`), mas não há
   registro de QUEM mudou um valor (COG, estoque manual, grupo do Unificador, config de
   integração) nem QUANDO. Hoje só o valor final fica salvo.

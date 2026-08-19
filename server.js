@@ -18,6 +18,7 @@ import * as bling from './src/bling.js';
 import * as shopifyYucaloo from './src/shopifyYucaloo.js';
 import * as auth from './src/auth.js';
 import { runBackup, runBackupIfDue, isConfigured as isBackupConfigured, listBackups } from './src/backup.js';
+import { checkSyncHealth, isConfigured as isAlertsConfigured, sendTelegramMessage } from './src/alerts.js';
 import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -900,6 +901,19 @@ app.post('/api/backup/run', requireAdmin, async (req, res) => {
   }
 });
 
+// Alerta de sync travado via Telegram (src/alerts.js) — POST manda uma mensagem de teste, pra
+// confirmar TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID sem esperar um canal ficar horas travado de verdade.
+app.post('/api/alerts/test', requireAdmin, async (req, res) => {
+  if (!isAlertsConfigured()) return res.status(400).json({ error: 'Alerta não configurado (faltam TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID).' });
+  try {
+    const by = req.authUser?.name || req.authUser?.username || 'alguém';
+    await sendTelegramMessage(`🔔 Teste de alerta disparado por ${by} — se você recebeu isso, está tudo certo.`);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Correção pontual (28/07/2026): só pedido com pagamento de verdade conta como venda
 // (CLAUDE.md 4.1) — pedido já gravado com status "sem pagamento" (Pending/
 // PendingAvailability na Amazon, PENDING/AUTHORIZED no Shopify, confirmed/
@@ -1306,6 +1320,11 @@ app.get('/api/status', (_req, res) => {
       authorized: Boolean(db.blingTokens),
       geo: destaleJob('bling-geo', geoStatus), // última rodada de reconcileGeoFromBling (preenche state via Bling)
     },
+    alerts: {
+      // Telegram — avisa quando um canal fica travado sem sincronizar (src/alerts.js).
+      configured: isAlertsConfigured(),
+      hasCreds:   has('TELEGRAM_BOT_TOKEN') && has('TELEGRAM_CHAT_ID'),
+    },
     lastSync: db.lastSync || null,
   });
 });
@@ -1507,9 +1526,12 @@ auth.initAuth();
 
 app.listen(PORT, () => {
   console.log(`Dashboard rodando em http://localhost:${PORT}`);
-  runSync().then(r => console.log('Sync inicial:', r)).catch(e => console.error('Sync inicial falhou:', e.message));
+  runSync().then(r => { console.log('Sync inicial:', r); checkSyncHealth(r); }).catch(e => console.error('Sync inicial falhou:', e.message));
   const minutes = Number(process.env.SYNC_INTERVAL_MINUTES || 15);
-  setInterval(() => runSync().then(r => console.log('Sync:', r)).catch(e => console.error('Sync falhou:', e.message)), minutes * 60 * 1000);
+  // checkSyncHealth (src/alerts.js) só entra no sync AUTOMÁTICO/agendado — é o único que roda sem
+  // ninguém olhando. Um "Sincronizar agora" manual já mostra o erro na hora pra quem clicou, não
+  // precisa do alerta assíncrono de canal travado por horas.
+  setInterval(() => runSync().then(r => { console.log('Sync:', r); checkSyncHealth(r); }).catch(e => console.error('Sync falhou:', e.message)), minutes * 60 * 1000);
 
   // Reconciliação de nomes de produto da Amazon (Reports API, balde de cota próprio —
   // ver CLAUDE.md 4.7.6 / backlog item 8). Job separado do sync de pedidos para não
