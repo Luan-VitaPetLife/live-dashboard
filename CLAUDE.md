@@ -481,6 +481,16 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     de job dias depois (mesmo `id`, execução diferente); fechar a aba/navegador já limpa sozinho.
   - Painel "Amazon — Histórico" (Integrações): logo da Amazon (`Amazon_logo.png`) ao lado do rótulo
     BR/EUA em cada linha, mesmo padrão de logo já usado no card de Tráfego & conversão.
+- **Clique num gráfico ECharts pra abrir um drilldown** (ex.: clicar na Tendência mostra o
+  detalhamento por canal daquele dia): usar `chart.getZr().on('click', ...)` +
+  `chart.convertFromPixel({seriesIndex}, [offsetX, offsetY])`, NÃO `chart.on('click', ...)` — o
+  `click` de série do ECharts só dispara em cima do traço/ponto exatos (o Chart.js antigo reagia a
+  clique em qualquer lugar da coluna, `getElementsAtEventForMode(...,'index',...)`); num gráfico de
+  linha com área preenchida, um dia de valor baixo deixa bastante espaço em branco por cima da
+  curva que não conta como "em cima da série" — parecia quebrado (clique não fazia nada na maior
+  parte do card), só funcionava acertando o pixel exato do traço. Bug relatado pelo Luan,
+  19/08/2026, depois da migração Chart.js → ECharts (index.html, toggle "Mostrar canais ao clicar
+  no gráfico de tendência").
 - Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
   nativo. Frequência de atualização (`localStorage('coco_refresh')`) é compartilhada entre todas
   as páginas. Estado ativo do item é fundo escuro (`background:var(--ink)`), não checkmark — era
