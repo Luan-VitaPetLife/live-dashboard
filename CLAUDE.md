@@ -446,6 +446,13 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   não centralizado) — as duas medidas são independentes e nada as amarra automaticamente; um canal
   novo de layout ou uma página nova precisa lembrar de repetir esse valor, senão o conteúdo desliza
   por baixo do rail (ou sobra um vão vazio de 64px quando expandida).
+  - **Mobile**: `.sidebar-open-btn` (o botão que abre a sidebar no celular, já que lá ela some de
+    verdade via overlay) é `position:fixed`, fora do fluxo de qualquer página — sem reservar
+    espaço pra ele, ficava sobreposto aos primeiros pills do topbar (seletor de país, por
+    exemplo). Em vez de mexer nas 12 páginas, a regra mora centralizada no próprio `sidebar.js`:
+    `@media(max-width:768px){.topbar{padding-left:56px!important}}` — o `!important` é porque o
+    `.topbar{padding:...}` de cada página tem a mesma especificidade; sem ele dependeria da ordem
+    de carregamento dos `<style>` no `<head>`, frágil. Bug relatado pelo Luan, 19/08/2026.
 - **Pop-up de confirmação** (`confirm-modal.js`, pedido do Luan 19/08/2026: o `confirm()` nativo
   do navegador — a barra cinza "site diz" — "não poderia acontecer"). `window.cocoConfirm(msg,
   {title, confirmText, cancelText, danger}) → Promise<boolean>` substitui todo `confirm()` nativo
@@ -501,6 +508,12 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     de job dias depois (mesmo `id`, execução diferente); fechar a aba/navegador já limpa sozinho.
   - Painel "Amazon — Histórico" (Integrações): logo da Amazon (`Amazon_logo.png`) ao lado do rótulo
     BR/EUA em cada linha, mesmo padrão de logo já usado no card de Tráfego & conversão.
+  - `.jw-head`/`.jw-resize` precisam de `touch-action:none` — sem isso, no celular o navegador
+    interpreta o toque como início de scroll da página em vez de entregar os eventos de pointer
+    pro nosso drag (arrastar/redimensionar funcionava só no desktop com mouse, não no touch). Vale
+    como regra geral pra qualquer drag customizado via Pointer Events nesse app, não só aqui — se
+    um novo componente precisar de arraste, lembrar do `touch-action`. Bug relatado pelo Luan,
+    19/08/2026.
 - **Clique num gráfico ECharts pra abrir um drilldown** (ex.: clicar na Tendência mostra o
   detalhamento por canal daquele dia): usar `chart.getZr().on('click', ...)` +
   `chart.convertFromPixel({seriesIndex}, [offsetX, offsetY])`, NÃO `chart.on('click', ...)` — o
@@ -510,7 +523,18 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   curva que não conta como "em cima da série" — parecia quebrado (clique não fazia nada na maior
   parte do card), só funcionava acertando o pixel exato do traço. Bug relatado pelo Luan,
   19/08/2026, depois da migração Chart.js → ECharts (index.html, toggle "Mostrar canais ao clicar
-  no gráfico de tendência").
+  no gráfico de tendência"). `showTrendDrilldown()` termina com `el.scrollIntoView({behavior:
+  'smooth', block:'nearest'})` — no mobile os cards empilham em largura total, e o card de
+  Tendência é alto o bastante pra clicar no gráfico (lá em cima) e o resultado do drilldown
+  aparecer fora da tela (embaixo, depois da legenda), parecendo que nada aconteceu. `block:
+  'nearest'` não mexe em nada se já estiver visível (desktop já vê sem rolar). Bug relatado pelo
+  Luan, 19/08/2026: "eu clico no gráfico lá em cima, e o card aparece lá embaixo".
+- **Selo de variação (`.delta-val`, ex.: "↑ 106%") no mobile**: `.kc-delta` é `display:flex` numa
+  linha só (selo + "vs. período anterior"); no mobile a faixa de Indicadores vira 2 colunas
+  (`.kpi-strip-grid` em 768px) e a frase não cabia mais ao lado do selo — quebrava no meio, com o
+  selo boiando sozinho ao lado de um parágrafo de 2 linhas ("pills verdes estranhos", relatado
+  pelo Luan 19/08/2026). Fix: `@media(max-width:768px){.kc-delta{flex-direction:column;
+  align-items:flex-start}}` — empilha em vez de quebrar no meio da frase.
 - **Card Tendência (index.html) — "Geral" × "Por canal"**: toggle (`trendView`,
   `localStorage('coco_trend_view')`) que troca a linha única (com área preenchida + "Custo ads")
   por uma linha por canal, sem área nem "Custo ads" (com vários canais ao mesmo tempo a área

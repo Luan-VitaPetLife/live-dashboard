@@ -157,7 +157,16 @@ body.sidebar-hidden .nav-text{display:none}
 body.sidebar-hidden .nav-item::after{content:attr(data-label);position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:10px;background:#000;color:#fff;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:500;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;box-shadow:0 6px 18px rgba(0,0,0,.28);z-index:210}
 body.sidebar-hidden .nav-item:hover::after{opacity:1}
 
-@media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar-open-btn{display:flex}}
+@media(max-width:768px){
+.sidebar{transform:translateX(-100%)}
+.sidebar-open-btn{display:flex}
+/* O botão de abrir é fixed, fora do fluxo de cada página — sem isso ele ficava sobreposto aos
+   primeiros pills do topbar (ex.: seletor de país em index.html/campanhas.html), reportado pelo
+   Luan 19/08/2026. Reservar o espaço aqui, uma vez, evita repetir isso em cada uma das 12
+   páginas — a mesma lógica de "nunca sobrepor o conteúdo" que já motivou a sidebar colapsada
+   virar faixa de ícones em vez de botão flutuante, agora aplicada ao caso mobile. */
+.topbar{padding-left:56px!important}
+}
 `;
   const css = baseCss
     + '.sidebar .nav-flag{width:15px;height:auto;vertical-align:middle;border-radius:2px;margin-left:3px;position:relative;top:-1px}'

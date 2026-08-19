@@ -47,7 +47,10 @@
     + '.jw-widget.jw-collapsed .jw-body{display:none}'
     + '.jw-widget.jw-collapsed .jw-resize{display:none}'
     + '.jw-head{display:flex;align-items:center;gap:8px;padding:9px 10px;cursor:grab;user-select:none;'
-    + 'background:var(--surface2);border-bottom:1px solid var(--border2);flex-shrink:0}'
+    // touch-action:none — sem isso, no celular o navegador interpreta o toque como início de
+    // scroll da página em vez de entregar os eventos de pointer pro nosso drag (arrastar não
+    // funcionava no mobile, só no desktop com mouse; reportado pelo Luan 19/08/2026).
+    + 'touch-action:none;background:var(--surface2);border-bottom:1px solid var(--border2);flex-shrink:0}'
     + '.jw-widget.jw-collapsed .jw-head{border-bottom:none}'
     + '.jw-head:active{cursor:grabbing}'
     + '.jw-spinner{width:11px;height:11px;border-radius:50%;border:2px solid var(--border2);'
@@ -77,7 +80,7 @@
     + '.jw-job-done .jw-bar{background:var(--sage,#6a8c6e)}'
     + '.jw-job-error .jw-bar{background:var(--red,#9b3a3a)}'
     + '.jw-job-cancelled .jw-bar{background:var(--muted)}'
-    + '.jw-resize{position:absolute;z-index:5}'
+    + '.jw-resize{position:absolute;z-index:5;touch-action:none}'
     + '.jw-resize[data-dir="n"]{top:-3px;left:8px;right:8px;height:6px;cursor:ns-resize}'
     + '.jw-resize[data-dir="s"]{bottom:-3px;left:8px;right:8px;height:6px;cursor:ns-resize}'
     + '.jw-resize[data-dir="e"]{right:-3px;top:8px;bottom:8px;width:6px;cursor:ew-resize}'
