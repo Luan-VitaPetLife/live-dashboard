@@ -491,6 +491,22 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   parte do card), só funcionava acertando o pixel exato do traço. Bug relatado pelo Luan,
   19/08/2026, depois da migração Chart.js → ECharts (index.html, toggle "Mostrar canais ao clicar
   no gráfico de tendência").
+- **Card Tendência (index.html) — "Geral" × "Por canal"**: toggle (`trendView`,
+  `localStorage('coco_trend_view')`) que troca a linha única (com área preenchida + "Custo ads")
+  por uma linha por canal, sem área nem "Custo ads" (com vários canais ao mesmo tempo a área
+  sobreposta fica ilegível — decisão combinada com o Luan antes de implementar, 19/08/2026). Usa o
+  mesmo `t.byChannel` que já alimentava só o drilldown de clique — nenhuma mudança no backend. Só
+  aparece com canal="todos" selecionado (`#trendViewToggle` some sozinho pra um canal específico,
+  que não tem o que quebrar em mais linhas); o drilldown de clique (ver item acima) também só roda
+  na visão "Geral" — na "Por canal" seria redundante, cada linha já é o próprio canal.
+  - Botão "Expandir" (`trendExpanded`, `localStorage('coco_trend_expanded')`): dobra a altura do
+    gráfico (`.ch220`→`.ch380`) e o card passa a ocupar a largura toda (`grid-column:span 12`). O
+    resize do ECharts acontece sozinho (o `ResizeObserver` compartilhado, `echartsRO`, já observa
+    `#trendChart`). Importante: `updateCardVisibility()` já mexia no `grid-column` do card de
+    Tendência por outro motivo (ocupar a linha toda quando o card de Canais ao lado está escondido
+    pelo canal selecionado) — as duas fontes de verdade precisam concordar, senão um refresh de
+    dado desfazia o expandido no ciclo seguinte; a condição virou `trendExpanded ||
+    !channelSplitVisible`.
 - Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
   nativo. Frequência de atualização (`localStorage('coco_refresh')`) é compartilhada entre todas
   as páginas. Estado ativo do item é fundo escuro (`background:var(--ink)`), não checkmark — era

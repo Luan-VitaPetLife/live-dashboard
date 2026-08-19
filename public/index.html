@@ -131,6 +131,15 @@
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
   .ct-title{font-size:12px;font-weight:600} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
   .ct-sub-logo{height:16px;width:auto;vertical-align:-3.5px;margin-right:5px;opacity:.9}
+  .ct-top-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  /* Toggle Geral/Por canal — mesmo visual do seletor de tipo de gráfico do campanhas.html, só
+     menor pra caber ao lado do valor no cabeçalho do card. */
+  .chart-type-toggle{display:flex;gap:3px}
+  .chart-type-btn{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:12px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s;font-size:10px;padding:0}
+  .chart-type-btn:hover{border-color:var(--ink);color:var(--text)}
+  .chart-type-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .ct-expand{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;display:flex;align-items:center}
+  .ct-expand:hover{color:var(--text)}
   .donut-center-wrap{position:relative;height:160px;margin-bottom:14px}
   /* ECharts precisa de um container com tamanho explícito (ao contrário do <canvas>, que tinha um
      tamanho intrínseco padrão) — os anéis (Canais, Marketing, Orgânico x Campanha) agora montam
@@ -187,7 +196,7 @@
   .legend-row{display:flex;align-items:center;gap:16px;margin-top:10px}
   .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
   .legend-line{width:20px;height:1.5px;border-radius:1px} .legend-sq{width:10px;height:10px;border-radius:2px}
-  .ch220{position:relative;height:220px} .ch180{position:relative;height:180px}
+  .ch220{position:relative;height:220px} .ch180{position:relative;height:180px} .ch380{position:relative;height:380px}
   .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
   .orders-pager{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 16px 2px;flex-wrap:wrap}
   .orders-pager:empty{display:none}
@@ -490,7 +499,17 @@
       <div class="edit-card" data-card-id="trend" data-title="Tendência" style="grid-column:span 7">
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card"><div class="card-pad">
-          <div class="card-top"><div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div><div class="ct-val" id="trendVal">—</div></div>
+          <div class="card-top">
+            <div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div>
+            <div class="ct-top-right">
+              <div class="chart-type-toggle" id="trendViewToggle">
+                <button class="chart-type-btn" data-view="geral" onclick="setTrendView('geral')" title="Linha geral"><i class="bi bi-graph-up"></i></button>
+                <button class="chart-type-btn" data-view="canal" onclick="setTrendView('canal')" title="Uma linha por canal"><i class="bi bi-bar-chart-steps"></i></button>
+              </div>
+              <div class="ct-val" id="trendVal">—</div>
+              <button class="ct-expand" id="trendExpandBtn" title="Expandir card"><i class="bi bi-arrows-angle-expand"></i></button>
+            </div>
+          </div>
           <div class="ch220" id="trendChart"></div>
           <div class="legend-row" id="trendLegend"></div>
           <div id="trendDrilldown" class="trend-drilldown" style="display:none"></div>
@@ -716,6 +735,41 @@ function isAmazonProductRev() { return localStorage.getItem('coco_amazon_rev_mod
 
 // ── Canal breakdown ──
 function isChanDetail() { return localStorage.getItem('coco_chan_detail') !== '0'; }
+
+// ── Tendência: "Geral" (uma linha só) × "Por canal" (uma linha por canal, sem preenchimento de
+// área nem linha de Custo ads — com vários canais ao mesmo tempo isso vira poluição visual, ver
+// conversa com o Luan 19/08/2026) — só faz sentido com canal="todos" selecionado (um canal
+// específico já filtrado não tem o que quebrar em mais linhas); o toggle some sozinho nesse caso.
+let trendView = localStorage.getItem('coco_trend_view') || 'geral';
+function setTrendView(v) {
+  trendView = v;
+  localStorage.setItem('coco_trend_view', v);
+  document.querySelectorAll('#trendViewToggle .chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  if (lastData) render(lastData);
+}
+document.querySelectorAll('#trendViewToggle .chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.view === trendView));
+
+// ── Expandir o card de Tendência (dobra a altura do gráfico e ocupa a largura toda) — pedido do
+// Luan 19/08/2026. Preferência persiste; o resize do ECharts acontece sozinho via echartsRO (o
+// ResizeObserver já observa #trendChart, então só precisa trocar largura/altura via CSS).
+let trendExpanded = localStorage.getItem('coco_trend_expanded') === '1';
+function applyTrendExpanded() {
+  const card = document.querySelector('.edit-card[data-card-id="trend"]');
+  const chartEl = document.getElementById('trendChart');
+  const btn = document.getElementById('trendExpandBtn');
+  if (!card || !chartEl || !btn) return;
+  card.style.gridColumn = trendExpanded ? 'span 12' : 'span 7';
+  chartEl.classList.toggle('ch220', !trendExpanded);
+  chartEl.classList.toggle('ch380', trendExpanded);
+  btn.title = trendExpanded ? 'Recolher card' : 'Expandir card';
+  btn.querySelector('i').className = 'bi ' + (trendExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand');
+}
+document.getElementById('trendExpandBtn')?.addEventListener('click', () => {
+  trendExpanded = !trendExpanded;
+  localStorage.setItem('coco_trend_expanded', trendExpanded ? '1' : '0');
+  applyTrendExpanded();
+});
+applyTrendExpanded();
 function showTrendDrilldown(label, val, byChannel, money, metric) {
   const el = document.getElementById('trendDrilldown');
   const entries = Object.entries(byChannel).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
@@ -984,13 +1038,39 @@ function render(d) {
   // Trend
   const t = d.trend, money = t.fmt === 'money';
   const line1 = cssVar('--line1'), line2 = cssVar('--line2'), surface = cssVar('--surface');
-  const ds = [{ name:METRIC_LABEL[d.metric], type:'line', data:t.data, smooth:.3, symbol:'circle', symbolSize:6, itemStyle:{ color:line1, borderColor:surface, borderWidth:1.5 }, lineStyle:{ color:line1, width:2 }, areaStyle:{ color:areaGradient(line1) }, emphasis:{ focus:'series', scale:false } }];
   // "Custo ads" é gasto do Meta Ads (Instagram/Facebook) — só atribuído a Shopify (ver 4.4/isCampaignOrder).
   // Mostrar essa linha com Shopee/Mercado Livre/Amazon selecionado sugeria (errado) que o canal tinha
   // custo de ads próprio, quando na verdade é o gasto do Meta da conta inteira aparecendo por engano.
   // Mesma regra já usada pelo card "Marketing por origem" (cardMarketing: isTodos || isShopify).
   const showAdsLine = d.metric === 'receita' && (d.channel === 'todos' || d.channel === 'shopify' || d.channel === 'shopify_us');
-  if (showAdsLine) ds.push({ name:'Custo ads', type:'line', data:t.metaSpendDaily || t.data.map(()=>0), smooth:.3, symbol:'none', lineStyle:{ color:line2, width:1.5, type:[5,4] } });
+  // "Por canal" só faz sentido com canal="todos" — um canal específico já filtrado não tem o que
+  // quebrar em mais linhas. O toggle some sozinho nesse caso (pedido do Luan, 19/08/2026).
+  const canChanView = d.channel === 'todos';
+  const toggleEl = document.getElementById('trendViewToggle');
+  if (toggleEl) toggleEl.style.display = canChanView ? '' : 'none';
+  const useChanView = canChanView && trendView === 'canal';
+
+  let ds, legendItems;
+  if (useChanView) {
+    // Uma linha por canal, sem preenchimento de área nem "Custo ads" — com vários canais ao
+    // mesmo tempo isso vira poluição visual (área sobreposta ilegível). Ordenado por receita
+    // total do período, maior primeiro, pra legenda/ordem de desenho fazer sentido.
+    const chKeys = [];
+    (t.byChannel || []).forEach(day => { for (const k in (day || {})) if (!chKeys.includes(k)) chKeys.push(k); });
+    const totals = Object.fromEntries(chKeys.map(k => [k, (t.byChannel || []).reduce((s, day) => s + (day?.[k] || 0), 0)]));
+    chKeys.sort((a, b) => totals[b] - totals[a]);
+    ds = chKeys.map(ch => {
+      const color = CocoColors.ch[ch]?.bg || '#888';
+      return { name: CocoColors.ch[ch]?.label || CHAN[ch] || ch, type:'line', data: (t.byChannel || []).map(day => (day && day[ch]) || 0), smooth:.3, symbol:'circle', symbolSize:5, itemStyle:{ color }, lineStyle:{ color, width:2 }, emphasis:{ focus:'series' } };
+    });
+    legendItems = chKeys.map(ch => ({ label: CocoColors.ch[ch]?.label || CHAN[ch] || ch, color: CocoColors.ch[ch]?.bg || '#888' }));
+  } else {
+    ds = [{ name:METRIC_LABEL[d.metric], type:'line', data:t.data, smooth:.3, symbol:'circle', symbolSize:6, itemStyle:{ color:line1, borderColor:surface, borderWidth:1.5 }, lineStyle:{ color:line1, width:2 }, areaStyle:{ color:areaGradient(line1) }, emphasis:{ focus:'series', scale:false } }];
+    if (showAdsLine) ds.push({ name:'Custo ads', type:'line', data:t.metaSpendDaily || t.data.map(()=>0), smooth:.3, symbol:'none', lineStyle:{ color:line2, width:1.5, type:[5,4] } });
+    legendItems = showAdsLine
+      ? [{ label:'Receita', color:'var(--line1)' }, { label:'Custo ads', color:'var(--line2)' }]
+      : [{ label: METRIC_LABEL[d.metric], color:'var(--line1)' }];
+  }
   const trendInst = setEChart('trendChart', {
     grid:{ left:8, right:8, top:12, bottom:22, containLabel:true },
     xAxis:{ type:'category', data:t.labels, boundaryGap:false, axisLine:{show:false}, axisTick:{show:false}, axisLabel:AXIS_FONT, splitLine:{show:false} },
@@ -1002,9 +1082,10 @@ function render(d) {
     } },
     series: ds,
   });
-  // Click → drilldown de canais. Usa getZr() (canvas bruto) + convertFromPixel em vez do 'click'
-  // de série do ECharts: esse último só dispara em cima do traço/ponto exatos, e a área
-  // preenchida acima da linha (bem comum num dia de valor baixo, sobra bastante espaço em
+  // Click → drilldown de canais. Só na visão "Geral" — na "Por canal" cada linha já mostra o
+  // próprio canal, o drilldown seria redundante. Usa getZr() (canvas bruto) + convertFromPixel em
+  // vez do 'click' de série do ECharts: esse último só dispara em cima do traço/ponto exatos, e a
+  // área preenchida acima da linha (bem comum num dia de valor baixo, sobra bastante espaço em
   // branco no card) não conta como "em cima da série" — ficava parecendo quebrado, clique só
   // funcionava se acertasse o pixel certo. O Chart.js antigo (getElementsAtEventForMode 'index')
   // reagia a clique em qualquer lugar da coluna; convertFromPixel reproduz isso. Bug relatado
@@ -1012,7 +1093,7 @@ function render(d) {
   document.getElementById('trendDrilldown').style.display = 'none';
   trendInst?.getZr().off('click');
   trendInst?.getZr().on('click', params => {
-    if (!isChanDetail()) return;
+    if (useChanView || !isChanDetail()) return;
     const pt = trendInst.convertFromPixel({ seriesIndex: 0 }, [params.offsetX, params.offsetY]);
     if (!pt) return;
     const i = Math.round(pt[0]);
@@ -1022,9 +1103,7 @@ function render(d) {
   document.getElementById('trendTitle').textContent = 'Tendência · ' + METRIC_LABEL[d.metric];
   document.getElementById('trendSub').textContent = (d.period.grain==='hour'?'Por hora · ':'Por dia · ') + label.toLowerCase();
   document.getElementById('trendVal').textContent = (money?fmtMoney(t.total):fmtInt(t.total)) + ' ' + METRIC_LABEL[d.metric].toUpperCase();
-  renderLegend('trendLegend', showAdsLine
-    ? [{ label:'Receita', color:'var(--line1)' }, { label:'Custo ads', color:'var(--line2)' }]
-    : [{ label: METRIC_LABEL[d.metric], color:'var(--line1)' }]);
+  renderLegend('trendLegend', legendItems);
 
   // Channel split
   const cs = d.channelSplit;
@@ -1357,7 +1436,10 @@ function updateCardVisibility() {
   // Top produtos passam a ocupar a linha inteira em vez de deixar metade em branco do lado
   // (mesmo espaço branco "sobrando" reportado pelo Luan, pente-fino de 30/07/2026).
   const trendWrap = document.querySelector('.edit-card[data-card-id="trend"]');
-  if (trendWrap) trendWrap.style.gridColumn = channelSplitVisible ? 'span 7' : 'span 12';
+  // trendExpanded (botão de expandir do card, ver applyTrendExpanded) força span 12 mesmo com o
+  // card de Canais visível — senão essa função (chamada de novo em todo refresh) desfazia o
+  // expandido no próximo ciclo de dados.
+  if (trendWrap) trendWrap.style.gridColumn = (trendExpanded || !channelSplitVisible) ? 'span 12' : 'span 7';
   const topProdWrap = document.querySelector('.edit-card[data-card-id="topProducts"]');
   if (topProdWrap) topProdWrap.style.gridColumn = marketingVisible ? 'span 8' : 'span 12';
 }
