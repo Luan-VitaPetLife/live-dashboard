@@ -628,6 +628,18 @@ app.post('/api/amazon-br/force-sync', async (_req, res) => {
   res.json(report);
 });
 
+// Cancelamento cooperativo dos jobs em segundo plano (botão × no widget flutuante,
+// pedido do Luan 19/08/2026). Só os três jobs com loop em etapas (backfill/imagens/itens
+// da Amazon) têm ponto seguro pra checar a flag no meio do caminho — backup e geografia
+// via Bling terminam em segundos e não valem o risco de interromper no meio de um upload/
+// gravação, então não entram em CANCELABLE_JOB_IDS (o botão nem aparece pra eles).
+class JobCancelledError extends Error {}
+const CANCELABLE_JOB_IDS = new Set(['amazon-backfill', 'amazon-images', 'amazon-items']);
+const cancelFlags = {};
+function checkCancelled(jobId) {
+  if (cancelFlags[jobId]) { cancelFlags[jobId] = false; throw new JobCancelledError('Cancelado pelo usuário'); }
+}
+
 // Backfill histórico da Amazon via Reports API. Roda em background (leva minutos:
 // cada janela de 30 dias é um relatório que a Amazon monta e nós baixamos) e responde
 // na hora. Progresso em GET /api/status → amazon.backfill. Ver CLAUDE.md 4.7.3.
@@ -649,8 +661,12 @@ function startBackfillJob(market, days, startedBy) {
     try {
       await amazon.backfillOrders({
         market, days,
-        onProgress: message => setAmazonBackfill({ status: 'running', market, days, orders, progressPct: Math.round(chunksDone / totalChunks * 100), message, startedBy, startedAt: new Date().toISOString() }),
+        onProgress: message => {
+          checkCancelled('amazon-backfill');
+          setAmazonBackfill({ status: 'running', market, days, orders, progressPct: Math.round(chunksDone / totalChunks * 100), message, startedBy, startedAt: new Date().toISOString() });
+        },
         onChunk: chunk => {
+          checkCancelled('amazon-backfill');
           upsertOrders(chunk);           // grava lote a lote: uma falha adiante não perde o que já veio
           orders += chunk.length;
           chunksDone++;
@@ -659,8 +675,12 @@ function startBackfillJob(market, days, startedBy) {
       });
       setAmazonBackfill({ status: 'done', market, days, orders, progressPct: 100, message: `concluído — ${orders} pedidos`, startedBy, finishedAt: new Date().toISOString() });
     } catch (e) {
-      setAmazonBackfill({ status: 'error', market, days, orders, message: e.message, startedBy, finishedAt: new Date().toISOString() });
-      console.error('Backfill Amazon falhou:', e.message);
+      if (e instanceof JobCancelledError) {
+        setAmazonBackfill({ status: 'cancelled', market, days, orders, message: `cancelado — ${orders} pedidos já gravados até aqui`, startedBy, finishedAt: new Date().toISOString() });
+      } else {
+        setAmazonBackfill({ status: 'error', market, days, orders, message: e.message, startedBy, finishedAt: new Date().toISOString() });
+        console.error('Backfill Amazon falhou:', e.message);
+      }
     } finally {
       backfillRunning = false;
     }
@@ -709,14 +729,19 @@ app.post('/api/amazon/images', (req, res) => {
 
   (async () => {
     try {
-      const found = await amazon.fetchProductImages(asins, market, message =>
-        setAmazonImagesJob({ status: 'running', market, total: asins.length, found: 0, message, startedBy, startedAt: new Date().toISOString() })
-      );
+      const found = await amazon.fetchProductImages(asins, market, message => {
+        checkCancelled('amazon-images');
+        setAmazonImagesJob({ status: 'running', market, total: asins.length, found: 0, message, startedBy, startedAt: new Date().toISOString() });
+      });
       setAmazonProductImages({ ...getAmazonProductImages(), ...Object.fromEntries(found) });
       setAmazonImagesJob({ status: 'done', market, total: asins.length, found: found.size, message: `concluído — ${found.size}/${asins.length} imagens encontradas`, startedBy, finishedAt: new Date().toISOString() });
     } catch (e) {
-      setAmazonImagesJob({ status: 'error', market, total: asins.length, found: 0, message: e.message, startedBy, finishedAt: new Date().toISOString() });
-      console.error('Busca de imagens Amazon falhou:', e.message);
+      if (e instanceof JobCancelledError) {
+        setAmazonImagesJob({ status: 'cancelled', market, total: asins.length, found: 0, message: 'cancelado pelo usuário', startedBy, finishedAt: new Date().toISOString() });
+      } else {
+        setAmazonImagesJob({ status: 'error', market, total: asins.length, found: 0, message: e.message, startedBy, finishedAt: new Date().toISOString() });
+        console.error('Busca de imagens Amazon falhou:', e.message);
+      }
     } finally {
       imagesJobRunning = false;
     }
@@ -890,9 +915,19 @@ app.post('/api/amazon/fetch-items', (req, res) => {
   const startedBy = req.authUser?.name || req.authUser?.username || null;
   itemsRunning = true;
   itemsStatus  = { status: 'running', market, message: 'iniciando', startedBy, startedAt: new Date().toISOString() };
-  enrichAmazonItems({ market, limit, onProgress: m => { itemsStatus = { status: 'running', market, message: m, startedBy, startedAt: itemsStatus.startedAt }; } })
+  enrichAmazonItems({ market, limit, onProgress: m => {
+    checkCancelled('amazon-items');
+    itemsStatus = { status: 'running', market, message: m, startedBy, startedAt: itemsStatus.startedAt };
+  } })
     .then(r => { itemsStatus = { status: 'done', market, result: r, startedBy, finishedAt: new Date().toISOString() }; console.log('Amazon itens:', r); })
-    .catch(e => { itemsStatus = { status: 'error', market, message: e.message, startedBy, finishedAt: new Date().toISOString() }; console.error('Amazon itens falhou:', e.message); })
+    .catch(e => {
+      if (e instanceof JobCancelledError) {
+        itemsStatus = { status: 'cancelled', market, message: 'cancelado pelo usuário', startedBy, finishedAt: new Date().toISOString() };
+      } else {
+        itemsStatus = { status: 'error', market, message: e.message, startedBy, finishedAt: new Date().toISOString() };
+        console.error('Amazon itens falhou:', e.message);
+      }
+    })
     .finally(() => { itemsRunning = false; });
   res.json({ ok: true, message: `Busca de itens (${market.toUpperCase()}, até ${limit}) iniciada. Acompanhe em GET /api/status → amazon.items.` });
 });
@@ -1176,12 +1211,13 @@ app.get('/api/ml/probe-order', syncLimiter, async (req, res) => {
 // só enriquece state vazio (ver src/sync.js reconcileGeoFromBling).
 app.post('/api/bling/sync-geo', syncLimiter, async (req, res) => {
   if (geoRunning) return res.status(409).json({ error: 'Reconciliação de geografia já em andamento.' });
+  const startedBy = req.authUser?.name || req.authUser?.username || null;
   geoRunning = true;
-  geoStatus = { status: 'running', startedAt: new Date().toISOString() };
+  geoStatus = { status: 'running', startedBy, startedAt: new Date().toISOString() };
   const days = req.query.days ? Number(req.query.days) : undefined;
   reconcileGeoFromBling({ market: req.query.market || 'br', force: true, ...(days ? { days } : {}) })
-    .then(r => { geoStatus = { status: 'done', result: r, finishedAt: new Date().toISOString() }; })
-    .catch(e => { geoStatus = { status: 'error', message: e.message, finishedAt: new Date().toISOString() }; })
+    .then(r => { geoStatus = { status: 'done', result: r, startedBy, finishedAt: new Date().toISOString() }; })
+    .catch(e => { geoStatus = { status: 'error', message: e.message, startedBy, finishedAt: new Date().toISOString() }; })
     .finally(() => { geoRunning = false; });
   res.json({ started: true });
 });
@@ -1262,13 +1298,36 @@ app.get('/api/status', (_req, res) => {
 // via Bling, backup) — alimenta o widget flutuante (jobs-widget.js, compartilhado em toda
 // página) em vez de cada página ter que saber os detalhes de cada job específico. Cada job já
 // carrega quem disparou (startedBy, capturado no POST que iniciou), pedido do Luan 18/08/2026.
+// "running" preso há tempo demais quase sempre é status fantasma sobrando de um deploy/reinício
+// no meio do processo (a flag *Running em memória zera sozinha ao reiniciar, mas o status
+// persistido em kv não é tocado por ninguém) — sem isso o widget mostrava "iniciando" pra sempre
+// e dava a impressão de um processo travado ou de tarefa nova toda hora (relatado pelo Luan,
+// 19/08/2026). Job concluído/erro/cancelado também some da lista sozinho depois de um tempo, pra
+// uma execução de teste de semanas atrás não continuar aparecendo em toda página pra sempre.
+const STALE_AFTER_MS = { 'amazon-backfill': 45 * 60 * 1000, 'amazon-images': 20 * 60 * 1000, 'amazon-items': 20 * 60 * 1000, 'bling-geo': 10 * 60 * 1000, 'backup': 10 * 60 * 1000 };
+const FORGET_FINISHED_AFTER_MS = 15 * 60 * 1000;
 function normalizeJob(id, label, raw) {
   if (!raw) return null;
+  let status = raw.status;
+  let message = raw.message || null;
+  const now = Date.now();
+  if (status === 'running' && raw.startedAt) {
+    const age = now - Date.parse(raw.startedAt);
+    if (age > (STALE_AFTER_MS[id] || 30 * 60 * 1000)) {
+      status = 'error';
+      message = 'Interrompido — sem resposta por tempo demais (provável reinício do servidor no meio do processo). Pode tentar de novo.';
+    }
+  }
+  if (status !== 'running' && raw.finishedAt) {
+    const age = now - Date.parse(raw.finishedAt);
+    if (age > FORGET_FINISHED_AFTER_MS) return null;
+  }
   return {
-    id, label, status: raw.status, message: raw.message || null,
+    id, label, status, message,
     progressPct: typeof raw.progressPct === 'number' ? raw.progressPct : null,
     startedBy: raw.startedBy || null,
     startedAt: raw.startedAt || null, finishedAt: raw.finishedAt || null,
+    cancelable: status === 'running' && CANCELABLE_JOB_IDS.has(id),
   };
 }
 app.get('/api/jobs', (_req, res) => {
@@ -1283,6 +1342,14 @@ app.get('/api/jobs', (_req, res) => {
     normalizeJob('backup', 'Backup do banco', backupSt),
   ].filter(Boolean);
   res.json({ jobs });
+});
+
+// Cancelamento cooperativo (botão × no widget) — só os jobs em CANCELABLE_JOB_IDS aceitam.
+app.post('/api/jobs/:id/cancel', (req, res) => {
+  const id = req.params.id;
+  if (!CANCELABLE_JOB_IDS.has(id)) return res.status(400).json({ error: 'Esse processo não pode ser cancelado (termina sozinho em segundos).' });
+  cancelFlags[id] = true;
+  res.json({ ok: true });
 });
 
 // ── Tela Integrações (dentro de Configurações, somente admin) ──────────────────

@@ -424,15 +424,34 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (`jobs-widget.js`) são componentes injetados via IIFE — nunca duplicar CSS/markup deles numa
   página nova, sempre incluir o script (`jobs-widget.js` logo depois de `sidebar.js`, em toda
   página exceto `login.html`).
-- **Widget de processos** (`jobs-widget.js`, pedido do Luan 18/08/2026): card flutuante e
-  arrastável (posição em `localStorage`) que aparece sozinho quando algo está rodando em segundo
-  plano (backfill/imagens/itens da Amazon, geografia via Bling, backup) e some sozinho ~8s depois
-  de terminar. Consome `GET /api/jobs` (server.js, agrega os status já existentes de cada job —
-  não duplica lógica) a cada 3s. Mostra quem disparou cada processo (`startedBy`, capturado no
-  handler do POST que iniciou via `req.authUser`; jobs automáticos/agendados ficam `null` →
-  aparece como "automático"). Continua visível ao trocar de página porque toda página recarrega o
-  mesmo script — a posição arrastada e se está minimizado ficam salvos, não o estado do job em si
-  (isso vem sempre fresco do servidor).
+- **Widget de processos** (`jobs-widget.js`, pedido do Luan 18/08/2026): card flutuante,
+  arrastável e redimensionável pelas bordas/cantos (posição e tamanho em `localStorage`) que
+  aparece sozinho quando algo está rodando em segundo plano (backfill/imagens/itens da Amazon,
+  geografia via Bling, backup) e some sozinho ~8s depois de terminar. Consome `GET /api/jobs`
+  (server.js, agrega os status já existentes de cada job — não duplica lógica) a cada 3s. Mostra
+  quem disparou cada processo (`startedBy`, capturado no handler do POST que iniciou via
+  `req.authUser`; jobs automáticos/agendados ficam `null` → aparece como "automático"). Continua
+  visível ao trocar de página porque toda página recarrega o mesmo script — a posição/tamanho
+  arrastados e se está minimizado ficam salvos, não o estado do job em si (isso vem sempre fresco
+  do servidor).
+  - Barra de progresso: cheia e sólida em concluído/erro/cancelado; só fica "correndo" (indeterminada)
+    enquanto o processo está rodando sem uma % conhecida ainda (iniciando) — bug relatado pelo Luan
+    19/08/2026, job já concluído aparecia com a barra animada e parcialmente cheia, parecendo travado.
+  - `GET /api/jobs` também descarta jobs velhos: um status `running` sem atualização há mais de
+    `STALE_AFTER_MS[jobId]` (server.js, 10–45min por tipo) vira `error` com mensagem de
+    "interrompido" em vez de aparecer preso em "iniciando" pra sempre — sintoma real de um
+    deploy/reinício no meio do processo (a flag `*Running` em memória zera sozinha ao reiniciar,
+    mas o status persistido em `kv` não é tocado por ninguém). Job concluído/erro/cancelado some
+    da lista sozinho 15min depois de terminar, pra uma execução de teste antiga não continuar
+    aparecendo em toda página pra sempre (o Luan relatou isso como "fica criando tarefa nova sem eu
+    pedir", 19/08/2026 — na real eram jobs fantasmas/antigos nunca limpos, não jobs novos de verdade).
+  - Botão × cancela um job (com `confirm()`), só nos três com ponto seguro pra checar a flag no
+    meio do loop: `amazon-backfill`, `amazon-images`, `amazon-items` (`CANCELABLE_JOB_IDS`,
+    server.js). Cancelamento cooperativo via `JobCancelledError`/`checkCancelled(jobId)`: a
+    callback de progresso de cada um checa a flag e lança, o que sobe até o catch do job e vira
+    status `cancelled` — o que já foi processado até ali fica salvo (upsert incremental, mesmo
+    princípio de sempre). `bling-geo` e `backup` não entram (terminam em segundos, não vale o
+    risco de interromper no meio de um upload/gravação) — o × nem aparece pra eles.
 - Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
   nativo. Frequência de atualização (`localStorage('coco_refresh')`) é compartilhada entre todas
   as páginas. Estado ativo do item é fundo escuro (`background:var(--ink)`), não checkmark — era
@@ -520,6 +539,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `GET /api/orders/search?market=&q=` / `GET /api/orders/export?...`
 - `POST /api/sync` / `GET /api/status` / `GET /api/jobs` — status agregado dos jobs em segundo
   plano, alimenta o widget flutuante (`jobs-widget.js`)
+- `POST /api/jobs/:id/cancel` — cancela um job em segundo plano (só os cancelable, ver acima)
 - `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
 - `GET/POST /api/amazon/history` (admin) · `GET /api/amazon/history/preview` — histórico por
   mercado (poda OU busca, decide sozinho), ver tela Integrações
