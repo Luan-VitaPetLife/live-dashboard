@@ -528,7 +528,17 @@
       <div class="edit-card" data-card-id="traffic" data-title="Tráfego &amp; conversão" style="grid-column:span 7">
         <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
         <div class="card" id="cardTraffic"><div class="card-pad">
-          <div class="card-top"><div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div><div class="ct-val" id="trafficVal">—</div></div>
+          <div class="card-top">
+            <div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div>
+            <div class="ct-top-right">
+              <div class="chart-type-toggle" id="trafficViewToggle">
+                <button class="chart-type-btn" data-view="geral" onclick="setTrafficView('geral')" title="Linha geral"><i class="bi bi-graph-up"></i></button>
+                <button class="chart-type-btn" data-view="canal" onclick="setTrafficView('canal')" title="Coco and Luna × Yucaloo"><i class="bi bi-bar-chart-steps"></i></button>
+              </div>
+              <div class="ct-val" id="trafficVal">—</div>
+              <button class="ct-expand" id="trafficExpandBtn" title="Expandir card"><i class="bi bi-arrows-angle-expand"></i></button>
+            </div>
+          </div>
           <div class="metric-row">
             <div class="metric-cell"><div class="mc-type">Sessões</div><div class="mc-val" id="mSessions">—</div><div class="mc-meta" id="mSessionsMeta">&nbsp;</div></div>
             <div class="metric-cell"><div class="mc-type">Visitantes</div><div class="mc-val" id="mVisitors">—</div><div class="mc-meta">únicos</div></div>
@@ -770,6 +780,40 @@ document.getElementById('trendExpandBtn')?.addEventListener('click', () => {
   applyTrendExpanded();
 });
 applyTrendExpanded();
+
+// ── Tráfego & conversão: mesmo padrão "Geral × Por canal" + expandir do card de Tendência
+// (pedido do Luan, 19/08/2026), só que aqui "canal" é sempre Coco and Luna × Yucaloo (as duas
+// únicas marcas com dado de sessão — Shopee/ML/Amazon não têm) em vez da lista de canais de
+// venda. Backend já manda os dois baldes separados (traffic.seriesCoco/seriesYucaloo, ver
+// aggregateSessions em metrics.js), sem precisar recalcular nada no front.
+let trafficView = localStorage.getItem('coco_traffic_view') || 'geral';
+function setTrafficView(v) {
+  trafficView = v;
+  localStorage.setItem('coco_traffic_view', v);
+  document.querySelectorAll('#trafficViewToggle .chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  if (lastData) render(lastData);
+}
+document.querySelectorAll('#trafficViewToggle .chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.view === trafficView));
+
+let trafficExpanded = localStorage.getItem('coco_traffic_expanded') === '1';
+function applyTrafficExpanded() {
+  const card = document.querySelector('.edit-card[data-card-id="traffic"]');
+  const chartEl = document.getElementById('trafficChart');
+  const btn = document.getElementById('trafficExpandBtn');
+  if (!card || !chartEl || !btn) return;
+  card.style.gridColumn = trafficExpanded ? 'span 12' : 'span 7';
+  chartEl.classList.toggle('ch180', !trafficExpanded);
+  chartEl.classList.toggle('ch380', trafficExpanded);
+  btn.title = trafficExpanded ? 'Recolher card' : 'Expandir card';
+  btn.querySelector('i').className = 'bi ' + (trafficExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand');
+}
+document.getElementById('trafficExpandBtn')?.addEventListener('click', () => {
+  trafficExpanded = !trafficExpanded;
+  localStorage.setItem('coco_traffic_expanded', trafficExpanded ? '1' : '0');
+  applyTrafficExpanded();
+});
+applyTrafficExpanded();
+
 function showTrendDrilldown(label, val, byChannel, money, metric) {
   const el = document.getElementById('trendDrilldown');
   const entries = Object.entries(byChannel).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
@@ -1200,24 +1244,51 @@ function render(d) {
   document.getElementById('mCartMeta').textContent = tf.sessions?pctStr(tf.cart/tf.sessions*100)+' das sessões':' ';
   document.getElementById('mConv').textContent = (tf.conversion*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
   document.getElementById('trafficVal').textContent = fmtInt(tf.sessions)+' SESSÕES';
+  // "Por canal" aqui é sempre Coco and Luna × Yucaloo (as duas únicas marcas com sessão) — só faz
+  // sentido com canal="todos" selecionado, igual ao toggle da Tendência. Um canal específico já
+  // filtrado (ex.: "shopify") não tem o que separar (a outra marca ficaria zerada o tempo todo).
+  const canTrafficChanView = d.channel === 'todos';
+  const trafficToggleEl = document.getElementById('trafficViewToggle');
+  if (trafficToggleEl) trafficToggleEl.style.display = canTrafficChanView ? '' : 'none';
+  const useTrafficChanView = canTrafficChanView && trafficView === 'canal';
+
+  let trafficSeries, trafficLegendItems, trafficYAxis;
+  if (useTrafficChanView) {
+    // Só sessões (sem Conversão) nesse modo — duas linhas de mais um eixo secundário viraria
+    // poluição visual, mesma decisão já tomada pro card Tendência. Cores reaproveitadas do
+    // mapeamento por canal (mesmas usadas no card "Canais"/donut), nada novo pra manter.
+    const cocoCh = d.market === 'us' ? 'shopify_us' : 'shopify';
+    const yucalooCh = d.market === 'us' ? 'yucaloo_us' : 'yucaloo_br';
+    const cocoColor = CocoColors.ch[cocoCh]?.bg || '#888', yucalooColor = CocoColors.ch[yucalooCh]?.bg || '#4466FF';
+    trafficYAxis = [{ type:'value', position:'left', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,0.06)'}}, axisLabel:AXIS_FONT }];
+    trafficSeries = [
+      { name:'Coco and Luna', type:'line', data:(tf.seriesCoco||[]).map(p=>p.sessions), smooth:.3, symbol:'circle', symbolSize:5, itemStyle:{ color:cocoColor }, lineStyle:{ color:cocoColor, width:2 } },
+      { name:'Yucaloo', type:'line', data:(tf.seriesYucaloo||[]).map(p=>p.sessions), smooth:.3, symbol:'circle', symbolSize:5, itemStyle:{ color:yucalooColor }, lineStyle:{ color:yucalooColor, width:2 } },
+    ];
+    trafficLegendItems = [{ label:'Coco and Luna', color:cocoColor }, { label:'Yucaloo', color:yucalooColor }];
+  } else {
+    trafficYAxis = [
+      { type:'value', position:'left', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,0.06)'}}, axisLabel:AXIS_FONT },
+      { type:'value', position:'right', axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}, axisLabel:{ ...AXIS_FONT, formatter:'{value}%' } },
+    ];
+    trafficSeries = [
+      { name:'Sessões', type:'bar', data:tf.series.map(p=>p.sessions), yAxisIndex:0, barMaxWidth:26, itemStyle:{ color:'rgba(176,168,152,.55)', borderRadius:[4,4,0,0] }, emphasis:{ itemStyle:{ color:'rgba(176,168,152,.8)' } } },
+      { name:'Conversão', type:'line', data:tf.series.map(p=>p.conv*100), yAxisIndex:1, smooth:.3, symbol:'circle', symbolSize:6, lineStyle:{ color:cssVar('--line1'), width:2 }, itemStyle:{ color:cssVar('--line1') } },
+    ];
+    trafficLegendItems = [{ label:'Sessões', color:'rgba(176,168,152,.55)', sq:true }, { label:'Conversão (%)', color:'var(--line1)' }];
+  }
   setEChart('trafficChart', {
     grid:{ left:8, right:8, top:12, bottom:22, containLabel:true },
     xAxis:{ type:'category', data:tf.series.map(p=>p.label), axisLine:{show:false}, axisTick:{show:false}, axisLabel:AXIS_FONT, splitLine:{show:false} },
-    yAxis:[
-      { type:'value', position:'left', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,0.06)'}}, axisLabel:AXIS_FONT },
-      { type:'value', position:'right', axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}, axisLabel:{ ...AXIS_FONT, formatter:'{value}%' } },
-    ],
-    tooltip:{ trigger:'axis', axisPointer:{ type:'shadow', shadowStyle:{ color:'rgba(30,28,24,0.05)' } }, ...EC_TOOLTIP, formatter: params => {
+    yAxis:trafficYAxis,
+    tooltip:{ trigger:'axis', axisPointer:{ type: useTrafficChanView ? 'line' : 'shadow', shadowStyle:{ color:'rgba(30,28,24,0.05)' } }, ...EC_TOOLTIP, formatter: params => {
       if (!params.length) return '';
       const head = `<div style="font-weight:700;color:${cssVar('--text')};margin-bottom:4px">${params[0].axisValueLabel}</div>`;
-      return head + params.map(p => `<div>${p.marker} ${p.seriesName==='Conversão' ? 'Conversão: '+p.value.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%' : 'Sessões: '+fmtInt(p.value)}</div>`).join('');
+      return head + params.map(p => `<div>${p.marker} ${p.seriesName==='Conversão' ? 'Conversão: '+p.value.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%' : p.seriesName+': '+fmtInt(p.value)+(useTrafficChanView?' sessões':'')}</div>`).join('');
     } },
-    series:[
-      { name:'Sessões', type:'bar', data:tf.series.map(p=>p.sessions), yAxisIndex:0, barMaxWidth:26, itemStyle:{ color:'rgba(176,168,152,.55)', borderRadius:[4,4,0,0] }, emphasis:{ itemStyle:{ color:'rgba(176,168,152,.8)' } } },
-      { name:'Conversão', type:'line', data:tf.series.map(p=>p.conv*100), yAxisIndex:1, smooth:.3, symbol:'circle', symbolSize:6, lineStyle:{ color:cssVar('--line1'), width:2 }, itemStyle:{ color:cssVar('--line1') } },
-    ],
+    series: trafficSeries,
   });
-  renderLegend('trafficLegend', [{ label:'Sessões', color:'rgba(176,168,152,.55)', sq:true }, { label:'Conversão (%)', color:'var(--line1)' }]);
+  renderLegend('trafficLegend', trafficLegendItems);
 
   // Funnel — mostra % do total de sessões e queda vs. a etapa anterior em cada degrau, além da
   // barra (antes só tinha rótulo+barra+valor bruto, ficava curto demais ao lado de "Tráfego &
