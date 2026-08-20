@@ -828,16 +828,16 @@ function setLive(s,t) {
 }
 
 // ── Leaflet map ──
+// Sem maxBounds de propósito — só usado pra enquadrar a vista inicial de cada mercado
+// (fitBounds), não pra travar o arraste. Pedido do Luan, 20/08/2026: tirar a trava de
+// arrastar o mapa (tanto BR quanto EUA ficavam presos numa caixa ao redor do país).
 const MAP_VIEW = {
-  br: { center:[-15,-52], bounds:[[-33.75,-73.99],[5.26,-28.84]], maxBounds:[[-36.0,-76.0],[8.0,-25.0]] },
-  us: { center:[38,-97],  bounds:[[24.0,-125.0],[49.5,-66.5]],   maxBounds:[[18.0,-130.0],[52.0,-62.0]] },
+  br: { center:[-15,-52], bounds:[[-33.75,-73.99],[5.26,-28.84]] },
+  us: { center:[38,-97],  bounds:[[24.0,-125.0],[49.5,-66.5]] },
 };
 const map = L.map('map', { center: MAP_VIEW[market].center, zoom:4, minZoom:4, maxZoom:8, zoomControl:true, zoomSnap:0.5 });
 function applyMapView(m) {
-  map.setMaxBounds(null);
   map.fitBounds(MAP_VIEW[m].bounds);
-  map.setMaxBounds(MAP_VIEW[m].maxBounds);
-  map.options.minZoom = 4;
 }
 applyMapView(market);
 
