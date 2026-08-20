@@ -19,8 +19,7 @@ import {
 export const PAGES = [
   { file: 'index.html', label: 'Revenue' },
   { file: 'segmentos.html', label: 'Segmentos' },
-  { file: 'geografia.html', label: 'Geografia (BR)' },
-  { file: 'geografia-us.html', label: 'Geografia (EUA)' },
+  { file: 'geografia.html', label: 'Geografia' },
   { file: 'produtos.html', label: 'Produtos' },
   { file: 'estoque.html', label: 'Estoque' },
   { file: 'campanhas.html', label: 'Campanhas' },

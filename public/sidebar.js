@@ -89,8 +89,7 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
     <a class="nav-item" data-page="index.html" data-label="Visão geral" href="/"><i class="bi bi-bar-chart-line nav-icon"></i><span class="nav-text">Visão geral</span></a>
     <a class="nav-item" data-page="segmentos.html" data-label="Segmentos" href="/segmentos"><i class="bi bi-pie-chart nav-icon"></i><span class="nav-text">Segmentos</span></a>
-    <a class="nav-item" data-page="geografia.html" data-label="Geografia BR" href="/geografia"><i class="bi bi-map nav-icon"></i><span class="nav-text">Geografia <img src="bandeira_brasil.webp" class="nav-flag" alt="BR"></span></a>
-    <a class="nav-item" data-page="geografia-us.html" data-label="Geografia EUA" href="/geografia-us"><i class="bi bi-map nav-icon"></i><span class="nav-text">Geografia <img src="bandeira_eua.svg" class="nav-flag" alt="EUA"></span></a></div>
+    <a class="nav-item" data-page="geografia.html" data-label="Geografia" href="/geografia"><i class="bi bi-map nav-icon"></i><span class="nav-text">Geografia</span></a></div>
   <div class="nav-group"><div class="nav-label">Operações</div>
     <a class="nav-item" data-page="produtos.html" data-label="Produtos" href="/produtos"><i class="bi bi-box-seam nav-icon"></i><span class="nav-text">Produtos</span></a>
     <a class="nav-item" data-page="estoque.html" data-label="Estoque" href="/estoque"><i class="bi bi-layers nav-icon"></i><span class="nav-text">Estoque</span></a>
@@ -169,7 +168,6 @@ body.sidebar-hidden .nav-item:hover::after{opacity:1}
 }
 `;
   const css = baseCss
-    + '.sidebar .nav-flag{width:15px;height:auto;vertical-align:middle;border-radius:2px;margin-left:3px;position:relative;top:-1px}'
     // Bloco de usuário no rodapé da sidebar (alimentado por /api/me)
     + '.sidebar .side-user{margin-top:auto;padding:12px 14px;border-top:1px solid rgba(240,235,224,0.08);display:flex;align-items:center;gap:9px}'
     + '.sidebar .side-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}'
@@ -247,7 +245,7 @@ body.sidebar-hidden .nav-item:hover::after{opacity:1}
   // `display:none` padrão do HTML, parecendo terem sido removidos.
   const SLUG_TO_FILE = {
     '': 'index.html', segmentos: 'segmentos.html', geografia: 'geografia.html',
-    'geografia-us': 'geografia-us.html', produtos: 'produtos.html', estoque: 'estoque.html',
+    produtos: 'produtos.html', estoque: 'estoque.html',
     campanhas: 'campanhas.html', configuracoes: 'configuracoes.html', integracoes: 'integracoes.html',
     unificador: 'unificador.html', login: 'login.html',
   };

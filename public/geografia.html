@@ -32,6 +32,11 @@
 
   /* ── Topbar ── */
   .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:2000}
+  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px;margin-right:auto}
+  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
+  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
   .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-right:4px}
   .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
   .ldot.loading{background:var(--amber)} .ldot.error{background:var(--red);animation:none}
@@ -221,6 +226,10 @@
   /* ── Sidebar: comportamento de recolher afeta o .main (layout da página) ── */
   @media(max-width:768px){.main{margin-left:0}}
   body.sidebar-hidden .main{margin-left:64px}
+  @media(max-width:520px){
+    .mkt-btn span{display:none}
+    .topbar{gap:4px}
+  }
 </style>
 </head>
 <body>
@@ -232,6 +241,15 @@
 
 <div class="main">
   <div class="topbar">
+    <div class="mkt-toggle-wrap">
+      <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
+        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
+      </button>
+      <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
+        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
+      </button>
+    </div>
+
     <div class="live-dot-wrap"><div class="ldot" id="liveDot"></div><span id="lastUpdate">Carregando…</span></div>
     <button class="sync-btn" id="syncBtn"><i class="bi bi-arrow-clockwise"></i> Sincronizar</button>
     <button class="settings-btn" id="settingsBtn" title="Configurações do mapa"><i class="bi bi-gear-fill"></i></button>
@@ -263,14 +281,7 @@
       <span class="lbl">Canal</span>
       <span class="val" id="channelVal">Todos</span>
       <span class="arr">▾</span>
-      <div class="csel-pop">
-        <div class="csel-opt active" data-value="todos">Todos</div>
-        <div class="csel-opt" data-value="shopify">Shopify - Coco and Luna BR</div>
-        <div class="csel-opt" data-value="yucaloo_br">Shopify - Yucaloo BR</div>
-        <div class="csel-opt" data-value="shopee">Shopee</div>
-        <div class="csel-opt" data-value="amazon">Amazon BR</div>
-        <div class="csel-opt" data-value="mercadolivre">Mercado Livre</div>
-      </div>
+      <div class="csel-pop" id="channelPop"></div>
     </div>
 
     <div style="position:relative">
@@ -297,7 +308,7 @@
   <div class="content">
     <div>
       <div class="page-title">Distribuição geográfica</div>
-      <div class="page-sub" id="pageSub">Coco and Luna · receita por estado · Brasil</div>
+      <div class="page-sub" id="pageSub">Coco and Luna · Brasil · receita por estado</div>
     </div>
 
     <div class="kpi-strip">
@@ -485,8 +496,8 @@
 </div>
 
 <script>
-// ── State data ──
-const STATE_NAMES = {
+// ── State data — Brasil ──
+const STATE_NAMES_BR = {
   AC:'Acre',AL:'Alagoas',AM:'Amazonas',AP:'Amapá',BA:'Bahia',
   CE:'Ceará',DF:'Distrito Federal',ES:'Espírito Santo',GO:'Goiás',
   MA:'Maranhão',MG:'Minas Gerais',MS:'Mato Grosso do Sul',MT:'Mato Grosso',
@@ -504,8 +515,8 @@ const IBGE_UF = {
   '50':'MS','51':'MT','52':'GO','53':'DF',
 };
 
-// Centroid coordinates [lat, lng] for labels and heatmap bubbles
-const CENTROIDS = {
+// Centroid coordinates [lat, lng] for labels and heatmap bubbles — Brasil
+const CENTROIDS_BR = {
   AC:[-9.0,-70.5],AL:[-9.6,-36.8],AM:[-4.0,-62.0],AP:[1.4,-51.8],BA:[-12.5,-41.7],
   CE:[-5.2,-39.5],DF:[-15.8,-47.9],ES:[-19.2,-40.3],GO:[-16.0,-49.6],MA:[-5.4,-44.4],
   MG:[-18.5,-44.4],MS:[-20.5,-54.5],MT:[-13.0,-55.9],PA:[-4.5,-52.5],PB:[-7.1,-36.7],
@@ -514,8 +525,8 @@ const CENTROIDS = {
   SP:[-22.5,-48.5],TO:[-10.0,-48.3],
 };
 
-// Sub-region points for heatmap dispersion [centroid, sub1, sub2, ...] (1st = centroid = label position)
-const SUB_REGIONS = {
+// Sub-region points for heatmap dispersion [centroid, sub1, sub2, ...] (1st = centroid = label position) — Brasil
+const SUB_REGIONS_BR = {
   AC: [[-9.0,-70.5],[-8.2,-72.8],[-10.3,-68.2]],
   AL: [[-9.6,-36.8],[-9.1,-35.8],[-10.1,-37.3]],
   AM: [[-4.0,-62.0],[-1.5,-67.5],[-6.5,-64.5],[-3.0,-57.5],[-7.5,-72.0]],
@@ -545,16 +556,123 @@ const SUB_REGIONS = {
   TO: [[-10.0,-48.3],[-7.0,-48.0],[-12.5,-49.5],[-10.0,-46.0]],
 };
 
-// ── Formatting ──
-const CHAN = { todos:'Todos os canais', shopify:'Shopify - Coco and Luna BR', yucaloo_br:'Shopify - Yucaloo BR', shopee:'Shopee', amazon:'Amazon BR', mercadolivre:'Mercado Livre' };
+// ── State data — EUA ──
+const STATE_NAMES_US = {
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',
+  CO:'Colorado',CT:'Connecticut',DC:'Washington D.C.',DE:'Delaware',FL:'Florida',
+  GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',
+  IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',
+  MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',
+  MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',
+  NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',
+  NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',
+  PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',
+  TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',
+  WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',
+  // Territórios dos EUA, endereços militares (APO/FPO) e bucket de estrangeiros.
+  // Não são um dos 50 estados nem pintam o mapa, mas aparecem no ranking. Ver CLAUDE.md 4.10.
+  PR:'Porto Rico',VI:'Ilhas Virgens',GU:'Guam',AS:'Samoa Americana',MP:'Marianas',
+  AA:'Militar (Américas)',AE:'Militar (Europa)',AP:'Militar (Pacífico)',
+  INTL:'Outros (internacional)',
+};
+
+// Os 50 estados de fato (para o contador "de 50 estados") — exclui DC, territórios,
+// militar e o bucket INTL, que aparecem no ranking mas não contam como estado.
+const US_50 = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID',
+  'IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV',
+  'NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT',
+  'VT','VA','WA','WV','WI','WY']);
+
+// FIPS (zero-padded 2-digit) → 2-letter state code
+const FIPS_UF = {
+  '01':'AL','02':'AK','04':'AZ','05':'AR','06':'CA','08':'CO','09':'CT',
+  '10':'DE','11':'DC','12':'FL','13':'GA','15':'HI','16':'ID','17':'IL',
+  '18':'IN','19':'IA','20':'KS','21':'KY','22':'LA','23':'ME','24':'MD',
+  '25':'MA','26':'MI','27':'MN','28':'MS','29':'MO','30':'MT','31':'NE',
+  '32':'NV','33':'NH','34':'NJ','35':'NM','36':'NY','37':'NC','38':'ND',
+  '39':'OH','40':'OK','41':'OR','42':'PA','44':'RI','45':'SC','46':'SD',
+  '47':'TN','48':'TX','49':'UT','50':'VT','51':'VA','53':'WA','54':'WV',
+  '55':'WI','56':'WY',
+};
+
+// Fallback: full name → abbreviation (para GeoJSON que usa name em vez de FIPS)
+const NAME_TO_UF = {};
+for (const [uf, name] of Object.entries(STATE_NAMES_US)) NAME_TO_UF[name] = uf;
+NAME_TO_UF['District of Columbia'] = 'DC';
+
+// Sub-regiões para dispersão das manchas por estados maiores — EUA
+const SUB_REGIONS_US = {
+  AK:[[64.2,-153.0],[66.0,-162.0],[60.0,-149.0]],
+  AZ:[[34.3,-111.9],[32.7,-111.8],[36.2,-112.0]],
+  CA:[[36.8,-119.4],[34.0,-118.3],[37.8,-122.4],[33.7,-117.8],[40.6,-122.5]],
+  CO:[[39.1,-105.4],[39.7,-104.9],[38.8,-104.8]],
+  FL:[[27.8,-81.6],[28.5,-81.4],[25.8,-80.2],[30.3,-81.7]],
+  GA:[[32.6,-83.4],[33.7,-84.4],[32.1,-81.2]],
+  ID:[[44.2,-114.5],[46.4,-116.9],[43.0,-112.4]],
+  IL:[[40.0,-89.2],[41.8,-87.6],[39.8,-88.9]],
+  KS:[[38.5,-98.4],[39.0,-95.7],[37.7,-100.0]],
+  KY:[[37.5,-85.3],[38.2,-85.8],[37.0,-84.5],[37.2,-82.5]],
+  LA:[[30.9,-91.8],[29.9,-90.1],[30.4,-91.2],[32.5,-93.8]],
+  MI:[[44.3,-85.4],[42.4,-83.0],[46.5,-84.5]],
+  MN:[[46.5,-94.7],[44.9,-93.2],[47.5,-92.0]],
+  MO:[[38.5,-92.5],[38.6,-90.2],[37.0,-94.5]],
+  MT:[[46.9,-110.5],[48.0,-106.0],[45.5,-108.5],[47.0,-115.0]],
+  NE:[[41.5,-99.9],[41.3,-96.0],[41.1,-103.0]],
+  NM:[[34.3,-106.0],[35.1,-106.6],[32.3,-106.8],[36.7,-105.9]],
+  NV:[[39.3,-117.1],[36.2,-115.2],[41.2,-117.7]],
+  NY:[[42.9,-75.5],[40.7,-74.0],[42.7,-74.0]],
+  NC:[[35.5,-79.6],[35.2,-80.9],[35.9,-78.5],[35.4,-82.6]],
+  ND:[[47.5,-100.5],[46.8,-96.8],[47.9,-102.8]],
+  OH:[[40.4,-82.8],[41.5,-81.7],[39.2,-84.5]],
+  OK:[[35.6,-96.9],[35.5,-97.5],[34.6,-99.0],[36.2,-95.8]],
+  OR:[[44.0,-120.5],[45.5,-122.7],[44.0,-121.3],[42.3,-118.5]],
+  PA:[[40.9,-77.8],[40.4,-80.0],[40.0,-75.1]],
+  SD:[[44.5,-100.3],[43.5,-96.7],[45.5,-100.4]],
+  TN:[[35.9,-86.2],[35.1,-89.9],[35.6,-83.6],[36.1,-87.5]],
+  TX:[[31.2,-99.3],[32.8,-96.8],[30.3,-97.7],[26.2,-97.9],[29.8,-95.4],[31.8,-106.4]],
+  VA:[[37.4,-78.7],[38.8,-77.2],[36.8,-76.3],[37.2,-80.4]],
+  WA:[[47.4,-120.5],[47.6,-122.3],[47.0,-121.0],[47.8,-118.5]],
+  WI:[[44.5,-89.8],[43.0,-88.0],[46.0,-90.0]],
+  WY:[[43.1,-107.6],[44.5,-104.9],[41.5,-110.6]],
+};
+
+const CENTROIDS_US = {
+  AL:[32.7,-86.8],AK:[64.2,-153.0],AZ:[34.3,-111.9],AR:[34.8,-92.4],CA:[36.8,-119.4],
+  CO:[39.1,-105.4],CT:[41.6,-72.7],DC:[38.9,-77.0],DE:[39.0,-75.5],FL:[27.8,-81.6],
+  GA:[32.6,-83.4],HI:[20.3,-156.4],ID:[44.2,-114.5],IL:[40.0,-89.2],IN:[39.9,-86.3],
+  IA:[42.1,-93.5],KS:[38.5,-98.4],KY:[37.5,-85.3],LA:[30.9,-91.8],ME:[45.4,-69.0],
+  MD:[39.1,-76.8],MA:[42.2,-71.5],MI:[44.3,-85.4],MN:[46.5,-94.7],MS:[32.7,-89.7],
+  MO:[38.5,-92.5],MT:[46.9,-110.5],NE:[41.5,-99.9],NV:[39.3,-117.1],NH:[43.7,-71.6],
+  NJ:[40.1,-74.6],NM:[34.3,-106.0],NY:[42.9,-75.5],NC:[35.5,-79.6],ND:[47.5,-100.5],
+  OH:[40.4,-82.8],OK:[35.6,-96.9],OR:[44.0,-120.5],PA:[40.9,-77.8],RI:[41.7,-71.5],
+  SC:[33.9,-80.9],SD:[44.5,-100.3],TN:[35.9,-86.2],TX:[31.2,-99.3],UT:[39.3,-111.1],
+  VT:[44.1,-72.7],VA:[37.4,-78.7],WA:[47.4,-120.5],WV:[38.6,-80.6],WI:[44.5,-89.8],
+  WY:[43.1,-107.6],
+};
+
+// ── Canais por mercado ──
+const CHAN_BR = { todos:'Todos os canais', shopify:'Shopify - Coco and Luna BR', yucaloo_br:'Shopify - Yucaloo BR', shopee:'Shopee', amazon:'Amazon BR', mercadolivre:'Mercado Livre' };
+const CHAN_US = { todos:'Todos os canais', shopify_us:'Shopify - Coco and Luna EUA', yucaloo_us:'Shopify - Yucaloo EUA', amazon_us:'Amazon EUA' };
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos' };
-function fmtBRL(v, dec=0) { return 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}) }
-function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
-function pctStr(n) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:1,minimumFractionDigits:1})+'%' }
+
+// ── Formatting (BRL/pt-BR ou USD/en-US conforme o mercado ativo) ──
+function fmtMoney(v, dec=0) {
+  return market === 'us'
+    ? 'U$ '+(Number(v)||0).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})
+    : 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
+function fmtInt(v) {
+  return market === 'us' ? (Number(v)||0).toLocaleString('en-US') : (Number(v)||0).toLocaleString('pt-BR');
+}
+function pctStr(n) {
+  return market === 'us'
+    ? (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:1,minimumFractionDigits:1})+'%'
+    : (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:1,minimumFractionDigits:1})+'%';
+}
 
 // ── Canal breakdown helpers ──
-const CHAN_COLORS_MAP = { shopify:'#95BF47', shopee:'#EE4D2D', mercadolivre:'#FFE600', amazon:'#FF9900', shopify_us:'#7EAD3C', yucaloo_br:'#4466FF' };
-const CHAN_LABELS_MAP = { shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon BR', shopify_us:'Shopify - Coco and Luna EUA', yucaloo_br:'Shopify - Yucaloo BR' };
+const CHAN_COLORS_MAP = { shopify:'#95BF47', shopee:'#EE4D2D', mercadolivre:'#FFE600', amazon:'#FF9900', amazon_us:'#FF9900', shopify_us:'#7EAD3C', yucaloo_br:'#4466FF', yucaloo_us:'#4466FF' };
+const CHAN_LABELS_MAP = { shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon BR', amazon_us:'Amazon EUA', shopify_us:'Shopify - Coco and Luna EUA', yucaloo_br:'Shopify - Yucaloo BR', yucaloo_us:'Shopify - Yucaloo EUA' };
 function isChanMap() { return localStorage.getItem('coco_chan_map') !== '0'; }
 function isChanExpand() { return localStorage.getItem('coco_chan_expand') === '1'; }
 function togglePopupExpand(uid) {
@@ -606,7 +724,7 @@ function modalChanHTML(byChannel) {
       <span class="smd-chan-dot" style="background:${color}"></span>
       <span class="smd-chan-name">${CHAN_LABELS_MAP[ch]||ch}</span>
       <div class="smd-chan-bar"><div class="smd-chan-fill" style="width:${pct}%;background:${color}"></div></div>
-      <span class="smd-chan-val">${fmtBRL(v)}</span>
+      <span class="smd-chan-val">${fmtMoney(v)}</span>
       <span class="smd-chan-pct">${pct}%</span>
     </div>`;
   }).join('');
@@ -615,7 +733,11 @@ function modalChanHTML(byChannel) {
 function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
 function parseISO(s) { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d) }
 function addDays(d,n) { const x=new Date(d); x.setDate(x.getDate()+n); return x }
-function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }
+function fmtDM(d) {
+  return market === 'us'
+    ? String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')
+    : String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
+}
 
 // ── Color helpers ──
 function hexToRGB(hex) {
@@ -630,11 +752,14 @@ function heatGradientColor(t) {
   return `rgb(${r},${g},${b})`;
 }
 
-// ── Choropleth config ──
+// ── Choropleth config (mesmas cores nos dois mercados) ──
 const CHORO_DEFAULTS = { lowColor:'#e8e3d8', midColor:'#c49568', highColor:'#8c3a20', borderColor:'#bbb5aa', borderWeight:0.8, fillOpacity:82 };
-let choroConfig = { ...CHORO_DEFAULTS };
-try { const _s = localStorage.getItem('coco_choro_cfg'); if (_s) choroConfig = { ...CHORO_DEFAULTS, ...JSON.parse(_s) }; } catch {}
-function saveChoroConfig() { localStorage.setItem('coco_choro_cfg', JSON.stringify(choroConfig)); }
+function loadChoroConfig(m) {
+  const cfg = { ...CHORO_DEFAULTS };
+  try { const s = localStorage.getItem(m === 'us' ? 'coco_choro_us_cfg' : 'coco_choro_cfg'); if (s) Object.assign(cfg, JSON.parse(s)); } catch {}
+  return cfg;
+}
+function saveChoroConfig() { localStorage.setItem(market === 'us' ? 'coco_choro_us_cfg' : 'coco_choro_cfg', JSON.stringify(choroConfig)); }
 
 function choroColor(t) {
   const s = Math.max(0, Math.min(1, t));
@@ -642,35 +767,49 @@ function choroColor(t) {
   const [r,g,b] = s < 0.5 ? lerpRGB(c0,c1,s*2) : lerpRGB(c1,c2,(s-0.5)*2);
   return `rgb(${r},${g},${b})`;
 }
-function heatColor(t) {
-  // green → yellow → red, opacity scales with intensity (partial fill for all)
-  const s = Math.max(0, Math.min(1, t));
-  const a = 0.18 + s * 0.44; // 0.18 (low) → 0.62 (top)
-  if (s < 0.5) {
-    const u = s * 2;
-    return { r:Math.round(u*230), g:Math.round(195-u*10), b:35, a };
-  } else {
-    const u = (s-0.5)*2;
-    return { r:230, g:Math.round(185-u*155), b:35, a };
-  }
+
+// ── Heat config (pill laranja no BR, azul no EUA — só essa cor difere por padrão) ──
+function HEAT_DEFAULTS(m) {
+  return { coldColor:'#22c55e', midColor:'#eab308', hotColor:'#ef4444', pillColor: m === 'us' ? '#3b82f6' : '#f97316', textColor:'#ffffff', radius:38, blur:28, minOpacity:30, borderColor:'#555544', borderWeight:1.5 };
 }
-
-// ── Heat config ──
-const HEAT_DEFAULTS = { coldColor:'#22c55e', midColor:'#eab308', hotColor:'#ef4444', pillColor:'#f97316', textColor:'#ffffff', radius:38, blur:28, minOpacity:30, borderColor:'#555544', borderWeight:1.5 };
-let heatConfig = { ...HEAT_DEFAULTS };
-try { const s = localStorage.getItem('coco_heat_cfg'); if (s) heatConfig = { ...HEAT_DEFAULTS, ...JSON.parse(s) }; } catch {}
-
-function saveHeatConfig() { localStorage.setItem('coco_heat_cfg', JSON.stringify(heatConfig)); }
+function loadHeatConfig(m) {
+  const cfg = { ...HEAT_DEFAULTS(m) };
+  try { const s = localStorage.getItem(m === 'us' ? 'coco_heat_us_cfg' : 'coco_heat_cfg'); if (s) Object.assign(cfg, JSON.parse(s)); } catch {}
+  return cfg;
+}
+function saveHeatConfig() { localStorage.setItem(market === 'us' ? 'coco_heat_us_cfg' : 'coco_heat_cfg', JSON.stringify(heatConfig)); }
 
 // ── App state ──
 const todayISO = isoLocal(new Date());
 let sinceDate = localStorage.getItem('coco_since') || isoLocal(addDays(new Date(),-29));
 let untilDate = localStorage.getItem('coco_until') || todayISO;
-let channel   = localStorage.getItem('coco_channel') || 'todos';
+let market    = localStorage.getItem('coco_market') || 'br';
+if (market !== 'us') market = 'br';
+// Link antigo /geografia-us redireciona pra cá com ?market=us — respeita e já
+// deixa gravado, senão o toggle voltaria pro último mercado usado no resto do app.
+const urlMarket = new URLSearchParams(location.search).get('market');
+if (urlMarket === 'us' || urlMarket === 'br') {
+  market = urlMarket;
+  localStorage.setItem('coco_market', market);
+}
 let metric    = localStorage.getItem('coco_metric_geo') || 'receita';
-let vizMode   = 'choropleth'; // 'choropleth' | 'heat'
-if (!CHAN[channel]) channel = 'todos';
 if (!METRIC_LABEL[metric]) metric = 'receita';
+let vizMode   = 'choropleth'; // 'choropleth' | 'heat'
+
+function loadChannel(m) {
+  const key = m === 'us' ? 'coco_ch_us' : 'coco_channel';
+  const val = localStorage.getItem(key) || 'todos';
+  const chans = m === 'us' ? CHAN_US : CHAN_BR;
+  return chans[val] ? val : 'todos';
+}
+
+let CHAN         = market === 'us' ? CHAN_US : CHAN_BR;
+let STATE_NAMES  = market === 'us' ? STATE_NAMES_US : STATE_NAMES_BR;
+let CENTROIDS    = market === 'us' ? CENTROIDS_US : CENTROIDS_BR;
+let SUB_REGIONS  = market === 'us' ? SUB_REGIONS_US : SUB_REGIONS_BR;
+let channel      = loadChannel(market);
+let choroConfig  = loadChoroConfig(market);
+let heatConfig   = loadHeatConfig(market);
 
 function rangeLabel(s,u) {
   if(s===u&&s===todayISO)return'Hoje'; if(s===u)return fmtDM(parseISO(s));
@@ -689,10 +828,18 @@ function setLive(s,t) {
 }
 
 // ── Leaflet map ──
-const map = L.map('map', { center:[-15,-52], zoom:4, minZoom:4, maxZoom:8, zoomControl:true, zoomSnap:0.5 });
-map.fitBounds([[-33.75, -73.99], [5.26, -28.84]]);
-map.setMaxBounds([[-36.0, -76.0], [8.0, -25.0]]);
-map.options.minZoom = 4;
+const MAP_VIEW = {
+  br: { center:[-15,-52], bounds:[[-33.75,-73.99],[5.26,-28.84]], maxBounds:[[-36.0,-76.0],[8.0,-25.0]] },
+  us: { center:[38,-97],  bounds:[[24.0,-125.0],[49.5,-66.5]],   maxBounds:[[18.0,-130.0],[52.0,-62.0]] },
+};
+const map = L.map('map', { center: MAP_VIEW[market].center, zoom:4, minZoom:4, maxZoom:8, zoomControl:true, zoomSnap:0.5 });
+function applyMapView(m) {
+  map.setMaxBounds(null);
+  map.fitBounds(MAP_VIEW[m].bounds);
+  map.setMaxBounds(MAP_VIEW[m].maxBounds);
+  map.options.minZoom = 4;
+}
+applyMapView(market);
 
 // Tile layer — CartoDB Voyager (city and state labels)
 let currentTile = null;
@@ -705,10 +852,12 @@ function setTileLayer(withLabels) {
 }
 setTileLayer(false);
 
-let geojsonData = null;   // Brazil states GeoJSON (loaded once)
-let stateData   = {};     // { UF: { revenue, orders } }
-let mapLayers   = [];     // active Leaflet layers
-let lastApiData = null;   // last /api/dashboard response for local re-renders
+let geojsonDataBR = null;  // Brazil states GeoJSON (loaded once, cacheado)
+let geojsonDataUS = null;  // US states GeoJSON (loaded once, cacheado)
+let geojsonData   = null;  // ponteiro pro GeoJSON do mercado ativo
+let stateData     = {};    // { UF: { revenue, orders } }
+let mapLayers     = [];    // active Leaflet layers
+let lastApiData   = null;  // last /api/dashboard response for local re-renders
 
 // ── Overlay helpers ──
 function showMapOverlay(icon, html, btnLabel, btnFn) {
@@ -721,16 +870,36 @@ function showMapOverlay(icon, html, btnLabel, btnFn) {
 }
 function removeMapOverlay() { document.getElementById('mapOverlay')?.remove(); }
 
-// ── Load GeoJSON ──
-async function loadGeoJSON() {
+// ── Load GeoJSON (BR via IBGE, EUA via jsDelivr — cacheado por mercado) ──
+async function loadGeoJSONFor(m) {
+  if (m === 'us') {
+    if (geojsonDataUS) return true;
+    try {
+      const res = await fetch('https://cdn.jsdelivr.net/gh/PublicaMundi/MappingAPI/data/geojson/us-states.json');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      data.features.forEach(f => {
+        const fips = String(f.properties?.id ?? '').padStart(2, '0');
+        const name = f.properties?.name || '';
+        f.properties._uf = FIPS_UF[fips] || NAME_TO_UF[name] || null;
+      });
+      geojsonDataUS = data;
+      return true;
+    } catch(e) {
+      console.error('US GeoJSON load failed:', e);
+      return false;
+    }
+  }
+  if (geojsonDataBR) return true;
   try {
     const res = await fetch('https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intrarregiao=UF&formato=application/vnd.geo+json&qualidade=minima');
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    geojsonData = await res.json();
-    geojsonData.features.forEach(f => {
+    const data = await res.json();
+    data.features.forEach(f => {
       const code = f.properties?.codarea;
       f.properties._uf = IBGE_UF[String(code)] || null;
     });
+    geojsonDataBR = data;
     return true;
   } catch(e) {
     console.error('GeoJSON load failed:', e);
@@ -749,8 +918,9 @@ function drawMap() {
   removeMapOverlay();
 
   if (!geojsonData) {
-    showMapOverlay('🗺', 'Não foi possível carregar o mapa do Brasil.<br>Verifique sua conexão e tente novamente.', '↺ Tentar novamente', async () => {
-      const ok = await loadGeoJSON();
+    showMapOverlay('🗺', `Não foi possível carregar o mapa ${market==='us'?'dos EUA':'do Brasil'}.<br>Verifique sua conexão e tente novamente.`, '↺ Tentar novamente', async () => {
+      const ok = await loadGeoJSONFor(market);
+      geojsonData = market === 'us' ? geojsonDataUS : geojsonDataBR;
       if (ok) drawMap();
       else showMapOverlay('🗺', 'Falha ao carregar mapa. Tente recarregar a página.', null, null);
     });
@@ -781,6 +951,7 @@ function drawMap() {
 function drawChoropleth(isMoney, getValue, maxVal) {
   setTileLayer(false);
   const layer = L.geoJSON(geojsonData, {
+    filter: f => !!f.properties._uf, // pula territórios/regiões sem UF conhecida
     style: feature => {
       const uf = feature.properties._uf;
       const s  = stateData[uf];
@@ -801,7 +972,7 @@ function drawChoropleth(isMoney, getValue, maxVal) {
       // Permanent label on each state with data
       if (s) {
         const val   = getValue(s);
-        const label = isMoney ? fmtBRL(val) : fmtInt(val) + (s.orders === 1 ? ' pedido' : ' pedidos');
+        const label = isMoney ? fmtMoney(val) : fmtInt(val) + (s.orders === 1 ? ' pedido' : ' pedidos');
         layer.bindTooltip(
           `<div style="text-align:center;line-height:1.5"><div style="font-size:11px;font-weight:700;letter-spacing:.3px">${uf}</div><div style="font-size:10px;opacity:.85">${label}</div></div>`,
           { permanent: true, direction: 'center', className: 'state-tooltip', offset: [0, 0] }
@@ -817,9 +988,9 @@ function drawChoropleth(isMoney, getValue, maxVal) {
         layer.bindPopup(`
           <div class="pop-title">📍 ${name}${uf ? ' · '+uf : ''}</div>
           ${s ? `
-            <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
+            <div class="pop-row"><span>Receita</span><strong>${fmtMoney(s.revenue, 2)}</strong></div>
             <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
-            <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue/s.orders,2) : '—'}</strong></div>
+            <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtMoney(s.revenue/s.orders,2) : '—'}</strong></div>
             <div class="pop-row"><span>% do total</span><strong>${pct}</strong></div>
             ${popupChanHTML(s.byChannel)}
           ` : '<div style="color:#9c9790;font-size:12px">Sem vendas neste estado no período.</div>'}
@@ -846,6 +1017,7 @@ function drawHeatmap(isMoney, getValue, maxVal) {
 
   // Bordas finas dos estados sobre o tile
   const borders = L.geoJSON(geojsonData, {
+    filter: f => !!f.properties._uf,
     style: { fillOpacity: 0, color: heatConfig.borderColor, weight: heatConfig.borderWeight, opacity: 0.5 },
     interactive: false,
   }).addTo(map);
@@ -853,7 +1025,7 @@ function drawHeatmap(isMoney, getValue, maxVal) {
 
   // Manchas de calor: múltiplos círculos por estado usando SUB_REGIONS,
   // raio base pequeno dividido por √(nº de pontos) → manchas dispersas pelo estado.
-  const MAX_R = 60000, MIN_R = 12000; // metros — base total por estado
+  const MAX_R = market === 'us' ? 70000 : 60000, MIN_R = 12000; // metros — base total por estado
   for (const [uf, s] of Object.entries(stateData)) {
     const val  = getValue(s);
     const t    = val / maxVal;
@@ -871,9 +1043,9 @@ function drawHeatmap(isMoney, getValue, maxVal) {
       circle.on('click', () => {
         L.popup().setLatLng([pts[0][0], pts[0][1]]).setContent(`
           <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
-          <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
+          <div class="pop-row"><span>Receita</span><strong>${fmtMoney(s.revenue, 2)}</strong></div>
           <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
-          <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue / s.orders, 2) : '—'}</strong></div>
+          <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtMoney(s.revenue / s.orders, 2) : '—'}</strong></div>
           <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
           ${popupChanHTML(s.byChannel)}
         `).openOn(map);
@@ -886,7 +1058,7 @@ function drawHeatmap(isMoney, getValue, maxVal) {
   for (const [uf, s] of Object.entries(stateData)) {
     const centroid = CENTROIDS[uf]; if (!centroid) continue;
     const val   = getValue(s);
-    const label = isMoney ? fmtBRL(val) : fmtInt(val) + ' ped.';
+    const label = isMoney ? fmtMoney(val) : fmtInt(val) + ' ped.';
     const text  = `${uf}: ${label}`;
     const pillW = Math.max(80, text.length * 7 + 28);
     const icon  = L.divIcon({
@@ -897,9 +1069,9 @@ function drawHeatmap(isMoney, getValue, maxVal) {
     marker.on('click', () => {
       L.popup().setLatLng(centroid).setContent(`
         <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
-        <div class="pop-row"><span>Receita</span><strong>${fmtBRL(s.revenue, 2)}</strong></div>
+        <div class="pop-row"><span>Receita</span><strong>${fmtMoney(s.revenue, 2)}</strong></div>
         <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
-        <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtBRL(s.revenue / s.orders, 2) : '—'}</strong></div>
+        <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtMoney(s.revenue / s.orders, 2) : '—'}</strong></div>
         <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
         ${popupChanHTML(s.byChannel)}
       `).openOn(map);
@@ -918,9 +1090,10 @@ function render(d) {
   stateData = d.byState || {};
   const isMoney = metric === 'receita';
   const label   = rangeLabel(d.period.since, d.period.until);
+  const marketLabel = market === 'us' ? 'EUA' : 'Brasil';
 
   document.getElementById('pageSub').textContent =
-    `Coco and Luna · ${CHAN[d.channel]} · ${label}`;
+    `Coco and Luna · ${marketLabel} · ${CHAN[d.channel] || d.channel} · ${label}`;
   document.getElementById('mapTitle').textContent =
     `${vizMode === 'choropleth' ? 'Coropleto' : 'Mapa de calor'} · ${METRIC_LABEL[metric]} por estado`;
   document.getElementById('rankTitle').textContent =
@@ -932,19 +1105,20 @@ function render(d) {
 
   const total = sorted.reduce((a, s) => a + s.val, 0);
   document.getElementById('rankTotal').textContent = sorted.length
-    ? `Total: ${isMoney ? fmtBRL(total) : fmtInt(total) + ' pedidos'}`
+    ? `Total: ${isMoney ? fmtMoney(total) : fmtInt(total) + ' pedidos'}`
     : '';
 
   // KPIs
-  document.getElementById('kpiStates').textContent = sorted.length || '—';
+  const stateCount = market === 'us' ? sorted.filter(s => US_50.has(s.code)).length : sorted.length;
+  document.getElementById('kpiStates').textContent = sorted.length ? stateCount : '—';
   document.getElementById('kpiStatesSub').textContent = sorted.length
-    ? `de 27 estados do Brasil`
+    ? (market === 'us' ? 'de 50 estados dos EUA' : 'de 27 estados do Brasil')
     : 'sincronize para carregar';
 
   if (sorted.length) {
     document.getElementById('kpiLeader').textContent = STATE_NAMES[sorted[0].code] || sorted[0].code;
     document.getElementById('kpiLeaderSub').textContent = isMoney
-      ? fmtBRL(sorted[0].val)
+      ? fmtMoney(sorted[0].val)
       : fmtInt(sorted[0].val) + ' pedidos';
   } else {
     document.getElementById('kpiLeader').textContent = '—';
@@ -964,10 +1138,10 @@ function render(d) {
     document.getElementById('stateGrid').innerHTML = sorted.map((s, i) => {
       const name   = STATE_NAMES[s.code] || s.code;
       const barW   = Math.max((s.val / maxVal) * 100, 1).toFixed(1);
-      const valTxt = isMoney ? fmtBRL(s.val) : fmtInt(s.val) + ' ped.';
+      const valTxt = isMoney ? fmtMoney(s.val) : fmtInt(s.val) + ' ped.';
       const subTxt = isMoney
         ? `${fmtInt(s.orders)} pedido${s.orders!==1?'s':''} · ${pctStr(s.val/total*100)}`
-        : `${fmtBRL(s.revenue)} · ${pctStr(s.val/total*100)}`;
+        : `${fmtMoney(s.revenue)} · ${pctStr(s.val/total*100)}`;
       const barCol = choroColor(s.val / maxVal);
       return `<div class="state-card" onclick="openStateModal('${s.code}')">
         <div class="sc-head">
@@ -988,7 +1162,7 @@ function render(d) {
   setLive('ok', `Ao vivo · ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   document.getElementById('footerDate').textContent =
-    `Coco and Luna · ${CHAN[d.channel]} · ${label} · última sincronização: ${up}`;
+    `Coco and Luna · ${marketLabel} · ${CHAN[d.channel] || d.channel} · ${label} · última sincronização: ${up}`;
 
   drawMap();
 }
@@ -997,7 +1171,7 @@ function render(d) {
 async function loadData() {
   setLive('loading','Atualizando…');
   try {
-    const p = new URLSearchParams({ channel, metric:'receita', since:sinceDate, until:untilDate });
+    const p = new URLSearchParams({ channel, metric:'receita', since:sinceDate, until:untilDate, market });
     const r = await fetch('/api/dashboard?'+p);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
@@ -1042,7 +1216,6 @@ function syncHeatCfgUI() {
   document.getElementById('hcBlurVal').textContent    = heatConfig.blur;
   document.getElementById('hcMinOpVal').textContent   = heatConfig.minOpacity + '%';
 }
-syncHeatCfgUI();
 
 function syncChoroUI() {
   setColorBtn('chCold',   choroConfig.lowColor);
@@ -1054,7 +1227,6 @@ function syncChoroUI() {
   document.getElementById('chBorderWVal').textContent = choroConfig.borderWeight;
   document.getElementById('chOpacityVal').textContent = choroConfig.fillOpacity + '%';
 }
-syncChoroUI();
 
 // Troca os <input type="color"> do painel de mapa pelo novo picker (colors.js) —
 // mantém o mesmo id/valor, só muda o widget de seleção.
@@ -1113,7 +1285,7 @@ document.getElementById('hcApply').addEventListener('click', () => {
   drawMap();
 });
 document.getElementById('hcReset').addEventListener('click', () => {
-  heatConfig = { ...HEAT_DEFAULTS };
+  heatConfig = { ...HEAT_DEFAULTS(market) };
   choroConfig = { ...CHORO_DEFAULTS };
   saveHeatConfig();
   saveChoroConfig();
@@ -1141,9 +1313,9 @@ function openStateModal(uf) {
   document.getElementById('smdSub').textContent = `#${rank} de ${sorted.length} estados · ${pctStr(pct)} do total`;
 
   document.getElementById('smdKpis').innerHTML = `
-    <div class="smd-kpi"><div class="smd-kpi-label">Receita</div><div class="smd-kpi-value">${fmtBRL(s.revenue)}</div></div>
+    <div class="smd-kpi"><div class="smd-kpi-label">Receita</div><div class="smd-kpi-value">${fmtMoney(s.revenue)}</div></div>
     <div class="smd-kpi"><div class="smd-kpi-label">Pedidos</div><div class="smd-kpi-value">${fmtInt(s.orders)}</div></div>
-    <div class="smd-kpi"><div class="smd-kpi-label">Ticket médio</div><div class="smd-kpi-value">${ticket > 0 ? fmtBRL(ticket) : '—'}</div></div>
+    <div class="smd-kpi"><div class="smd-kpi-label">Ticket médio</div><div class="smd-kpi-value">${ticket > 0 ? fmtMoney(ticket) : '—'}</div></div>
     <div class="smd-kpi"><div class="smd-kpi-label">Participação</div><div class="smd-kpi-value">${pctStr(pct)}</div></div>
   `;
   document.getElementById('smdChan').innerHTML = modalChanHTML(s.byChannel);
@@ -1151,7 +1323,7 @@ function openStateModal(uf) {
   const top8 = sorted.slice(0, 8);
   document.getElementById('smdChart').innerHTML = top8.map(x => {
     const barW = ((x.val / maxVal) * 100).toFixed(1);
-    const valTxt = isMoney ? fmtBRL(x.val) : fmtInt(x.val) + ' ped.';
+    const valTxt = isMoney ? fmtMoney(x.val) : fmtInt(x.val) + ' ped.';
     const isThis = x.code === uf;
     const barColor = isThis ? choroColor(x.val / maxVal) : 'var(--border2)';
     return `<div class="smd-bar-row${isThis ? ' smd-highlight' : ''}">
@@ -1172,6 +1344,24 @@ document.getElementById('smdClose').addEventListener('click', closeStateModal);
 document.getElementById('smdOverlay').addEventListener('click', closeStateModal);
 
 // ── Filter controls ──
+function renderChannelOptions() {
+  const wrap = document.getElementById('cselChannel');
+  const pop = document.getElementById('channelPop');
+  pop.innerHTML = Object.entries(CHAN).map(([k,label]) =>
+    `<div class="csel-opt${k===channel?' active':''}" data-value="${k}">${label}</div>`
+  ).join('');
+  pop.querySelectorAll('.csel-opt').forEach(opt => {
+    opt.addEventListener('click', e => {
+      e.stopPropagation();
+      channel = opt.dataset.value;
+      localStorage.setItem(market === 'us' ? 'coco_ch_us' : 'coco_channel', channel);
+      wrap.classList.remove('open');
+      syncControls();
+      loadData();
+    });
+  });
+}
+
 function syncControls() {
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
   document.querySelectorAll('#cselMetric .csel-opt').forEach(o=>o.classList.toggle('active',o.dataset.value===metric));
@@ -1194,18 +1384,18 @@ document.querySelectorAll('.csel').forEach(el => {
     closeAllDropdowns();
     if (!wasOpen) el.classList.add('open');
   });
-  el.querySelectorAll('.csel-opt').forEach(opt => {
-    opt.addEventListener('click', e => {
-      e.stopPropagation();
-      const val = opt.dataset.value;
-      if (el.id==='cselMetric')  { metric=val; localStorage.setItem('coco_metric_geo',metric); }
-      if (el.id==='cselChannel') { channel=val; localStorage.setItem('coco_channel',channel); }
-      el.classList.remove('open');
-      syncControls();
-      // Métrica só muda a exibição local; canal requer nova busca na API
-      if (el.id==='cselMetric' && lastApiData) render(lastApiData);
-      else loadData();
-    });
+});
+
+document.querySelectorAll('#cselMetric .csel-opt').forEach(opt => {
+  opt.addEventListener('click', e => {
+    e.stopPropagation();
+    metric = opt.dataset.value;
+    localStorage.setItem('coco_metric_geo', metric);
+    document.getElementById('cselMetric').classList.remove('open');
+    syncControls();
+    // Métrica só muda a exibição local; canal requer nova busca na API
+    if (lastApiData) render(lastApiData);
+    else loadData();
   });
 });
 
@@ -1260,10 +1450,45 @@ document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => {
 });
 syncRefreshUI();
 
+// ── Market toggle ──
+async function setMarket(m) {
+  if (m === market) return;
+  market = m;
+  localStorage.setItem('coco_market', m);
+  document.getElementById('mktBtnBr').classList.toggle('active', m === 'br');
+  document.getElementById('mktBtnUs').classList.toggle('active', m === 'us');
+  document.body.classList.toggle('market-us', m === 'us');
+
+  CHAN        = m === 'us' ? CHAN_US : CHAN_BR;
+  STATE_NAMES = m === 'us' ? STATE_NAMES_US : STATE_NAMES_BR;
+  CENTROIDS   = m === 'us' ? CENTROIDS_US : CENTROIDS_BR;
+  SUB_REGIONS = m === 'us' ? SUB_REGIONS_US : SUB_REGIONS_BR;
+  channel     = loadChannel(m);
+  choroConfig = loadChoroConfig(m);
+  heatConfig  = loadHeatConfig(m);
+  syncChoroUI();
+  syncHeatCfgUI();
+  renderChannelOptions();
+  syncControls();
+
+  applyMapView(m);
+  setLive('loading', 'Atualizando…');
+  await loadGeoJSONFor(m);
+  geojsonData = m === 'us' ? geojsonDataUS : geojsonDataBR;
+  await loadData();
+}
+
 // ── Init ──
+document.getElementById('mktBtnBr').classList.toggle('active', market === 'br');
+document.getElementById('mktBtnUs').classList.toggle('active', market === 'us');
+document.body.classList.toggle('market-us', market === 'us');
+syncChoroUI();
+syncHeatCfgUI();
+renderChannelOptions();
 syncControls();
 (async () => {
-  await loadGeoJSON();
+  await loadGeoJSONFor(market);
+  geojsonData = market === 'us' ? geojsonDataUS : geojsonDataBR;
   await loadData();
   scheduleRefresh();
 })();
