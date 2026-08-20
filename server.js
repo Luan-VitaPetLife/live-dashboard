@@ -173,7 +173,6 @@ const SLUG_TO_FILE = {
   '': 'index.html',
   segmentos: 'segmentos.html',
   geografia: 'geografia.html',
-  'geografia-us': 'geografia-us.html',
   produtos: 'produtos.html',
   estoque: 'estoque.html',
   campanhas: 'campanhas.html',
@@ -191,6 +190,11 @@ function resolvePageFile(pathname) {
   const seg = clean.slice(1).toLowerCase();
   return SLUG_TO_FILE[seg.endsWith('.html') ? seg.slice(0, -5) : seg] || null;
 }
+
+// Geografia BR/EUA virou uma página só com seletor de país embutido (ver CLAUDE.md) —
+// bookmarks antigos pro slug separado continuam funcionando, só passam a abrir a
+// página unificada já no mercado EUA.
+app.get(['/geografia-us', '/geografia-us.html'], (req, res) => res.redirect(301, '/geografia?market=us'));
 
 // Redireciona (301, permanente) qualquer .html antigo pra URL limpa — bookmarks e
 // links salvos continuam funcionando, mas a URL canônica nunca mais mostra .html.

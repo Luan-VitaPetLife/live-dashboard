@@ -75,8 +75,7 @@ public/campanhas.html    Gastos reais por canal + campanhas
 public/produtos.html     Catálogo completo por canal
 public/estoque.html      Estoque + produção, híbrido real (vendas) + manual
 public/segmentos.html    Gato vs Cão, tipos de produto, geografia por produto
-public/geografia.html    Mapa por estado BR (Leaflet)
-public/geografia-us.html Mapa por estado US (Leaflet)
+public/geografia.html    Mapa por estado (Leaflet), seletor BR/EUA embutido
 public/unificador.html   Agrupamento manual de produtos entre canais (admin)
 public/configuracoes.html Geral, login, gestão de usuários (admin)
 public/integracoes.html  Status + liga/desliga por integração (admin)
@@ -307,8 +306,8 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   nesses lugares — só telas com lista FIXA de canais (em vez de descobrir dinamicamente pelos
   dados) precisam de uma entrada própria pra Yucaloo aparecer: já adicionada em `index.html`
   (`MARKET_CHANNELS`), `produtos.html`/`estoque.html` (`CHANNELS_BR`/`CHANNELS_US` + `CH_META`),
-  `segmentos.html` (`CH_BY_MARKET`) e `geografia.html`/`geografia-us.html` (dropdown hardcoded +
-  `CHAN`/`CHAN_COLORS_MAP`/`CHAN_LABELS_MAP`). `campanhas.html` fica de fora de propósito — não
+  `segmentos.html` (`CH_BY_MARKET`) e `geografia.html` (`CHAN_BR`/`CHAN_US` +
+  `CHAN_COLORS_MAP`/`CHAN_LABELS_MAP`). `campanhas.html` fica de fora de propósito — não
   tem lista genérica de canais Shopify, só cards fixos por conta de Ads, e a Yucaloo ainda não tem
   conta de Ads própria. Se um canal novo for adicionado no futuro, checar essas mesmas telas.
 - Cor padrão da marca: `#4466FF`. Badge de canal: "Shopify - Yucaloo BR"/"EUA" (e os da Coco and
@@ -379,16 +378,36 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   Produtos/Estoque mesmo assim). Canal sem catálogo (Shopee/ML/Amazon) cai no fallback de sempre: só
   a tag do pedido mesmo.
 
-### Geografia (`geografia.html`/`geografia-us.html`)
+### Geografia (`geografia.html`)
+- Página única com seletor BR/EUA no topo (mesmo padrão `mkt-toggle-wrap`/`setMarket()` de
+  `campanhas.html`) — antes eram duas páginas/rotas separadas (`geografia.html` +
+  `geografia-us.html`, um item de sidebar cada). Unificado 20/08/2026 a pedido do Luan: "temos
+  tudo pronto, é só fazer essa lógica de mudar o país dentro de uma só página". `/geografia-us` e
+  `/geografia-us.html` continuam existindo só como redirect 301 pra `/geografia?market=us`
+  (bookmark antigo), lidos por `geografia.html` via `?market=` na URL na carga inicial.
 - Leaflet 1.9.4, tile CartoDB Voyager. Dois modos: coroplético (polígono colorido por intensidade)
   e calor (também preenche o polígono, com gradiente — não usa círculos, evita sobreposição).
 - BR: GeoJSON do IBGE em runtime, casa por `codarea`. US: `us-states.json`, casa por `_uf`.
+  Os dois ficam cacheados em memória (`geojsonDataBR`/`geojsonDataUS`) depois da 1ª carga — trocar
+  de mercado não rebusca o GeoJSON se já visitado nesta sessão. Bounds/centro/zoom do Leaflet
+  (`MAP_VIEW`) e as tabelas de nomes/centróides/sub-regiões (`STATE_NAMES`/`CENTROIDS`/
+  `SUB_REGIONS`) trocam de ponteiro em `setMarket()`, não são reconstruídas.
 - `byState` no mercado US passa por `normalizeUsState`. Endereço fora dos EUA no mercado US vira
   bucket `'INTL'` (não perde receita, só não vira linha própria por país). Território/militar
   contam como EUA.
-- Canal é dropdown hardcoded no HTML (não gerado dinamicamente) — ao adicionar canal novo em
-  qualquer lugar do app, checar também aqui (`CHAN`/`CHAN_COLORS_MAP`/`CHAN_LABELS_MAP` + o `<div
-  class="csel-opt">` do dropdown), é o ponto mais fácil de esquecer.
+- Lista de canais por mercado (`CHAN_BR`/`CHAN_US`) ainda é hardcoded no JS — ao adicionar canal
+  novo em qualquer lugar do app, checar também aqui. O dropdown de canal em si já não é mais HTML
+  estático: `renderChannelOptions()` monta as `.csel-opt` a partir de `CHAN_BR`/`CHAN_US` toda vez
+  que o mercado troca, então só as duas constantes precisam de manutenção (antes eram 2 arquivos
+  com `<div class="csel-opt">` duplicado cada).
+- Formatação (`fmtMoney`/`fmtInt`/`pctStr`/`fmtDM`) lê a variável `market` em cada chamada — BRL/
+  pt-BR no Brasil, USD/en-US nos EUA (mesmo padrão de moeda por mercado do resto do app; texto em
+  pt-BR nos dois — a antiga `geografia-us.html` tinha "order"/"orders" em inglês vazado em dois
+  lugares, corrigido na unificação).
+- Cores do coroplético são as mesmas nos dois mercados; só a cor padrão da pill do mapa de calor
+  difere (laranja `#f97316` no BR, azul `#3b82f6` no EUA) — configuração salva por mercado
+  (`coco_choro_cfg`/`coco_choro_us_cfg`, `coco_heat_cfg`/`coco_heat_us_cfg`), recarregada a cada
+  troca de país.
 
 ### Campanhas (`public/campanhas.html`)
 - Os cards de RESUMO por canal (topo) e os cards de CAMPANHA individual (embaixo) precisam vir da
@@ -610,8 +629,8 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   igualado visualmente, não o código; um canal novo em `.csel-opt` não precisa de checkmark.
 - **Texto de última sincronização no header** (`#lastUpdate`, ao lado da bolinha `.ldot`): padrão é
   `"Ao vivo · HH:MM"` (`Atualizando…`/`Erro` enquanto carrega/falha, `Carregando…` como texto
-  inicial antes do primeiro load) — já era assim em index.html/geografia.html/geografia-us.html/
-  segmentos.html. `campanhas.html`/`estoque.html`/`produtos.html` ainda mostravam
+  inicial antes do primeiro load) — já era assim em index.html/geografia.html/segmentos.html.
+  `campanhas.html`/`estoque.html`/`produtos.html` ainda mostravam
   `"sync: DD/MM/AAAA, HH:MM:SS"` (cru, sem estado de loading/erro) — igualado ao padrão dos outros
   4 (só o texto/formato; não ganharam a máquina de estado completa da bolinha, que era um trabalho
   maior). Pedido do Luan, 19/08/2026: "deve ser um padrão entre todos os headers". O rodapé

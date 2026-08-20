@@ -212,7 +212,7 @@
 
   // Monta as linhas .sp-row (canal/marketing) num container já existente no HTML da página —
   // um único indicador de cor por linha (o próprio .ccp-trigger, à direita), mesmo padrão já
-  // usado nos painéis de cor do mapa (geografia.html/geografia-us.html) — sem swatch estático
+  // usado no painel de cor do mapa (geografia.html) — sem swatch estático
   // duplicado à esquerda.
   function buildSection(container, defaults, prefix, getCurrent, onChange) {
     if (typeof container === 'string') container = document.getElementById(container);
