@@ -521,6 +521,22 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     `@media(max-width:768px){.topbar{padding-left:56px!important}}` — o `!important` é porque o
     `.topbar{padding:...}` de cada página tem a mesma especificidade; sem ele dependeria da ordem
     de carregamento dos `<style>` no `<head>`, frágil. Bug relatado pelo Luan, 19/08/2026.
+- **`.main{min-width:0}` evita rolagem horizontal da página inteira** — regra idêntica em `.main`
+  (sidebar fixa + `margin-left:180px`) repetida nas 10 páginas com sidebar, nenhuma tinha
+  `min-width:0`. `.main` é item flex de `body{display:flex}`; sem `min-width:0`, o navegador usa o
+  `min-content` do descendente mais largo como largura mínima automática do item, em vez de
+  encolher pra caber no espaço disponível — se QUALQUER conteúdo lá dentro (tabela com muitas
+  colunas, nome de produto comprido) for mais largo que o espaço, a página inteira alarga e o
+  scroll horizontal aparece no rodapé do navegador. Bug real: Estoque (card "Panorama geral" de 11
+  colunas) alargava a página, mas Produtos "funcionava" só porque o card mais largo de lá cabia —
+  não porque tivesse alguma proteção que faltava em Estoque (reportado pelo Luan, 21/08/2026, "deve
+  ser igual a produtos, que fixa corretamente" — a causa real não era a página em si, era a mesma
+  falha latente em todas, só que sem conteúdo largo o bastante pra aparecer). Confirmado ao vivo via
+  DevTools antes de mexer no código: injetar `min-width:0` no `.main` de produção zerava o
+  `scrollWidth` extra na hora. Corrigido nas 10 páginas de uma vez (mesma regra, mesmo bug latente
+  em todas). `.prod-table-wrap{overflow-x:auto}` (Produtos/Estoque) continua como segunda camada de
+  proteção pra quando uma tabela específica for mesmo mais larga que o card — as duas coisas
+  resolvem problemas diferentes, uma não substitui a outra.
 - **Pop-up de confirmação** (`confirm-modal.js`, pedido do Luan 19/08/2026: o `confirm()` nativo
   do navegador — a barra cinza "site diz" — "não poderia acontecer"). `window.cocoConfirm(msg,
   {title, confirmText, cancelText, danger}) → Promise<boolean>` substitui todo `confirm()` nativo

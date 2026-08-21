@@ -21,7 +21,13 @@
   /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
 
   /* ── Main ── */
-  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+  /* min-width:0 é o que impede a página de ganhar rolagem horizontal quando algum conteúdo (aqui,
+     o card "Panorama geral" de 11 colunas) é mais largo que o espaço disponível — sem isso, .main
+     (item flex de body{display:flex}) usa o min-content do descendente mais largo como sua
+     largura mínima automática, em vez de encolher pra caber. Ver CLAUDE.md "Padrões de UI
+     compartilhados" pro mecanismo completo (relatado pelo Luan, 21/08/2026, print mostrando o
+     scroll lateral). Mesma regra repetida nas outras 9 páginas — não centralizado. */
+  .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
 
   /* ── Topbar ── */
   .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
@@ -94,11 +100,7 @@
   body.sidebar-hidden .main{margin-left:64px}
 
   /* ── Content ── */
-  /* overflow-x:auto contém qualquer conteúdo largo (card de canal com muitas colunas numéricas,
-     nome de produto comprido) DENTRO do próprio miolo da página — sem isso, um filho que força
-     mais largura que o disponível empurra a página inteira, e o scroll horizontal aparece no
-     rodapé do navegador em vez de ficar contido aqui. Relatado pelo Luan, 21/08/2026. */
-  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;overflow-x:auto}
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
