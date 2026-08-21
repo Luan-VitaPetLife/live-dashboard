@@ -141,10 +141,16 @@
   .integ-flow>.integ-card{flex:1 1 260px}
   .integ-flow>.fam-block{flex:1 1 100%}
 
-  /* ── Modo Colunas: masonry via CSS columns — aproveita a largura toda distribuindo os blocos
-       em colunas fluidas, cada bloco inteiro numa coluna só (sem quebrar no meio) ── */
-  .integ-columns{column-width:320px;column-gap:16px}
-  .integ-columns>*{break-inside:avoid;width:100%;margin:0 0 16px}
+  /* ── Modo Colunas: grid de verdade (não masonry via CSS columns) — cada linha alinha pela
+       altura do bloco mais alto dela. O masonry anterior (column-width) balanceava só a altura
+       TOTAL de cada coluna, então cards avulsos sem relação nenhuma entre si (Shopee, Meta Ads)
+       acabavam empilhados juntos numa coluna só pra fechar conta, ficando com um visual torto e
+       sem alinhamento — reportado pelo Luan, 21/08/2026, com print. */
+  .integ-columns{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;align-items:stretch}
+  /* .fam-block já é flex-column (regra geral acima) — só falta o miolo (.fam-cards) crescer pra
+     absorver a altura extra do stretch, puxando os cards-membro junto (align-items:stretch
+     também vale dentro de .fam-cards, por padrão) em vez de sobrar vão em branco embaixo. */
+  .integ-columns>.fam-block>.fam-cards{flex:1}
 
   /* ── Modo Linhas: lista compacta, um card por linha, tipo configurações ── */
   .integ-rows-wrap{display:flex;flex-direction:column;gap:12px}
@@ -192,7 +198,7 @@
 
   @media(max-width:768px){
     .integ-row-name{width:auto}
-    .integ-columns{column-width:100%}
+    .integ-columns{grid-template-columns:1fr}
   }
   @media(max-width:560px){
     .content{padding:20px 16px}
