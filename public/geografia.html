@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Geografia — Coco and Luna</title>
+<title>Geografia — Vita Pet Life</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -310,7 +310,7 @@
   <div class="content">
     <div>
       <div class="page-title">Distribuição geográfica</div>
-      <div class="page-sub" id="pageSub">Coco and Luna · Brasil · receita por estado</div>
+      <div class="page-sub" id="pageSub">Vita Pet Life · Brasil · receita por estado</div>
     </div>
 
     <div class="kpi-strip">
@@ -1095,7 +1095,7 @@ function render(d) {
   const marketLabel = market === 'us' ? 'EUA' : 'Brasil';
 
   document.getElementById('pageSub').textContent =
-    `Coco and Luna · ${marketLabel} · ${CHAN[d.channel] || d.channel} · ${label}`;
+    `Vita Pet Life · ${marketLabel} · ${CHAN[d.channel] || d.channel} · ${label}`;
   document.getElementById('mapTitle').textContent =
     `${vizMode === 'choropleth' ? 'Coropleto' : 'Mapa de calor'} · ${METRIC_LABEL[metric]} por estado`;
   document.getElementById('rankTitle').textContent =

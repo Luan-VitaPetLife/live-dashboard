@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Estoque — Coco and Luna</title>
+<title>Estoque — Vita Pet Life</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -283,7 +283,7 @@
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
         <div class="page-title">Estoque</div>
-        <div class="page-sub" id="pageSub">Coco and Luna · últimos 30 dias</div>
+        <div class="page-sub" id="pageSub">Vita Pet Life · últimos 30 dias</div>
       </div>
       <div class="layout-toggle" id="layoutToggle">
         <button class="layout-btn" data-layout="row" onclick="setLayout('row')" title="Linha — uma tabela abaixo da outra"><i class="bi bi-list-ul"></i></button>
@@ -906,7 +906,7 @@ function render() {
   // aqui ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho (pedido do Luan, 19/08/2026).
   const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
   setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
-  setText('pageSub', `Coco and Luna · ${state.label} (${rangeLabelShort(d.since, d.until)}) · vendas reais do período`);
+  setText('pageSub', `Vita Pet Life · ${state.label} (${rangeLabelShort(d.since, d.until)}) · vendas reais do período`);
   setText('footerDate', `Vita Pet Life · período ${state.label} · última sincronização: ${updated}`);
   renderAggCard();
   const channels = getOrderedChannels(market);
