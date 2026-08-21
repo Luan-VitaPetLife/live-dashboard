@@ -331,9 +331,20 @@
   body.edit-mode .card-bank.open{display:block}
   .card-bank-title{font-size:11px;font-weight:600;color:var(--sub);margin-bottom:8px;display:flex;align-items:center;gap:8px}
   .cb-hint{font-weight:400;color:var(--muted);font-size:10px}
-  .card-bank-list{display:flex;flex-wrap:wrap;gap:8px}
-  .cb-item{display:flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:16px;border:1px solid var(--border2);background:var(--surface);font-size:11px;color:var(--sub);cursor:pointer;transition:all .12s;font-family:inherit}
-  .cb-item:hover{border-color:var(--green);color:var(--green)}
+  .card-bank-list{display:flex;flex-wrap:wrap;gap:10px}
+  /* Card do banco: nome no topo, prévia do conteúdo real do card embaixo (ver capturePreview/
+     renderCardBank) — antes era só uma pill com o nome, não dava pra saber o que era sem
+     lembrar de cor (pedido do Luan, 21/08/2026). */
+  .cb-item{display:flex;flex-direction:column;gap:8px;width:210px;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);cursor:pointer;transition:all .12s;font-family:inherit;text-align:left}
+  .cb-item:hover{border-color:var(--green)}
+  .cb-item:hover .cb-item-head{color:var(--green)}
+  .cb-item-head{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .12s}
+  .cb-item-preview{width:100%;height:92px;overflow:hidden;border-radius:8px;background:var(--bg);border:1px solid var(--border2);position:relative}
+  /* Clone real do card (com canvas de gráfico virado <img>, ver capturePreview) encolhido via
+     transform:scale — barato e sempre fiel ao último estado renderizado, sem precisar recriar o
+     card em miniatura na mão. */
+  .cb-preview-stage{transform-origin:top left;position:absolute;top:0;left:0;pointer-events:none}
+  .cb-preview-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:24px}
   .cb-empty{font-size:11px;color:var(--muted)}
   .edit-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
   .edit-card{position:relative;min-width:0}
@@ -1534,18 +1545,22 @@ function updateCardVisibility() {
   show('cardMlBreakdown',  channel === 'mercadolivre');
 
   ALWAYS_VISIBLE_CARD_IDS.forEach(id => {
-    setWrap(document.querySelector(`.edit-card[data-card-id="${id}"]`), true);
+    setWrap(editGrid.querySelector(`.edit-card[data-card-id="${id}"]`), true);
   });
 
   // Quando o card vizinho (Canais/Marketing) fica escondido pelo canal selecionado, Tendência e
   // Top produtos passam a ocupar a linha inteira em vez de deixar metade em branco do lado
   // (mesmo espaço branco "sobrando" reportado pelo Luan, pente-fino de 30/07/2026).
-  const trendWrap = document.querySelector('.edit-card[data-card-id="trend"]');
+  // Escopado em editGrid (não document) — uma prévia do card no banco de cards (ver
+  // capturePreview/renderCardBank) é um clone com o mesmo data-card-id, só que vive dentro de
+  // #cardBank, que aparece ANTES de #editGrid no DOM; um document.querySelector pegaria essa
+  // cópia inerte em vez do card de verdade sempre que o card estivesse oculto (21/08/2026).
+  const trendWrap = editGrid.querySelector('.edit-card[data-card-id="trend"]');
   // trendExpanded (botão de expandir do card, ver applyTrendExpanded) força span 12 mesmo com o
   // card de Canais visível — senão essa função (chamada de novo em todo refresh) desfazia o
   // expandido no próximo ciclo de dados.
   if (trendWrap) trendWrap.style.gridColumn = (trendExpanded || !channelSplitVisible) ? 'span 12' : 'span 7';
-  const topProdWrap = document.querySelector('.edit-card[data-card-id="topProducts"]');
+  const topProdWrap = editGrid.querySelector('.edit-card[data-card-id="topProducts"]');
   if (topProdWrap) topProdWrap.style.gridColumn = marketingVisible ? 'span 8' : 'span 12';
 }
 
@@ -1609,6 +1624,49 @@ function resetLayout() {
   updateCardVisibility();
 }
 
+// Prévia de cada card no banco: clone real do elemento (com qualquer <canvas> de gráfico
+// virado <img> via toDataURL, já que cloneNode não copia o bitmap desenhado) capturado no
+// instante em que o card é ocultado — reflete o último estado renderizado de verdade, sem
+// precisar recriar em miniatura na mão. Card que já veio oculto de uma sessão anterior (nunca
+// esteve visível nesta carga de página) não tem captura disponível: cai no ícone genérico
+// (CB_ICON_BY_ID/CB_ICON_KPI) até ser mostrado e ocultado de novo uma vez. Pedido do Luan,
+// 21/08/2026: o banco só mostrava o nome, sem dar nenhuma pista visual do que era cada card.
+const CB_PREVIEW_W = 190;
+const CB_ICON_BY_ID = {
+  trend: 'bi-graph-up', channelSplit: 'bi-pie-chart', traffic: 'bi-signpost-split',
+  funnel: 'bi-filter-circle', mlBreakdown: 'bi-basket', topProducts: 'bi-box-seam',
+  marketing: 'bi-megaphone', salesSplit: 'bi-bullseye', recentOrders: 'bi-receipt',
+};
+const CB_ICON_KPI = {
+  revenue: 'bi-cash-stack', orders: 'bi-bag-check', aov: 'bi-tag',
+  roas: 'bi-graph-up-arrow', acos: 'bi-percent',
+};
+let cardPreviews = {};
+function capturePreview(el, kind, id) {
+  if (!el || el.style.display === 'none') return;
+  const rect = el.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll('.edit-card-tools, .kpi-mini-tools').forEach(t => t.remove());
+  // Tira todo id do clone — ele fica inserido no DOM real (dentro do banco de cards), e um id
+  // duplicado faria getElementById('trendChart') etc. arriscar pegar essa cópia inerte em vez
+  // do card de verdade na próxima atualização de dado.
+  clone.removeAttribute('id');
+  clone.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+  const origCanvases = el.querySelectorAll('canvas');
+  clone.querySelectorAll('canvas').forEach((c, i) => {
+    const src = origCanvases[i];
+    if (!src) return;
+    let dataUrl = '';
+    try { dataUrl = src.toDataURL(); } catch { /* canvas contaminado por CORS, sem prévia possível pra esse elemento */ }
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.style.cssText = c.style.cssText || `width:${src.width}px;height:${src.height}px`;
+    c.replaceWith(img);
+  });
+  cardPreviews[`${kind}:${id}`] = { html: clone.outerHTML, width: rect.width, height: rect.height };
+}
+
 function renderCardBank() {
   const list = document.getElementById('cardBankList');
   const badge = document.getElementById('cardBankBadge');
@@ -1623,7 +1681,14 @@ function renderCardBank() {
       ? editGrid.querySelector(`.edit-card[data-card-id="${id}"]`)
       : kpiStripGrid.querySelector(`.kpi-mini[data-kpi-id="${id}"]`);
     const title = el ? el.dataset.title : id;
-    return `<button type="button" class="cb-item" data-kind="${kind}" data-id="${id}"><i class="bi bi-plus-lg"></i> ${title}</button>`;
+    const preview = cardPreviews[`${kind}:${id}`];
+    const previewHtml = preview
+      ? `<div class="cb-preview-stage" style="width:${preview.width}px;height:${preview.height}px;transform:scale(${(CB_PREVIEW_W / preview.width).toFixed(4)})">${preview.html}</div>`
+      : `<div class="cb-preview-empty"><i class="bi ${(kind === 'kpi' ? CB_ICON_KPI : CB_ICON_BY_ID)[id] || 'bi-grid-1x2'}"></i></div>`;
+    return `<button type="button" class="cb-item" data-kind="${kind}" data-id="${id}">
+      <div class="cb-item-head"><i class="bi bi-plus-lg"></i> ${title}</div>
+      <div class="cb-item-preview">${previewHtml}</div>
+    </button>`;
   }).join('');
 }
 document.getElementById('cardBankList').addEventListener('click', e => {
@@ -1648,6 +1713,7 @@ editGrid.addEventListener('click', e => {
   if (!removeBtn || kpiStripGrid.contains(removeBtn)) return;
   const card = removeBtn.closest('.edit-card');
   if (!card) return;
+  capturePreview(card, 'card', card.dataset.cardId);
   hiddenByUser.add(card.dataset.cardId);
   card.style.display = 'none';
   persistLayout();
@@ -1659,6 +1725,7 @@ kpiStripGrid.addEventListener('click', e => {
   e.stopPropagation();
   const mini = removeBtn.closest('.kpi-mini');
   if (!mini) return;
+  capturePreview(mini, 'kpi', mini.dataset.kpiId);
   hiddenKpis.add(mini.dataset.kpiId);
   mini.style.display = 'none';
   persistLayout();
