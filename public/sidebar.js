@@ -81,10 +81,12 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   </div>
   <div class="brand">
     <a href="/" class="brand-link">
-      <img src="Logo2.png" alt="Coco and Luna" class="brand-logo">
-      <img src="favicon.png" alt="Coco and Luna" class="brand-icon">
+      <img src="favicon.png" alt="Coco and Luna" class="brand-mark">
     </a>
-    <span class="brand-name">Dashboard<br>Vita Pet Life · Coco and Luna</span>
+    <div class="brand-text">
+      <span class="brand-name">Dashboard</span>
+      <span class="brand-sub">Vita Pet Life · Coco and Luna</span>
+    </div>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
     <a class="nav-item" data-page="index.html" data-label="Visão geral" href="/"><i class="bi bi-bar-chart-line nav-icon"></i><span class="nav-text">Visão geral</span></a>
@@ -118,11 +120,20 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   // senão o conteúdo da página desliza por baixo da faixa de ícones (ou sobra um vão vazio).
   const baseCss = `
 .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:width .25s cubic-bezier(.4,0,.2,1)}
-.brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px;transition:padding .2s}
-.brand-link{display:block;line-height:0}
-.brand-logo{width:72px;height:auto}
-.brand-icon{display:none;width:30px;height:30px;border-radius:8px}
-.brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center;white-space:nowrap}
+/* Cabeçalho (logo+texto) no mesmo tamanho/layout da sidebar de dashboard-social-media
+   (ícone pequeno à esquerda + nome/subtítulo à direita, em vez do logo grande empilhado em cima
+   do texto) — pedido do Luan, 21/08/2026. Só o TAMANHO/LAYOUT vem de lá; a paleta (--side-bg/
+   --side-text/--side-muted/--side-hover/--side-active) continua a mesma de sempre — uma tentativa
+   anterior mudou a cor de fundo pra um gradiente pastel claro sem que isso tivesse sido pedido, e
+   foi revertida. favicon.png (ícone quadrado) no lugar de Logo2.png (faixa larga, não cabe em
+   34px) — mesma imagem já usada no estado colapsado, então não precisa mais trocar de logo ao
+   colapsar, só esconder o bloco de texto. */
+.brand{display:flex;align-items:center;gap:11px;padding:0 20px 20px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px;transition:padding .2s}
+.brand-link{display:block;line-height:0;flex-shrink:0}
+.brand-mark{width:34px;height:34px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.brand-text{display:flex;flex-direction:column;line-height:1.3;min-width:0}
+.brand-name{font-size:13px;font-weight:700;color:var(--side-text);white-space:nowrap}
+.brand-sub{font-size:10.5px;color:var(--side-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nav-group{margin-bottom:24px}
 .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px;white-space:nowrap}
 .nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:background .15s,color .15s;text-decoration:none;position:relative}
@@ -145,10 +156,8 @@ body.sidebar-mobile-open .sidebar{transform:translateX(0)!important}
      rótulo (mesmo texto do item, via data-label, sem precisar de JS pra montar tooltip). ── */
 body.sidebar-hidden .sidebar{width:64px}
 body.sidebar-hidden .sidebar-header{justify-content:center;padding:6px 0 0}
-body.sidebar-hidden .brand{padding:18px 8px 20px}
-body.sidebar-hidden .brand-logo{display:none}
-body.sidebar-hidden .brand-icon{display:block}
-body.sidebar-hidden .brand-name{display:none}
+body.sidebar-hidden .brand{padding:0 0 18px;justify-content:center}
+body.sidebar-hidden .brand-text{display:none}
 body.sidebar-hidden .nav-label{display:none}
 body.sidebar-hidden .nav-group{margin-bottom:14px}
 body.sidebar-hidden .nav-item{justify-content:center;padding:9px 0}

@@ -485,6 +485,19 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   IIFE — nunca duplicar CSS/markup deles numa página nova, sempre incluir o script
   (`confirm-modal.js` logo depois de `sidebar.js`, `jobs-widget.js` logo depois desse, em toda
   página exceto `login.html`).
+- **Cabeçalho da sidebar** (logo + texto no topo, `.brand`): layout/tamanho igual ao da sidebar de
+  `dashboard-social-media` (projeto irmão) — ícone pequeno (34px) à esquerda + nome/subtítulo à
+  direita, em vez do logo grande empilhado em cima do texto. Pedido do Luan, 21/08/2026. Só o
+  TAMANHO/LAYOUT veio de lá — a paleta (`--side-bg`/`--side-text`/`--side-muted`/`--side-hover`/
+  `--side-active`) continua a mesma de sempre (fundo escuro sólido). Uma primeira tentativa (PR
+  #159, `da753ee`) mudou também a cor de fundo pra um gradiente pastel claro nos 9 `:root` de cada
+  página, sem que isso tivesse sido pedido — e foi mesclada **direto em `master`, sem passar por
+  `dev`** (bypass do fluxo normal, produção ficou com a cor errada). Revertido: a paleta nunca
+  chegou a existir em `dev`, então o conserto foi implementar o layout certo direto aqui; falta só
+  a mesclagem chegar em `master` pra sobrescrever o commit `da753ee` que está lá. `favicon.png`
+  (ícone quadrado) no lugar de `Logo2.png` (faixa larga, não cabe em 34px) — mesma imagem que já
+  era usada no estado colapsado, então não precisa mais trocar de logo ao colapsar a sidebar, só
+  esconder o bloco de texto (`.brand-text`).
 - **Sidebar colapsada = faixa de ícones (64px), não mais some da tela** (pedido do Luan,
   19/08/2026, a partir de uma referência visual). Antes "esconder" fazia `transform:translateX(
   -100%)` — a sidebar sumia por completo e um botão flutuante fora dela (`.sidebar-open-btn`)
