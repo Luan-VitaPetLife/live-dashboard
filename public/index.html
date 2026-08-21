@@ -230,6 +230,9 @@
   .exp-status-row{display:flex;gap:6px;flex-wrap:wrap}
   .exp-status-opt{padding:7px 12px;font-size:11px;font-weight:600;border-radius:16px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;font-family:inherit}
   .exp-status-opt.active{background:var(--ink);border-color:var(--ink);color:#fff}
+  /* Mesmos botões de status do modal de exportar (.exp-status-row/.exp-status-opt), reaproveitados
+     aqui pra filtrar o card "Pedidos recentes" em si — pedido do Luan, 21/08/2026. */
+  .ro-status-row{margin-bottom:14px}
   .exp-cols-list{display:flex;flex-direction:column;gap:4px}
   .exp-col-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--surface2)}
   .exp-col-row.off{opacity:.5}
@@ -639,6 +642,12 @@
               <div class="ro-search"><i class="bi bi-search"></i><input type="search" id="ordersSearch" placeholder="Buscar cliente, nº, status, canal…" autocomplete="off" aria-label="Buscar pedidos"></div>
               <span class="ro-pg-info" id="ordersMeta">—</span>
             </div>
+          </div>
+          <div class="exp-status-row ro-status-row" id="roStatusRow">
+            <button type="button" class="exp-status-opt active" data-status="todos">Todos</button>
+            <button type="button" class="exp-status-opt" data-status="autorizado">Autorizado</button>
+            <button type="button" class="exp-status-opt" data-status="em_aberto">Em aberto</button>
+            <button type="button" class="exp-status-opt" data-status="cancelado">Cancelado</button>
           </div>
           <div class="tbl-wrap">
             <table class="tbl"><thead><tr><th>Pedido</th><th>Data/Hora da compra</th><th>Cliente</th><th>Situação</th><th>Valor</th><th>Canal</th></tr></thead>
@@ -1424,9 +1433,16 @@ let _roLimited = false;
 let _roLoading = false;
 let _roSeq = 0;         // descarta respostas de busca fora de ordem
 let _roExportStatus = 'todos';
+let _roStatusFilter = 'todos'; // botões do card em si (#roStatusRow) — mesmo vocabulário/valores do filtro de exportar
 
-// Lista atualmente exibida no card (recentes ou resultado da busca geral).
-function activeOrders() { return _roMode === 'search' ? _roSearch : _roAll; }
+// Lista atualmente exibida no card (recentes ou resultado da busca geral), já filtrada por
+// status (EXPORT_STATUS_CLS mapeia o valor do botão pra classe de statusTag() — definido mais
+// abaixo, mas função só roda depois do script inteiro já ter carregado, mesma lógica de sempre).
+function activeOrders() {
+  const list = _roMode === 'search' ? _roSearch : _roAll;
+  if (_roStatusFilter === 'todos') return list;
+  return list.filter(o => statusTag(o).cls === EXPORT_STATUS_CLS[_roStatusFilter]);
+}
 
 // Busca geral no backend: varre TODO o histórico do mercado atual (todos os canais, sem janela
 // de data). Escopo por mercado para não misturar BRL/USD. Chamada com debounce pelo input.
@@ -1460,11 +1476,16 @@ function renderOrdersPage() {
   const pager = document.getElementById('ordersPager');
   const meta = document.getElementById('ordersMeta');
   const searching = _roMode === 'search';
+  const filtered = _roStatusFilter !== 'todos';
   const ro = activeOrders();
   if (meta) {
+    // Com filtro de status ativo, _roSearchTotal/_roAll.length não valem mais — são a contagem
+    // ANTES do filtro (vêm do backend/período, não sabem de statusTag()) — usa ro.length (já
+    // filtrado) pro texto não ficar dizendo "12 pedidos" com só 3 linhas na tabela.
+    const total = filtered ? ro.length : (searching ? _roSearchTotal : _roAll.length);
     meta.textContent = _roLoading ? 'Buscando…'
-      : searching ? `${_roSearchTotal} resultado${_roSearchTotal === 1 ? '' : 's'}${_roLimited ? ` (mostrando ${ro.length})` : ''}`
-      : (_roAll.length ? `${_roAll.length} pedidos` : '0 pedidos');
+      : searching ? `${total} resultado${total === 1 ? '' : 's'}${(!filtered && _roLimited) ? ` (mostrando ${ro.length})` : ''}`
+      : (total ? `${total} pedidos` : '0 pedidos');
   }
   if (_roLoading && !ro.length) {
     body.innerHTML = '<tr><td colspan="6" class="muted-state">Buscando…</td></tr>';
@@ -2204,6 +2225,15 @@ document.getElementById('expStatusRow').addEventListener('click', e => {
   btn.classList.add('active');
   _roExportStatus = btn.dataset.status;
   renderExportPreview();
+});
+document.getElementById('roStatusRow').addEventListener('click', e => {
+  const btn = e.target.closest('.exp-status-opt');
+  if (!btn) return;
+  document.querySelectorAll('#roStatusRow .exp-status-opt').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _roStatusFilter = btn.dataset.status;
+  _roPage = 0;
+  renderOrdersPage();
 });
 
 document.getElementById('expColsList').addEventListener('change', e => {
