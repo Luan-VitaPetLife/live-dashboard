@@ -24,7 +24,9 @@
   @media(max-width:768px){ .main{margin-left:0} .content{padding:16px} }
 
   /* ── Main ── */
-  .main{margin-left:180px;flex:1;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+  /* min-width:0 evita rolagem horizontal da página — ver CLAUDE.md "Padrões de UI
+     compartilhados" (mesma regra repetida em todas as páginas, não centralizado). */
+  .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
 
   /* ── Topbar ── */
   .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
