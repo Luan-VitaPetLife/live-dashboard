@@ -335,15 +335,26 @@
   /* Card do banco: nome no topo, prévia do conteúdo real do card embaixo (ver capturePreview/
      renderCardBank) — antes era só uma pill com o nome, não dava pra saber o que era sem
      lembrar de cor (pedido do Luan, 21/08/2026). */
-  .cb-item{display:flex;flex-direction:column;gap:8px;width:210px;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);cursor:pointer;transition:all .12s;font-family:inherit;text-align:left}
+  /* overflow:hidden aqui (mesmo width já sendo fixo) evita que o conteúdo real, muito mais largo
+     que 210px, force esse item de flexbox a crescer além do declarado — flex item sem overflow
+     controlado ainda respeita seu min-content intrínseco por baixo do width (mesmo bug que fazia
+     "Tendência"/"Pedidos recentes" vazarem pro lado, 21/08/2026). */
+  .cb-item{display:flex;flex-direction:column;gap:8px;width:210px;flex:0 0 210px;overflow:hidden;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);cursor:pointer;transition:all .12s;font-family:inherit;text-align:left}
   .cb-item:hover{border-color:var(--green)}
   .cb-item:hover .cb-item-head{color:var(--green)}
   .cb-item-head{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .12s}
-  .cb-item-preview{width:100%;height:92px;overflow:hidden;border-radius:8px;background:var(--bg);border:1px solid var(--border2);position:relative}
+  /* contain:paint garante que nada do clone pinta fora dessa caixa não importa o motivo (Tendência
+     e Pedidos recentes vazavam pro lado, mostrando o card real em tamanho quase total em vez da
+     miniatura — relatado pelo Luan, 21/08/2026). */
+  .cb-item-preview{width:100%;height:92px;overflow:hidden;border-radius:8px;background:var(--bg);border:1px solid var(--border2);position:relative;contain:paint}
   /* Clone real do card (com canvas de gráfico virado <img>, ver capturePreview) encolhido via
      transform:scale — barato e sempre fiel ao último estado renderizado, sem precisar recriar o
-     card em miniatura na mão. */
-  .cb-preview-stage{transform-origin:top left;position:absolute;top:0;left:0;pointer-events:none}
+     card em miniatura na mão. De propósito SEM position:absolute: um bloco normal, no fluxo,
+     cabe no canto superior esquerdo sozinho (é o único filho) e ainda assim é cortado pelo
+     overflow:hidden do pai — position:absolute era complexidade extra sem necessidade real, e
+     era a suspeita mais provável do vazamento (um elemento posicionado escapando do contexto de
+     conteção do ancestral em algum caso de borda do motor de renderização). */
+  .cb-preview-stage{transform-origin:top left;overflow:hidden;pointer-events:none}
   .cb-preview-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:24px}
   .cb-empty{font-size:11px;color:var(--muted)}
   .edit-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
@@ -1682,8 +1693,9 @@ function renderCardBank() {
       : kpiStripGrid.querySelector(`.kpi-mini[data-kpi-id="${id}"]`);
     const title = el ? el.dataset.title : id;
     const preview = cardPreviews[`${kind}:${id}`];
-    const previewHtml = preview
-      ? `<div class="cb-preview-stage" style="width:${preview.width}px;height:${preview.height}px;transform:scale(${(CB_PREVIEW_W / preview.width).toFixed(4)})">${preview.html}</div>`
+    const scale = preview && preview.width > 0 ? CB_PREVIEW_W / preview.width : 0;
+    const previewHtml = preview && isFinite(scale) && scale > 0
+      ? `<div class="cb-preview-stage" style="width:${preview.width}px;height:${preview.height}px;transform:scale(${scale.toFixed(4)})">${preview.html}</div>`
       : `<div class="cb-preview-empty"><i class="bi ${(kind === 'kpi' ? CB_ICON_KPI : CB_ICON_BY_ID)[id] || 'bi-grid-1x2'}"></i></div>`;
     return `<button type="button" class="cb-item" data-kind="${kind}" data-id="${id}">
       <div class="cb-item-head"><i class="bi bi-plus-lg"></i> ${title}</div>
