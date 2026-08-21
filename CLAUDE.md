@@ -485,6 +485,14 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   IIFE — nunca duplicar CSS/markup deles numa página nova, sempre incluir o script
   (`confirm-modal.js` logo depois de `sidebar.js`, `jobs-widget.js` logo depois desse, em toda
   página exceto `login.html`).
+- **Paleta da sidebar** (gradiente pastel `#fbe3e0→#f6e9ec→#eef1fb` + pílula navy `#1c2b39` no
+  item ativo): mesmo estilo visual da sidebar de `dashboard-social-media` (projeto irmão), pedido
+  do Luan em 21/08/2026. Tokens `--side-bg`/`--side-muted`/`--side-hover`/`--side-active`
+  (definidos no `:root` de cada página, valor idêntico repetido — mesmo backlog "CSS da sidebar
+  duplicado" logo abaixo) mudaram de valor; `--side-text` continua cream (`#f0ebe0`) de propósito
+  — é reaproveitada em vários outros lugares do app como texto claro sobre pílula `--ink` escura
+  (`.csel-opt.active`, `.mkt-btn.active`, `.et-done` etc.), sem relação com o fundo da sidebar.
+  Texto próprio da sidebar usa `--side-active` (a mesma navy da pílula) em vez de `--side-text`.
 - **Sidebar colapsada = faixa de ícones (64px), não mais some da tela** (pedido do Luan,
   19/08/2026, a partir de uma referência visual). Antes "esconder" fazia `transform:translateX(
   -100%)` — a sidebar sumia por completo e um botão flutuante fora dela (`.sidebar-open-btn`)
