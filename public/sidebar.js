@@ -116,33 +116,23 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   // solto flutuando por cima da página. Os 64px aqui precisam bater com o `margin-left` de
   // `body.sidebar-hidden .main` em cada página (ver CLAUDE.md) — as duas precisam concordar,
   // senão o conteúdo da página desliza por baixo da faixa de ícones (ou sobra um vão vazio).
-  //
-  // Paleta: gradiente pastel + pílula navy no item ativo, no mesmo estilo da sidebar da
-  // dashboard-social-media (`../dashboard-social-media/public/sidebar.js`) — pedido do Luan,
-  // 21/08/2026. Só `--side-bg`/`--side-muted`/`--side-hover`/`--side-active` mudaram de valor;
-  // `--side-text` continua cream (#f0ebe0) DE PROPÓSITO — é reaproveitada em dezenas de outros
-  // lugares do app (`.csel-opt.active`, `.mkt-btn.active`, `.et-done`, `.chart-type-btn.active`
-  // etc.) como o texto claro que fica por cima de um botão/pílula com fundo `--ink` escuro, nada
-  // a ver com a cor de fundo da sidebar em si — trocar o valor dela quebraria esses outros
-  // lugares. O texto da própria sidebar (que precisa ficar escuro sobre o fundo agora claro) usa
-  // `--side-active` (a mesma cor navy da pílula ativa) em vez de `--side-text`.
   const baseCss = `
-.sidebar{width:180px;min-height:100vh;background:var(--side-bg);border-right:1px solid rgba(28,43,57,.08);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:width .25s cubic-bezier(.4,0,.2,1)}
-.brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(28,43,57,.08);margin-bottom:20px;transition:padding .2s}
+.sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:width .25s cubic-bezier(.4,0,.2,1)}
+.brand{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px 24px;border-bottom:1px solid rgba(240,235,224,0.07);margin-bottom:20px;transition:padding .2s}
 .brand-link{display:block;line-height:0}
 .brand-logo{width:72px;height:auto}
 .brand-icon{display:none;width:30px;height:30px;border-radius:8px}
-.brand-name{font-size:11px;font-weight:500;color:var(--side-muted);letter-spacing:.2px;line-height:1.4;text-align:center;white-space:nowrap}
+.brand-name{font-size:11px;font-weight:500;color:rgba(240,235,224,.55);letter-spacing:.2px;line-height:1.4;text-align:center;white-space:nowrap}
 .nav-group{margin-bottom:24px}
 .nav-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--side-muted);padding:0 18px;margin-bottom:4px;white-space:nowrap}
-.nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:var(--side-active);cursor:pointer;transition:background .15s,color .15s;text-decoration:none;position:relative}
-.nav-item:hover{background:var(--side-hover)}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:12px;color:rgba(240,235,224,0.55);cursor:pointer;transition:background .15s,color .15s;text-decoration:none;position:relative}
+.nav-item:hover{background:var(--side-hover);color:var(--side-text)}
 .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
 .nav-icon{font-size:15px;width:16px;text-align:center;flex-shrink:0;line-height:1;opacity:.75}
 .nav-text{white-space:nowrap}
 .sidebar-header{display:flex;justify-content:flex-end;padding:6px 10px 0;transition:padding .2s}
-.sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(28,43,57,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s;flex-shrink:0}
-.sidebar-close-btn:hover{background:rgba(28,43,57,.08);color:rgba(28,43,57,.9)}
+.sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(240,235,224,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s;flex-shrink:0}
+.sidebar-close-btn:hover{background:rgba(240,235,224,.12);color:rgba(240,235,224,.9)}
 .sidebar-open-btn{display:none;position:fixed;left:12px;top:11px;z-index:300;width:36px;height:32px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(30,28,24,.1);transition:all .15s}
 .sidebar-open-btn:hover{border-color:var(--ink);color:var(--text)}
 body.sidebar-mobile-open .sidebar-open-btn{display:none!important}
@@ -179,14 +169,14 @@ body.sidebar-hidden .nav-item:hover::after{opacity:1}
 `;
   const css = baseCss
     // Bloco de usuário no rodapé da sidebar (alimentado por /api/me)
-    + '.sidebar .side-user{margin-top:auto;padding:12px 14px;border-top:1px solid rgba(28,43,57,.08);display:flex;align-items:center;gap:9px}'
+    + '.sidebar .side-user{margin-top:auto;padding:12px 14px;border-top:1px solid rgba(240,235,224,0.08);display:flex;align-items:center;gap:9px}'
     + '.sidebar .side-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}'
     + '.sidebar .side-user-info{min-width:0;flex:1}'
-    + '.sidebar .side-user-name{font-size:12px;color:var(--side-active);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    + '.sidebar .side-user-name{font-size:12px;color:var(--side-text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '.sidebar .side-user-role{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--side-muted);margin-top:1px}'
-    + '.sidebar .side-user-role.admin{color:var(--side-active)}'
+    + '.sidebar .side-user-role.admin{color:var(--side-text)}'
     + '.sidebar .side-logout{background:none;border:none;color:var(--side-muted);cursor:pointer;font-size:14px;padding:4px;line-height:1}'
-    + '.sidebar .side-logout:hover{color:var(--side-active)}'
+    + '.sidebar .side-logout:hover{color:var(--side-text)}'
     // Colapsada: só o avatar (mesmo padrão de "ícone só + tooltip" dos itens de navegação acima).
     + 'body.sidebar-hidden .sidebar .side-user{padding:12px 0;justify-content:center;position:relative}'
     + 'body.sidebar-hidden .sidebar .side-user-info,body.sidebar-hidden .sidebar .side-logout{display:none}'
