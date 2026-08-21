@@ -12,7 +12,15 @@
 Dashboard de vendas multi-mercado e multicanal da marca **Coco and Luna** (suplementos para
 pets) e da sua 2ª marca **Yucaloo**. A empresa por trás das duas é a **Vita Pet Life** — isso é
 só o nome legal/administrativo (aparece no domínio da loja Shopify US e na conta Meta EUA por
-motivo histórico); não tratar "Vita Pet Life" como nome de loja em textos de UI.
+motivo histórico); não tratar "Vita Pet Life" como nome de loja em textos de UI (ex.: não rotular
+um canal Shopify específico como "Vita Pet Life", isso é sempre "Coco and Luna" ou "Yucaloo",
+ver `colors.js`). Já o rodapé (`#footerDate`, 6 páginas: Visão geral/Produtos/Estoque/Campanhas/
+Segmentos/Geografia) usa "Vita Pet Life" DE PROPÓSITO desde 21/08/2026 — é o resumo de rodapé da
+dashboard inteira, que hoje cobre duas marcas (e mais devem vir), então "Coco and Luna" sozinho
+ficou impreciso ali; o nome da empresa como identificador de "de quem é essa dashboard" é
+exatamente o uso correto do nome legal. As duas regras não se contradizem: uma é sobre não
+inventar uma "loja Vita Pet Life" que não existe, a outra é sobre o rótulo correto pra dashboard
+como um todo.
 
 - **Brasil:** Shopify BR (`cocoandluna.com.br`) + Shopify Yucaloo BR + Shopee + Mercado Livre + Amazon BR
 - **EUA:** Shopify US (`vita-pet-life.myshopify.com`) + Shopify Yucaloo EUA + Amazon US

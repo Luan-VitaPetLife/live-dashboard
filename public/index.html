@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard — Coco and Luna</title>
+<title>Dashboard — Vita Pet Life</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -495,7 +495,7 @@
     <div class="page-head">
       <div>
         <div class="page-title">Visão geral de receita</div>
-        <div class="page-sub" id="pageSub">Coco and Luna · multicanal</div>
+        <div class="page-sub" id="pageSub">Vita Pet Life · multicanal</div>
       </div>
     </div>
 
@@ -1081,7 +1081,7 @@ function drawDonut(id, data, colors, labels) {
 function render(d) {
   lastData = d;
   const label = rangeLabel(d.period.since, d.period.until);
-  document.getElementById('pageSub').textContent = `Coco and Luna · ${CHAN[d.channel]} · multicanal`;
+  document.getElementById('pageSub').textContent = `Vita Pet Life · ${CHAN[d.channel]} · multicanal`;
 
   // KPIs
   const k = d.kpis;
@@ -1418,7 +1418,7 @@ function render(d) {
   const now=new Date(), hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
   setLive('ok',`Ao vivo · ${hh}:${mm}`);
   const up = d.updatedAt?new Date(d.updatedAt).toLocaleString('pt-BR'):'—';
-  document.getElementById('footerDate').textContent = `Coco and Luna · ${CHAN[d.channel]} · período ${label} · última sincronização: ${up}`;
+  document.getElementById('footerDate').textContent = `Vita Pet Life · ${CHAN[d.channel]} · período ${label} · última sincronização: ${up}`;
   updateCardVisibility();
 }
 

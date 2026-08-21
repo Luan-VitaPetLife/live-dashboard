@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Segmentos — Coco and Luna</title>
+<title>Segmentos — Vita Pet Life</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1383,7 +1383,7 @@ function render(d) {
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   const chLbl = CH_LABELS[channel] || channel;
   document.getElementById('pageSub').textContent = `Gato vs Cão · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · última sincronização: ${up}`;
-  document.getElementById('footerDate').textContent = `Coco and Luna · Segmentos · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · receita exclui cancelados · última sincronização: ${up}`;
+  document.getElementById('footerDate').textContent = `Vita Pet Life · Segmentos · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · receita exclui cancelados · última sincronização: ${up}`;
   setLive('ok', `Ao vivo · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`);
 }
 

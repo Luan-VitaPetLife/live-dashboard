@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Campanhas — Coco and Luna</title>
+<title>Campanhas — Vita Pet Life</title>
 <link rel="icon" href="favicon.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -274,7 +274,7 @@
   <div class="content">
     <div>
       <div class="page-title">Campanhas & Performance</div>
-      <div class="page-sub" id="pageSub">Coco and Luna · últimos 30 dias</div>
+      <div class="page-sub" id="pageSub">Vita Pet Life · últimos 30 dias</div>
     </div>
 
     <!-- KPI Summary -->
@@ -565,8 +565,8 @@ async function render() {
   // aqui ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho (pedido do Luan, 19/08/2026).
   const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
   setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
-  setText('pageSub', 'Coco and Luna · ' + state.label);
-  setText('footerDate', `Coco and Luna · período ${state.label} · última sincronização: ${updated}`);
+  setText('pageSub', 'Vita Pet Life · ' + state.label);
+  setText('footerDate', `Vita Pet Life · período ${state.label} · última sincronização: ${updated}`);
 
   // Gasto/vendas/cliques por canal de Ads vêm SEMPRE de /api/campaigns (a mesma fonte ao vivo,
   // filtrada pelo período certo, que já alimenta os cards de campanha individuais logo abaixo) —

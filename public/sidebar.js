@@ -81,7 +81,7 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   </div>
   <div class="brand">
     <a href="/" class="brand-link">
-      <img src="favicon.png" alt="Coco and Luna" class="brand-mark">
+      <img src="favicon.png" alt="Vita Pet Life" class="brand-mark">
     </a>
     <div class="brand-text">
       <span class="brand-name">Dashboard</span>
