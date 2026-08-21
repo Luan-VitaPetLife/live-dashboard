@@ -337,7 +337,7 @@
   .cb-empty{font-size:11px;color:var(--muted)}
   .edit-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
   .edit-card{position:relative;min-width:0}
-  .edit-card.dragging{opacity:.35}
+  .edit-card.drop-bounce{animation:ecDropBounce .32s cubic-bezier(.34,1.56,.64,1)}
   .edit-card-tools{position:absolute;top:8px;right:8px;display:none;gap:4px;z-index:20}
   body.edit-mode .edit-card-tools{display:flex}
   body.edit-mode .edit-card>.card{outline:1.5px dashed var(--border2);outline-offset:2px}
@@ -346,20 +346,31 @@
   .ec-handle:active{cursor:grabbing}
   .ec-handle:hover,.ec-remove:hover{border-color:var(--ink);color:var(--text)}
   .ec-remove:hover{color:var(--red);border-color:var(--red)}
-  .edit-card-ghost{border:2px dashed var(--border2);border-radius:var(--radius);background:rgba(30,28,24,.03);min-height:80px}
+  .edit-card-ghost{border:2px dashed var(--sage);border-radius:var(--radius);background:rgba(106,140,110,.08);min-height:80px;animation:ecGhostPulse 1.1s ease-in-out infinite}
   .sync-btn.period-pill-active{color:var(--side-text)!important}
   body.edit-mode .edit-card[data-card-id="kpiStrip"]>.card{outline:none}
+  @keyframes ecDropBounce{0%{transform:scale(1.035)}60%{transform:scale(.985)}100%{transform:scale(1)}}
+  @keyframes ecGhostPulse{0%,100%{opacity:.5;background:rgba(106,140,110,.06)}50%{opacity:.95;background:rgba(106,140,110,.14)}}
+  /* Clone que segue o cursor durante o arraste (ver makeDragController) — o item real some do
+     grid enquanto isso (só o placeholder tracejado acima fica no lugar), mesmo padrão já
+     validado em produtos.html/estoque.html: a Drag and Drop API nativa do HTML5 deixava o
+     elemento de origem no DOM e o navegador tirava dele uma "imagem fantasma" fora do nosso
+     controle, dando a sensação de duas cópias do card ao mesmo tempo (relatado pelo Luan,
+     21/08/2026 — o espaço vago/dinâmico esperado não acontecia). */
+  .ec-drag-floating{position:fixed!important;top:0;left:0;margin:0;pointer-events:none;z-index:9999;max-height:70vh;overflow:hidden;box-shadow:0 22px 40px rgba(0,0,0,.28),0 0 0 3px var(--sage);transform:rotate(-1.1deg) scale(1.02);opacity:.97;transition:none}
+  body.dragging-active{cursor:grabbing!important;user-select:none}
+  body.dragging-active *{cursor:grabbing!important}
 
   /* ── Faixa de indicadores (card fixo, blocos internos editáveis) ── */
   .kpi-strip-pad{padding:0}
   .kpi-strip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
   .kpi-mini{position:relative;padding:16px 20px;border-right:1px solid var(--border)}
   .kpi-mini:last-child{border-right:none}
-  .kpi-mini.dragging{opacity:.35}
+  .kpi-mini.drop-bounce{animation:ecDropBounce .32s cubic-bezier(.34,1.56,.64,1)}
   .kpi-mini-tools{position:absolute;top:6px;right:6px;display:none;gap:4px;z-index:20}
   body.edit-mode .kpi-mini-tools{display:flex}
   body.edit-mode .kpi-mini{outline:1.5px dashed var(--border2);outline-offset:-3px}
-  .kpi-mini-ghost{border:2px dashed var(--border2);border-radius:var(--radius-sm);background:rgba(30,28,24,.03);min-height:60px}
+  .kpi-mini-ghost{border:2px dashed var(--sage);border-radius:var(--radius-sm);background:rgba(106,140,110,.08);min-height:60px;animation:ecGhostPulse 1.1s ease-in-out infinite}
   @media(max-width:768px){
     .kpi-strip-grid{grid-template-columns:1fr 1fr}
     .kpi-mini{border-bottom:1px solid var(--border)}
@@ -1654,70 +1665,106 @@ kpiStripGrid.addEventListener('click', e => {
   renderCardBank();
 });
 
-// Drag-and-drop genérico (reutilizado pro grid principal e pra faixa interna de KPIs) — alça
-// dispara draggable no mousedown, nunca no card/bloco inteiro, mesmo mecanismo já validado em
-// produtos.html/estoque.html pros cards de canal. excludeSelector impede que outros itens sejam
-// inseridos antes do card fixo "Indicadores".
+// Drag-and-drop genérico (reutilizado pro grid principal e pra faixa interna de KPIs) — arraste
+// customizado por ponteiro, não a Drag and Drop API nativa do HTML5 (deixava o elemento de
+// origem no DOM, o navegador tirava dele uma "imagem fantasma" fora do nosso controle, e o
+// espaço vago dinâmico esperado não acontecia — reportado pelo Luan, 21/08/2026). Mesmo
+// mecanismo já validado em produtos.html/estoque.html: o item real some do grid assim que o
+// arraste começa (só sobra o placeholder tracejado indicando onde ele vai cair) e um clone dele,
+// em position:fixed, segue o cursor de verdade a cada mousemove. excludeSelector impede que o
+// card fixo "Indicadores" seja arrastado ou usado como referência de posição.
+const EC_DRAG_THRESHOLD = 4;
+let ecDragItem = null, ecDragGhost = null, ecDragClone = null, ecDragContainer = null;
+let ecDragItemClass = null, ecDragExclude = null;
+let ecDragGrabX = 0, ecDragGrabY = 0, ecDragStartX = 0, ecDragStartY = 0, ecDragStarted = false;
+
+function getEcDragAfterElement(container, itemClass, excludeSelector, x, y) {
+  let els = [...container.querySelectorAll(`.${itemClass}`)];
+  if (excludeSelector) els = els.filter(el => !el.matches(excludeSelector));
+  let closest = null, closestDist = Infinity;
+  for (const el of els) {
+    const box = el.getBoundingClientRect();
+    const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+    const dist = Math.hypot(x - cx, y - cy);
+    if (dist < closestDist) closestDist = dist, closest = { el, box };
+  }
+  if (!closest) return null;
+  const cy = closest.box.top + closest.box.height / 2;
+  return (y > cy) ? closest.el.nextElementSibling : closest.el;
+}
+function ecBeginDrag() {
+  ecDragStarted = true;
+  const item = ecDragItem;
+  const rect = item.getBoundingClientRect();
+  ecDragGrabX = ecDragStartX - rect.left;
+  ecDragGrabY = ecDragStartY - rect.top;
+
+  ecDragGhost = document.createElement('div');
+  ecDragGhost.className = ecDragItemClass + '-ghost';
+  ecDragGhost.style.height = rect.height + 'px';
+  if (ecDragItemClass === 'edit-card') ecDragGhost.style.gridColumn = item.style.gridColumn;
+  item.after(ecDragGhost);
+
+  ecDragClone = item.cloneNode(true);
+  ecDragClone.classList.add('ec-drag-floating');
+  ecDragClone.style.width = rect.width + 'px';
+  ecDragClone.style.left = rect.left + 'px';
+  ecDragClone.style.top = rect.top + 'px';
+  document.body.appendChild(ecDragClone);
+
+  item.remove();
+  document.body.classList.add('dragging-active');
+}
+function ecDragPointerMove(e) {
+  if (!ecDragStarted) {
+    if (Math.hypot(e.clientX - ecDragStartX, e.clientY - ecDragStartY) < EC_DRAG_THRESHOLD) return;
+    ecBeginDrag();
+  }
+  ecDragClone.style.left = (e.clientX - ecDragGrabX) + 'px';
+  ecDragClone.style.top = (e.clientY - ecDragGrabY) + 'px';
+  const afterEl = getEcDragAfterElement(ecDragContainer, ecDragItemClass, ecDragExclude, e.clientX, e.clientY);
+  if (afterEl == null) ecDragContainer.appendChild(ecDragGhost);
+  else if (afterEl !== ecDragGhost) ecDragContainer.insertBefore(ecDragGhost, afterEl);
+}
+function ecDragPointerUp() {
+  document.removeEventListener('mousemove', ecDragPointerMove);
+  document.removeEventListener('mouseup', ecDragPointerUp);
+  const item = ecDragItem;
+  if (ecDragStarted && item) {
+    ecDragContainer.insertBefore(item, ecDragGhost);
+    item.classList.add('drop-bounce');
+    setTimeout(() => item.classList.remove('drop-bounce'), 320);
+    persistLayout();
+  }
+  if (ecDragGhost) { ecDragGhost.remove(); ecDragGhost = null; }
+  if (ecDragClone) { ecDragClone.remove(); ecDragClone = null; }
+  document.body.classList.remove('dragging-active');
+  ecDragItem = null;
+  ecDragContainer = null;
+  ecDragStarted = false;
+}
 function makeDragController(container, itemClass, excludeSelector) {
-  let ghost = null;
-  function candidates() {
-    let els = [...container.querySelectorAll(`.${itemClass}:not(.dragging)`)];
-    if (excludeSelector) els = els.filter(el => !el.matches(excludeSelector));
-    return els;
-  }
-  function getAfter(x, y) {
-    for (const el of candidates()) {
-      const r = el.getBoundingClientRect();
-      const midY = r.top + r.height / 2, midX = r.left + r.width / 2;
-      if (y < midY - 4) return el;
-      if (y < r.bottom && x < midX) return el;
-    }
-    return null;
-  }
   container.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
     const handle = e.target.closest('.ec-handle');
     if (!handle) return;
     const item = handle.closest(`.${itemClass}`);
     if (!item || (excludeSelector && item.matches(excludeSelector))) return;
-    item.draggable = true;
-    e.stopPropagation();
-  });
-  container.addEventListener('dragstart', e => {
-    const item = e.target.closest(`.${itemClass}`);
-    if (!item || item.draggable !== true) return;
-    item.classList.add('dragging');
-    ghost = document.createElement('div');
-    ghost.className = itemClass + '-ghost';
-    if (itemClass === 'edit-card') ghost.style.gridColumn = item.style.gridColumn;
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-    e.stopPropagation();
-  });
-  container.addEventListener('dragover', e => {
-    const dragging = container.querySelector(`.${itemClass}.dragging`);
-    if (!dragging || !ghost) return;
     e.preventDefault();
     e.stopPropagation();
-    const after = getAfter(e.clientX, e.clientY);
-    if (after == null) container.appendChild(ghost);
-    else if (after !== ghost) container.insertBefore(ghost, after);
-  });
-  container.addEventListener('dragend', e => {
-    const item = container.querySelector(`.${itemClass}.dragging`);
-    if (!item) return;
-    item.classList.remove('dragging');
-    item.draggable = false;
-    if (ghost && ghost.parentNode) container.insertBefore(item, ghost);
-    if (ghost) { ghost.remove(); ghost = null; }
-    persistLayout();
-    e.stopPropagation();
+    ecDragItem = item;
+    ecDragContainer = container;
+    ecDragItemClass = itemClass;
+    ecDragExclude = excludeSelector;
+    ecDragStartX = e.clientX;
+    ecDragStartY = e.clientY;
+    ecDragStarted = false;
+    document.addEventListener('mousemove', ecDragPointerMove);
+    document.addEventListener('mouseup', ecDragPointerUp);
   });
 }
 makeDragController(editGrid, 'edit-card', '[data-card-id="kpiStrip"]');
 makeDragController(kpiStripGrid, 'kpi-mini');
-document.addEventListener('mouseup', () => {
-  document.querySelectorAll('.edit-card[draggable="true"]:not(.dragging), .kpi-mini[draggable="true"]:not(.dragging)')
-    .forEach(c => { c.draggable = false; });
-});
 
 function setEditMode(on) {
   document.body.classList.toggle('edit-mode', on);
