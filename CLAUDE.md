@@ -643,11 +643,33 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   4 (só o texto/formato; não ganharam a máquina de estado completa da bolinha, que era um trabalho
   maior). Pedido do Luan, 19/08/2026: "deve ser um padrão entre todos os headers". O rodapé
   (`#footerDate`) continua com data/hora completa — só o header precisa ser curto.
-- Arrastar para reordenar cards (Produtos/Estoque): a API nativa de Drag and Drop do HTML5 causou
-  vários bugs (arraste não iniciava, duas cópias visuais do card) — foi trocada por um arraste
-  customizado por ponteiro (`mousedown`/`mousemove`/`mouseup` + clone `position:fixed` seguindo o
-  cursor). Se for implementar reordenação em alguma tela nova, seguir esse padrão em vez da API
-  nativa de drag and drop.
+- Arrastar para reordenar cards (Produtos/Estoque/Visão geral): a API nativa de Drag and Drop do
+  HTML5 causou vários bugs (arraste não iniciava, duas cópias visuais do card) — foi trocada por
+  um arraste customizado por ponteiro (`mousedown`/`mousemove`/`mouseup` + clone `position:fixed`
+  seguindo o cursor). Se for implementar reordenação em alguma tela nova, seguir esse padrão em
+  vez da API nativa de drag and drop. O modo de edição da Visão geral (`index.html`,
+  `makeDragController`) ainda usava a API nativa apesar do próprio comentário do código dizer
+  "mesmo mecanismo já validado em produtos.html/estoque.html" — nunca tinha sido migrado de
+  verdade, só o comentário mentia; o espaço vago dinâmico esperado ao arrastar não acontecia
+  (reportado pelo Luan, 21/08/2026). Migrado pro mesmo padrão de ponteiro dos outros dois, tanto
+  pro grid principal (`#editGrid`) quanto pra faixa interna de KPIs (`#kpiStripGrid`).
+- **Banco de cards** (Visão geral, modo de edição): cada card oculto mostra uma prévia real do seu
+  conteúdo, não só o nome (pedido do Luan, 21/08/2026 — antes era uma pill sem nenhuma pista
+  visual). `capturePreview()` clona o elemento no instante em que ele é ocultado — `cloneNode` não
+  copia o bitmap desenhado num `<canvas>`, então todo `<canvas>` do clone (gráficos ECharts) é
+  trocado por um `<img>` com `toDataURL()` do canvas original antes de descartar a referência.
+  Encolhido no banco via `transform:scale`. Card que já veio oculto de uma sessão anterior (nunca
+  esteve visível nesta carga de página) não tem captura disponível — cai num ícone genérico
+  (`CB_ICON_BY_ID`/`CB_ICON_KPI`) até ser mostrado e ocultado de novo uma vez; não vale a pena
+  forçar uma captura de um card que nunca renderizou dado real. O clone tem todo `id` removido
+  antes de entrar no DOM (`clone.removeAttribute('id')` + `querySelectorAll('[id]')`) — sem isso,
+  a prévia de "Tendência" ficaria com um segundo elemento `id="trendChart"` no documento, e como
+  `#cardBank` aparece ANTES de `#editGrid` no HTML, um `document.querySelector` desprotegido pegaria
+  a cópia inerte em vez do card de verdade. Por isso `updateCardVisibility()` (que já tinha esse
+  padrão pra `trendWrap`/`topProdWrap`/`ALWAYS_VISIBLE_CARD_IDS`) foi escopado em `editGrid` em vez
+  de `document` — vale como regra geral: nunca usar `document.querySelector` pra achar um
+  `.edit-card`/`.kpi-mini` por `data-card-id`/`data-kpi-id`, sempre escopar em `editGrid`/
+  `kpiStripGrid`.
 - Nunca engolir erro de integração silenciosamente (`.catch(() => [])` sem log/propagação) — já
   escondeu um bug real (Amazon US com pedidos zerados) por semanas.
 
