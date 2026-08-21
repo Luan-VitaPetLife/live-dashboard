@@ -94,7 +94,11 @@
   body.sidebar-hidden .main{margin-left:64px}
 
   /* ── Content ── */
-  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
+  /* overflow-x:auto contém qualquer conteúdo largo (card de canal com muitas colunas numéricas,
+     nome de produto comprido) DENTRO do próprio miolo da página — sem isso, um filho que força
+     mais largura que o disponível empurra a página inteira, e o scroll horizontal aparece no
+     rodapé do navegador em vez de ficar contido aqui. Relatado pelo Luan, 21/08/2026. */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;overflow-x:auto}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
 
