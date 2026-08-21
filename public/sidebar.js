@@ -85,7 +85,8 @@ window.initCollapsibleNotice = initCollapsibleNotice;
     </a>
     <div class="brand-text">
       <span class="brand-name">Dashboard</span>
-      <span class="brand-sub">Vita Pet Life · Coco and Luna</span>
+      <span class="brand-sub">Painel Principal</span>
+      <span class="brand-sub">Vita Pet Life</span>
     </div>
   </div>
   <div class="nav-group"><div class="nav-label">Visão Geral</div>
