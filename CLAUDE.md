@@ -826,6 +826,25 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   decidir os project ID/token de cada site. Limitação já identificada: a API pública do Clarity só
   devolve métricas agregadas dos últimos 1–3 dias (sem histórico longo) e não expõe heatmaps nem
   gravações de sessão — isso continua só no painel deles.
+- **Village (programa de assinatura, Shopify EUA) — página/gestão dedicada:** o Luan quer uma
+  tela própria pra gerenciar as inscrições do programa "Village". Ainda não iniciado — falta
+  pesquisar o que a API do app **Seal Subscriptions** (o app que eles usam hoje no Shopify EUA
+  pra gerenciar assinatura) expõe de útil pra essa tela (provavelmente dá pra ler contrato,
+  status, próxima cobrança etc. direto da API deles, em vez de só inferir pelos pedidos). Domínio
+  já investigado e confirmado contra pedidos reais (21/08/2026):
+  - Cada item de pedido com assinatura vem com `lineItem.sellingPlan.name` (Shopify Admin
+    GraphQL) — hoje NÃO pedido em `fetchOrders` (`src/shopify.js`), precisa ser adicionado à
+    query.
+  - `VIL-XXXX` (tag do PEDIDO, não do produto — também precisa ser adicionada à query, hoje só
+    pedimos `product.tags` por item) é o número do contrato do programa Village. Confirmado que
+    a tag se REPETE em todo pedido de renovação do mesmo contrato (não é "só aparece na primeira
+    vez") — ex.: mesmo cliente com 3 pedidos em datas diferentes, os 3 com a mesma tag
+    `VIL-1562`. Pedido com mais de um produto em assinatura pode ter mais de uma tag VIL (uma por
+    contrato) no mesmo pedido.
+  - Nem todo pedido de assinatura tem tag VIL: uma parte tem `appstle_subscription_first_order`
+    no lugar — indício de contratos mais antigos de um app diferente (Appstle Subscriptions),
+    provavelmente de antes da troca pro Seal Subscriptions. Vale confirmar com o Luan se isso é
+    esperado antes de tratar como "sem contrato".
 
 ### Confiabilidade operacional (não é checklist de site público — SEO/CTA/meta description não se
 ### aplicam aqui, a dashboard é interna e atrás de login; pedido do Luan em 17/08/2026)
