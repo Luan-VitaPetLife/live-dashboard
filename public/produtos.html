@@ -834,7 +834,7 @@ function render() {
   const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
   setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
   setText('pageSub', 'Coco and Luna · ' + state.label);
-  setText('footerDate', `Coco and Luna · período ${state.label} · última sincronização: ${updated}`);
+  setText('footerDate', `Vita Pet Life · período ${state.label} · última sincronização: ${updated}`);
   const channels = getOrderedChannels(market);
   document.getElementById('prodGrid').innerHTML = channels.map(cardHTML).join('');
   document.querySelectorAll('.prod-input').forEach(inp => inp.addEventListener('change', onFinanceEdit));

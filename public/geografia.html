@@ -1164,7 +1164,7 @@ function render(d) {
   setLive('ok', `Ao vivo · ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   document.getElementById('footerDate').textContent =
-    `Coco and Luna · ${marketLabel} · ${CHAN[d.channel] || d.channel} · ${label} · última sincronização: ${up}`;
+    `Vita Pet Life · ${marketLabel} · ${CHAN[d.channel] || d.channel} · ${label} · última sincronização: ${up}`;
 
   drawMap();
 }

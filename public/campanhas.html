@@ -566,7 +566,7 @@ async function render() {
   const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
   setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
   setText('pageSub', 'Coco and Luna · ' + state.label);
-  setText('footerDate', `Coco and Luna · período ${state.label} · última sincronização: ${updated}`);
+  setText('footerDate', `Vita Pet Life · período ${state.label} · última sincronização: ${updated}`);
 
   // Gasto/vendas/cliques por canal de Ads vêm SEMPRE de /api/campaigns (a mesma fonte ao vivo,
   // filtrada pelo período certo, que já alimenta os cards de campanha individuais logo abaixo) —
