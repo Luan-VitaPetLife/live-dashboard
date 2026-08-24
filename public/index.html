@@ -285,6 +285,55 @@
   .ro-summary-val{padding:10px 16px;font-weight:600;font-size:13px}
   footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
 
+  /* ── Insights (card da Visão geral) ──
+     Layout do card do Shopify que o Luan trouxe de referência (24/08/2026): lista de assuntos à
+     esquerda, detalhe do selecionado à direita. Em tela estreita vira uma coluna só (a lista
+     rola na horizontal como abas), porque duas colunas de 300px não cabem no celular. */
+  .ins-body{display:grid;grid-template-columns:262px 1fr;gap:18px;align-items:stretch;flex:1;min-height:0}
+  .ins-list{display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--border);padding-right:14px;overflow-y:auto;min-height:0}
+  .ins-item{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border-radius:var(--radius-sm);border:1px solid transparent;background:none;font-family:inherit;font-size:11.5px;line-height:1.35;color:var(--sub);text-align:left;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+  .ins-item:hover{background:var(--surface2);color:var(--text)}
+  .ins-item.active{background:var(--surface2);border-color:var(--border2);color:var(--text);font-weight:600}
+  .ins-item-ico{flex-shrink:0;font-size:12px;line-height:1.2;margin-top:.5px}
+  .ins-item-txt{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  /* Cores por tipo: atenção em âmbar (não vermelho — é "olha isso", não "quebrou"), ganho em
+     verde, informativo em cinza. Mesma paleta do resto da dashboard. */
+  .ins-ico-atencao{color:var(--amber)} .ins-ico-positivo{color:var(--green)} .ins-ico-neutro{color:var(--muted)}
+  /* Coluna das barras generosa (não uma faixa fina encostada na direita): o card é span 12, e com
+     as barras estreitas sobrava um vão morto de uns 500px entre o fim da frase e o começo do
+     gráfico. Aqui as duas colunas dividem o espaço de forma parecida e não sobra buraco. */
+  .ins-detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,44%);gap:26px;align-items:center;min-width:0}
+  .ins-detail-main{min-width:0}
+  .ins-eyebrow{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+  .ins-title{font-size:14px;font-weight:600;line-height:1.35;display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+  .ins-title-ico{flex-shrink:0;margin-top:1px}
+  .ins-text{font-size:12px;color:var(--sub);line-height:1.5}
+  /* Selo de variação, mesmo vocabulário visual do .delta-val da faixa de Indicadores (seta +
+     percentual em pill colorida) — repetido aqui em vez de reaproveitar a classe porque lá o
+     verde é sempre "subiu" e aqui a cor segue o TIPO do insight: uma queda de 40% no ACOS é
+     ótima notícia e sairia vermelha se fosse pelo sinal do número. */
+  .ins-delta{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;margin-top:8px}
+  .ins-delta.atencao{background:rgba(155,122,42,.1);color:var(--amber)}
+  .ins-delta.positivo{background:rgba(61,122,82,.1);color:var(--green)}
+  .ins-delta.neutro{background:rgba(30,28,24,.06);color:var(--muted)}
+  /* Duas barras comparativas. Largura proporcional ao maior valor do par, com um piso de 2% pra
+     uma barra de valor zero ainda aparecer como traço (senão "0" some e parece dado faltando). */
+  .ins-bars{display:flex;flex-direction:column;gap:10px;min-width:0}
+  .ins-bar-row{display:flex;align-items:center;gap:9px;font-size:11px}
+  .ins-bar-track{flex:1;min-width:0;height:22px;border-radius:5px;background:var(--surface2);overflow:hidden}
+  .ins-bar-fill{height:100%;border-radius:5px;transition:width .35s ease}
+  .ins-bar-val{flex-shrink:0;font-weight:600;font-size:11px;white-space:nowrap}
+  .ins-bar-lbl{font-size:9.5px;color:var(--muted);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ins-bar-cell{min-width:0;flex:1}
+  .ins-empty{display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:12px;padding:26px 10px;line-height:1.6}
+  @media(max-width:900px){
+    .ins-body{grid-template-columns:1fr;gap:14px}
+    .ins-list{flex-direction:row;border-right:none;border-bottom:1px solid var(--border);padding:0 0 10px;overflow-x:auto;gap:6px}
+    .ins-item{flex:0 0 auto;max-width:230px}
+    .ins-item-txt{-webkit-line-clamp:2}
+    .ins-detail{grid-template-columns:1fr;gap:16px}
+  }
+
   /* ── Top produtos (lista construída via JS) ── */
   /* flex:1 1 auto: as linhas de produto dividem entre si a sobra de altura quando o card é
      esticado pelo vizinho mais alto ("Marketing por origem"), ficando mais espaçadas em vez de
@@ -591,6 +640,20 @@
               <div class="kc-label">ACOS</div><div class="kc-value" id="kpiAcos">—</div><div class="kc-delta" id="kpiAcosSub">gasto ÷ vendas atribuídas</div>
             </div>
           </div>
+        </div></div>
+      </div>
+
+      <!-- Insights: fica logo depois da faixa de Indicadores de propósito. A faixa diz "receita
+           subiu 53%"; este card diz POR CAUSA DE QUÊ. Ler um logo depois do outro é a leitura
+           natural. Regras determinísticas no servidor (src/insights.js), sem IA. -->
+      <div class="edit-card" data-card-id="insights" data-title="Insights" style="grid-column:span 12">
+        <div class="edit-card-tools"><button class="ec-handle" title="Arrastar"><i class="bi bi-grip-vertical"></i></button><button class="ec-remove" title="Remover"><i class="bi bi-x-lg"></i></button></div>
+        <div class="card" id="cardInsights"><div class="card-pad">
+          <div class="card-top">
+            <div><div class="ct-title">Insights</div><div class="ct-sub" id="insightsSub">O que mudou em relação ao período anterior</div></div>
+            <div class="ct-top-right"><div class="ct-val" id="insightsCount">—</div></div>
+          </div>
+          <div class="ins-body" id="insightsBody"></div>
         </div></div>
       </div>
 
@@ -1040,6 +1103,91 @@ function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
 function pctStr(n, dec=1) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:dec,minimumFractionDigits:dec})+'%' }
 function escapeHtmlAttr(s) { return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+// ── Insights ──────────────────────────────────────────────────────────────────
+// As frases e os números vêm PRONTOS do servidor (src/insights.js) — aqui só se desenha.
+// De propósito: a regra que decide o que é relevante é a mesma pro Brasil e pros EUA, mora num
+// lugar só e é testável sem navegador. O front não recalcula nada nem reformata número, senão
+// viraria uma segunda fonte de verdade discordando da primeira (o mesmo erro que já aconteceu
+// entre resumo e cards na tela de Campanhas, ver CLAUDE.md).
+let _insights = [];
+let _insightSel = 0;
+const INS_ICO = { atencao: 'bi-exclamation-circle-fill', positivo: 'bi-graph-up-arrow', neutro: 'bi-info-circle-fill' };
+const INS_BAR_COLOR = { atencao: 'var(--amber)', positivo: 'var(--sage)', neutro: 'var(--tan)' };
+
+// Formata um valor conforme o tipo que o servidor mandou junto do gráfico.
+function insFmtVal(v, fmt) {
+  if (fmt === 'money') return fmtMoney(v);
+  if (fmt === 'pct') return pctStr(v);
+  if (fmt === 'x') return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '×';
+  return fmtInt(v);
+}
+
+function renderInsights(list) {
+  _insights = Array.isArray(list) ? list : [];
+  const body = document.getElementById('insightsBody');
+  const count = document.getElementById('insightsCount');
+  if (!body) return;
+  if (!_insights.length) {
+    count.textContent = '';
+    // Sem insight não é erro: é período estável, ou volume baixo demais pra afirmar qualquer
+    // coisa sem virar ruído (ver os pisos em src/insights.js).
+    body.innerHTML = `<div class="ins-empty">Nada fora do normal neste período.<br>Períodos maiores (7 ou 30 dias) costumam revelar mais que um dia isolado.</div>`;
+    return;
+  }
+  if (_insightSel >= _insights.length) _insightSel = 0;
+  count.textContent = _insights.length === 1 ? '1 destaque' : `${_insights.length} destaques`;
+  body.innerHTML = `<div class="ins-list" id="insList"></div><div class="ins-detail" id="insDetail"></div>`;
+  document.getElementById('insList').innerHTML = _insights.map((i, n) => `
+    <button class="ins-item${n === _insightSel ? ' active' : ''}" data-n="${n}">
+      <i class="bi ${INS_ICO[i.kind] || INS_ICO.neutro} ins-item-ico ins-ico-${i.kind}"></i>
+      <span class="ins-item-txt">${escapeHtmlAttr(i.title)}</span>
+    </button>`).join('');
+  document.getElementById('insList').onclick = e => {
+    const b = e.target.closest('.ins-item');
+    if (!b) return;
+    _insightSel = Number(b.dataset.n);
+    renderInsights(_insights);
+  };
+  renderInsightDetail();
+}
+
+function renderInsightDetail() {
+  const i = _insights[_insightSel];
+  const el = document.getElementById('insDetail');
+  if (!i || !el) return;
+  const rows = i.chart?.rows || [];
+  // Barra proporcional ao MAIOR valor do par. Piso de 2% pra uma barra de valor zero ainda
+  // aparecer como um traço: sem isso ela some e parece dado faltando, quando o zero é a
+  // informação (ex.: "nenhuma venda atribuída aos anúncios").
+  const max = Math.max(...rows.map(r => Math.abs(Number(r.value) || 0)), 0) || 1;
+  const bars = rows.map((r, n) => {
+    const v = Number(r.value) || 0;
+    const w = Math.max((Math.abs(v) / max) * 100, v === 0 ? 2 : 6);
+    // A primeira linha é sempre o período/valor atual: ganha a cor do tipo, a segunda fica neutra.
+    const cor = n === 0 ? (INS_BAR_COLOR[i.kind] || 'var(--tan)') : 'var(--border2)';
+    return `<div class="ins-bar-cell">
+      <div class="ins-bar-lbl">${escapeHtmlAttr(r.label)}</div>
+      <div class="ins-bar-row">
+        <div class="ins-bar-track"><div class="ins-bar-fill" style="width:${w}%;background:${cor}"></div></div>
+        <span class="ins-bar-val">${insFmtVal(v, i.chart.fmt)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  // Selo de variação. A SETA segue o número (subiu/caiu), a COR segue o tipo do insight — não dá
+  // pra derivar a cor do sinal, porque nem toda queda é ruim (ACOS caindo é bom) nem toda alta é
+  // boa. Quem já decidiu isso foi a regra no servidor, através do `kind`.
+  const delta = (i.deltaPct == null || !isFinite(i.deltaPct)) ? '' :
+    `<div class="ins-delta ${i.kind}"><i class="bi bi-arrow-${i.deltaPct >= 0 ? 'up' : 'down'}-right"></i>${pctStr(Math.abs(i.deltaPct))}</div>`;
+  el.innerHTML = `
+    <div class="ins-detail-main">
+      <div class="ins-eyebrow">${escapeHtmlAttr(i.dimension)}</div>
+      <div class="ins-title"><i class="bi ${INS_ICO[i.kind] || INS_ICO.neutro} ins-title-ico ins-ico-${i.kind}"></i><span>${escapeHtmlAttr(i.title)}</span></div>
+      <div class="ins-text">${escapeHtmlAttr(i.detail)}</div>
+      ${delta}
+    </div>
+    <div class="ins-bars">${bars}</div>`;
+}
+
 function renderDelta(el, p, suffix='vs. período anterior') {
   if (p === null || p === undefined) { el.innerHTML=`<span class="delta-val flat">—</span> ${suffix}`; return }
   const up = p >= 0, cls = Math.abs(p) < 0.05 ? 'flat' : (up ? 'up' : 'down');
@@ -1426,6 +1574,8 @@ function render(d) {
     return `<div class="fl-row"><div class="fl-row-top"><span class="fl-label">${l}</span><span class="fl-val">${fmtInt(v)}</span></div><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><div class="fl-meta">${ofTotal}${drop ? ' '+drop : ''}</div></div>`;
   }).join('');
 
+  renderInsights(d.insights || []);
+
   // Top products
   const isAllCh = d.channel === 'todos';
   const allProds = d.topProductsAll || d.topProducts;
@@ -1605,7 +1755,11 @@ function statusTag(o) {
 }
 
 // Cards sem regra de visibilidade por canal (sempre visíveis, exceto se removidos no modo de edição)
-const ALWAYS_VISIBLE_CARD_IDS = ['kpiStrip','trend','topProducts','recentOrders'];
+// Insights entra aqui: as regras dele já se adaptam ao canal selecionado (as de canal não rodam
+// fora de "todos", ver src/insights.js), então o card nunca fica sem sentido — no pior caso mostra
+// o estado vazio "nada fora do normal". Esconder por canal seria pior: o usuário perderia
+// justamente o aviso de "esse canal parou de vender".
+const ALWAYS_VISIBLE_CARD_IDS = ['kpiStrip','insights','trend','topProducts','recentOrders'];
 
 function updateCardVisibility() {
   const isTodos = channel === 'todos';
@@ -1722,6 +1876,7 @@ function resetLayout() {
 // 21/08/2026: o banco só mostrava o nome, sem dar nenhuma pista visual do que era cada card.
 const CB_PREVIEW_W = 190;
 const CB_ICON_BY_ID = {
+  insights: 'bi-lightbulb',
   trend: 'bi-graph-up', channelSplit: 'bi-pie-chart', traffic: 'bi-signpost-split',
   funnel: 'bi-filter-circle', mlBreakdown: 'bi-basket', topProducts: 'bi-box-seam',
   marketing: 'bi-megaphone', salesSplit: 'bi-bullseye', recentOrders: 'bi-receipt',

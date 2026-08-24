@@ -4,8 +4,9 @@
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
 import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
-import { normalizeUsState, isUsRegionCode } from './us-states.js';
-import { normalizeBrState } from './br-states.js';
+import { normalizeUsState, isUsRegionCode, US_STATE_NAMES } from './us-states.js';
+import { normalizeBrState, BR_STATE_NAMES } from './br-states.js';
+import { buildInsights } from './insights.js';
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 
@@ -432,6 +433,66 @@ const DEFAULT_COMMISSION_PCT = {
 // extremo do amazon_us em janelas longas, evitando um payload gigante.
 const RECENT_MAX = 5000;
 
+// Lista de produtos (título + receita) de um conjunto de pedidos válidos, já com as regras do
+// card Top produtos aplicadas: produto oculto de fora, agrupamento manual do Unificador junto.
+// Extraída de dentro do computeDashboard porque o card de Insights precisa rodar exatamente a
+// MESMA agregação no período anterior — se as duas pontas divergirem, a comparação mente.
+function productRevenueRows(validOrders, market, groups, catalogTagsIdx) {
+  const byCh = aggregateProductsByChannel(validOrders);
+  let rows = Object.entries(byCh)
+    .flatMap(([ch, c]) => Object.entries(c.products)
+      .filter(([title, p]) => !isHiddenProduct(ch, title, p.tags, catalogTagsIdx, market))
+      .map(([title, p]) => ({
+        title, channel: ch, revenue: p.revenue, avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
+      })));
+  // Junta linhas de canais diferentes que pertencem ao mesmo grupo manual — sem grupo, cada
+  // (canal, título) continua sua própria linha, como sempre foi.
+  rows = applyProductGroups(rows, groups, {
+    sumKeys: ['revenue', 'avulsoQty', 'comboQty'],
+    objSumKeys: ['comboBySize'],
+    collectKeys: [{ from: 'channel', to: 'channels' }],
+  }).map(p => (p.channels ? p : { ...p, channels: [p.channel] }));
+  return rows.filter(p => p.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+}
+
+// Receita/pedidos por estado de entrega. Mesma extração e mesmo motivo da função acima.
+// US: normaliza a grafia do estado ("California"/"CALIFORNIA"/"CA."/"N.Y." → "CA"/"NY"),
+// senão cada variante da Amazon vira uma linha no ranking e o mapa subconta. Ver 4.10/4.7.5.
+// Endereços que não são região dos EUA (províncias do Canadá, etc.) são agrupados num
+// único bucket 'INTL' — não poluem o ranking com cada país, mas não perdem receita.
+// BR: mesmo princípio (ver br-states.js) — nem todo canal grava o estado como código UF; sem
+// normalizar, "SP" e "SÃO PAULO" viravam duas linhas separadas pro mesmo estado (reportado
+// pelo Luan, 07/08/2026, no ranking de "Onde os produtos vendem" e na Geografia BR).
+function revenueByState(validOrders, market) {
+  const byState = {};
+  validOrders.forEach(o => {
+    let s = o.state;
+    if (market === 'us') { s = normalizeUsState(s); if (s && !isUsRegionCode(s)) s = 'INTL'; }
+    else if (market === 'br') { s = normalizeBrState(s); }
+    if (s && o.total > 0) {
+      if (!byState[s]) byState[s] = { revenue: 0, orders: 0, byChannel: {} };
+      byState[s].revenue += o.total;
+      byState[s].orders += 1;
+      byState[s].byChannel[o.channel] = (byState[s].byChannel[o.channel] || 0) + o.total;
+    }
+  });
+  return byState;
+}
+
+// Soma um balde diário (metaInsightsDaily / mlAdCostsDaily) dentro de um intervalo de datas.
+// Mesmo laço que já existia solto em dois lugares do computeDashboard; virou função porque o
+// card de Insights precisa do mesmo número no período ANTERIOR pra comparar eficiência de anúncio.
+function sumDailyRange(daily, since, until) {
+  const t = { spend: 0, impressions: 0, clicks: 0 };
+  let d = parseISO(since); const end = parseISO(until);
+  while (d <= end) {
+    const m = daily[isoUTC(d)];
+    if (m) { t.spend += m.spend || 0; t.impressions += m.impressions || 0; t.clicks += m.clicks || 0; }
+    d = addDays(d, 1);
+  }
+  return t;
+}
+
 export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br', amazonRevenueMode = 'total' }) {
   const span = daySpan(since, until);
   const grain = span <= 2 ? 'hour' : 'day';
@@ -508,27 +569,13 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // a quebra avulso x combo (Shopify Bundles e combos legados, ver legacyComboSize). Retornamos o
   // top 5 (topProducts) e a lista completa (topProductsAll) pra permitir expandir o card na revenue.
   const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações) — ver acima
-  const productsByChannel = aggregateProductsByChannel(valid);
   // Produto oculto (Unificador → "Ocultar produtos") não pode aparecer em nenhuma lista de produto
   // fora do card "Ocultos" — antes só computeSegments (Gato/Cão/"Onde os produtos vendem") respeitava
   // isso; Top Produtos, Produtos e Estoque continuavam mostrando o produto normalmente (reportado
   // pelo Luan, 17/08/2026). isHiddenProduct prioriza a tag atual do catálogo Shopify sobre a tag
   // presa no pedido (ver isHiddenProduct).
   const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
-  let allProducts = Object.entries(productsByChannel)
-    .flatMap(([ch, c]) => Object.entries(c.products)
-      .filter(([title, p]) => !isHiddenProduct(ch, title, p.tags, catalogTagsIdx, market))
-      .map(([title, p]) => ({
-        title, channel: ch, revenue: p.revenue, avulsoQty: p.avulsoQty, comboQty: p.comboQty, comboBySize: p.comboBySize,
-      })));
-  // Junta linhas de canais diferentes que pertencem ao mesmo grupo manual — sem grupo, cada
-  // (canal, título) continua sua própria linha, como sempre foi.
-  allProducts = applyProductGroups(allProducts, productGroupsMkt, {
-    sumKeys: ['revenue', 'avulsoQty', 'comboQty'],
-    objSumKeys: ['comboBySize'],
-    collectKeys: [{ from: 'channel', to: 'channels' }],
-  }).map(p => (p.channels ? p : { ...p, channels: [p.channel] }));
-  allProducts = allProducts.filter(p => p.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+  const allProducts = productRevenueRows(valid, market, productGroupsMkt, catalogTagsIdx);
   const topProducts = allProducts.slice(0, 5);
 
   // por estado (endereço de entrega dos pedidos válidos)
@@ -539,18 +586,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // BR: mesmo princípio (ver br-states.js) — nem todo canal grava o estado como código UF; sem
   // normalizar, "SP" e "SÃO PAULO" viravam duas linhas separadas pro mesmo estado (reportado
   // pelo Luan, 07/08/2026, no ranking de "Onde os produtos vendem" e na Geografia BR).
-  const byState = {};
-  valid.forEach(o => {
-    let s = o.state;
-    if (market === 'us') { s = normalizeUsState(s); if (s && !isUsRegionCode(s)) s = 'INTL'; }
-    else if (market === 'br') { s = normalizeBrState(s); }
-    if (s && o.total > 0) {
-      if (!byState[s]) byState[s] = { revenue: 0, orders: 0, byChannel: {} };
-      byState[s].revenue += o.total;
-      byState[s].orders += 1;
-      byState[s].byChannel[o.channel] = (byState[s].byChannel[o.channel] || 0) + o.total;
-    }
-  });
+  const byState = revenueByState(valid, market);
 
   // segmentos por espécie (gato vs cão) + tipo de produto
   // productGeoAcc: mesma passada, agrupa por título de produto (não por segmento) para saber
@@ -688,12 +724,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 
   // Meta Ads — gasto e ROAS no período (separado por mercado)
   const metaDaily = market === 'us' ? getMetaUSInsightsDaily() : getMetaInsightsDaily();
-  let adCost = 0, adImpressions = 0, adClicks = 0;
-  { let d = parseISO(since); const end = parseISO(until);
-    while (d <= end) { const k = isoUTC(d); const m = metaDaily[k]; if (m) { adCost += m.spend; adImpressions += m.impressions; adClicks += m.clicks; } d = addDays(d, 1); }
-  }
+  const metaCur = sumDailyRange(metaDaily, since, until);
+  const adCost = metaCur.spend, adImpressions = metaCur.impressions, adClicks = metaCur.clicks;
   const metaRevenue = valid.filter(o => metaSources.has(normSource(o.source))).reduce((a, o) => a + o.total, 0);
   const roas = adCost > 0 ? metaRevenue / adCost : 0;
+  // Mesmos números no período anterior, só para o card de Insights comparar eficiência de anúncio.
+  const prevAdCost = sumDailyRange(metaDaily, prevSince, prevUntil).spend;
+  const prevMetaRevenue = prevValid.filter(o => metaSources.has(normSource(o.source))).reduce((a, o) => a + o.total, 0);
+  const prevRoas = prevAdCost > 0 ? prevMetaRevenue / prevAdCost : 0;
 
   // Série diária de gasto do Meta alinhada aos buckets da tendência (para a tela de Campanhas).
   const metaSpendDaily = buckets.map(b => {
@@ -735,18 +773,51 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     // pro gasto do Meta Ads logo acima (metaDaily). Antes usava um valor único preso na janela
     // fixa de 60 dias do sync automático (kv.mlAdCosts, removido): o ROAS/ACOS ficava sempre com
     // o mesmo gasto não importa o período escolhido na tela. Ver CLAUDE.md backlog "Mercado Ads".
-    const mlDaily = getMlAdCostsDaily();
-    { let d = parseISO(since); const end = parseISO(until);
-      while (d <= end) { const k = isoUTC(d); const m = mlDaily[k]; if (m) { mlBreakdown.adCost += m.spend; mlBreakdown.adClicks += m.clicks; } d = addDays(d, 1); }
-    }
+    const mlRange = sumDailyRange(getMlAdCostsDaily(), since, until);
+    mlBreakdown.adCost = mlRange.spend;
+    mlBreakdown.adClicks = mlRange.clicks;
     mlBreakdown.roas = mlBreakdown.adCost > 0
       ? (mlBreakdown.organic + mlBreakdown.premium) / mlBreakdown.adCost
       : 0;
   }
 
+  // ── Insights (card da Visão geral) ──
+  // Dois retratos do MESMO formato, período atual e anterior, montados com as mesmas funções
+  // (productRevenueRows/revenueByState) pra comparação não mentir. As regras em si moram em
+  // insights.js, que é puro e não sabe nada de store — ver o cabeçalho de lá.
+  // Custo: uma agregação extra de produto/estado sobre pedidos que já estavam em memória
+  // (prevValid já era buscado pros deltas dos indicadores). Nenhuma chamada de API externa —
+  // o /api/dashboard continua sem falar com Shopify/Meta/Amazon na hora de responder.
+  const retrato = (orders, states, prods, sessions, conv, ad, r) => ({
+    revenue: sum(orders, o => orderRevenue(o, amazonRevenueMode)),
+    orders: orders.length,
+    aov: orders.length ? sum(orders, o => orderRevenue(o, amazonRevenueMode)) / orders.length : 0,
+    byChannel: orders.reduce((acc, o) => { acc[o.channel] = (acc[o.channel] || 0) + orderRevenue(o, amazonRevenueMode); return acc; }, {}),
+    byState: states,
+    products: prods,
+    sessions, conversion: conv, adCost: ad, roas: r,
+  });
+  const insights = buildInsights({
+    cur: {
+      ...retrato(valid, byState, allProducts, sess.sessions, sess.conv, adCost, roas),
+      funnel: { sessions: sess.sessions, cart: sess.cart, checkout: sess.checkout, completed: sess.completed },
+    },
+    prev: retrato(
+      prevValid,
+      revenueByState(prevValid, market),
+      productRevenueRows(prevValid, market, productGroupsMkt, catalogTagsIdx),
+      prevSess.sessions, prevSess.conv, prevAdCost, prevRoas,
+    ),
+    market,
+    channel,
+    channelLabels: CH_LABEL,
+    stateNames: market === 'us' ? US_STATE_NAMES : BR_STATE_NAMES,
+  });
+
   return {
     period: { since, until, span, grain },
     channel, metric, market,
+    insights,
     kpis: {
       revenue, revenueDelta: delta(revenue, pRev),
       orders: count, ordersDelta: delta(count, pCount),
