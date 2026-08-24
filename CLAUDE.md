@@ -699,6 +699,28 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   de `document` — vale como regra geral: nunca usar `document.querySelector` pra achar um
   `.edit-card`/`.kpi-mini` por `data-card-id`/`data-kpi-id`, sempre escopar em `editGrid`/
   `kpiStripGrid`.
+- **Cards da Visão geral esticam pra preencher a linha do grid** (`.edit-grid`, `align-items:
+  stretch` em vez do antigo `start`): dois cards na mesma linha (Tendência×Canais, Tráfego×Funil,
+  Top produtos×Marketing por origem) quase nunca têm o mesmo tanto de conteúdo — o mais curto
+  ficava boiando no topo, com o fundo da página aparecendo como uma faixa em branco antes da
+  próxima linha começar (reportado pelo Luan, 24/08/2026, com print). Só esticar o card (borda/
+  fundo) não bastava — pedido explícito de preencher com conteúdo de verdade em vez de deixar vão:
+  `.card-pad` virou coluna flex ocupando 100% da altura esticada, e cada elemento "de crescer"
+  dentro dela usa `flex:1` com um `min-height` como piso (mesmo tamanho de sempre quando não sobra
+  espaço nenhum):
+  - `.ch220`/`.ch180` (Tendência/Tráfego): o gráfico ECharts cresce de verdade, não só a moldura —
+    o `ResizeObserver` único (`echartsRO`) já observava o container e redesenha sozinho, nenhum
+    código de gráfico precisou mudar;
+  - `.donut-center-wrap` (Canais/Marketing por origem): o anel fica maior, mesma lógica;
+  - `.funnel-list` (Funil de conversão, já era flex-column): ganhou `flex:1` +
+    `justify-content:space-between` — os passos se espalham em vez de empilhar no topo;
+  - `#topProducts`: virou coluna flex própria com `.tp-summary{margin-top:auto}` — o "Total top N"
+    fica ancorado no fim do card (acompanhando a altura do vizinho) em vez de colado embaixo do
+    último produto com um vão vazio depois.
+  Cards sozinhos numa linha (span 12: Mercado Livre · Detalhe, Orgânico x Campanha, Pedidos
+  recentes, Indicadores) não têm vizinho pra comparar altura, então não mudam visualmente. Mobile
+  também não é afetado — `.edit-grid>.edit-card{grid-column:1/-1!important}` já força um card por
+  linha ali, sem par pra esticar contra.
 - Nunca engolir erro de integração silenciosamente (`.catch(() => [])` sem log/propagação) — já
   escondeu um bug real (Amazon US com pedidos zerados) por semanas.
 
