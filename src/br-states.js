@@ -50,3 +50,17 @@ export function normalizeBrState(raw) {
   // 3) desconhecido: devolve limpo (não perde a receita/unidade, só não vira código)
   return clean;
 }
+
+// Código UF → nome por extenso, com acento, para texto gerado no SERVIDOR (card de Insights).
+// Fica aqui porque quem já é dono do vocabulário de estado do Brasil é este módulo. As telas de
+// Geografia/Segmentos têm as suas próprias tabelas de nome por motivo histórico, mas frase montada
+// no backend precisa de uma fonte no backend.
+export const BR_STATE_NAMES = {
+  AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia',
+  CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás',
+  MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul', MG: 'Minas Gerais',
+  PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí',
+  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul',
+  RO: 'Rondônia', RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo',
+  SE: 'Sergipe', TO: 'Tocantins',
+};

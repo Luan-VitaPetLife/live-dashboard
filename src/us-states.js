@@ -73,3 +73,29 @@ export function normalizeUsState(raw) {
   // 4) desconhecido: devolve limpo (não perde a receita, só não vira código)
   return nameKey;
 }
+
+// Código → nome de exibição, para texto gerado no SERVIDOR (card de Insights). Mesmo papel do
+// BR_STATE_NAMES em br-states.js. Derivado do NAME_TO_CODE acima em vez de digitado de novo: lá
+// vários apelidos apontam pro mesmo código ("WASHINGTON DC" e "DISTRICT OF COLUMBIA" → DC), então
+// vale o nome MAIS LONGO de cada código, que é sempre o oficial e não o apelido.
+export const US_STATE_NAMES = (() => {
+  const preferido = {};
+  for (const [nome, code] of Object.entries(NAME_TO_CODE)) {
+    if (!preferido[code] || nome.length > preferido[code].length) preferido[code] = nome;
+  }
+  const minusculas = new Set(['OF', 'AND', 'THE']);
+  const titulo = s => s.split(' ')
+    .map((w, i) => (i > 0 && minusculas.has(w) ? w.toLowerCase() : w[0] + w.slice(1).toLowerCase()))
+    .join(' ');
+  const out = {};
+  for (const [code, nome] of Object.entries(preferido)) out[code] = titulo(nome);
+  // Casos que a inversão não cobre: siglas que devem continuar em caixa alta, endereço militar
+  // (não tem nome por extenso no mapa) e o balde de fora dos EUA criado pelo metrics.js.
+  Object.assign(out, {
+    DC: 'Washington, D.C.', VI: 'Ilhas Virgens Americanas', PR: 'Porto Rico',
+    GU: 'Guam', AS: 'Samoa Americana', MP: 'Ilhas Marianas do Norte',
+    AA: 'Forças Armadas (Américas)', AE: 'Forças Armadas (Europa)', AP: 'Forças Armadas (Pacífico)',
+    INTL: 'Fora dos Estados Unidos',
+  });
+  return out;
+})();

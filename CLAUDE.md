@@ -72,6 +72,7 @@ src/amazon.js            Amazon SP-API (BR+US): LWA + SigV4 + STS AssumeRole
 src/meta.js              Meta Marketing API: gasto diário + fetchCampaigns
 src/googleads.js         Google Ads API: OAuth + fetchCampaigns (só EUA)
 src/metrics.js           Calcula o payload da dashboard por mercado
+src/insights.js          Regras do card "Insights" (sem IA) — puro, testável sem banco
 src/us-states.js         normalizeUsState(): reduz grafias de estado dos EUA a 2 letras
 src/auth.js              Login: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página
 src/sync.js              Orquestra a busca de todos os canais e grava no store
@@ -288,6 +289,44 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (sem revisão, só Sandbox — não vê pedido real). Roles renomeados: usar "Inventory and Order
   Tracking" (equivalente ao antigo "Orders") + "Product Listing" (exigido pela Catalog Items API —
   imagem de produto; o app US não tem esse role hoje, o app BR já nasceu com ele).
+
+### Insights (`src/insights.js`, card da Visão geral)
+- Frases curtas explicando O QUE mudou no período contra o período anterior comparável. Nasceu do
+  card de Insights do Shopify que o Luan trouxe como referência (24/08/2026).
+- **Não usa IA, e é decisão deliberada, não falta de vontade.** O insight do Shopify também não
+  usa: é estatística encaixada num molde de frase. Motivos de manter assim: número exibido é o
+  número calculado (LLM erra conta e inventa com convicção); `/api/dashboard` nunca chama serviço
+  externo na hora de responder e chamar IA a cada carregamento quebraria isso além de custar por
+  acesso; dado de faturamento não sai daqui; e o mesmo dado gera sempre a mesma frase, então dá
+  pra testar. Se um dia quiser IA, o lugar certo é SÓ um botão "ver o motivo" sob demanda, nunca
+  no caminho do carregamento.
+- Papel do card, e a razão dele ficar logo abaixo da faixa de Indicadores: a faixa diz "receita
+  subiu 53%", o card diz POR CAUSA DE QUÊ (qual canal/produto/estado/etapa puxou).
+- `insights.js` é **puro**: recebe dois retratos já calculados (atual e anterior) e devolve a
+  lista. Não lê store, não faz I/O e NÃO importa `metrics.js` (evitar import circular — os rótulos
+  de canal e nomes de estado chegam por parâmetro). É o que permite testar as regras sem banco.
+- Regras hoje: canal parado (prioridade máxima, quase sempre é integração quebrada e não queda de
+  vendas), canal que mais subiu/caiu, produto que mais mexeu, concentração num produto só, queda/
+  ganho de conversão, maior vazamento do funil, ticket médio, eficiência de anúncio (inclui o caso
+  "gastou e não veio nenhuma venda atribuída") e estado que mais mexeu.
+- **Anti-ruído é o que faz o card prestar.** Com algumas dezenas de pedidos por dia, percentual
+  isolado é ruído: um estado que foi de 1 pra 4 vendas vira "+300%" e não significa nada. Toda
+  regra de variação em dinheiro exige TRÊS pisos ao mesmo tempo — valor absoluto (`MIN_ABS`, R$200
+  no BR / US$50 nos EUA), peso no total do período (`MIN_SHARE`, 8%) e variação relativa
+  (`MIN_PCT`, 15%) — e a ordenação final é por impacto em dinheiro, nunca por percentual.
+  Conversão/funil exigem `MIN_SESSIONS`, ticket exige `MIN_ORDERS`. Lista limitada a 6, no máximo
+  2 por dimensão (senão um dia em que tudo mexeu no mesmo eixo enche as vagas só com "Canal"), e
+  insights com os mesmos dois números são deduplicados (num canal que vende um produto só,
+  "Shopify caiu de X pra Y" e "Lisina caiu de X pra Y" são a mesma frase duas vezes).
+- Frases e números vêm PRONTOS do servidor; o front (`renderInsights` em `index.html`) só desenha,
+  nunca recalcula nem reformata. É o mesmo princípio de "uma fonte de verdade só" já documentado
+  em Campanhas — duas pontas formatando o mesmo número acabam discordando.
+- `productRevenueRows()`/`revenueByState()`/`sumDailyRange()` (metrics.js) foram extraídos de dentro
+  do `computeDashboard` justamente pra que o período anterior use EXATAMENTE a mesma agregação do
+  atual. Se as duas pontas divergirem, a comparação mente.
+- `BR_STATE_NAMES`/`US_STATE_NAMES` (br-states.js/us-states.js) existem porque a frase é montada no
+  servidor e precisa de "Minas Gerais", não "MG" — as telas de Geografia/Segmentos têm as próprias
+  tabelas de nome por motivo histórico, mas texto gerado no backend precisa de fonte no backend.
 
 ### Multi-mercado
 - Campo `market: 'br'|'us'` em todo pedido. `computeDashboard({market})` separa tudo:
