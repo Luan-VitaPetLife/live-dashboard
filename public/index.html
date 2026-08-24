@@ -129,7 +129,14 @@
      eram totalmente planos (só borda de 1px). Esse é o "acessório" visual desta rodada: um
      único sistema de elevação aplicado em todo lugar, em vez de vários ajustes espalhados. */
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative;box-shadow:0 1px 2px rgba(30,28,24,.04),0 6px 20px -6px rgba(30,28,24,.10)}
-  .card-pad{padding:16px 24px}
+  /* Coluna flex ocupando os 100% de altura herdados do .edit-card>.card acima: sem isso, o
+     height:100% do .card não tem efeito nenhum no conteúdo (um filho normal em fluxo de bloco só
+     cresce até caber o próprio conteúdo) — é o que permite ch220/ch180/donut-center-wrap/
+     funnel-list/#topProducts abaixo crescerem de verdade até preencher a altura esticada, em vez
+     de só esticar o fundo/borda do card e deixar a sobra em branco por dentro. Cards sozinhos na
+     própria linha (span 12, sem vizinho) não têm sobra nenhuma pra distribuir — vira o mesmo
+     layout de sempre. */
+  .card-pad{padding:16px 24px;display:flex;flex-direction:column;height:100%}
   .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
   .ct-title{font-size:12px;font-weight:600} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
   .ct-sub-logo{height:16px;width:auto;vertical-align:-3.5px;margin-right:5px;opacity:.9}
@@ -142,7 +149,9 @@
   .chart-type-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
   .ct-expand{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;display:flex;align-items:center}
   .ct-expand:hover{color:var(--text)}
-  .donut-center-wrap{position:relative;height:160px;margin-bottom:14px}
+  /* Mesma lógica de crescimento do ch220/ch180 acima, aplicada ao anel (Canais/Marketing por
+     origem): o donut fica maior pra preencher a sobra em vez de deixar vão em branco. */
+  .donut-center-wrap{position:relative;flex:1 1 auto;min-height:160px;margin-bottom:14px}
   /* ECharts precisa de um container com tamanho explícito (ao contrário do <canvas>, que tinha um
      tamanho intrínseco padrão) — os anéis (Canais, Marketing, Orgânico x Campanha) agora montam
      num <div> que precisa herdar 100% do wrap posicionado. */
@@ -179,7 +188,10 @@
   .mc-type{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
   .mc-val{font-size:18px;font-weight:300;letter-spacing:-.5px;margin-bottom:3px} .mc-meta{font-size:10px;color:var(--muted)}
   .mc-val.pos{color:var(--green)}
-  .funnel-list{display:flex;flex-direction:column}
+  /* flex:1 + space-between: quando o card (esticado por um vizinho mais alto na mesma linha, ver
+     .edit-grid acima) sobra altura, os passos do funil se espalham em vez de ficar um bloco
+     compacto no topo com vão em branco embaixo. Pedido do Luan, 24/08/2026. */
+  .funnel-list{display:flex;flex-direction:column;flex:1;justify-content:space-between}
   .fl-row{padding:13px 0;border-bottom:1px solid var(--border)} .fl-row:last-child{border-bottom:none}
   .fl-row-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
   .fl-label{font-size:12.5px;color:var(--sub);font-weight:500}
@@ -198,7 +210,13 @@
   .legend-row{display:flex;align-items:center;gap:16px;margin-top:10px}
   .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
   .legend-line{width:20px;height:1.5px;border-radius:1px} .legend-sq{width:10px;height:10px;border-radius:2px}
-  .ch220{position:relative;height:220px} .ch180{position:relative;height:180px} .ch380{position:relative;height:380px}
+  /* ch220/ch180 crescem (flex:1, dentro do .card-pad em coluna) até preencher a sobra de altura
+     quando o card é esticado por um vizinho mais alto na mesma linha (Tendência x Canais, Tráfego
+     x Funil) — o ResizeObserver único (echartsRO) já reage a isso sozinho e redesenha o gráfico
+     maior, sem precisar de nenhum código de gráfico novo. min-height preserva o tamanho de sempre
+     quando não há sobra nenhuma. ch380 (expandir manual) fica fixo — nesse estado o card já ocupa
+     a linha inteira sozinho, não tem vizinho pra "sobrar" altura. Pedido do Luan, 24/08/2026. */
+  .ch220{position:relative;flex:1 1 auto;min-height:220px} .ch180{position:relative;flex:1 1 auto;min-height:180px} .ch380{position:relative;height:380px}
   .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
   .orders-pager{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 16px 2px;flex-wrap:wrap}
   .orders-pager:empty{display:none}
@@ -265,12 +283,20 @@
   .tp-qty{font-size:10px;color:var(--muted);margin-top:2px}
   .tp-val{font-weight:500;white-space:nowrap}
   .tp-group-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
-  .tp-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px}
+  /* #topProducts (coluna flex, ver regra dela abaixo, perto de .funnel-list): margin-top:auto
+     empurra o total pro fim do card, absorvendo a sobra de altura quando o vizinho ("Marketing
+     por origem") é mais alto — sem isso o total ficava colado embaixo do último produto, com um
+     vão em branco entre ele e a borda inferior do card. Pedido do Luan, 24/08/2026. */
+  .tp-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px;margin-top:auto}
   .tp-summary-label{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
   .tp-summary-val{font-weight:600}
   .tp-toggle-wrap{text-align:center;padding-top:8px}
   .tp-toggle-btn{background:none;border:none;color:var(--sub);font-size:11px;cursor:pointer;text-decoration:underline;padding:2px}
   .tp-list-scroll{max-height:420px;overflow-y:auto}
+  /* flex:1 dentro do .card-pad em coluna: cresce até a sobra de altura do vizinho mais alto
+     ("Marketing por origem"), e sendo coluna também, deixa o .tp-summary (margin-top:auto acima)
+     empurrado pro fim em vez de colado no último produto. */
+  #topProducts{display:flex;flex-direction:column;flex:1;min-height:0}
 
   /* ── Sidebar: comportamento de recolher afeta o .main (layout da página) ── */
   body.sidebar-hidden .main{margin-left:64px}
@@ -362,8 +388,17 @@
   .cb-preview-stage{transform-origin:top left;overflow:hidden;pointer-events:none}
   .cb-preview-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:24px}
   .cb-empty{font-size:11px;color:var(--muted)}
-  .edit-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
+  /* align-items:stretch (não "start"): quando dois cards dividem a mesma linha com alturas de
+     conteúdo diferentes (ex.: "Top produtos" com poucas linhas x "Marketing por origem" com o
+     donut+lista), "start" deixava o mais curto flutuando no topo e o fundo do grid (cor de
+     página) aparecendo como uma lacuna em branco antes da próxima linha começar — reportado pelo
+     Luan, 24/08/2026. Com stretch o .edit-card (e o .card dentro dele, via height:100% abaixo)
+     estica até a altura do vizinho mais alto da mesma linha, então a lacuna vira fundo/borda do
+     próprio card mais curto em vez de vão vazio. Não afeta o mobile (ali cada card já é
+     grid-column:1/-1!important, uma linha por card, sem vizinho pra comparar altura). */
+  .edit-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:stretch}
   .edit-card{position:relative;min-width:0}
+  .edit-card>.card{height:100%}
   .edit-card.drop-bounce{animation:ecDropBounce .32s cubic-bezier(.34,1.56,.64,1)}
   .edit-card-tools{position:absolute;top:8px;right:8px;display:none;gap:4px;z-index:20}
   body.edit-mode .edit-card-tools{display:flex}
