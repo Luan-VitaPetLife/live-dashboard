@@ -712,11 +712,27 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     o `ResizeObserver` único (`echartsRO`) já observava o container e redesenha sozinho, nenhum
     código de gráfico precisou mudar;
   - `.donut-center-wrap` (Canais/Marketing por origem): o anel fica maior, mesma lógica;
+  - **Container de gráfico usa `flex:1 1 0` (base ZERO), NUNCA `flex:1 1 auto`.** Com base `auto` o
+    tamanho base do item vira a altura do próprio conteúdo — e o conteúdo é um canvas que o ECharts
+    desenha no tamanho do container, então fecha um laço infinito: canvas cresce → conteúdo cresce
+    → item cresce → `echartsRO` dispara → ECharts redesenha maior → repete. Foi exatamente o que
+    aconteceu na 1ª versão dessa mudança (PR #172): o gráfico da Tendência chegou a 1651px e
+    continuava subindo, com o anel de Canais junto (o laço se realimenta pelos dois cards da linha,
+    via altura da linha do grid). Pego pelo Luan no mesmo dia, corrigido no PR seguinte. Com base 0
+    a altura sai só da divisão do espaço livre, o conteúdo não realimenta nada, e o `min-height`
+    segura o piso. Vale pra qualquer container de gráfico flexível daqui pra frente;
   - `.funnel-list` (Funil de conversão, já era flex-column): ganhou `flex:1` +
     `justify-content:space-between` — os passos se espalham em vez de empilhar no topo;
-  - `#topProducts`: virou coluna flex própria com `.tp-summary{margin-top:auto}` — o "Total top N"
-    fica ancorado no fim do card (acompanhando a altura do vizinho) em vez de colado embaixo do
-    último produto com um vão vazio depois.
+  - `#topProducts`: virou coluna flex própria, e quem absorve a sobra são as próprias linhas
+    (`.tp-row{flex:1 1 auto}`) — ficam mais espaçadas, preenchendo o card. Deixar só o
+    `.tp-summary{margin-top:auto}` absorver (1ª tentativa, PR #172) apenas MUDOU o vão de lugar:
+    as 4 linhas amontoadas em cima, um bloco em branco no meio e o total lá embaixo (Luan, mesmo
+    dia: "não podemos deixar esse espaço em branco desse jeito"). O `margin-top:auto` continua no
+    total, mas só serve pro modo "Ver todos", onde as linhas ficam presas dentro do
+    `.tp-list-scroll` (altura travada em 420px, não cresce). `.tp-row` NÃO leva `max-height` pra
+    limitar o crescimento: ela não tem `overflow:hidden`, então um nome comprido que quebre em duas
+    linhas vazaria por cima da borda seguinte — linha espaçosa demais é bem menos ruim que texto
+    vazando.
   Cards sozinhos numa linha (span 12: Mercado Livre · Detalhe, Orgânico x Campanha, Pedidos
   recentes, Indicadores) não têm vizinho pra comparar altura, então não mudam visualmente. Mobile
   também não é afetado — `.edit-grid>.edit-card{grid-column:1/-1!important}` já força um card por

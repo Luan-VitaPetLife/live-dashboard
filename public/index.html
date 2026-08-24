@@ -149,9 +149,11 @@
   .chart-type-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
   .ct-expand{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;display:flex;align-items:center}
   .ct-expand:hover{color:var(--text)}
-  /* Mesma lógica de crescimento do ch220/ch180 acima, aplicada ao anel (Canais/Marketing por
-     origem): o donut fica maior pra preencher a sobra em vez de deixar vão em branco. */
-  .donut-center-wrap{position:relative;flex:1 1 auto;min-height:160px;margin-bottom:14px}
+  /* Mesma lógica de crescimento do ch220/ch180 abaixo, aplicada ao anel (Canais/Marketing por
+     origem): o donut fica maior pra preencher a sobra em vez de deixar vão em branco. Base ZERO
+     pelo mesmo motivo explicado lá (é canvas de ECharts aqui também — com base `auto` o anel
+     entrava no mesmo laço infinito de crescimento). */
+  .donut-center-wrap{position:relative;flex:1 1 0;min-height:160px;margin-bottom:14px}
   /* ECharts precisa de um container com tamanho explícito (ao contrário do <canvas>, que tinha um
      tamanho intrínseco padrão) — os anéis (Canais, Marketing, Orgânico x Campanha) agora montam
      num <div> que precisa herdar 100% do wrap posicionado. */
@@ -210,13 +212,20 @@
   .legend-row{display:flex;align-items:center;gap:16px;margin-top:10px}
   .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
   .legend-line{width:20px;height:1.5px;border-radius:1px} .legend-sq{width:10px;height:10px;border-radius:2px}
-  /* ch220/ch180 crescem (flex:1, dentro do .card-pad em coluna) até preencher a sobra de altura
-     quando o card é esticado por um vizinho mais alto na mesma linha (Tendência x Canais, Tráfego
-     x Funil) — o ResizeObserver único (echartsRO) já reage a isso sozinho e redesenha o gráfico
-     maior, sem precisar de nenhum código de gráfico novo. min-height preserva o tamanho de sempre
-     quando não há sobra nenhuma. ch380 (expandir manual) fica fixo — nesse estado o card já ocupa
-     a linha inteira sozinho, não tem vizinho pra "sobrar" altura. Pedido do Luan, 24/08/2026. */
-  .ch220{position:relative;flex:1 1 auto;min-height:220px} .ch180{position:relative;flex:1 1 auto;min-height:180px} .ch380{position:relative;height:380px}
+  /* ch220/ch180 crescem (dentro do .card-pad em coluna) até preencher a sobra de altura quando o
+     card é esticado por um vizinho mais alto na mesma linha (Tendência x Canais, Tráfego x Funil)
+     — o ResizeObserver único (echartsRO) já reage a isso sozinho e redesenha o gráfico maior, sem
+     precisar de nenhum código de gráfico novo. min-height preserva o tamanho de sempre quando não
+     há sobra nenhuma. ch380 (expandir manual) fica fixo — nesse estado o card já ocupa a linha
+     inteira sozinho, não tem vizinho pra "sobrar" altura.
+     `flex:1 1 0` (base ZERO), nunca `flex:1 1 auto`: com base `auto` o tamanho base do item passa
+     a ser a altura do próprio conteúdo, e como o conteúdo aqui é um canvas que o ECharts desenha
+     no tamanho do container, vira um laço infinito — canvas cresce -> conteúdo cresce -> item
+     cresce -> ResizeObserver dispara -> ECharts redesenha maior -> repete, o gráfico "não para de
+     crescer" (bug real que eu mesmo introduzi e o Luan pegou, 24/08/2026). Com base 0 a altura sai
+     só da divisão do espaço livre do container, o conteúdo não realimenta nada. Vale pra qualquer
+     container de gráfico flexível daqui pra frente. */
+  .ch220{position:relative;flex:1 1 0;min-height:220px} .ch180{position:relative;flex:1 1 0;min-height:180px} .ch380{position:relative;height:380px}
   .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
   .orders-pager{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 16px 2px;flex-wrap:wrap}
   .orders-pager:empty{display:none}
@@ -277,16 +286,27 @@
   footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
 
   /* ── Top produtos (lista construída via JS) ── */
-  .tp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+  /* flex:1 1 auto: as linhas de produto dividem entre si a sobra de altura quando o card é
+     esticado pelo vizinho mais alto ("Marketing por origem"), ficando mais espaçadas em vez de
+     amontoadas em cima com um bloco em branco entre a última linha e o total (foi o que aconteceu
+     quando o total sozinho absorvia a sobra via margin-top:auto — reportado pelo Luan, 24/08/2026:
+     "não podemos deixar esse espaço em branco desse jeito"). `auto` aqui é seguro (é texto, não
+     canvas: não tem o laço de realimentação descrito em .ch220). align-items:center já centraliza
+     o conteúdo na linha crescida. De propósito SEM max-height pra limitar o crescimento: a linha
+     não tem overflow:hidden, então um nome comprido que quebre em duas linhas (com os badges de
+     canal quebrando junto, comum no celular) transbordaria por cima da borda da linha seguinte em
+     vez de ser cortado. Linha espaçosa demais num período com 1 produto só é bem menos ruim que
+     texto vazando. */
+  .tp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;flex:1 1 auto}
   .tp-info{min-width:0}
   .tp-name-row{color:var(--sub);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .tp-qty{font-size:10px;color:var(--muted);margin-top:2px}
   .tp-val{font-weight:500;white-space:nowrap}
   .tp-group-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
-  /* #topProducts (coluna flex, ver regra dela abaixo, perto de .funnel-list): margin-top:auto
-     empurra o total pro fim do card, absorvendo a sobra de altura quando o vizinho ("Marketing
-     por origem") é mais alto — sem isso o total ficava colado embaixo do último produto, com um
-     vão em branco entre ele e a borda inferior do card. Pedido do Luan, 24/08/2026. */
+  /* margin-top:auto ancora o total no fim do card. Hoje quem absorve a sobra de altura são as
+     próprias linhas de produto (ver .tp-row acima), então na visão normal isso quase não tem o que
+     fazer — continua valendo pro modo "Ver todos", onde as linhas ficam dentro do
+     .tp-list-scroll (altura travada em 420px, não cresce) e a sobra precisa ir pra algum lugar. */
   .tp-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px;margin-top:auto}
   .tp-summary-label{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
   .tp-summary-val{font-weight:600}
