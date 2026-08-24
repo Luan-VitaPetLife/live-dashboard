@@ -25,7 +25,11 @@ const MIN_PCT = 15;          // variação relativa mínima (%)
 const MIN_SHARE = 0.08;      // a variação precisa valer ao menos 8% do total do período maior
 const MIN_ORDERS = 8;        // piso de pedidos pra falar de ticket médio
 const MIN_SESSIONS = 100;    // piso de sessões pra falar de conversão/funil
-const MAX_INSIGHTS = 6;      // teto da lista (card não é relatório, é resumo)
+// Teto da lista. Subiu de 6 pra 10 quando a tira virou horizontal com carrossel (24/08/2026): o
+// que limitava antes era altura de card, e agora não limita mais. Os pisos anti-ruído abaixo é
+// que decidem de verdade quantos aparecem — este número é só o teto, e na prática quase nunca é
+// atingido, porque insight sem relevância nem chega aqui.
+const MAX_INSIGHTS = 10;
 const MAX_POR_DIMENSAO = 2;  // evita lista inteira falando só de canal (ou só de produto)
 // Piso ABSOLUTO em dinheiro, além do piso relativo (MIN_SHARE). Os dois são necessários: num
 // período de volume baixo (um único dia fraco), uma variação de R$ 60 pode representar 50% do
@@ -85,6 +89,22 @@ function relevante(curVal, prevVal, totalRef, market) {
 // ── Regras ──
 // Cada regra devolve 0..n insights. Assinatura igual pra todas, pra ficar fácil adicionar
 // regra nova depois sem mexer no orquestrador.
+//
+// Todo insight tem DOIS textos, e a diferença importa:
+//   `label` — sintagma curto ("Conversão em queda", "Amazon BR sem vendas"), do tamanho de uma
+//             aba. É o que aparece na tira horizontal de seleção no topo do card, onde o espaço
+//             por item é de uns 200px. Frase inteira ali não cabe e vira reticências.
+//   `title` — a frase completa ("A conversão da loja caiu em relação ao período anterior"), que
+//             aparece no detalhe, embaixo, com a largura do card inteiro.
+// Regra nova que esquecer o `label` não quebra (o front cai no `title`), mas fica feia na tira.
+//
+// `kind` é o SEMÁFORO do insight, e é o servidor que decide (pedido do Luan, 24/08/2026):
+//   'bom'   → verde     ganho claro
+//   'medio' → amarelo   nem ganho nem perda: risco, concentração, movimento de dimensão secundária
+//   'ruim'  → vermelho  perda clara, ou algo que precisa de ação
+// Não dá pra derivar isso do SINAL da variação no front: ACOS caindo é ótimo, custo subindo é
+// ruim, e "concentração de 80% num produto" não tem sinal nenhum. Quem sabe o que o número
+// significa é a regra que o produziu, então a decisão nasce aqui e o front só pinta.
 
 // Canal que simplesmente parou de vender. É a regra mais valiosa do card: quase sempre significa
 // integração quebrada (token expirado, canal desligado sem querer), não queda de vendas de
@@ -98,8 +118,9 @@ function regraCanalParado({ cur, prev, ctx }) {
     if (prev.revenue > 0 && prevRev / prev.revenue < 0.05) continue; // canal irrelevante antes
     out.push({
       id: `canal-parado-${ch}`,
-      kind: 'atencao',
+      kind: 'ruim',
       dimension: 'Canal',
+      label: `${ctx.label(ch)} sem vendas`,
       title: `${ctx.label(ch)} não registrou nenhuma venda no período`,
       detail: `No período anterior esse canal fez ${ctx.f.money(prevRev)}. Vale conferir se a integração está sincronizando antes de tratar como queda de vendas.`,
       impact: prevRev,
@@ -134,8 +155,9 @@ function regraCanal({ cur, prev, ctx }) {
     const novo = m.p === 0;
     out.push({
       id: `canal-${dir}-${m.ch}`,
-      kind: subiu ? 'positivo' : 'atencao',
+      kind: subiu ? 'bom' : 'ruim',
       dimension: 'Canal',
+      label: `${ctx.label(m.ch)} ${novo ? 'estreou' : (subiu ? 'em alta' : 'em queda')}`,
       title: novo
         ? `${ctx.label(m.ch)} começou a vender no período`
         : `${ctx.label(m.ch)} foi o canal que mais ${subiu ? 'cresceu' : 'caiu'} em receita`,
@@ -173,8 +195,9 @@ function regraProduto({ cur, prev, ctx }) {
   const subiu = m.diff > 0;
   return [{
     id: `produto-${subiu ? 'up' : 'down'}`,
-    kind: subiu ? 'positivo' : 'atencao',
+    kind: subiu ? 'bom' : 'ruim',
     dimension: 'Produto',
+    label: `${curto(m.title, 26)} ${subiu ? 'em alta' : 'em queda'}`,
     title: `${curto(m.title)} ${subiu ? 'puxou o faturamento pra cima' : 'perdeu faturamento'}`,
     detail: m.p === 0
       ? `Fez ${ctx.f.money(m.c)}, sem venda no período anterior.`
@@ -203,8 +226,9 @@ function regraConcentracao({ cur, ctx }) {
   if (share < 0.6) return [];
   return [{
     id: 'concentracao',
-    kind: 'neutro',
+    kind: 'medio',
     dimension: 'Produto',
+    label: `Concentração em ${curto(top.title, 18)}`,
     title: `${curto(top.title)} concentra ${ctx.f.pct(share * 100)} da receita do período`,
     detail: `De ${ctx.f.money(cur.revenue)} faturados, ${ctx.f.money(top.revenue)} vieram de um produto só. Vale acompanhar o estoque dele de perto.`,
     impact: top.revenue * 0.25, // pesa menos que uma variação de verdade na ordenação
@@ -231,8 +255,9 @@ function regraEstado({ cur, prev, ctx }) {
   const subiu = m.diff > 0;
   return [{
     id: `estado-${subiu ? 'up' : 'down'}`,
-    kind: subiu ? 'positivo' : 'neutro',
+    kind: subiu ? 'bom' : 'medio',
     dimension: 'Geografia',
+    label: `${ctx.stateLabel(m.uf)} ${subiu ? 'em alta' : 'em queda'}`,
     title: `${ctx.stateLabel(m.uf)} ${subiu ? 'comprou mais' : 'comprou menos'} que no período anterior`,
     detail: m.p === 0
       ? `Fez ${ctx.f.money(m.c)}, sem venda no período anterior.`
@@ -253,8 +278,9 @@ function regraConversao({ cur, prev, ctx }) {
   const caiu = diffPP < 0;
   return [{
     id: 'conversao',
-    kind: caiu ? 'atencao' : 'positivo',
+    kind: caiu ? 'ruim' : 'bom',
     dimension: 'Conversão',
+    label: `Conversão ${caiu ? 'em queda' : 'em alta'}`,
     title: `A conversão da loja ${caiu ? 'caiu' : 'subiu'} em relação ao período anterior`,
     detail: `Passou de ${ctx.f.pct(p * 100)} para ${ctx.f.pct(c * 100)} das sessões, ${caiu ? 'uma queda' : 'um ganho'} de ${ctx.f.pp(diffPP)}.`,
     impact: Math.abs(diffPP) * (cur.revenue / 100), // traduz em ordem de grandeza de dinheiro
@@ -284,10 +310,17 @@ function regraFunil({ cur, ctx }) {
     if (!pior || perda > pior.perda) pior = { nome, nomeAnt, v, ant, perda };
   }
   if (!pior || pior.perda < 50) return [];
+  // Amarelo, não vermelho: perder 90%+ entre sessão e carrinho é o normal de qualquer loja, e
+  // esta regra é diagnóstico ("onde vaza mais"), não alarme de que algo quebrou. Vermelho fixo
+  // aqui apareceria em TODO período e treinaria o olho a ignorar o vermelho do card inteiro.
+  // Só vira vermelho quando o vazamento é no fim do funil (quem já chegou no checkout e desiste
+  // de pagar), que aí sim é dinheiro perdido na porta e costuma ter causa acionável.
+  const noFim = pior.nome === 'Concluiu compra';
   return [{
     id: 'funil',
-    kind: 'atencao',
+    kind: noFim ? 'ruim' : 'medio',
     dimension: 'Funil',
+    label: `Vazamento em ${pior.nome.toLowerCase()}`,
     title: `A maior perda do funil está entre ${pior.nomeAnt.toLowerCase()} e ${pior.nome.toLowerCase()}`,
     detail: `De ${ctx.f.int(pior.ant)} que chegaram nessa etapa, ${ctx.f.int(pior.v)} seguiram adiante. São ${ctx.f.pct(pior.perda)} que ficaram pelo caminho.`,
     impact: 0.5, // diagnóstico, não movimento: fica no fim da lista se houver coisa mais forte
@@ -305,8 +338,9 @@ function regraTicket({ cur, prev, ctx }) {
   const subiu = p > 0;
   return [{
     id: 'ticket',
-    kind: subiu ? 'positivo' : 'neutro',
+    kind: subiu ? 'bom' : 'medio',
     dimension: 'Ticket médio',
+    label: `Ticket médio ${subiu ? 'em alta' : 'em queda'}`,
     title: `O ticket médio ${subiu ? 'subiu' : 'caiu'} em relação ao período anterior`,
     detail: `Passou de ${ctx.f.money(prev.aov)} para ${ctx.f.money(cur.aov)} por pedido, ${subiu ? 'um aumento' : 'uma queda'} de ${absPct(p, ctx.f)}.`,
     impact: Math.abs(cur.aov - prev.aov) * cur.orders,
@@ -328,8 +362,9 @@ function regraRoas({ cur, prev, ctx }) {
   if (c === 0) {
     return [{
       id: 'roas-zero',
-      kind: 'atencao',
+      kind: 'ruim',
       dimension: 'Anúncios',
+      label: 'Anúncios sem retorno',
       title: 'Nenhuma venda foi atribuída aos anúncios no período',
       detail: `Foram ${ctx.f.money(cur.adCost)} investidos sem nenhum pedido com origem de anúncio identificada. Em período curto isso costuma ser a atribuição demorando a chegar, mas se repetir vale investigar.`,
       impact: cur.adCost,
@@ -345,8 +380,9 @@ function regraRoas({ cur, prev, ctx }) {
   const piorou = pv < 0;
   return [{
     id: 'roas',
-    kind: piorou ? 'atencao' : 'positivo',
+    kind: piorou ? 'ruim' : 'bom',
     dimension: 'Anúncios',
+    label: `Retorno dos anúncios ${piorou ? 'pior' : 'melhor'}`,
     title: `O retorno sobre o gasto com anúncio ${piorou ? 'piorou' : 'melhorou'}`,
     // ctx.f.num, não toFixed: toFixed sempre usa ponto decimal, e em pt-BR o separador é vírgula.
     detail: `O ROAS passou de ${ctx.f.num(p, 2)}× para ${ctx.f.num(c, 2)}×, com ${ctx.f.money(cur.adCost)} investidos no período contra ${ctx.f.money(prev.adCost)} antes.`,
