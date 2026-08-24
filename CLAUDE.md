@@ -321,6 +321,36 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Frases e números vêm PRONTOS do servidor; o front (`renderInsights` em `index.html`) só desenha,
   nunca recalcula nem reformata. É o mesmo princípio de "uma fonte de verdade só" já documentado
   em Campanhas — duas pontas formatando o mesmo número acabam discordando.
+- **Semáforo de três cores** (pedido do Luan, 24/08/2026): campo `kind` = `'bom'` (verde) /
+  `'medio'` (amarelo) / `'ruim'` (vermelho). Quem classifica é a REGRA no servidor, nunca o sinal
+  do número no front: ACOS caindo é bom, custo subindo é ruim, e "concentração de 80% num produto"
+  não tem sinal nenhum. O ícone acompanha a cor (`bi-check-circle-fill`/`bi-exclamation-circle-fill`/
+  `bi-exclamation-triangle-fill`) pra não depender só dela. A regra do funil é `'medio'` de
+  propósito mesmo perdendo 90%+ entre sessão e carrinho: isso é o normal de qualquer loja, e um
+  vermelho fixo em todo período treinaria o olho a ignorar o vermelho do card inteiro — só vira
+  `'ruim'` quando o vazamento é no fim (quem chegou no checkout e desistiu de pagar).
+- **Tira horizontal com carrossel finito**, não coluna vertical (pedido do Luan, 24/08/2026: em
+  linha "cabe mais insights sem deixar o card gigantesco na vertical"). Por isso cada insight tem
+  DOIS textos: `label` (sintagma curto, "Conversão em queda", que é o que cabe na aba de ~200px) e
+  `title` (frase inteira, que aparece no detalhe embaixo). Regra nova que esquecer o `label` não
+  quebra — o front cai no `title` — mas fica feia na tira.
+  - As abas usam `flex:1 1 200px` + `min-width:200px`: com poucas elas crescem e preenchem a linha
+    toda; passando do que cabe, param de encolher e a tira rola. É o que faz o carrossel aparecer
+    sozinho só "quando tem muito", sem contar itens no JS.
+  - Navegação **finita** de propósito (pedido explícito): as setas desabilitam nos extremos em vez
+    de dar a volta — carrossel infinito faria o mesmo insight reaparecer e confundir.
+  - `MAX_INSIGHTS` subiu de 6 pra 10 junto com essa mudança: o que limitava era altura de card, e
+    não limita mais. Os pisos anti-ruído é que decidem quantos aparecem de verdade.
+  - Trocar de aba NÃO remonta a tira (só troca a classe ativa e redesenha o detalhe), e o
+    `scrollLeft` é salvo/restaurado ao redor de cada remontagem — senão o refresh periódico de
+    dados jogava o carrossel de volta pro começo enquanto a pessoa lia um insight do fim.
+  - **`behavior:'smooth'` pode ser ignorado SILENCIOSAMENTE** (movimento reduzido no sistema, ou
+    rolagem suave desligada no Chrome): a chamada não dá erro e o elemento não sai do lugar.
+    Confirmado ao vivo aqui — `scrollTo`/`scrollBy` com `'auto'` funcionam e com `'smooth'` ficam
+    em zero, então o clique na seta não fazia NADA. `insScroll()` tenta suave e, se em 250ms não
+    andou, aplica direto. Vale como regra pra qualquer rolagem programática nova neste app. Pelo
+    mesmo motivo `.ins-list` NÃO leva `scroll-behavior:smooth` no CSS: ele se aplicaria também à
+    atribuição direta de `scrollLeft`, que aqui precisa ser instantânea.
 - `productRevenueRows()`/`revenueByState()`/`sumDailyRange()` (metrics.js) foram extraídos de dentro
   do `computeDashboard` justamente pra que o período anterior use EXATAMENTE a mesma agregação do
   atual. Se as duas pontas divergirem, a comparação mente.

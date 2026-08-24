@@ -289,16 +289,46 @@
      Layout do card do Shopify que o Luan trouxe de referência (24/08/2026): lista de assuntos à
      esquerda, detalhe do selecionado à direita. Em tela estreita vira uma coluna só (a lista
      rola na horizontal como abas), porque duas colunas de 300px não cabem no celular. */
-  .ins-body{display:grid;grid-template-columns:262px 1fr;gap:18px;align-items:stretch;flex:1;min-height:0}
-  .ins-list{display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--border);padding-right:14px;overflow-y:auto;min-height:0}
-  .ins-item{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border-radius:var(--radius-sm);border:1px solid transparent;background:none;font-family:inherit;font-size:11.5px;line-height:1.35;color:var(--sub);text-align:left;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
-  .ins-item:hover{background:var(--surface2);color:var(--text)}
-  .ins-item.active{background:var(--surface2);border-color:var(--border2);color:var(--text);font-weight:600}
-  .ins-item-ico{flex-shrink:0;font-size:12px;line-height:1.2;margin-top:.5px}
-  .ins-item-txt{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-  /* Cores por tipo: atenção em âmbar (não vermelho — é "olha isso", não "quebrou"), ganho em
-     verde, informativo em cinza. Mesma paleta do resto da dashboard. */
-  .ins-ico-atencao{color:var(--amber)} .ins-ico-positivo{color:var(--green)} .ins-ico-neutro{color:var(--muted)}
+  /* Tira de seleção HORIZONTAL no topo, detalhe embaixo (pedido do Luan, 24/08/2026: a coluna
+     vertical à esquerda esticava o card e limitava quantos insights cabiam). Cada aba divide a
+     largura por igual (flex:1 1 0), então a tira preenche a linha inteira em vez de deixar sobra
+     à direita, e caber mais insight só torna as abas mais estreitas em vez de alongar o card. */
+  .ins-body{display:flex;flex-direction:column;gap:16px;flex:1;min-height:0}
+  /* Tira + setas do carrossel. As setas ficam FORA da área que rola (não sobrepostas ao conteúdo)
+     pra nunca cobrirem o texto de uma aba. */
+  .ins-strip{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding-bottom:14px;min-width:0}
+  /* Sem `scroll-behavior:smooth` no CSS de propósito: ele se aplica TAMBÉM à atribuição direta de
+     scrollLeft, e a restauração de posição feita depois de remontar a tira (ver renderInsights)
+     precisa ser instantânea, não animada. O deslize suave dos botões vem do `behavior:'smooth'`
+     passado no próprio scrollBy, onde a intenção é explícita. */
+  .ins-list{display:flex;gap:8px;min-width:0;flex:1;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+  .ins-list::-webkit-scrollbar{display:none}
+  /* `flex:1 1 200px` + `min-width:200px`: com poucas abas elas crescem e preenchem a linha toda
+     (sem sobra à direita); passando do que cabe, param de encolher em 200px e a tira rola. É o
+     que faz o carrossel aparecer sozinho só "quando tem muito", sem contar itens no JS. */
+  .ins-item{flex:1 1 200px;min-width:200px;display:flex;flex-direction:column;gap:6px;padding:10px 11px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);font-family:inherit;text-align:left;cursor:pointer;transition:background .12s,border-color .12s,box-shadow .12s}
+  /* Setas: navegação FINITA de propósito (pedido do Luan, 24/08/2026 — sem carrossel infinito,
+     que faz o mesmo insight reaparecer e confunde). Nos extremos elas desabilitam em vez de dar
+     a volta, então dá pra saber que chegou ao fim da lista. */
+  .ins-nav{flex-shrink:0;width:28px;height:28px;border-radius:50%;border:1px solid var(--border2);background:var(--surface);color:var(--sub);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;padding:0;transition:all .12s}
+  .ins-nav:hover:not(:disabled){border-color:var(--ink);color:var(--text)}
+  .ins-nav:disabled{opacity:.3;cursor:default}
+  .ins-nav[hidden]{display:none}
+  .ins-item:hover{border-color:var(--border2)}
+  /* Selecionada: borda escura + leve elevação. Não uso fundo escuro porque a aba carrega o selo
+     de variação colorido dentro dela, que perderia contraste. */
+  .ins-item.active{background:var(--surface);border-color:var(--ink);box-shadow:0 1px 3px rgba(30,28,24,.10)}
+  .ins-item-top{display:flex;align-items:flex-start;gap:7px;min-width:0}
+  .ins-item-ico{flex-shrink:0;font-size:12px;line-height:1.3;margin-top:.5px}
+  .ins-item-txt{min-width:0;font-size:11.5px;line-height:1.3;color:var(--sub);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .ins-item.active .ins-item-txt{color:var(--text);font-weight:600}
+  /* Selo dentro da aba: dá o número junto do assunto, então a tira sozinha já informa sem
+     precisar clicar em cada uma. */
+  .ins-item-delta{font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+  /* Semáforo de três cores (pedido do Luan, 24/08/2026): bom em verde, meio termo em amarelo,
+     ruim em vermelho. Quem classifica é o servidor, pelo campo `kind` (ver src/insights.js) —
+     o sinal do número não serve pra isso, porque ACOS caindo é bom e custo subindo é ruim. */
+  .ins-ico-bom{color:var(--green)} .ins-ico-medio{color:var(--amber)} .ins-ico-ruim{color:var(--red)}
   /* Coluna das barras generosa (não uma faixa fina encostada na direita): o card é span 12, e com
      as barras estreitas sobrava um vão morto de uns 500px entre o fim da frase e o começo do
      gráfico. Aqui as duas colunas dividem o espaço de forma parecida e não sobra buraco. */
@@ -308,14 +338,6 @@
   .ins-title{font-size:14px;font-weight:600;line-height:1.35;display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
   .ins-title-ico{flex-shrink:0;margin-top:1px}
   .ins-text{font-size:12px;color:var(--sub);line-height:1.5}
-  /* Selo de variação, mesmo vocabulário visual do .delta-val da faixa de Indicadores (seta +
-     percentual em pill colorida) — repetido aqui em vez de reaproveitar a classe porque lá o
-     verde é sempre "subiu" e aqui a cor segue o TIPO do insight: uma queda de 40% no ACOS é
-     ótima notícia e sairia vermelha se fosse pelo sinal do número. */
-  .ins-delta{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;margin-top:8px}
-  .ins-delta.atencao{background:rgba(155,122,42,.1);color:var(--amber)}
-  .ins-delta.positivo{background:rgba(61,122,82,.1);color:var(--green)}
-  .ins-delta.neutro{background:rgba(30,28,24,.06);color:var(--muted)}
   /* Duas barras comparativas. Largura proporcional ao maior valor do par, com um piso de 2% pra
      uma barra de valor zero ainda aparecer como traço (senão "0" some e parece dado faltando). */
   .ins-bars{display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -326,11 +348,11 @@
   .ins-bar-lbl{font-size:9.5px;color:var(--muted);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ins-bar-cell{min-width:0;flex:1}
   .ins-empty{display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:12px;padding:26px 10px;line-height:1.6}
+  /* No celular a tira rola com o dedo, então as setas só ocupariam espaço — ficam escondidas e a
+     aba encolhe um pouco pra caber mais de uma na tela. O detalhe empilha. */
   @media(max-width:900px){
-    .ins-body{grid-template-columns:1fr;gap:14px}
-    .ins-list{flex-direction:row;border-right:none;border-bottom:1px solid var(--border);padding:0 0 10px;overflow-x:auto;gap:6px}
-    .ins-item{flex:0 0 auto;max-width:230px}
-    .ins-item-txt{-webkit-line-clamp:2}
+    .ins-nav{display:none}
+    .ins-item{flex:1 1 170px;min-width:170px}
     .ins-detail{grid-template-columns:1fr;gap:16px}
   }
 
@@ -1111,8 +1133,20 @@ function escapeHtmlAttr(s) { return String(s==null?'':s).replace(/[&<>"']/g, c =
 // entre resumo e cards na tela de Campanhas, ver CLAUDE.md).
 let _insights = [];
 let _insightSel = 0;
-const INS_ICO = { atencao: 'bi-exclamation-circle-fill', positivo: 'bi-graph-up-arrow', neutro: 'bi-info-circle-fill' };
-const INS_BAR_COLOR = { atencao: 'var(--amber)', positivo: 'var(--sage)', neutro: 'var(--tan)' };
+// Semáforo: bom/medio/ruim vêm prontos do servidor (campo `kind`, ver src/insights.js).
+// O ícone acompanha a cor pra não depender só dela — daltonismo, e print em preto e branco.
+const INS_ICO = { bom: 'bi-check-circle-fill', medio: 'bi-exclamation-circle-fill', ruim: 'bi-exclamation-triangle-fill' };
+const INS_BAR_COLOR = { bom: 'var(--green)', medio: 'var(--amber)', ruim: 'var(--red)' };
+const INS_KIND_FALLBACK = 'medio';
+
+// Selo de variação, usado tanto na aba quanto no detalhe. A SETA segue o número (subiu/caiu), a
+// COR segue o `kind` do insight — não dá pra derivar a cor do sinal, porque nem toda queda é ruim
+// (ACOS caindo é ótimo) nem toda alta é boa. Quem já decidiu isso foi a regra no servidor.
+function insDeltaHTML(i, cls) {
+  if (i.deltaPct == null || !isFinite(i.deltaPct)) return '';
+  const seta = i.deltaPct >= 0 ? 'up' : 'down';
+  return `<span class="${cls} ins-ico-${i.kind}"><i class="bi bi-arrow-${seta}-right"></i>${pctStr(Math.abs(i.deltaPct))}</span>`;
+}
 
 // Formata um valor conforme o tipo que o servidor mandou junto do gráfico.
 function insFmtVal(v, fmt) {
@@ -1136,19 +1170,89 @@ function renderInsights(list) {
   }
   if (_insightSel >= _insights.length) _insightSel = 0;
   count.textContent = _insights.length === 1 ? '1 destaque' : `${_insights.length} destaques`;
-  body.innerHTML = `<div class="ins-list" id="insList"></div><div class="ins-detail" id="insDetail"></div>`;
+  // Guarda a rolagem da tira: o refresh automático de dados (a cada poucos minutos) chama esta
+  // função de novo, e sem isso o carrossel pulava de volta pro começo sozinho enquanto a pessoa
+  // estava olhando um insight do fim da lista.
+  const scrollAnterior = document.getElementById('insList')?.scrollLeft || 0;
+  body.innerHTML = `
+    <div class="ins-strip">
+      <button class="ins-nav" id="insPrev" aria-label="Insights anteriores"><i class="bi bi-chevron-left"></i></button>
+      <div class="ins-list" id="insList"></div>
+      <button class="ins-nav" id="insNext" aria-label="Próximos insights"><i class="bi bi-chevron-right"></i></button>
+    </div>
+    <div class="ins-detail" id="insDetail"></div>`;
+  // `label` é o sintagma curto feito pra caber na aba; `title` (frase inteira) é só o fallback
+  // caso alguma regra nova esqueça de mandar o label. O title vai no `title=` pra quem passar o
+  // mouse ler o texto completo sem precisar clicar.
   document.getElementById('insList').innerHTML = _insights.map((i, n) => `
-    <button class="ins-item${n === _insightSel ? ' active' : ''}" data-n="${n}">
-      <i class="bi ${INS_ICO[i.kind] || INS_ICO.neutro} ins-item-ico ins-ico-${i.kind}"></i>
-      <span class="ins-item-txt">${escapeHtmlAttr(i.title)}</span>
+    <button class="ins-item${n === _insightSel ? ' active' : ''}" data-n="${n}" title="${escapeHtmlAttr(i.title)}">
+      <span class="ins-item-top">
+        <i class="bi ${INS_ICO[i.kind] || INS_ICO[INS_KIND_FALLBACK]} ins-item-ico ins-ico-${i.kind}"></i>
+        <span class="ins-item-txt">${escapeHtmlAttr(i.label || i.title)}</span>
+      </span>
+      ${insDeltaHTML(i, 'ins-item-delta')}
     </button>`).join('');
-  document.getElementById('insList').onclick = e => {
+  // `tira` e não `list`: o parâmetro desta função já se chama list (é o array de insights).
+  const tira = document.getElementById('insList');
+  // Trocar de aba NÃO remonta a tira: só troca a classe ativa e redesenha o detalhe. Remontar
+  // (como era antes) zerava a rolagem do carrossel a cada clique, o que tornava impossível
+  // navegar até o fim da lista.
+  tira.onclick = e => {
     const b = e.target.closest('.ins-item');
     if (!b) return;
     _insightSel = Number(b.dataset.n);
-    renderInsights(_insights);
+    tira.querySelectorAll('.ins-item').forEach((el, n) => el.classList.toggle('active', n === _insightSel));
+    renderInsightDetail();
   };
+  tira.scrollLeft = scrollAnterior;
+  tira.onscroll = insSyncNav;
+  document.getElementById('insPrev').onclick = () => insScroll(-1);
+  document.getElementById('insNext').onclick = () => insScroll(1);
+  // O ResizeObserver cobre recolher/expandir a sidebar e redimensionar a janela, que mudam a
+  // largura da tira e portanto se ela ainda rola ou não.
+  _insRO?.disconnect();
+  _insRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(insSyncNav) : null;
+  _insRO?.observe(tira);
+  insSyncNav();
   renderInsightDetail();
+}
+
+let _insRO = null;
+
+// Rola uma "página" (80% do que está visível) pra frente ou pra trás. Navegação finita: o alvo é
+// grampeado entre 0 e o máximo, então nos extremos ele para em vez de dar a volta.
+function insScroll(dir) {
+  const tira = document.getElementById('insList');
+  if (!tira) return;
+  const passo = Math.max(tira.clientWidth * 0.8, 200);
+  const max = tira.scrollWidth - tira.clientWidth;
+  const antes = tira.scrollLeft;
+  const alvo = Math.max(0, Math.min(antes + dir * passo, max));
+  if (Math.abs(alvo - antes) < 1) return;
+  tira.scrollTo({ left: alvo, behavior: 'smooth' });
+  // `behavior:'smooth'` é ignorado SILENCIOSAMENTE em alguns ambientes (movimento reduzido no
+  // sistema operacional, ou rolagem suave desligada no Chrome): a chamada não dá erro e o
+  // elemento simplesmente não sai do lugar, então o clique na seta não faria nada e o carrossel
+  // pareceria quebrado. Confirmado ao vivo aqui: scrollTo/scrollBy com 'auto' funcionam e com
+  // 'smooth' ficam em zero. Por isso a checagem: se não andou, aplica direto (sem animação, mas
+  // funcionando). Vale como regra pra qualquer rolagem programática nova neste app.
+  setTimeout(() => {
+    if (Math.abs(tira.scrollLeft - antes) < 1) tira.scrollLeft = alvo;
+    insSyncNav();
+  }, 250);
+}
+
+// Mostra as setas só quando a tira realmente rola, e desabilita a que já chegou no fim.
+function insSyncNav() {
+  const list = document.getElementById('insList');
+  const prev = document.getElementById('insPrev');
+  const next = document.getElementById('insNext');
+  if (!list || !prev || !next) return;
+  const rola = list.scrollWidth > list.clientWidth + 1;
+  prev.hidden = next.hidden = !rola;
+  if (!rola) return;
+  prev.disabled = list.scrollLeft <= 1;
+  next.disabled = list.scrollLeft >= list.scrollWidth - list.clientWidth - 1;
 }
 
 function renderInsightDetail() {
@@ -1164,7 +1268,7 @@ function renderInsightDetail() {
     const v = Number(r.value) || 0;
     const w = Math.max((Math.abs(v) / max) * 100, v === 0 ? 2 : 6);
     // A primeira linha é sempre o período/valor atual: ganha a cor do tipo, a segunda fica neutra.
-    const cor = n === 0 ? (INS_BAR_COLOR[i.kind] || 'var(--tan)') : 'var(--border2)';
+    const cor = n === 0 ? (INS_BAR_COLOR[i.kind] || INS_BAR_COLOR[INS_KIND_FALLBACK]) : 'var(--border2)';
     return `<div class="ins-bar-cell">
       <div class="ins-bar-lbl">${escapeHtmlAttr(r.label)}</div>
       <div class="ins-bar-row">
@@ -1173,17 +1277,11 @@ function renderInsightDetail() {
       </div>
     </div>`;
   }).join('');
-  // Selo de variação. A SETA segue o número (subiu/caiu), a COR segue o tipo do insight — não dá
-  // pra derivar a cor do sinal, porque nem toda queda é ruim (ACOS caindo é bom) nem toda alta é
-  // boa. Quem já decidiu isso foi a regra no servidor, através do `kind`.
-  const delta = (i.deltaPct == null || !isFinite(i.deltaPct)) ? '' :
-    `<div class="ins-delta ${i.kind}"><i class="bi bi-arrow-${i.deltaPct >= 0 ? 'up' : 'down'}-right"></i>${pctStr(Math.abs(i.deltaPct))}</div>`;
   el.innerHTML = `
     <div class="ins-detail-main">
       <div class="ins-eyebrow">${escapeHtmlAttr(i.dimension)}</div>
-      <div class="ins-title"><i class="bi ${INS_ICO[i.kind] || INS_ICO.neutro} ins-title-ico ins-ico-${i.kind}"></i><span>${escapeHtmlAttr(i.title)}</span></div>
+      <div class="ins-title"><i class="bi ${INS_ICO[i.kind] || INS_ICO[INS_KIND_FALLBACK]} ins-title-ico ins-ico-${i.kind}"></i><span>${escapeHtmlAttr(i.title)}</span></div>
       <div class="ins-text">${escapeHtmlAttr(i.detail)}</div>
-      ${delta}
     </div>
     <div class="ins-bars">${bars}</div>`;
 }
