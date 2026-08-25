@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-<link rel="stylesheet" href="switch.css">
+<link rel="stylesheet" href="css/switch.css">
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -211,9 +211,9 @@
 </head>
 <body>
 
-<script src="sidebar.js"></script>
-<script src="confirm-modal.js"></script>
-<script src="jobs-widget.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/confirm-modal.js"></script>
+<script src="js/jobs-widget.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -278,14 +278,14 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const LOGO_BASE = 'logos-integracao/';
+const LOGO_BASE = 'img/integracoes/';
 const FALLBACK_ICON = { geral: 'bi-shop', marketing: 'bi-megaphone', planned: 'bi-hourglass-split' };
 const STATE_LABEL = {
   connected: 'Conectada', pending_auth: 'Aguardando autorização', not_configured: 'Não configurada',
   paused: 'Pausada', disabled: 'Desativada', planned: 'Em breve',
 };
 const COUNTRY_LABEL = { br: 'Brasil', us: 'Estados Unidos' };
-const COUNTRY_FLAG  = { br: 'bandeira_brasil.webp', us: 'bandeira_eua.svg' };
+const COUNTRY_FLAG  = { br: 'img/bandeiras/bandeira_brasil.webp', us: 'img/bandeiras/bandeira_eua.svg' };
 
 // Metadados de cada PLATAFORMA (não confundir com o canal em si) — usados só pro cabeçalho do
 // bloco de família, quando 2+ integrações do mesmo `group` aparecem juntas (ver server.js
@@ -370,7 +370,7 @@ function logoBoxEl(className, logo, label, category){
   box.className = className;
   const img = document.createElement('img');
   // Logo começando com "/" é servida direto da raiz de public/ (ex: /Logo2.png, o ícone da
-  // própria Coco and Luna) em vez de logos-integracao/ — usado pros canais Shopify que são a
+  // própria Coco and Luna) em vez de img/integracoes/ — usado pros canais Shopify que são a
   // marca em si, não um serviço de terceiro (ver server.js computeIntegrationsList).
   img.src = (logo || '').startsWith('/') ? logo : LOGO_BASE + logo;
   img.alt = label;
@@ -648,7 +648,7 @@ async function loadHistory(){
       const cap = mkt === 'us' ? 'Us' : 'Br';
       return `<div class="ret-row">
         <div class="ret-row-main">
-          <div class="ret-row-label"><img class="ret-row-logo" src="logos-integracao/Amazon_logo.png" alt=""><span class="ret-row-label-text">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${info.totalOrders.toLocaleString('pt-BR')} pedidos · ${retCoverageText(info)}</span></span></div>
+          <div class="ret-row-label"><img class="ret-row-logo" src="img/integracoes/Amazon_logo.png" alt=""><span class="ret-row-label-text">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${info.totalOrders.toLocaleString('pt-BR')} pedidos · ${retCoverageText(info)}</span></span></div>
           <div class="ret-row-input"><input type="number" id="retDays${cap}" min="0" value="${info.days}"><span>dias (0 = sem limite)</span></div>
           <button class="ret-btn" id="retApply${cap}" onclick="applyHistory('${mkt}')">Aplicar</button>
         </div>

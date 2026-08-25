@@ -210,19 +210,19 @@
 </head>
 <body>
 
-<script src="sidebar.js"></script>
-<script src="confirm-modal.js"></script>
-<script src="jobs-widget.js"></script>
-<script src="colors.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/confirm-modal.js"></script>
+<script src="js/jobs-widget.js"></script>
+<script src="js/colors.js"></script>
 
 <div class="main">
   <div class="topbar">
     <div class="mkt-toggle-wrap">
       <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
-        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
+        <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
       </button>
       <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
-        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
+        <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
     </div>
     <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">Carregando…</span></div>
@@ -327,14 +327,14 @@ function fmtMoney(v, mkt = market) {
 
 // ── Metadados de canal (mesmas cores de index.html/DEFAULT_CH) ──
 const CH_META = {
-  shopify:      { name: 'Shopify - Coco and Luna BR',  color: '#95BF47', logo: 'Logo2.png', logoFill: true },
-  shopee:       { name: 'Shopee',                      color: '#EE4D2D', logo: 'logo_shopee.svg' },
-  mercadolivre: { name: 'Mercado Livre',                color: '#FFE600', logo: 'logo_mercadolivre.png', logoFill: true },
-  amazon:       { name: 'Amazon BR',                    color: '#111111', logo: 'logo_amazon.webp' },
-  yucaloo_br:   { name: 'Shopify - Yucaloo BR',         color: '#4466FF', logo: 'logos-integracao/Yucaloo2.png' },
-  shopify_us:   { name: 'Shopify - Coco and Luna EUA',  color: '#7EAD3C', logo: 'Logo2.png', logoFill: true },
-  amazon_us:    { name: 'Amazon EUA',                   color: '#FF9900', logo: 'logo_amazon.webp' },
-  yucaloo_us:   { name: 'Shopify - Yucaloo EUA',        color: '#4466FF', logo: 'logos-integracao/Yucaloo2.png' },
+  shopify:      { name: 'Shopify - Coco and Luna BR',  color: '#95BF47', logo: 'img/marca/Logo2.png', logoFill: true },
+  shopee:       { name: 'Shopee',                      color: '#EE4D2D', logo: 'img/canais/logo_shopee.svg' },
+  mercadolivre: { name: 'Mercado Livre',                color: '#FFE600', logo: 'img/canais/logo_mercadolivre.png', logoFill: true },
+  amazon:       { name: 'Amazon BR',                    color: '#111111', logo: 'img/canais/logo_amazon.webp' },
+  yucaloo_br:   { name: 'Shopify - Yucaloo BR',         color: '#4466FF', logo: 'img/integracoes/Yucaloo2.png' },
+  shopify_us:   { name: 'Shopify - Coco and Luna EUA',  color: '#7EAD3C', logo: 'img/marca/Logo2.png', logoFill: true },
+  amazon_us:    { name: 'Amazon EUA',                   color: '#FF9900', logo: 'img/canais/logo_amazon.webp' },
+  yucaloo_us:   { name: 'Shopify - Yucaloo EUA',        color: '#4466FF', logo: 'img/integracoes/Yucaloo2.png' },
 };
 const CHANNELS_BR = ['shopify', 'yucaloo_br', 'shopee', 'amazon', 'mercadolivre'];
 const CHANNELS_US = ['shopify_us', 'yucaloo_us', 'amazon_us'];

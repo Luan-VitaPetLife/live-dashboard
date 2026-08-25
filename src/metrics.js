@@ -123,7 +123,7 @@ function classifyType(item) {
 }
 
 // Macro-categorias de produto usadas em Segmentos pra organizar o "Top produtos" de cada card
-// (Gato/Cão) por tipo — CRIADAS PELO USUÁRIO pela tela (Segmentos → "Tipos de produto"), nada fixo
+// (Gato/Cachorro) por tipo — CRIADAS PELO USUÁRIO pela tela (Segmentos → "Tipos de produto"), nada fixo
 // no código (substituiu a 1ª versão hardcoded "Areia x Suplementos" do mesmo dia, 05/08/2026, a
 // pedido do Luan). Cada regra é { nome: [palavra-chave,...] }; a palavra-chave é buscada (contains,
 // case-insensitive) no título, no productType (Shopify) e em CADA tag do item — "em qualquer lugar",
@@ -570,7 +570,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // top 5 (topProducts) e a lista completa (topProductsAll) pra permitir expandir o card na revenue.
   const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações) — ver acima
   // Produto oculto (Unificador → "Ocultar produtos") não pode aparecer em nenhuma lista de produto
-  // fora do card "Ocultos" — antes só computeSegments (Gato/Cão/"Onde os produtos vendem") respeitava
+  // fora do card "Ocultos" — antes só computeSegments (Gato/Cachorro/"Onde os produtos vendem") respeitava
   // isso; Top Produtos, Produtos e Estoque continuavam mostrando o produto normalmente (reportado
   // pelo Luan, 17/08/2026). isHiddenProduct prioriza a tag atual do catálogo Shopify sobre a tag
   // presa no pedido (ver isHiddenProduct).
@@ -679,7 +679,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     ],
   })
     .sort((a, b) => b.qty - a.qty);
-  // "hidden" fica fora do denominador — não é uma fatia real da distribuição Gato/Cão/Outros,
+  // "hidden" fica fora do denominador — não é uma fatia real da distribuição Gato/Cachorro/Outros,
   // é só onde produtos explicitamente ocultados (ver isHiddenItem) vão parar.
   const totalSegUnits = Object.entries(segAcc).filter(([k]) => k !== 'hidden').reduce((a, [, s]) => a + s.units, 0);
   const segments = {};

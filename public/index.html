@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-<link rel="stylesheet" href="switch.css">
+<link rel="stylesheet" href="css/switch.css">
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -533,21 +533,21 @@
 </head>
 <body>
 
-<script src="sidebar.js"></script>
-<script src="confirm-modal.js"></script>
-<script src="jobs-widget.js"></script>
-<script src="colors.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/confirm-modal.js"></script>
+<script src="js/jobs-widget.js"></script>
+<script src="js/colors.js"></script>
 
 <div class="main">
   <div class="topbar">
     <!-- Market toggle -->
     <div class="mkt-toggle-wrap" id="mktToggleWrap">
       <button class="mkt-btn active" id="mktBtnBr" data-market="br">
-        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img">
+        <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img">
         <span>Brasil</span>
       </button>
       <button class="mkt-btn" id="mktBtnUs" data-market="us">
-        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img">
+        <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img">
         <span>EUA</span>
       </button>
     </div>
@@ -1593,7 +1593,7 @@ function render(d) {
     (d.market === 'us' && (d.channel === 'todos' || d.channel === 'shopify_us' || d.channel === 'yucaloo_us'));
   const trafficSubEl = document.getElementById('trafficSub');
   const mktLabel = d.market === 'us' ? 'EUA' : 'BR';
-  const brandLogo = b => `<img class="ct-sub-logo" src="logos-integracao/${b === 'coco' ? 'cocoandluna.webp' : 'Yucaloo1.png'}" alt="">`;
+  const brandLogo = b => `<img class="ct-sub-logo" src="img/integracoes/${b === 'coco' ? 'cocoandluna.webp' : 'Yucaloo1.png'}" alt="">`;
   // A logo já entrega qual marca é — repetir "Coco and Luna"/"Yucaloo" no texto ao lado é
   // redundante (pedido do Luan, 18/08/2026), o texto fica só com Shopify + mercado + período.
   if (d.channel === 'shopify' || d.channel === 'shopify_us') {

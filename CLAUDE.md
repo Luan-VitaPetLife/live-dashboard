@@ -83,18 +83,49 @@ public/index.html        Dashboard principal (Revenue)
 public/campanhas.html    Gastos reais por canal + campanhas
 public/produtos.html     Catálogo completo por canal
 public/estoque.html      Estoque + produção, híbrido real (vendas) + manual
-public/segmentos.html    Gato vs Cão, tipos de produto, geografia por produto
+public/segmentos.html    Gato vs Cachorro, tipos de produto, geografia por produto
 public/geografia.html    Mapa por estado (Leaflet), seletor BR/EUA embutido
 public/unificador.html   Agrupamento manual de produtos entre canais (admin)
 public/configuracoes.html Geral, login, gestão de usuários (admin)
 public/integracoes.html  Status + liga/desliga por integração (admin)
 public/login.html        Tela de login (standalone)
-public/404.html          Página de erro 404 (rota desconhecida), ilustração 404.png
-public/sidebar.js        Sidebar compartilhada (IIFE, injeta markup + CSS + comportamento)
-public/colors.js         Sistema de cores compartilhado (IIFE) + color picker
-public/jobs-widget.js    Card flutuante de processos em segundo plano (IIFE), toda página
-public/confirm-modal.js  Pop-up de confirmação (substitui confirm() nativo, IIFE), toda página
+public/404.html          Página de erro 404 (rota desconhecida)
+public/js/sidebar.js       Sidebar compartilhada (IIFE, injeta markup + CSS + comportamento)
+public/js/colors.js        Sistema de cores compartilhado (IIFE) + color picker
+public/js/jobs-widget.js   Card flutuante de processos em segundo plano (IIFE), toda página
+public/js/confirm-modal.js Pop-up de confirmação (substitui confirm() nativo, IIFE), toda página
+public/css/switch.css      Toggle .ios-switch, padrão único do app
 ```
+
+### Organização de `public/` (25/08/2026)
+Só `.html` e `favicon.png` ficam na raiz — a raiz é o que o `express.static` serve, e as páginas
+precisam estar lá pras URLs limpas (`/produtos` etc., ver `SLUG_TO_FILE` em server.js). Antes as
+imagens estavam soltas no meio dos HTML e não dava pra ver o que era página e o que era asset.
+
+```
+public/
+  *.html                 as 11 páginas (raiz obrigatória)
+  favicon.png            convenção de raiz, fica onde está
+  css/                   switch.css
+  js/                    sidebar.js colors.js confirm-modal.js jobs-widget.js
+  img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
+  img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
+  img/canais/            logo_* usados nos cards de canal (Campanhas/Produtos/Estoque)
+  img/integracoes/       antiga logos-integracao/ — logos da tela de Integrações (LOGO_BASE)
+  img/mascotes/          coco.svg (cachorro) luna.svg (gata)
+  img/ilustracoes/       404.png
+```
+
+Duas armadilhas ao mexer nisso:
+- **Caminho relativo dentro de um `.js` resolve pela PÁGINA, não pelo arquivo do script.**
+  `sidebar.js` mora em `public/js/` mas injeta `<img src="favicon.png">`, e isso continua certo
+  porque quem resolve é o documento (`/produtos`), que está na raiz. Não "consertar" pra `../`.
+- `LOGO_BASE` (integracoes.html) prefixa os nomes de logo que o `server.js` devolve em
+  `computeIntegrationsList` — lá os valores são nome pelado (`Amazon_logo.png`), não caminho.
+  Logo começando com `/` escapa do `LOGO_BASE` e é caminho absoluto (`/img/marca/Logo2.png`).
+
+Removidos por não serem referenciados em lugar nenhum: `Feno_no_deserto.svg` (substituída pela
+`404.png` em 18/08/2026), `Logo1.svg`, `logo_shopify.png`, `logos-integracao/TikTok_logo.png`.
 
 Fluxo: `sync.js` busca pedidos/sessões → grava no `store` → `metrics.js` calcula → `/api/*`
 devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shopee/ML/Amazon direto.
@@ -429,6 +460,29 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   `computeStock.agg` (grupo manual tem prioridade sobre a família automática Lysine/Daily).
 - Também mostra produto do catálogo Shopify mesmo sem venda nenhuma (`listProductCatalog` mescla
   pedidos reais com `kv.shopifyProductCatalog`).
+
+### Segmentos de público — "Gato vs Cachorro" (`public/segmentos.html`)
+- Rótulo é **"Cachorro"**, não "Cão" (pedido do Luan, 25/08/2026). As CHAVES internas seguem
+  `cat`/`dog` — é o modelo de dado (`computeSegments`, `metrics.js`), não texto de tela, e mudar
+  isso não traria nada. As palavras-chave de classificação em `SEG_KW` (`metrics.js`) também
+  continuam com `'cão'`/`'cães'`: elas casam com TÍTULO DE PRODUTO real, que segue escrito assim.
+- Cores: gato `#ff002b`, cachorro `#0849e9`. Não são escolha estética avulsa — saem direto dos
+  mascotes da marca (`img/mascotes/luna.svg` é a gata e usa `#FF002B`; `img/mascotes/coco.svg` é o
+  cachorro e usa `#0849E9`). Trocar a cor sem trocar o SVG deixa o card brigando com o mascote que
+  está do lado dele.
+- **Fonte única**: `DEFAULT_SEG`/`CocoColors.seg` em `js/colors.js`, no mesmo formato de
+  `DEFAULT_CH`/`DEFAULT_MKT` (inclui `label` e `text` de contraste, e aceita override salvo em
+  `localStorage('coco_colors')` com chave `seg.<k>`). O `colors.js` também injeta as variáveis CSS
+  `--cat`/`--dog`/`--other` (`segVarsCss()`, dentro do `injectStyle()` que já existia). Antes o hex
+  vivia em DOIS lugares dentro do próprio `segmentos.html` — o `:root` do `<style>` e o objeto JS
+  `SEG_COLORS` do gráfico de rosca — e já estavam divergentes na prática (`--other:#9c9790` no CSS
+  contra `#c4b49a` no JS); quem mexesse em um não tinha como saber do outro.
+- Por isso `segmentos.html` carrega `js/colors.js` no **`<head>`**, e não junto dos outros scripts
+  no começo do `<body>` como as demais páginas: o CSS da própria página usa `--cat`/`--dog` e, se o
+  script chegasse depois, os acentos e as barras dos cards nasceriam sem cor por um instante.
+- O mascote aparece no cabeçalho de cada card de segmento (`.seg-card-mascote`, `SEG_MASCOTE`).
+  `height` fixo com `width:auto` de propósito: os dois SVG têm proporções diferentes e travar os
+  dois no mesmo quadrado achataria um deles.
 
 ### Tipos de produto
 - Categorias criadas pela própria UI (Segmentos → botão de gerenciar tipos), não hardcoded.
