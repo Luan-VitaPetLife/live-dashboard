@@ -374,6 +374,33 @@ function shopifyCatalogTagsByChannel(market) {
   return idx;
 }
 
+// Índice título → productType ATUAL do catálogo bruto Shopify, por canal (kv.shopifyProductCatalog,
+// re-sincronizado a cada ciclo) — MESMO PRINCÍPIO E MESMO FORMATO de shopifyCatalogTagsByChannel,
+// só que pra "Type" em vez de tag. `it.productType`, capturado no pedido (ver shopify.js), é uma
+// FOTO de quando o pedido foi buscado e nunca é re-sincronizado depois — exatamente o mesmo
+// problema que já existia com tag (ver isHiddenProduct/catalogTagsIdx): produto com Type certinho
+// HOJE na Shopify continuava aparecendo sem tipo em Segmentos por causa de um pedido antigo,
+// sincronizado antes do campo "Type" ter sido preenchido no Admin (ou antes da consulta de
+// pedidos passar a buscar esse campo). Reportado pelo Luan, 25/08/2026 — "Daily"/Areia caindo em
+// "Outros" mesmo com o tipo certo cadastrado na Shopify.
+// Por que POR CANAL, e não um índice único pro mercado inteiro (como cheguei a fazer na 1ª
+// versão): o catálogo bruto da Shopify tem título repetido apontando pra produtos DIFERENTES —
+// ex. "Urinary Tract" e "Liver & Kidney" (loja EUA) existem como Tablet, Soft Chews E Powder for
+// Cats ao mesmo tempo, listagens distintas com o mesmo nome de exibição. Um índice único (título
+// → tipo) escolheria um dos três às cegas e classificaria unidade errada. Por canal reduz esse
+// risco (mesma ambiguidade que catalogTagsIdx já aceita hoje pra tag, não pior), mas não elimina
+// de vez — título duplicado dentro do MESMO canal ainda existe nos dados reais.
+function shopifyCatalogTypeByChannel(market) {
+  const raw = getShopifyProductCatalog();
+  const idx = {};
+  for (const channel of SHOPIFY_CATALOG_CHANNELS[market] || []) {
+    const map = {};
+    for (const p of raw[channel] || []) map[p.title] = p.productType || null;
+    idx[channel] = map;
+  }
+  return idx;
+}
+
 // Decide se um produto (canal + título) deve ficar oculto ("Ocultar produtos" no Unificador).
 // Prioriza a tag ATUAL do catálogo Shopify sobre a tag presa nos pedidos: `it.tags` de um pedido
 // vem do produto NA HORA em que o pedido foi buscado (ver shopify.js, product.tags via GraphQL) e
@@ -595,6 +622,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const productGeoAcc = {};
   const seenBundleIdsSeg = new Set();
   const geoAmazonImages = getAmazonProductImages(); // Shopify/Shopee/ML trazem it.image direto; Amazon só via cache de ASIN (ver 4.13)
+  const catalogTypeIdx = shopifyCatalogTypeByChannel(market);
   valid.forEach(o => {
     const rf = itemRevFactor(o); // escala receita ao total capturado; ver 4.7.6 e 4.13
     // mesma normalização de estado usada em byState (ver acima): reduz grafias da Amazon e agrupa
@@ -606,7 +634,13 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       if (!it.title || it.title.trim() === '-') return; // placeholder de frete/serviço da Amazon, ver amazon.js ordersFromRows
       const hidden = isHiddenItem(it, market);
       const seg  = hidden ? 'hidden' : classifySeg(it);
-      const type = classifyType(it);
+      // Prioriza o Type ATUAL do catálogo Shopify (catalogTypeIdx, escopado por CANAL — ver
+      // shopifyCatalogTypeByChannel) sobre o productType preso no pedido — mesma prioridade já
+      // aplicada a tag (ver catalogTagsIdx/isHiddenProduct). Só cai no valor do próprio item
+      // quando o canal do pedido nem tem catálogo Shopify (Shopee/ML/Amazon) ou o título não está
+      // cadastrado nele (produto vendido só fora da Shopify, sem contrapartida).
+      const liveType = catalogTypeIdx[o.channel]?.[it.title];
+      const type = classifyType(liveType !== undefined ? { ...it, productType: liveType } : it);
       const amount = (it.amount || 0) * rf;
       // Mesma normalização de combo legado usada em aggregateProductsByChannel (ver 4.13.1): um
       // item "3 Pack"/"Combo de N unidades" vendido como SKU próprio (não Shopify Bundles) conta
