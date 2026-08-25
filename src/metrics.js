@@ -621,7 +621,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       segAcc[seg].revenue += amount;
       segAcc[seg].units  += qty;
       segAcc[seg].orderIds.add(o.id);
-      if (type) segAcc[seg].byType[type] = (segAcc[seg].byType[type] || 0) + qty;
+      // 'Outros' e não descartar: `type` vem null sempre que o produto na Shopify nunca teve o
+      // campo "Type" preenchido (comum em produto Yucaloo/variante nova) — sem esse fallback a
+      // unidade some do card "Por tipo de produto" mas continua contando no total do segmento
+      // (units/revenue lá em cima), então a soma dos pills nunca batia com o card (BR chegava a
+      // esconder MAIS DA METADE das unidades — só "Pó" aparecia porque só os produtos com Type
+      // cadastrado entravam). Reportado pelo Luan, 25/08/2026 ("só mostra o Pó").
+      const typeKey = type || 'Outros';
+      segAcc[seg].byType[typeKey] = (segAcc[seg].byType[typeKey] || 0) + qty;
       const p = segAcc[seg].products;
       if (!p[title]) p[title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, typeGroup: null };
       p[title].qty     += qty;
