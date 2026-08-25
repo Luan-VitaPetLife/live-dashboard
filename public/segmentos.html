@@ -12,13 +12,18 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- colors.js no <head> (e não junto dos outros scripts no body): ele injeta as variáveis
+     --cat/--dog/--other usadas pelo CSS logo abaixo, então precisa chegar antes da primeira
+     pintura, senão as barras/acentos dos cards nascem sem cor por um instante. -->
+<script src="js/colors.js"></script>
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
     --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
     --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--tan:#c4b49a;--ink:#2d2a26;
-    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px;
-    --cat:#c4793a;--dog:#4a7ab8;--other:#9c9790; }
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  /* --cat/--dog/--other NÃO ficam aqui: vêm de colors.js (CocoColors.seg), a mesma fonte que o
+     gráfico de rosca lê em JS. Antes o hex vivia nos dois lugares e podiam divergir. */
   *{box-sizing:border-box;margin:0;padding:0}
   body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
 
@@ -123,7 +128,11 @@
   .seg-card-accent.cat{background:var(--cat)}
   .seg-card-accent.dog{background:var(--dog)}
   .seg-card-accent.other{background:var(--other)}
-  .seg-card-name{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:8px}
+  .seg-card-name{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  /* Mascote da marca no cabeçalho do card (Luna = gata, Coco = cachorro). Altura fixa e
+     width:auto porque os dois SVG têm proporções diferentes — travar os dois no mesmo
+     quadrado achataria um deles. */
+  .seg-card-mascote{height:26px;width:auto;flex-shrink:0;display:block}
   .seg-kpis{display:flex;gap:20px}
   .seg-kpi{display:flex;flex-direction:column}
   .seg-kpi-val{font-size:18px;font-weight:700;color:var(--ink)}
@@ -349,19 +358,19 @@
 </head>
 <body>
 
-<script src="sidebar.js"></script>
-<script src="confirm-modal.js"></script>
-<script src="jobs-widget.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/confirm-modal.js"></script>
+<script src="js/jobs-widget.js"></script>
 
 <div class="main">
   <div class="topbar">
     <div class="mkt-toggle-wrap">
       <button class="mkt-btn active" data-market="br">
-        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img">
+        <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img">
         <span>Brasil</span>
       </button>
       <button class="mkt-btn" data-market="us">
-        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img">
+        <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img">
         <span>EUA</span>
       </button>
     </div>
@@ -403,7 +412,7 @@
     <div class="page-header">
       <div>
         <div class="page-title">Segmentos</div>
-        <div class="page-sub" id="pageSub">Gato vs Cão · comparação por unidades vendidas</div>
+        <div class="page-sub" id="pageSub">Gato vs Cachorro · comparação por unidades vendidas</div>
       </div>
       <button class="geo-map-toggle" id="manageTypesBtn"><i class="bi bi-tags"></i> Tipos de produto</button>
     </div>
@@ -576,8 +585,15 @@ function setEChart(id, option) {
   return inst;
 }
 
-const SEG_COLORS = { cat:'#c4793a', dog:'#4a7ab8', other:'#c4b49a' };
-const SEG_LABELS = { cat:'Gato', dog:'Cão', other:'Outros' };
+// Cor e rótulo dos segmentos vêm de colors.js (CocoColors.seg) — mesma fonte das variáveis
+// CSS --cat/--dog/--other. As cores são as dos mascotes: Luna (gata) #ff002b, Coco (cachorro)
+// #0849e9. O fallback existe só pra página não quebrar caso colors.js falhe em carregar.
+const SEG_COLORS = Object.fromEntries(
+  ['cat','dog','other'].map(k => [k, window.CocoColors?.seg?.[k]?.bg || '#9c9790']));
+const SEG_LABELS = Object.fromEntries(
+  ['cat','dog','other'].map(k => [k, window.CocoColors?.seg?.[k]?.label || k]));
+// Mascote de cada segmento, usado no cabeçalho do card (Segmentos) — 'other' não tem mascote.
+const SEG_MASCOTE = { cat:'img/mascotes/luna.svg', dog:'img/mascotes/coco.svg' };
 
 function renderChart(segs) {
   const keys = ['cat','dog'].filter(k => segs[k]?.units > 0);
@@ -731,7 +747,10 @@ function renderCards(segs) {
       <div class="seg-card">
         <div class="seg-card-header">
           <div class="seg-card-accent ${k}"></div>
-          <div class="seg-card-name">${SEG_LABELS[k]}</div>
+          <div class="seg-card-name">
+            ${SEG_MASCOTE[k] ? `<img class="seg-card-mascote" src="${SEG_MASCOTE[k]}" alt="">` : ''}
+            <span>${SEG_LABELS[k]}</span>
+          </div>
           <div class="seg-kpis">
             <div class="seg-kpi">
               <div class="seg-kpi-val">${fmtMoney(s.revenue)}</div>
@@ -1382,7 +1401,7 @@ function render(d) {
   renderGeoBlocks();
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   const chLbl = CH_LABELS[channel] || channel;
-  document.getElementById('pageSub').textContent = `Gato vs Cão · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · última sincronização: ${up}`;
+  document.getElementById('pageSub').textContent = `Gato vs Cachorro · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · última sincronização: ${up}`;
   document.getElementById('footerDate').textContent = `Vita Pet Life · Segmentos · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · receita exclui cancelados · última sincronização: ${up}`;
   setLive('ok', `Ao vivo · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`);
 }

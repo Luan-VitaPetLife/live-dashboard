@@ -472,7 +472,7 @@ app.delete('/api/product-types', (req, res) => {
 
 // Produtos ocultos (controlado no Unificador — "essa função deve estar no unificador, que é onde
 // iremos controlar tudo", pedido do Luan 06/08/2026) — palavras-chave buscadas só nas tags de cada
-// item (ver metrics.js isHiddenItem); produto que bater sai dos cards normais (Gato/Cão/Outros) de
+// item (ver metrics.js isHiddenItem); produto que bater sai dos cards normais (Gato/Cachorro/Outros) de
 // Segmentos e vai pro card "Ocultos" lá. Admin-only, mesmo padrão de /api/product-groups (única tela
 // que chama esses endpoints é unificador.html — segmentos.html só exibe o resultado já calculado).
 app.get('/api/product-hidden-tags', requireAdmin, (req, res) => {
@@ -1412,11 +1412,11 @@ function computeIntegrationsList() {
   // planejado). Grupo com um item só é exibido como card avulso, sem cabeçalho de grupo.
   const items = [
     // ── Brasil · Geral ──
-    // Logo com "/" na frente é servida direto da raiz de public/ (fora de logos-integracao/, ver
-    // LOGO_BASE em integracoes.html) — Logo2.png é o ícone "CC" da própria Coco and Luna (mesmo
+    // Logo com "/" na frente é um caminho absoluto dentro de public/ (fora de img/integracoes/,
+    // ver LOGO_BASE em integracoes.html) — Logo2.png é o ícone "CC" da própria Coco and Luna (mesmo
     // usado no topo da sidebar), não o logo genérico da plataforma Shopify: essa loja É a Coco and
     // Luna, então o logo do card deve identificar a MARCA, não a plataforma por trás dela.
-    { key: 'shopify_br', label: 'Shopify - Coco and Luna BR', country: 'br', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
+    { key: 'shopify_br', label: 'Shopify - Coco and Luna BR', country: 'br', category: 'geral', group: 'shopify', logo: '/img/marca/Logo2.png', detail: has('SHOPIFY_STORE') ? process.env.SHOPIFY_STORE : '',
       ...integrationStatus({ key: 'shopify_br', configured: has('SHOPIFY_STORE') && has('SHOPIFY_ADMIN_TOKEN') }) },
     { key: 'yucaloo_br', label: 'Yucaloo BR', country: 'br', category: 'geral', group: 'shopify', logo: 'Yucaloo2.png', detail: getYucalooTokens().br?.shop || '',
       ...integrationStatus({ key: 'yucaloo_br', configured: shopifyYucaloo.isConfigured('br'), authorized: Boolean(getYucalooTokens().br) }) },
@@ -1440,7 +1440,7 @@ function computeIntegrationsList() {
     { key: null, label: 'TikTok Shop', country: 'br', category: 'planned', group: 'tiktok', logo: 'logo-tiktok-shop.png', detail: 'Loja em configuração, sem pedidos ainda', state: 'planned', note: '' },
 
     // ── Estados Unidos · Geral ──
-    { key: 'shopify_us', label: 'Shopify - Coco and Luna EUA', country: 'us', category: 'geral', group: 'shopify', logo: '/Logo2.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
+    { key: 'shopify_us', label: 'Shopify - Coco and Luna EUA', country: 'us', category: 'geral', group: 'shopify', logo: '/img/marca/Logo2.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
       ...integrationStatus({ key: 'shopify_us', configured: has('SHOPIFY_US_STORE') && has('SHOPIFY_US_ADMIN_TOKEN') }) },
     { key: 'yucaloo_us', label: 'Yucaloo EUA', country: 'us', category: 'geral', group: 'shopify', logo: 'Yucaloo2.png', detail: getYucalooTokens().us?.shop || '',
       ...integrationStatus({ key: 'yucaloo_us', configured: shopifyYucaloo.isConfigured('us'), authorized: Boolean(getYucalooTokens().us) }) },

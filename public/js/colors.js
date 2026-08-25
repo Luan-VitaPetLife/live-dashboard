@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────
 //  colors.js — sistema de cores compartilhado (Coco and Luna)
-//  IIFE incluído via <script src="colors.js"> em qualquer página, mesmo
+//  IIFE incluído via <script src="js/colors.js"> em qualquer página, mesmo
 //  padrão de sidebar.js. Expõe window.CocoColors com:
 //   - defaults (DEFAULT_CH/DEFAULT_MKT) + objetos vivos (.ch/.mkt)
 //   - persistência em localStorage('coco_colors') (mesma chave de sempre)
@@ -21,6 +21,19 @@
     amazon_us:    { bg: '#FF9900', label: 'Amazon EUA' },
     yucaloo_br:   { bg: '#4466ff', label: 'Shopify - Yucaloo BR' },
     yucaloo_us:   { bg: '#4466ff', label: 'Shopify - Yucaloo EUA' },
+  };
+  // Segmentos de público (Segmentos → "Gato vs Cachorro"). As duas cores principais NÃO são
+  // escolha estética avulsa: saem direto dos mascotes da marca — #FF002B é a cor da Luna
+  // (gata, mascotes/luna.svg) e #0849E9 é a cor do Coco (cachorro, mascotes/coco.svg). Trocar
+  // uma delas sem trocar o SVG correspondente deixa o card brigando com o próprio mascote.
+  // Ficam aqui, e não dentro de segmentos.html, porque a página precisava do valor em DOIS
+  // lugares (variável CSS e objeto JS do gráfico) e os dois saíam de fontes diferentes — mudar
+  // um e esquecer o outro era só questão de tempo. Agora a fonte é única e o CSS sai daqui
+  // (ver segVarsCss/injectStyle logo abaixo).
+  const DEFAULT_SEG = {
+    cat:   { bg: '#ff002b', label: 'Gato' },
+    dog:   { bg: '#0849e9', label: 'Cachorro' },
+    other: { bg: '#9c9790', label: 'Outros' },
   };
   const DEFAULT_MKT = {
     Instagram:       '#E1306C',
@@ -62,6 +75,7 @@
 
   const ch = {};
   const mkt = {};
+  const seg = {};
   function load() {
     const saved = readSaved();
     for (const k in DEFAULT_CH) {
@@ -71,6 +85,16 @@
     for (const k in DEFAULT_MKT) {
       mkt[k] = saved[`mkt.${k}`] || DEFAULT_MKT[k];
     }
+    for (const k in DEFAULT_SEG) {
+      const bg = saved[`seg.${k}`] || DEFAULT_SEG[k].bg;
+      seg[k] = { bg, text: contrastText(bg), label: DEFAULT_SEG[k].label };
+    }
+  }
+
+  // As mesmas cores de segmento como variável CSS (--cat/--dog/--other), pra folha de estilo
+  // poder usá-las sem que a página tenha que repetir o hex.
+  function segVarsCss() {
+    return ':root{' + Object.keys(seg).map(k => `--${k}:${seg[k].bg};`).join('') + '}';
   }
   function resetAll() {
     localStorage.removeItem(STORAGE_KEY);
@@ -104,7 +128,7 @@
     if (document.getElementById('ccp-style')) return;
     const s = document.createElement('style');
     s.id = 'ccp-style';
-    s.textContent = STYLE;
+    s.textContent = STYLE + '\n' + segVarsCss();
     document.head.appendChild(s);
   }
 
@@ -242,7 +266,7 @@
   injectStyle();
 
   window.CocoColors = {
-    DEFAULT_CH, DEFAULT_MKT, ch, mkt,
+    DEFAULT_CH, DEFAULT_MKT, DEFAULT_SEG, ch, mkt, seg,
     load, save, resetAll, contrastText, chBadgeHTML,
     buildSection, openPicker, makeTrigger,
   };

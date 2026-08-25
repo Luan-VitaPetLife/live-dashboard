@@ -3,7 +3,7 @@
 //  "site diz", sem cara nenhuma de app) por um pop-up no estilo da própria
 //  dashboard — pedido do Luan, 19/08/2026: "não poderia acontecer".
 //
-//  Uso: <script src="confirm-modal.js"></script> logo depois de sidebar.js.
+//  Uso: <script src="js/confirm-modal.js"></script> logo depois de sidebar.js.
 //  API: await cocoConfirm('Mensagem', { title, confirmText, cancelText, danger })
 //  → Promise<boolean> (true = confirmou, false = cancelou/Esc/clique fora).
 //  Mesmo padrão de componente injetado via IIFE do sidebar.js/jobs-widget.js.

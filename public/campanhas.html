@@ -210,19 +210,19 @@
 </head>
 <body>
 
-<script src="sidebar.js"></script>
-<script src="confirm-modal.js"></script>
-<script src="jobs-widget.js"></script>
-<script src="colors.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/confirm-modal.js"></script>
+<script src="js/jobs-widget.js"></script>
+<script src="js/colors.js"></script>
 
 <div class="main">
   <div class="topbar">
     <div class="mkt-toggle-wrap">
       <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
-        <img src="bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
+        <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
       </button>
       <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
-        <img src="bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
+        <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
     </div>
 
@@ -492,12 +492,12 @@ const setText  = (id, t) => { const e = document.getElementById(id); if (e) e.te
 // Nenhum valor começa com número de exemplo no HTML — tudo nasce em "—" e só é preenchido pelo
 // render(), então não existe mais texto fixo que não venha da API.
 const CAMP_CHANNELS = [
-  { key: 'ml',        mkt: 'br', logo: 'logo_mercadolivre.png', logoFill: true, name: 'Mercado Livre', type: 'ML Product Ads' },
-  { key: 'meta_br',   mkt: 'br', logo: 'logo_meta.png',                        name: 'Meta Ads',       type: 'Instagram · Facebook' },
-  { key: 'amazon_br', mkt: 'br', logo: 'logo_amazon.webp',                     name: 'Amazon BR',      type: 'Amazon Ads' },
-  { key: 'meta_us',   mkt: 'us', logo: 'logo_meta.png',                        name: 'Meta Ads',       type: 'Instagram · Facebook' },
-  { key: 'google_us', mkt: 'us', logo: 'logo_google_ads.webp',                 name: 'Google Ads',     type: 'Pesquisa · Display' },
-  { key: 'amazon',    mkt: 'us', logo: 'logo_amazon.webp',                     name: 'Amazon EUA',     type: 'Sponsored Products' },
+  { key: 'ml',        mkt: 'br', logo: 'img/canais/logo_mercadolivre.png', logoFill: true, name: 'Mercado Livre', type: 'ML Product Ads' },
+  { key: 'meta_br',   mkt: 'br', logo: 'img/canais/logo_meta.png',                        name: 'Meta Ads',       type: 'Instagram · Facebook' },
+  { key: 'amazon_br', mkt: 'br', logo: 'img/canais/logo_amazon.webp',                     name: 'Amazon BR',      type: 'Amazon Ads' },
+  { key: 'meta_us',   mkt: 'us', logo: 'img/canais/logo_meta.png',                        name: 'Meta Ads',       type: 'Instagram · Facebook' },
+  { key: 'google_us', mkt: 'us', logo: 'img/canais/logo_google_ads.webp',                 name: 'Google Ads',     type: 'Pesquisa · Display' },
+  { key: 'amazon',    mkt: 'us', logo: 'img/canais/logo_amazon.webp',                     name: 'Amazon EUA',     type: 'Sponsored Products' },
 ];
 
 function campCardTemplate(cfg) {

@@ -3,7 +3,7 @@
 //  A sidebar não muda de página para página (as opções são sempre as mesmas),
 //  então fica definida UMA vez aqui em vez de duplicada em cada .html.
 //
-//  Uso na página: colocar <script src="sidebar.js"></script> logo após <body>.
+//  Uso na página: colocar <script src="js/sidebar.js"></script> logo após <body>.
 //  O componente injeta o markup, marca o item ativo pela URL atual e liga
 //  o comportamento de abrir/fechar (desktop e mobile). Nada mais é necessário.
 // ─────────────────────────────────────────────
@@ -81,6 +81,8 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   </div>
   <div class="brand">
     <a href="/" class="brand-link">
+      <!-- Caminho relativo à PÁGINA, não a este arquivo: favicon.png segue na raiz de public/
+           (convenção de favicon) mesmo com sidebar.js tendo mudado pra public/js/. -->
       <img src="favicon.png" alt="Vita Pet Life" class="brand-mark">
     </a>
     <div class="brand-text">

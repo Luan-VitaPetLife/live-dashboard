@@ -3,7 +3,7 @@
 //  (backfill/imagens/itens da Amazon, geografia via Bling, backup),
 //  compartilhado por TODAS as páginas — mesmo padrão do sidebar.js.
 //
-//  Uso: <script src="jobs-widget.js"></script> logo depois de sidebar.js.
+//  Uso: <script src="js/jobs-widget.js"></script> logo depois de sidebar.js.
 //  Sozinho: puxa GET /api/jobs a cada poucos segundos, mostra um card
 //  flutuante e arrastável quando há algo rodando, some sozinho um tempo
 //  depois de tudo terminar. Continua visível ao navegar pra outra página
