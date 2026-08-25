@@ -617,18 +617,12 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       const title = canonicalTitle(taggedSize ? stripComboSuffix(it.title) : it.title);
       const rawQty = it.qty || 1;
       const qty = taggedSize ? rawQty * taggedSize : rawQty;
-      if (!segAcc[seg]) segAcc[seg] = { revenue: 0, units: 0, orderIds: new Set(), products: {}, byType: {} };
+      if (!segAcc[seg]) segAcc[seg] = { revenue: 0, units: 0, orderIds: new Set(), products: {} };
       segAcc[seg].revenue += amount;
       segAcc[seg].units  += qty;
       segAcc[seg].orderIds.add(o.id);
-      // 'Outros' e não descartar: `type` vem null sempre que o produto na Shopify nunca teve o
-      // campo "Type" preenchido (comum em produto Yucaloo/variante nova) — sem esse fallback a
-      // unidade some do card "Por tipo de produto" mas continua contando no total do segmento
-      // (units/revenue lá em cima), então a soma dos pills nunca batia com o card (BR chegava a
-      // esconder MAIS DA METADE das unidades — só "Pó" aparecia porque só os produtos com Type
-      // cadastrado entravam). Reportado pelo Luan, 25/08/2026 ("só mostra o Pó").
-      const typeKey = type || 'Outros';
-      segAcc[seg].byType[typeKey] = (segAcc[seg].byType[typeKey] || 0) + qty;
+      // "Por tipo de produto" (byType) NÃO é acumulado aqui item a item — ver por quê logo
+      // abaixo, onde é montado a partir de topProducts (já agrupado pelo Unificador).
       const p = segAcc[seg].products;
       if (!p[title]) p[title] = { qty: 0, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: null, typeGroup: null };
       p[title].qty     += qty;
@@ -698,21 +692,39 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue, avulsoQty: d.avulsoQty, comboQty: d.comboQty, comboBySize: d.comboBySize, type: d.type, typeGroup: d.typeGroup }));
     // typeGroup: macro-categoria criada pelo usuário (Segmentos → "Tipos de produto", ver
     // classifyTypeGroup) usada pra organizar "Top produtos" por tipo em vez de uma lista só.
-    // preferNonDefault (não pickFirst): um grupo unificado é UM produto físico — se a palavra-chave
-    // bateu na listagem de QUALQUER canal membro (ex: só no Shopify, não no Mercado Livre), o grupo
-    // inteiro entra nesse tipo, em vez de cair em "Outros" por causa do membro que não bateu.
+    // `type` (Pó/Powder/Tablets/...) segue o MESMO princípio, e pelo MESMO motivo: um produto
+    // unificado no Unificador é UM produto físico só, vendido por vários canais/títulos — e só o
+    // membro Shopify carrega o campo "Type" de verdade (Shopee/ML/Amazon não têm esse conceito, e
+    // o próprio Shopify só popula em parte dos cadastros). `preferNonDefault` (não `pickFirst`):
+    // qualquer membro do grupo com um tipo real vence, mesmo que não seja o primeiro da lista —
+    // "Lysine"/"Daily"/as Areias tinham a maioria das unidades vindas de títulos SEM Type
+    // cadastrado (Amazon/Shopee, ou variante Shopify legada) enquanto o título Shopify "de
+    // verdade" tinha "Pó" certinho; com pickFirst, se esse título Shopify não fosse o primeiro do
+    // grupo, TODO o grupo perdia o tipo. Reportado pelo Luan, 25/08/2026, com prints mostrando
+    // "Lysine"/"Daily"/a Areia caindo quase inteiros em "Outros" apesar de serem produtos de Pó
+    // conhecidos e já unificados.
     topProducts = applyProductGroups(topProducts, productGroupsMkt, {
       sumKeys: ['qty', 'revenue', 'avulsoQty', 'comboQty'],
       objSumKeys: ['comboBySize'],
-      pickFirst: ['type'],
-      preferNonDefault: [{ key: 'typeGroup', default: 'Outros' }],
+      preferNonDefault: [{ key: 'type', default: null }, { key: 'typeGroup', default: 'Outros' }],
     }).sort((a, b) => b.qty - a.qty);
+    // byType SEMPRE sai de topProducts (já agrupado acima), nunca de uma soma feita item a item
+    // durante a varredura de pedidos lá em cima — um produto unificado só tem UM tipo depois do
+    // agrupamento, e derivar daqui garante que a soma dos pills bate exatamente com `units` do
+    // card (mesmo produto, mesma fonte, sem outro caminho pra divergir). Item sem tipo
+    // classificável (nenhum membro do grupo tem Type cadastrado, e o título não bate nenhuma
+    // palavra-chave em inglês) cai em "Outros" em vez de sumir da lista.
+    const byType = {};
+    for (const p of topProducts) {
+      const t = p.type || 'Outros';
+      byType[t] = (byType[t] || 0) + p.qty;
+    }
     segments[k] = {
       revenue: v.revenue,
       units:   v.units,
       orders:  v.orderIds.size,
       pct:     totalSegUnits > 0 ? v.units / totalSegUnits : 0,
-      byType:  v.byType,
+      byType,
       // Lista completa ordenada por unidades — a tela mostra 5 e expande com "ver mais".
       topProducts,
     };
