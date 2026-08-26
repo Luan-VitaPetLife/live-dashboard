@@ -460,6 +460,36 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   `computeStock.agg` (grupo manual tem prioridade sobre a família automática Lysine/Daily).
 - Também mostra produto do catálogo Shopify mesmo sem venda nenhuma (`listProductCatalog` mescla
   pedidos reais com `kv.shopifyProductCatalog`).
+- **"Tag mãe" do grupo** (`kv.productGroupTypes` = `{ [market]: { [nomeDoGrupo]: {type, typeGroup} } }`,
+  campos Tipo/Categoria em cada card do Unificador, 26/08/2026): um grupo unificado é UM produto
+  físico, então tem UM tipo. Antes disso o tipo era INFERIDO em tempo de consulta a partir dos
+  membros que venderam NO PERÍODO, e como só o membro Shopify carrega o campo `productType`
+  (Amazon/Shopee/ML não têm esse conceito), o mesmo produto trocava de tipo conforme a data
+  escolhida: numa janela em que só a listagem Amazon do "Daily" vendeu, o grupo inteiro caía em
+  "Outros"; numa janela maior voltava a ser "Pó". Reportado pelo Luan com dois prints do MESMO
+  produto em períodos diferentes. Três correções anteriores (item sem Type descartado, grupo sem
+  herdar Type de um irmão, Type congelado no pedido em vez do catálogo vivo) atacaram camadas reais
+  mas continuaram sendo inferência, então o resultado continuava variando com o período. Chave
+  SEPARADA de `productGroups` de propósito: aquele blob é `{nome:[títulos]}` e é lido em cinco
+  telas, então mudar o formato exigiria migrar produção e tocar em todas elas.
+- **Dois eixos independentes, decisão do Luan** (26/08/2026, "vamos ter suplementos de diferentes
+  tipos no futuro também, não só o pó"): `type` = forma física, alimenta os pills "Por tipo de
+  produto" em Segmentos; `typeGroup` = macro-categoria, alimenta os cabeçalhos do Top produtos. NÃO
+  unificar os dois num vocabulário só. Tags por mercado, nada compartilhado entre BR e EUA (também
+  pedido explícito) — o formato `{[market]:{...}}` já garante isso.
+- **Precedência do tipo** (`resolveGroupTypes` em `metrics.js`, por eixo, primeiro que resolver
+  vence): 1) tag mãe manual; 2) Type/tags ATUAIS do catálogo Shopify de qualquer membro do grupo,
+  varrendo TODOS os membros cadastrados (tenham vendido ou não — é isso que mata a dependência de
+  período); 3) palavra-chave de "Tipos de produto" no título de qualquer membro (só pro eixo
+  `typeGroup`, é o que salva membro de canal sem catálogo); 4) null, e aí `applyGroupTypes` preserva
+  o valor que veio dos itens do período. `applyGroupTypes` roda DEPOIS de `applyProductGroups` e tem
+  a palavra final, mas só sobrescreve o eixo que o grupo conseguiu resolver. Aplicado em Segmentos
+  (`computeDashboard`), Produtos (`mergeProductRows`) e Estoque (`computeStock`) — as três telas onde
+  uma linha de grupo carrega `type`, pra não discordarem entre si.
+- Os campos são `<datalist>`, não `<select>`: sugerem os Types já presentes no catálogo do mercado
+  e os nomes de "Tipos de produto" cadastrados, mas continuam aceitando um valor novo digitado.
+  Campo vazio = automático (volta pra inferência). Apagar o grupo apaga a tag mãe junto
+  (`deleteProductGroup`), senão um grupo novo com nome repetido herdaria o tipo do antigo.
 
 ### Segmentos de público — "Gato vs Cachorro" (`public/segmentos.html`)
 - Rótulo é **"Cachorro"**, não "Cão" (pedido do Luan, 25/08/2026). As CHAVES internas seguem
@@ -945,7 +975,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `GET /shopee/connect` · `GET /mercadolivre/connect` · `GET /googleads/connect`
 - `GET /shopify-yucaloo/:mkt(br|us)/{connect,callback}` — chamadas pela própria Shopify
 - `POST /api/login` / `POST /api/logout` / `GET /api/me`
-- `GET/POST /api/product-groups*` (Unificador, admin) · `GET/POST /api/product-types*` ·
+- `GET/POST /api/product-groups*` (Unificador, admin; `POST /api/product-groups/type` grava a
+  "tag mãe" Tipo/Categoria de um grupo) · `GET/POST /api/product-types*` ·
   `GET/POST /api/product-hidden-tags*` (admin)
 - `GET /api/integrations` / `POST /api/integrations/:key/toggle` (admin)
 - `GET /health`

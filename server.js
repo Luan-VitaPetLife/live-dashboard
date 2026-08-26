@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -393,7 +393,7 @@ app.get('/api/products/export', (req, res) => {
 app.get('/api/product-groups', requireAdmin, (req, res) => {
   try {
     const { market = 'br' } = req.query;
-    res.json({ groups: getProductGroups()[market] || {} });
+    res.json({ groups: getProductGroups()[market] || {}, types: getProductGroupTypes()[market] || {} });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -417,6 +417,18 @@ app.delete('/api/product-groups', requireAdmin, (req, res) => {
   if (!market || !name) return res.status(400).json({ error: 'market e name são obrigatórios.' });
   const groups = deleteProductGroup(market, name);
   res.json({ groups });
+});
+// "Tag mãe" do grupo: o tipo (forma física) e a categoria de um grupo unificado, definidos à mão
+// em vez de inferidos das vendas do período. Ver setProductGroupType (store.js) e resolveGroupTypes
+// (metrics.js) pro porquê. Campo vazio limpa aquele eixo e volta pro automático.
+app.post('/api/product-groups/type', requireAdmin, (req, res) => {
+  const { market, name } = req.body || {};
+  if (!market || !name) return res.status(400).json({ error: 'market e name são obrigatórios.' });
+  const patch = {};
+  for (const k of ['type', 'typeGroup']) if (k in (req.body || {})) patch[k] = req.body[k];
+  if (!Object.keys(patch).length) return res.status(400).json({ error: 'informe type e/ou typeGroup.' });
+  const types = setProductGroupType(market, name, patch);
+  res.json({ types });
 });
 // Liga/desliga global do Unificador — padrão ligado quando ausente (opt-out).
 app.get('/api/product-groups/config', requireAdmin, (_req, res) => {

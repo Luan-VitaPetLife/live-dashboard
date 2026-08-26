@@ -38,6 +38,7 @@ const EMPTY = {
   productStockAgg: {},
   productGroups: {}, // { [market]: { [nomeDoGrupo]: [tituloBruto,...] } } — unificação manual de produtos entre canais, ver tela Unificador (Configurações)
   productGroupsConfig: {}, // { enabled: bool } — liga/desliga global do Unificador, padrão ligado quando ausente
+  productGroupTypes: {}, // { [market]: { [nomeDoGrupo]: { type, typeGroup } } } — "tag mãe" do grupo unificado, definida à mão no Unificador; chave separada de productGroups de propósito, ver getProductGroupTypes
   productTypeGroups: {}, // { [market]: { [nomeDoTipo]: [palavraChave,...] } } — tipos de produto criados pelo usuário em Segmentos (busca por tags/título/productType)
   productHiddenTags: {}, // { [market]: [palavraChave,...] } — Segmentos → "Ocultar produtos": item cuja tag bate sai dos segmentos normais e vai pro card "Ocultos"
   lastSync: null,
@@ -139,6 +140,7 @@ export async function initStore() {
       if (r.key === 'productStockAgg')      cache.productStockAgg      = r.value;
       if (r.key === 'productGroups')        cache.productGroups        = r.value;
       if (r.key === 'productGroupsConfig')  cache.productGroupsConfig  = r.value;
+      if (r.key === 'productGroupTypes')    cache.productGroupTypes    = r.value;
       if (r.key === 'productTypeGroups')    cache.productTypeGroups    = r.value;
       if (r.key === 'productHiddenTags')    cache.productHiddenTags    = r.value;
       if (r.key === 'metaInsightsDaily')    cache.metaInsightsDaily    = r.value;
@@ -735,6 +737,9 @@ export function deleteProductGroup(market, name) {
   delete mkt[name];
   saveJson();
   if (USE_PG) pgKv('productGroups', db.productGroups);
+  // A tag mãe vive numa chave irmã (productGroupTypes) e é indexada pelo NOME do grupo; sem essa
+  // limpeza, criar um grupo novo com um nome já usado antes herdaria o tipo do grupo apagado.
+  setProductGroupType(market, name, { type: null, typeGroup: null });
   return mkt;
 }
 // Tira só UM título do grupo (diferente de upsertProductGroup, que só une membros — nunca tira).
@@ -763,6 +768,38 @@ export function setProductGroupsEnabled(enabled) {
   saveJson();
   if (USE_PG) pgKv('productGroupsConfig', db.productGroupsConfig);
   return db.productGroupsConfig;
+}
+
+// ── "Tag mãe" do grupo unificado (Unificador → campos Tipo/Categoria de cada grupo) ──
+// Um grupo do Unificador é UM produto físico vendido em vários canais, então ele tem UM tipo. Até
+// 26/08/2026 esse tipo era inferido em tempo de consulta a partir dos membros que venderam NO
+// PERÍODO — e como só o membro Shopify carrega o campo "Type" (Amazon/Shopee/ML não têm esse
+// conceito), o mesmo produto trocava de tipo conforme a data escolhida na tela: num período em que
+// só a variante Amazon vendeu, o grupo inteiro caía em "Outros" (reportado pelo Luan com dois
+// prints do mesmo produto, "Daily" como Pó numa janela e Outros na outra). Aqui o tipo vira DADO
+// EXPLÍCITO, definido à mão, e não depende mais de venda nenhuma. Dois eixos independentes,
+// mantidos separados a pedido do Luan (vão existir suplementos de outros formatos além de pó):
+//   type      → forma física, alimenta os pills "Por tipo de produto" (Pó/Tablets/Soft Chews/...)
+//   typeGroup → macro-categoria, alimenta os cabeçalhos do Top produtos (Suplementos/Areia/...)
+// Chave SEPARADA de productGroups (que é { nome: [títulos] } e é lida em cinco telas) de
+// propósito: nenhum leitor atual precisa mudar e não existe blob pra migrar em produção.
+// Por mercado, sem nada compartilhado entre BR e EUA (também pedido do Luan).
+export function getProductGroupTypes() { return load().productGroupTypes || {}; }
+// patch = { type?, typeGroup? } — valor vazio/null LIMPA aquele eixo (volta pro automático).
+export function setProductGroupType(market, name, patch = {}) {
+  const db = load();
+  if (!db.productGroupTypes) db.productGroupTypes = {};
+  const mkt = db.productGroupTypes[market] || (db.productGroupTypes[market] = {});
+  const cur = { ...(mkt[name] || {}) };
+  for (const k of ['type', 'typeGroup']) {
+    if (!(k in patch)) continue;
+    const v = String(patch[k] ?? '').trim();
+    if (v) cur[k] = v; else delete cur[k];
+  }
+  if (Object.keys(cur).length) mkt[name] = cur; else delete mkt[name];
+  saveJson();
+  if (USE_PG) pgKv('productGroupTypes', db.productGroupTypes);
+  return mkt;
 }
 
 // ── Tipos de produto (Segmentos → "Tipos de produto") ──
