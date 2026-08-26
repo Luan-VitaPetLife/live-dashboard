@@ -3,7 +3,7 @@
 //  partir dos pedidos e sessões guardados no store.
 //  Receita SEMPRE exclui pedidos cancelados.
 // ─────────────────────────────────────────────
-import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductGroupTypes, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode, US_STATE_NAMES } from './us-states.js';
 import { normalizeBrState, BR_STATE_NAMES } from './br-states.js';
 import { buildInsights } from './insights.js';
@@ -343,6 +343,68 @@ function applyProductGroups(list, groups, opts = {}) {
 // Amazon continuam só derivados de pedido (sem endpoint de catálogo integrado ainda).
 const SHOPIFY_CATALOG_CHANNELS = { br: ['shopify', 'yucaloo_br'], us: ['shopify_us', 'yucaloo_us'] };
 
+// Tipo de cada grupo do Unificador resolvido a partir da DEFINIÇÃO do grupo, nunca das vendas do
+// período. Essa distinção é o conserto do bug reportado pelo Luan em 26/08/2026 (ver
+// setProductGroupType em store.js): antes o tipo saía de `applyProductGroups`, que só enxerga os
+// membros presentes na lista, ou seja, os que venderam na janela escolhida — num dia em que só a
+// listagem da Amazon do "Daily" vendeu, o membro Shopify (o único que carrega o campo Type) nem
+// entrava na conta e o grupo inteiro caía em "Outros". Aqui varremos TODOS os membros cadastrados,
+// tenham vendido ou não, então a resposta é a mesma em qualquer período.
+// Precedência, primeiro que resolver vence, por eixo (type e typeGroup são independentes):
+//   1. tag mãe definida à mão no Unificador (absoluta, não depende de mais nada);
+//   2. Type/tags ATUAIS do catálogo Shopify de qualquer membro do grupo (o catálogo é
+//      re-sincronizado a cada ciclo, diferente do productType/tags congelados no pedido);
+//   3. palavra-chave de "Tipos de produto" batendo no título de qualquer membro (só pro eixo
+//      typeGroup) — é o que salva membro de canal sem catálogo, tipo Amazon/Shopee/ML;
+//   4. null, e aí quem chama mantém o valor que já tinha vindo dos itens do período.
+// Devolve { [nomeDoGrupo]: { type, typeGroup } }, com null em cada eixo não resolvido.
+function resolveGroupTypes(market, groups) {
+  const manual = getProductGroupTypes()[market] || {};
+  const raw = getShopifyProductCatalog();
+  // Título → cadastro atual na Shopify. Diferente de shopifyCatalogTypeByChannel (que precisa ser
+  // escopado por canal porque a MESMA linha de pedido pertence a um canal só), aqui o alvo é um
+  // grupo unificado, que por definição cruza canais: basta achar o cadastro em qualquer loja
+  // Shopify do mercado. Primeiro canal que tiver o título vence.
+  const byTitle = {};
+  for (const channel of SHOPIFY_CATALOG_CHANNELS[market] || []) {
+    for (const p of raw[channel] || []) {
+      if (!byTitle[p.title]) byTitle[p.title] = { productType: p.productType || null, tags: p.tags || [] };
+    }
+  }
+  const out = {};
+  for (const [name, members] of Object.entries(groups || {})) {
+    const m = manual[name] || {};
+    let type = m.type || null;
+    let typeGroup = m.typeGroup || null;
+    for (const title of members) {
+      if (type && typeGroup) break;
+      const cat = byTitle[title] || {};
+      if (!type) type = classifyType({ productType: cat.productType || null, title });
+      if (!typeGroup) {
+        const g = classifyTypeGroup({ title, productType: cat.productType || null, tags: cat.tags || [] }, market);
+        if (g && g !== 'Outros') typeGroup = g;
+      }
+    }
+    out[name] = { type: type || null, typeGroup: typeGroup || null };
+  }
+  return out;
+}
+
+// Aplica o tipo resolvido acima nas linhas JÁ agrupadas por applyProductGroups. Só toca em linha de
+// grupo (`_grouped`) e só sobrescreve o eixo que o grupo resolveu — um eixo que ficou null aqui
+// preserva o que veio dos itens do período, que continua sendo melhor que nada.
+function applyGroupTypes(rows, groupTypeIdx, keys = ['type', 'typeGroup']) {
+  if (!groupTypeIdx || !Object.keys(groupTypeIdx).length) return rows;
+  return rows.map(p => {
+    if (!p._grouped) return p;
+    const g = groupTypeIdx[p.title];
+    if (!g) return p;
+    const patch = {};
+    for (const k of keys) if (g[k] != null) patch[k] = g[k];
+    return Object.keys(patch).length ? { ...p, ...patch } : p;
+  });
+}
+
 // Mescla o catálogo bruto da Shopify (kv.shopifyProductCatalog — produto cadastrado, mesmo sem
 // venda) em cima de um catalogByChannel derivado só de pedidos (aggregateProductsByChannel).
 // Sem isso, um canal Shopify sem NENHUM pedido no histórico inteiro (ex.: Yucaloo recém-conectada)
@@ -623,6 +685,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const seenBundleIdsSeg = new Set();
   const geoAmazonImages = getAmazonProductImages(); // Shopify/Shopee/ML trazem it.image direto; Amazon só via cache de ASIN (ver 4.13)
   const catalogTypeIdx = shopifyCatalogTypeByChannel(market);
+  const groupTypeIdx = resolveGroupTypes(market, productGroupsMkt);
   valid.forEach(o => {
     const rf = itemRevFactor(o); // escala receita ao total capturado; ver 4.7.6 e 4.13
     // mesma normalização de estado usada em byState (ver acima): reduz grafias da Amazon e agrupa
@@ -737,11 +800,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     // grupo, TODO o grupo perdia o tipo. Reportado pelo Luan, 25/08/2026, com prints mostrando
     // "Lysine"/"Daily"/a Areia caindo quase inteiros em "Outros" apesar de serem produtos de Pó
     // conhecidos e já unificados.
-    topProducts = applyProductGroups(topProducts, productGroupsMkt, {
+    // applyGroupTypes vem DEPOIS e tem a palavra final: `preferNonDefault` resolve o tipo a partir
+    // dos membros que venderam no período (bom como último recurso, instável como fonte principal),
+    // e resolveGroupTypes resolve a partir da definição do grupo, que não muda com a data escolhida.
+    topProducts = applyGroupTypes(applyProductGroups(topProducts, productGroupsMkt, {
       sumKeys: ['qty', 'revenue', 'avulsoQty', 'comboQty'],
       objSumKeys: ['comboBySize'],
       preferNonDefault: [{ key: 'type', default: null }, { key: 'typeGroup', default: 'Outros' }],
-    }).sort((a, b) => b.qty - a.qty);
+    }), groupTypeIdx).sort((a, b) => b.qty - a.qty);
     // byType SEMPRE sai de topProducts (já agrupado acima), nunca de uma soma feita item a item
     // durante a varredura de pedidos lá em cima — um produto unificado só tem UM tipo depois do
     // agrupamento, e derivar daqui garante que a soma dos pills bate exatamente com `units` do
@@ -1060,7 +1126,7 @@ function aggregateProductsByChannel(orders) {
 // COG/frete/%impostos/%comissão viram null na linha unificada — são valores POR PRODUTO, não faz
 // sentido somar/mostrar um só quando os membros podem ter overrides diferentes; a tela desabilita
 // a edição inline nessas linhas (ver public/produtos.html), edição continua por produto individual.
-function mergeProductRows(products, groups) {
+function mergeProductRows(products, groups, groupTypeIdx = {}) {
   if (!groups || !Object.keys(groups).length) return products;
   const byTitle = new Map(products.map(p => [p.title, p]));
   const used = new Set();
@@ -1076,7 +1142,9 @@ function mergeProductRows(products, groups) {
     const comboBySize = {};
     found.forEach(p => { for (const [s, n] of Object.entries(p.comboBySize || {})) comboBySize[s] = (comboBySize[s] || 0) + n; });
     const image = found.map(p => p.image).find(Boolean) || null;
-    const type = found.map(p => p.type).find(Boolean) || null;
+    // Tag mãe do grupo primeiro (ver resolveGroupTypes); só cai no tipo dos membros do período
+    // quando o grupo não resolveu nada — mesma precedência usada em Segmentos.
+    const type = groupTypeIdx[name]?.type || found.map(p => p.type).find(Boolean) || null;
     const withProfit = found.filter(p => p.profit != null);
     const profit = withProfit.length ? withProfit.reduce((a, p) => a + p.profit, 0) : null;
     const taxAmount = found.reduce((a, p) => a + (p.taxAmount || 0), 0);
@@ -1107,6 +1175,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
 
   const finance = getProductFinance();
   const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações)
+  const groupTypeIdx = resolveGroupTypes(market, productGroupsMkt);
   const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
   const channels = {};
   const chKeys = new Set([...Object.keys(byChannel), ...Object.keys(catalogByChannel)]);
@@ -1147,7 +1216,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
-    products = mergeProductRows(products, productGroupsMkt);
+    products = mergeProductRows(products, productGroupsMkt, groupTypeIdx);
 
     const withProfit = products.filter(p => p.profit != null);
     const totalProfit = withProfit.reduce((a, p) => a + p.profit, 0);
@@ -1215,6 +1284,7 @@ export function computeStock({ market = 'br', since, until } = {}) {
   // caindo na família automática ou, sem uma reconhecida, na própria linha (mesmo comportamento
   // de sempre). titleToGroup é o inverso de productGroupsMkt: título → nome do grupo.
   const productGroupsMkt = activeProductGroups(market);
+  const groupTypeIdx = resolveGroupTypes(market, productGroupsMkt);
   const titleToGroup = {};
   for (const [name, members] of Object.entries(productGroupsMkt)) for (const m of members) titleToGroup[m] = name;
   const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
@@ -1250,11 +1320,12 @@ export function computeStock({ market = 'br', since, until } = {}) {
     // ligeiramente diferente por listagem). Só o "Panorama geral" (cross-canal) respeitava o grupo;
     // o card por canal, não (reportado pelo Luan, 17/08/2026). monthsOfStock é recalculado depois
     // do merge porque é uma razão, não soma diretamente.
-    products = applyProductGroups(products, productGroupsMkt, {
+    products = applyGroupTypes(applyProductGroups(products, productGroupsMkt, {
       sumKeys: ['avulsoQty', 'comboQty', 'salesDaily', 'salesMonth', 'stock', 'incoming'],
       objSumKeys: ['comboBySize'],
       pickFirst: ['type', 'image'],
-    }).map(p => ({ ...p, monthsOfStock: p.salesMonth > 0 ? (p.stock + p.incoming) / p.salesMonth : null }))
+    }), groupTypeIdx, ['type'])
+      .map(p => ({ ...p, monthsOfStock: p.salesMonth > 0 ? (p.stock + p.incoming) / p.salesMonth : null }))
       .sort((a, b) => b.salesMonth - a.salesMonth);
 
     const totals = products.reduce((a, p) => ({

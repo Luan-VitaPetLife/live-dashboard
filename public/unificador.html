@@ -134,6 +134,16 @@
   .group-name{font-size:13px;font-weight:700;color:var(--text)}
   .group-stat{font-size:11px;color:var(--muted)}
   .group-actions{margin-left:auto;display:flex;gap:6px}
+  /* Faixa de tags do grupo (Tipo/Categoria). Fica entre o cabecalho e a lista de membros porque
+     descreve o grupo inteiro, nao um membro. flex-wrap pra cair pra duas linhas no celular. */
+  .group-tags{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .gt-hint{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:5px;cursor:help}
+  .gt-field{display:flex;align-items:center;gap:6px}
+  .gt-label{font-size:11px;color:var(--muted)}
+  .gt-input{width:150px;font:inherit;font-size:12px;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 8px}
+  .gt-input:focus{outline:none;border-color:var(--sage)}
+  .gt-input::placeholder{color:var(--muted);font-style:italic}
+  @media(max-width:640px){.gt-input{width:100%;min-width:0}.gt-field{flex:1 1 140px}}
   .member-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
   .member-row:last-child{border-bottom:none}
   .row-thumb{width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--surface2);border:1px solid var(--border)}
@@ -261,6 +271,10 @@
           </div>
         </div>
         <div id="groupsWrap" style="display:flex;flex-direction:column;gap:14px"></div>
+        <!-- Sugestoes dos campos Tipo/Categoria de cada grupo. Ficam aqui, uma vez so, porque
+             <datalist> e endereçada por id: repetir dentro de cada card criaria ids duplicados. -->
+        <datalist id="gtTypeList"></datalist>
+        <datalist id="gtCatList"></datalist>
       </div>
     </div>
 
@@ -323,6 +337,10 @@ function toast(msg, isErr){
 let market = localStorage.getItem('coco_market') || 'br';
 let catalog = [];   // [{title, channel, image, type, qty, revenue}]
 let groups = {};    // { [nome]: [tituloBruto,...] }
+// "Tag mae" de cada grupo: { [nome]: { type, typeGroup } }. Definida a mao aqui e gravada em
+// kv.productGroupTypes; vazio = automatico (o backend infere pelo catalogo Shopify dos membros).
+let groupTypes = {};
+let typeRuleNames = [];  // nomes cadastrados em Segmentos -> "Tipos de produto", usados como sugestao de categoria
 let selectMode = false;
 let selected = new Set();
 let addToGroupTarget = null; // nome do grupo quando o modal abre a partir de "+ Adicionar produtos"
@@ -398,14 +416,18 @@ $('groupsToggle').addEventListener('change', async function(){
 /* ── Carrega catálogo + grupos do mercado atual ── */
 async function load(){
   try{
-    const [rCat, rGroups] = await Promise.all([
+    const [rCat, rGroups, rTypes] = await Promise.all([
       fetch('/api/product-groups/catalog?market=' + market, { credentials:'same-origin' }),
       fetch('/api/product-groups?market=' + market, { credentials:'same-origin' }),
+      fetch('/api/product-types?market=' + market, { credentials:'same-origin' }),
     ]);
     const dCat = await rCat.json();
     const dGroups = await rGroups.json();
+    const dTypes = await rTypes.json().catch(()=>({}));
     catalog = dCat.items || [];
     groups = dGroups.groups || {};
+    groupTypes = dGroups.types || {};
+    typeRuleNames = Object.keys(dTypes.types || {}).sort();
     render();
   }catch(e){
     $('groupsWrap').innerHTML = '<div class="empty">Não foi possível carregar o catálogo.</div>';
@@ -440,10 +462,42 @@ function matchesSearch(title){
 }
 
 function render(){
+  renderTagSuggestions();
   renderGroups();
   renderPlainList();
   renderHiddenList();
   updateSelectBar();
+}
+
+/* Sugestoes dos campos Tipo/Categoria. "Tipo" oferece os Types que ja existem no catalogo Shopify
+   deste mercado (Po, Tablets, Soft Chews...) e "Categoria" oferece os nomes cadastrados em
+   Segmentos > "Tipos de produto". Sao <datalist>, entao continuam aceitando um valor novo digitado
+   na mao: a lista e atalho pro que ja existe, nao camisa de forca. */
+function renderTagSuggestions(){
+  const types = [...new Set(catalog.map(c => c.type).filter(Boolean))].sort();
+  const opts = arr => arr.map(v => `<option value="${escapeHtml(v)}">`).join('');
+  $('gtTypeList').innerHTML = opts(types);
+  $('gtCatList').innerHTML  = opts(typeRuleNames);
+}
+
+/* Grava a tag mae de um grupo. Campo vazio limpa aquele eixo e volta pro automatico (o backend
+   volta a inferir pelo catalogo Shopify dos membros, ver resolveGroupTypes em metrics.js). */
+async function saveGroupTag(name, axis, value){
+  const before = { ...(groupTypes[name] || {}) };
+  try{
+    const r = await fetch('/api/product-groups/type', {
+      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+      body: JSON.stringify({ market, name, [axis]: value }),
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'Falha ao salvar.');
+    groupTypes = d.types || {};
+    toast(value ? `"${name}" agora e ${value}.` : `"${name}" voltou pro tipo automatico.`);
+  }catch(e){
+    groupTypes[name] = before;
+    renderGroups();
+    toast(e.message || 'Nao foi possivel salvar a tag do grupo.');
+  }
 }
 
 // Soma qty/receita de todos os membros de um grupo (referência mostrada nos chips/linhas
@@ -464,6 +518,7 @@ function summarizeGroup(name){
 // nos modos Grade/Compacta.
 function groupCardHtml(name){
   const members = groups[name] || [];
+  const gt = groupTypes[name] || {};
   const collapsed = collapsedCards.has(name);
   const memberRows = members.map(title => {
     const rows = rowsForTitle(title);
@@ -489,7 +544,15 @@ function groupCardHtml(name){
         <button class="btn btn-sm btn-icon" data-collapse-card="${escapeHtml(name)}" title="${collapsed?'Abrir':'Fechar'}"><i class="bi bi-chevron-${collapsed?'down':'up'}"></i></button>
       </div>
     </div>
-    ${collapsed ? '' : `<div class="group-body">${memberRows}</div>`}
+    ${collapsed ? '' : `<div class="group-tags">
+      <span class="gt-hint" title="Um grupo unificado e UM produto fisico, entao ele tem um tipo so. Definindo aqui, o tipo para de depender de qual canal vendeu no periodo escolhido."><i class="bi bi-tag"></i> Tags do grupo</span>
+      <label class="gt-field"><span class="gt-label">Tipo</span>
+        <input class="gt-input" list="gtTypeList" placeholder="automatico" value="${escapeHtml(gt.type || '')}" data-group-tag="${escapeHtml(name)}" data-axis="type">
+      </label>
+      <label class="gt-field"><span class="gt-label">Categoria</span>
+        <input class="gt-input" list="gtCatList" placeholder="automatico" value="${escapeHtml(gt.typeGroup || '')}" data-group-tag="${escapeHtml(name)}" data-axis="typeGroup">
+      </label>
+    </div><div class="group-body">${memberRows}</div>`}
   </div>`;
 }
 
@@ -773,6 +836,14 @@ $('plainList').addEventListener('click', e => {
   if(!row) return;
 });
 
+// 'change' (nao 'input'): so grava quando a pessoa termina de digitar e sai do campo, em vez de
+// disparar um POST por tecla. Nao chama renderGroups no sucesso de proposito, porque remontar o
+// card enquanto o cursor esta dentro dele tiraria o foco no meio da edicao.
+$('groupsWrap').addEventListener('change', e => {
+  const inp = e.target.closest('[data-group-tag]');
+  if(!inp) return;
+  saveGroupTag(inp.dataset.groupTag, inp.dataset.axis, inp.value.trim());
+});
 $('groupsWrap').addEventListener('click', e => {
   const rm = e.target.closest('[data-remove-member]');
   if(rm){ removeMember(rm.dataset.group, rm.dataset.removeMember); return; }
