@@ -34,11 +34,8 @@
   .back-link{font-size:11px;font-weight:600;color:var(--sub);text-decoration:none;display:flex;align-items:center;gap:5px}
   .back-link:hover{color:var(--text)}
 
-  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px}
-  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
-  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
-  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
-  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+  /* Seletor Brasil/EUA: a aparência vem do componente compartilhado (.seg/.ps-opt em
+     js/pill-switch.js). Aqui fica só o que é posicionamento desta página. */
 
   .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;max-width:1280px;width:100%}
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
@@ -197,6 +194,7 @@
 <body>
 
 <script src="js/sidebar.js"></script>
+<script src="js/pill-switch.js"></script>
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
@@ -204,11 +202,12 @@
 <div class="main">
   <div class="topbar">
     <a class="back-link" href="/configuracoes"><i class="bi bi-arrow-left"></i> Configurações</a>
-    <div class="mkt-toggle-wrap">
-      <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
+    <div class="pill-switch mkt-toggle-wrap">
+      <span class="ps-pill" aria-hidden="true"></span>
+      <button class="ps-opt mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
         <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
       </button>
-      <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
+      <button class="ps-opt mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
         <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
     </div>

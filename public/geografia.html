@@ -34,11 +34,9 @@
 
   /* ── Topbar ── */
   .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:2000}
-  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px;margin-right:auto}
-  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
-  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
-  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
-  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+  /* Seletor Brasil/EUA: a aparência vem do componente compartilhado (.seg/.ps-opt em
+     js/pill-switch.js). Aqui fica só o que é posicionamento desta página. */
+  .mkt-toggle-wrap{margin-right:auto}
   .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-right:4px}
   .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
   .ldot.loading{background:var(--amber)} .ldot.error{background:var(--red);animation:none}
@@ -96,10 +94,8 @@
   .map-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px}
   .map-title{font-size:12px;font-weight:500}
   .map-sub{font-size:11px;color:var(--muted);margin-top:1px}
-  .map-modes{display:flex;gap:6px}
-  .mode-btn{height:28px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .12s}
-  .mode-btn:hover{border-color:var(--ink);color:var(--text)}
-  .mode-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  /* O layout interno vem do componente (.seg); aqui não sobra nada pra ajustar. */
+  /* Coropleto x Calor: componente compartilhado (js/pill-switch.js). */
   #map{width:100%;height:540px;background:#f0ebe4;position:relative}
   .map-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(242,238,232,.88);z-index:800;backdrop-filter:blur(2px)}
   .map-overlay-icon{font-size:38px;opacity:.35}
@@ -237,6 +233,7 @@
 <body>
 
 <script src="js/sidebar.js"></script>
+<script src="js/pill-switch.js"></script>
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
@@ -244,11 +241,12 @@
 
 <div class="main">
   <div class="topbar">
-    <div class="mkt-toggle-wrap">
-      <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
+    <div class="pill-switch mkt-toggle-wrap">
+      <span class="ps-pill" aria-hidden="true"></span>
+      <button class="ps-opt mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
         <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
       </button>
-      <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
+      <button class="ps-opt mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
         <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
     </div>
@@ -338,9 +336,10 @@
           <div class="map-title" id="mapTitle">Mapa de calor · Receita por estado</div>
           <div class="map-sub">Clique em um estado para mais detalhes · passe o cursor para ver o valor</div>
         </div>
-        <div class="map-modes">
-          <button class="mode-btn active" id="btnChoropleth">🗺 Coropleto</button>
-          <button class="mode-btn" id="btnHeat">🌡 Calor</button>
+        <div class="pill-switch map-modes">
+          <span class="ps-pill" aria-hidden="true"></span>
+          <button class="ps-opt mode-btn active" id="btnChoropleth">🗺 Coropleto</button>
+          <button class="ps-opt mode-btn" id="btnHeat">🌡 Calor</button>
         </div>
       </div>
 
