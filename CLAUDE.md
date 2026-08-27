@@ -107,7 +107,7 @@ public/
   *.html                 as 11 páginas (raiz obrigatória)
   favicon.png            convenção de raiz, fica onde está
   css/                   switch.css
-  js/                    sidebar.js colors.js confirm-modal.js jobs-widget.js
+  js/                    sidebar.js colors.js geo.js confirm-modal.js jobs-widget.js
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
   img/canais/            logo_* usados nos cards de canal (Campanhas/Produtos/Estoque)
@@ -455,8 +455,15 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - `'unsafe-inline'` em `script-src`/`style-src` é exigido porque a lógica de cada página vive em
   `<script>`/`<style>` dentro do próprio HTML. Fechar isso depende de tirar o JS de dentro do
   HTML, não de ajustar a regra.
-- Nenhum recurso de CDN usa `integrity` (SRI) ainda — ECharts, Leaflet e Bootstrap Icons entram
-  sem verificação. Pendência conhecida.
+- **Todo recurso de CDN carrega com `integrity` + `crossorigin="anonymous"`** (SRI): ECharts,
+  Leaflet e Bootstrap Icons. Sem isso, um pacote adulterado na origem roda dentro da dashboard
+  já logada. Os dois atributos são indivisíveis — sem `crossorigin` o navegador não consegue
+  verificar recurso de outro domínio e bloqueia igual.
+  - Ao trocar a VERSÃO de qualquer um deles, recalcular o hash:
+    `sha384-` + sha384 do arquivo em base64. `scripts/test/sri.test.mjs` baixa cada recurso e
+    compara, então um hash esquecido falha no teste em vez de sumir com o gráfico em produção.
+  - A folha do **Google Fonts fica de fora de propósito**: o CSS que ela devolve varia conforme
+    o navegador que pede, então o hash nunca bateria e a fonte ficaria bloqueada pra sempre.
 
 ### Integrações (`public/integracoes.html`)
 - Admin only. `GET /api/integrations` monta status ao vivo por canal; `POST
@@ -567,15 +574,21 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (bookmark antigo), lidos por `geografia.html` via `?market=` na URL na carga inicial.
 - Leaflet 1.9.4, tile CartoDB Voyager. Dois modos: coroplético (polígono colorido por intensidade)
   e calor (também preenche o polígono, com gradiente — não usa círculos, evita sobreposição).
-- **Fundo do mapa: Esri "Light Gray Canvas"**, DUAS camadas (`World_Light_Gray_Base` +
-  `World_Light_Gray_Reference`) — a base do Esri não traz nome de cidade nenhum, os rótulos vêm
-  separados. Sem chave de API. Era CartoDB Voyager até 27/08/2026, quando a CARTO passou a exigir
-  chave e começou a devolver o tile com **"API KEY REQUIRED" carimbado por cima do mapa**: HTTP
-  200, imagem válida, nada falhando no código, só a marca d'água na tela do usuário. Cinza claro
-  também é melhor aqui do que o Voyager colorido — o mapa é fundo pro coroplético e não pode
-  disputar cor com o dado desenhado em cima. Constantes `ESRI_TILE`/`ESRI_ATTR`/`ESRI_MAX_ZOOM`
-  duplicadas em `geografia.html` e `segmentos.html`: ao trocar de provedor, trocar nos DOIS
-  (`scripts/test/mapa.test.mjs` falha se divergirem ou se voltarem pra um provedor com chave).
+- **`public/js/geo.js` (`window.CocoGeo`) é a fonte única de tudo que Geografia e Segmentos
+  compartilham**: as oito tabelas (nome de estado, centróide, sub-região do mapa de calor,
+  códigos do IBGE e FIPS, nome→sigla dos EUA), o carregador de contorno com cache por mercado,
+  o fundo do mapa e a interpolação de cor. Eram ~150 linhas IDÊNTICAS dentro de cada um dos dois
+  HTML (conferido chave a chave antes de extrair, 27/08/2026), e corrigir um lado nunca chegava
+  no outro. Uma tela nova que desenhe mapa carrega esse script em vez de copiar tabela.
+- **Fundo do mapa: Esri "Light Gray Canvas"** (`CocoGeo.addBasemap(map)`), DUAS camadas
+  (`World_Light_Gray_Base` + `World_Light_Gray_Reference`) — a base do Esri não traz nome de
+  cidade nenhum, os rótulos vêm separados. Sem chave de API. Era CartoDB Voyager até 27/08/2026,
+  quando a CARTO passou a exigir chave e começou a devolver o tile com **"API KEY REQUIRED"
+  carimbado por cima do mapa**: HTTP 200, imagem válida, nada falhando no código, só a marca
+  d'água na tela do usuário. Cinza claro também é melhor aqui do que o Voyager colorido — o mapa
+  é fundo pro coroplético e não pode disputar cor com o dado desenhado em cima.
+  `scripts/test/mapa.test.mjs` falha se alguém voltar pra um provedor que exige chave ou se uma
+  página montar o próprio `L.tileLayer` em vez de chamar `addBasemap`.
 - BR: GeoJSON do IBGE em runtime, casa por `codarea`. US: `public/geo/us-states.json`, servido do
   próprio domínio, casa por `_uf`. Esse arquivo vinha de um repositório de TERCEIROS via jsDelivr
   (`PublicaMundi/MappingAPI`) até 27/08/2026 — o mapa dos EUA parava de desenhar se aquele
@@ -671,6 +684,33 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 ### Devoluções
 - Quantidade/receita por produto usa `LineItem.currentQuantity` (Shopify) e desconta refund do
   valor do item — ver "Receita" acima. Sem isso, produto devolvido continuava contando venda.
+
+### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
+- **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
+  aparece em todas as telas. Antes disso a mesma informação vivia em cinco tabelas
+  (`CH_META` em Produtos e Estoque, `CHAN`/`MARKET_CHANNELS` na Visão geral,
+  `CHAN_COLORS_MAP`/`CHAN_LABELS_MAP` na Geografia, `CH_BY_MARKET` em Segmentos) e as cópias já
+  discordavam: Shopify verde numa tela e vermelha na outra, Amazon BR preta em quase tudo e
+  laranja na Geografia e nos mini-gráficos de Campanhas. Pior: só quem lia daqui enxergava a cor
+  que o usuário salva no seletor de cores, então mudar a cor de um canal não mexia em Produtos,
+  Estoque nem Geografia (27/08/2026).
+- Cores confirmadas pelo Luan na mesma data, a partir do que a Visão geral BR já mostrava:
+  Shopify Coco and Luna verde (`#95BF47` BR / `#7EAD3C` EUA), Yucaloo azul `#4466FF`,
+  Amazon BR preto `#111111`, Amazon EUA laranja `#FF9900`, Shopee `#EE4D2D`, Mercado Livre
+  `#FFE600`. A ORDEM das chaves no objeto é a ordem em que os canais aparecem em toda tela.
+- API: `CocoColors.channelsFor(market, {comTodos})` monta seletor de canal;
+  `CocoColors.chLabel(chave)` dá o nome (trata `'todos'` e chave desconhecida sem quebrar);
+  `CocoColors.setChannelColor(k, hex)` troca a cor E persiste. **Nunca escrever
+  `CocoColors.ch[k] = {...}` na mão** — era o que as quatro telas com seletor de cor faziam, e
+  isso agora apagaria `logo`/`logoFill`/`market` do canal: a logo sumiria do card e o canal
+  deixaria de aparecer no seletor do próprio mercado, logo depois de alguém escolher uma cor.
+- Só a COR é personalizável. Nome, logo e mercado vêm sempre do catálogo, nunca do que está
+  salvo no navegador — senão uma cópia antiga no `localStorage` de alguém mostraria o nome velho.
+- `'todos'` não está no catálogo de propósito: não é um canal, é a ausência de filtro.
+- `scripts/test/canais.test.mjs` guarda tudo isso: falha se uma tela redeclarar qualquer das
+  tabelas antigas, se um hex de canal aparecer solto numa página, se um logo apontar pra arquivo
+  inexistente, se dois canais tiverem o mesmo nome — e executa o `colors.js` de verdade (com
+  dublês de window/localStorage/document) pra testar o comportamento, não só o texto do arquivo.
 
 ### Padrões de UI compartilhados
 - Sidebar (`sidebar.js`), sistema de cores (`colors.js`) e o widget de processos em segundo plano

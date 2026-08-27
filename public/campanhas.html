@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Campanhas — Vita Pet Life</title>
 <link rel="icon" href="favicon.png" type="image/png">
-<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js" integrity="sha384-C2iskrW/uPW46KzOjrvJIQo4YkV8lkD+QS0CrDN18IIPIpT/g2USu8bTP3nvmIAD" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" integrity="sha384-CK2SzKma4jA5H/MXDUU7i1TqZlCFaD4T01vtyDFvPlD97JQyS+IsSh1nI2EFbpyk" crossorigin="anonymous">
 <style>
   :root{ color-scheme:light;
     --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
@@ -392,12 +392,8 @@ function setCampChartType(t) {
   document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === t));
   if (current) render();
 }
-function hexToRgba(hex, a) {
-  const h = hex.replace('#','');
-  const n = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
-  const r = parseInt(n.slice(0,2),16), g = parseInt(n.slice(2,4),16), b = parseInt(n.slice(4,6),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
+// hexToRgba vive em js/colors.js, junto dos outros utilitários de cor.
+const hexToRgba = (hex, a) => CocoColors.hexToRgba(hex, a);
 function areaGradient(color) {
   return { type:'linear', x:0, y:0, x2:0, y2:1, colorStops:[
     { offset:0, color:hexToRgba(color, 0.28) },
@@ -673,11 +669,15 @@ async function render() {
   // ── Mini charts (séries reais) ──
   const metaSeries = d.trend?.metaSpendDaily || labels.map(() => 0);
   drawMini(metaKey, labels, metaSeries, '#1877F2', 'Gasto Meta / dia', 'Gasto');
+  // Cor de canal sempre do catálogo (js/colors.js), nunca escrita aqui: estes três gráficos
+  // eram os últimos lugares onde o hex de um canal ficava solto numa página, e já discordavam
+  // do resto do app — a Amazon BR era laranja aqui e preta em todas as outras telas.
+  const corCanal = k => CocoColors.ch[k]?.bg || '#888';
   if (market === 'br') {
-    drawMini('ml',        labels, tb.map(b => b.mercadolivre || 0), '#FFE600', 'Receita / dia', 'Receita');
-    drawMini('amazon_br', labels, tb.map(b => b.amazon       || 0), '#FF9900', 'Receita / dia', 'Receita');
+    drawMini('ml',        labels, tb.map(b => b.mercadolivre || 0), corCanal('mercadolivre'), 'Receita / dia', 'Receita');
+    drawMini('amazon_br', labels, tb.map(b => b.amazon       || 0), corCanal('amazon'),       'Receita / dia', 'Receita');
   } else {
-    drawMini('amazon', labels, tb.map(b => b.amazon_us || 0), '#FF9900', 'Receita / dia', 'Receita');
+    drawMini('amazon', labels, tb.map(b => b.amazon_us || 0), corCanal('amazon_us'), 'Receita / dia', 'Receita');
   }
 
   // re-renderiza painéis de campanha abertos (mercado/período mudou)
@@ -877,8 +877,7 @@ document.getElementById('syncBtn').addEventListener('click', async () => {
 // ── Painel de configurações (cores) ────────────────────────
 function buildSettingsPanel() {
   CocoColors.buildSection('sp-ch-colors', CocoColors.DEFAULT_CH, 'ch', k => CocoColors.ch[k].bg, (k, v) => {
-    CocoColors.ch[k] = { bg: v, text: CocoColors.contrastText(v), label: CocoColors.DEFAULT_CH[k].label };
-    CocoColors.save(`ch.${k}`, v);
+    CocoColors.setChannelColor(k, v);
   });
   CocoColors.buildSection('sp-mkt-colors', CocoColors.DEFAULT_MKT, 'mkt', k => CocoColors.mkt[k], (k, v) => {
     CocoColors.mkt[k] = v;

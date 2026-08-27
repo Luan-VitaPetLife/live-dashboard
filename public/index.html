@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard — Vita Pet Life</title>
 <link rel="icon" href="favicon.png" type="image/png">
-<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js" integrity="sha384-C2iskrW/uPW46KzOjrvJIQo4YkV8lkD+QS0CrDN18IIPIpT/g2USu8bTP3nvmIAD" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" integrity="sha384-CK2SzKma4jA5H/MXDUU7i1TqZlCFaD4T01vtyDFvPlD97JQyS+IsSh1nI2EFbpyk" crossorigin="anonymous">
 <link rel="stylesheet" href="css/switch.css">
 <style>
   :root{ color-scheme:light;
@@ -887,9 +887,7 @@
 // ── Settings panel ──
 function buildSettingsPanel() {
   CocoColors.buildSection('sp-ch-colors', CocoColors.DEFAULT_CH, 'ch', k => CocoColors.ch[k].bg, (k, v) => {
-    const bg = v;
-    CocoColors.ch[k] = { bg, text: CocoColors.contrastText(bg), label: CocoColors.DEFAULT_CH[k].label };
-    CocoColors.save(`ch.${k}`, bg);
+    CocoColors.setChannelColor(k, v);
     if (lastData) render(lastData);
   });
   CocoColors.buildSection('sp-mkt-colors', CocoColors.DEFAULT_MKT, 'mkt', k => CocoColors.mkt[k], (k, v) => {
@@ -1044,23 +1042,9 @@ function showTrendDrilldown(label, val, byChannel, money, metric) {
 }
 
 // ── App state ──
-const CHAN = { todos:'Todos', shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', amazon:'Amazon BR', amazon_us:'Amazon EUA', mercadolivre:'Mercado Livre', shopify_us:'Shopify - Coco and Luna EUA', yucaloo_br:'Shopify - Yucaloo BR', yucaloo_us:'Shopify - Yucaloo EUA' };
-const MARKET_CHANNELS = {
-  br: [
-    { value:'todos',         label:'Todos' },
-    { value:'shopify',       label:'Shopify - Coco and Luna BR' },
-    { value:'yucaloo_br',    label:'Shopify - Yucaloo BR' },
-    { value:'shopee',        label:'Shopee' },
-    { value:'mercadolivre',  label:'Mercado Livre' },
-    { value:'amazon',        label:'Amazon BR' },
-  ],
-  us: [
-    { value:'todos',      label:'Todos' },
-    { value:'shopify_us', label:'Shopify - Coco and Luna EUA' },
-    { value:'yucaloo_us', label:'Shopify - Yucaloo EUA' },
-    { value:'amazon_us', label:'Amazon EUA' },
-  ],
-};
+// Nome, cor e mercado de cada canal vêm do catálogo único em js/colors.js. Esta tela tinha
+// duas tabelas próprias (CHAN e MARKET_CHANNELS) que repetiam o que outras quatro telas também
+// repetiam, e as cópias já discordavam de cor entre si.
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos', sessoes:'Sessões' };
 const echartsInst = {};
 let lastData = null;
@@ -1101,7 +1085,7 @@ let market    = localStorage.getItem('coco_market')  || 'br';
 let channel   = localStorage.getItem('coco_channel') || 'todos';
 let metric    = localStorage.getItem('coco_metric')  || 'receita';
 let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
-if (!CHAN[channel]) channel = 'todos';
+if (channel !== 'todos' && !CocoColors.ch[channel]) channel = 'todos';
 if (!METRIC_LABEL[metric]) metric = 'receita';
 
 function rangeLabel(s, u) {
@@ -1375,12 +1359,8 @@ const EC_TOOLTIP = {
 // Preenchimento em degradê sob a linha (do tom sólido no topo até transparente) — efeito comum em
 // libs de gráfico mais "premium", nativo no ECharts via areaStyle.color com um descritor de
 // gradiente linear (x/y de 0 a 1 = relativo à própria área desenhada, sem precisar de canvas/ctx).
-function hexToRgba(hex, a) {
-  const h = hex.replace('#','');
-  const n = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
-  const r = parseInt(n.slice(0,2),16), g = parseInt(n.slice(2,4),16), b = parseInt(n.slice(4,6),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
+// hexToRgba vive em js/colors.js, junto dos outros utilitários de cor.
+const hexToRgba = (hex, a) => CocoColors.hexToRgba(hex, a);
 function areaGradient(color) {
   return { type:'linear', x:0, y:0, x2:0, y2:1, colorStops:[
     { offset:0, color:hexToRgba(color, 0.22) },
@@ -1439,7 +1419,7 @@ function drawDonut(id, data, colors, labels) {
 function render(d) {
   lastData = d;
   const label = rangeLabel(d.period.since, d.period.until);
-  document.getElementById('pageSub').textContent = `Vita Pet Life · ${CHAN[d.channel]} · multicanal`;
+  document.getElementById('pageSub').textContent = `Vita Pet Life · ${CocoColors.chLabel(d.channel)} · multicanal`;
 
   // KPIs
   const k = d.kpis;
@@ -1530,9 +1510,9 @@ function render(d) {
     chKeys.sort((a, b) => totals[b] - totals[a]);
     ds = chKeys.map(ch => {
       const color = CocoColors.ch[ch]?.bg || '#888';
-      return { name: CocoColors.ch[ch]?.label || CHAN[ch] || ch, type:'line', data: (t.byChannel || []).map(day => (day && day[ch]) || 0), smooth:.3, symbol:'circle', symbolSize:5, itemStyle:{ color }, lineStyle:{ color, width:2 }, emphasis:{ focus:'series' } };
+      return { name: CocoColors.chLabel(ch), type:'line', data: (t.byChannel || []).map(day => (day && day[ch]) || 0), smooth:.3, symbol:'circle', symbolSize:5, itemStyle:{ color }, lineStyle:{ color, width:2 }, emphasis:{ focus:'series' } };
     });
-    legendItems = chKeys.map(ch => ({ label: CocoColors.ch[ch]?.label || CHAN[ch] || ch, color: CocoColors.ch[ch]?.bg || '#888' }));
+    legendItems = chKeys.map(ch => ({ label: CocoColors.chLabel(ch), color: CocoColors.ch[ch]?.bg || '#888' }));
   } else {
     ds = [{ name:METRIC_LABEL[d.metric], type:'line', data:t.data, smooth:.3, symbol:'circle', symbolSize:6, itemStyle:{ color:line1, borderColor:surface, borderWidth:1.5 }, lineStyle:{ color:line1, width:2 }, areaStyle:{ color:areaGradient(line1) }, emphasis:{ focus:'series', scale:false } }];
     if (showAdsLine) ds.push({ name:'Custo ads', type:'line', data:t.metaSpendDaily || t.data.map(()=>0), smooth:.3, symbol:'none', lineStyle:{ color:line2, width:1.5, type:[5,4] } });
@@ -1583,12 +1563,12 @@ function render(d) {
     ? ['shopify_us','yucaloo_us','amazon_us']
     : ['shopify','yucaloo_br','shopee','mercadolivre','amazon'];
   const cTotal = chOrder.reduce((a,k) => a+(cs[k]||0), 0);
-  drawDonut('channelChart', chOrder.map(k=>cs[k]||0), chOrder.map(k=>CocoColors.ch[k]?.bg||'#999'), chOrder.map(k=>CocoColors.ch[k]?.label||CHAN[k]||k));
+  drawDonut('channelChart', chOrder.map(k=>cs[k]||0), chOrder.map(k=>CocoColors.ch[k]?.bg||'#999'), chOrder.map(k=>CocoColors.chLabel(k)));
   document.getElementById('chCenter').textContent = fmtMoneyShort(cTotal);
   document.getElementById('channelRows').innerHTML = cTotal > 0 ? chOrder.map(k => {
     const v = cs[k]||0;
     const pc = cTotal>0?(v/cTotal*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'0%';
-    const nm = CocoColors.ch[k]?.label || CHAN[k] || k;
+    const nm = CocoColors.chLabel(k);
     return `<div class="dr-row"><div class="dr-left"><div class="dr-swatch" style="background:${CocoColors.ch[k]?.bg||'#999'}"></div>${nm}</div><div class="dr-right"><span class="dr-pct">${pc}</span><span class="dr-val">${fmtMoney(v)}</span></div></div>`;
   }).join('') : '<div class="muted-state">Sem dados para o período.</div>';
 
@@ -1608,7 +1588,7 @@ function render(d) {
   const ssChannels = ssIsAll
     ? (d.market === 'us' ? ['shopify_us', 'yucaloo_us', 'amazon_us'] : ['shopify', 'yucaloo_br', 'shopee', 'mercadolivre', 'amazon'])
     : [d.channel];
-  document.getElementById('ssSub').textContent = ssIsAll ? 'Por canal' : `Canal: ${CHAN[d.channel] || d.channel}`;
+  document.getElementById('ssSub').textContent = ssIsAll ? 'Por canal' : `Canal: ${CocoColors.chLabel(d.channel)}`;
   const ssGridEl = document.getElementById('ssGrid');
   ssGridEl.classList.toggle('single', !ssIsAll);
   // Canal único: a pizza cresce (ver CSS .ss-grid.single) e ganha ao lado os pedidos de campanha
@@ -1622,7 +1602,7 @@ function render(d) {
   })() : '';
   ssGridEl.innerHTML = ssChannels.map(ch => `
     <div class="ss-cell">
-      <div class="ss-cell-title">${CocoColors.ch[ch]?.label || CHAN[ch] || ch}</div>
+      <div class="ss-cell-title">${CocoColors.chLabel(ch)}</div>
       <div class="ss-pie-wrap"><div class="donut-canvas" id="ssPie-${ch}"></div></div>
       <div class="ss-cell-legend" id="ssLeg-${ch}"></div>
       <div class="ss-cell-total" id="ssTotal-${ch}">—</div>
@@ -1684,7 +1664,7 @@ function render(d) {
     // mapeamento por canal (mesmas usadas no card "Canais"/donut), nada novo pra manter.
     const cocoCh = d.market === 'us' ? 'shopify_us' : 'shopify';
     const yucalooCh = d.market === 'us' ? 'yucaloo_us' : 'yucaloo_br';
-    const cocoColor = CocoColors.ch[cocoCh]?.bg || '#888', yucalooColor = CocoColors.ch[yucalooCh]?.bg || '#4466FF';
+    const cocoColor = CocoColors.ch[cocoCh]?.bg || '#888', yucalooColor = CocoColors.ch[yucalooCh]?.bg || '#888';
     trafficYAxis = [{ type:'value', position:'left', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:'rgba(30,28,24,0.06)'}}, axisLabel:AXIS_FONT }];
     trafficSeries = [
       { name:'Coco and Luna', type:'line', data:(tf.seriesCoco||[]).map(p=>p.sessions), smooth:.3, symbol:'circle', symbolSize:5, itemStyle:{ color:cocoColor }, lineStyle:{ color:cocoColor, width:2 } },
@@ -1778,7 +1758,7 @@ function render(d) {
   const now=new Date(), hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
   setLive('ok',`Ao vivo · ${hh}:${mm}`);
   const up = d.updatedAt?new Date(d.updatedAt).toLocaleString('pt-BR'):'—';
-  document.getElementById('footerDate').textContent = `Vita Pet Life · ${CHAN[d.channel]} · período ${label} · última sincronização: ${up}`;
+  document.getElementById('footerDate').textContent = `Vita Pet Life · ${CocoColors.chLabel(d.channel)} · período ${label} · última sincronização: ${up}`;
   updateCardVisibility();
 }
 
@@ -2253,13 +2233,15 @@ function applyRefresh() {
 
 // ── Channel dropdown dinâmico ──
 function buildChannelDropdown() {
-  const channels = MARKET_CHANNELS[market] || MARKET_CHANNELS.br;
-  if (!channels.find(c => c.value === channel)) {
+  const channels = CocoColors.channelsFor(market, { comTodos: true });
+  // Canal salvo que não existe neste mercado (veio da outra bandeira) volta pra "todos",
+  // senão o seletor mostraria um item que não está na lista.
+  if (!channels.includes(channel)) {
     channel = 'todos';
     localStorage.setItem('coco_channel', channel);
   }
   document.getElementById('channelPop').innerHTML = channels
-    .map(c => `<div class="csel-opt${c.value===channel?' active':''}" data-value="${c.value}">${c.label}</div>`)
+    .map(k => `<div class="csel-opt${k===channel?' active':''}" data-value="${k}">${CocoColors.chLabel(k)}</div>`)
     .join('');
 }
 
@@ -2269,7 +2251,7 @@ function syncControls() {
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
   document.querySelectorAll('#cselMetric .csel-opt').forEach(o => o.classList.toggle('active', o.dataset.value === metric));
   buildChannelDropdown();
-  document.getElementById('channelVal').textContent = CHAN[channel]||channel;
+  document.getElementById('channelVal').textContent = CocoColors.chLabel(channel);
   document.getElementById('refreshVal').textContent = refreshMin===0?'Desligar':`${refreshMin} min`;
   document.querySelectorAll('#cselRefresh .csel-opt').forEach(o => o.classList.toggle('active', Number(o.dataset.value) === refreshMin));
   document.getElementById('periodValue').textContent = rangeLabel(sinceDate, untilDate);
@@ -2432,7 +2414,7 @@ const EXPORT_VALUE_GETTERS = {
   customer:    o => o.customer || '',
   statusLabel: o => statusTag(o).label,
   total:       o => fmtMoney(o.total, 2),
-  channel:     o => CocoColors.ch[o.channel]?.label || CHAN[o.channel] || o.channel,
+  channel:     o => CocoColors.chLabel(o.channel),
   products:    o => (o.products || []).join(', '),
   itemsCount:  o => o.items,
   itemsQty:    o => o.itemsQty ?? o.items,

@@ -12,12 +12,27 @@ const t = criarTeste('GeoJSON dos estados dos EUA');
 
 const CAMINHO = '/geo/us-states.json';
 
-// As duas telas de mapa precisam apontar pro arquivo local.
-for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
-  if (!s.includes('us-states.json')) continue;
-  t.ok(s.includes(`'${CAMINHO}'`), `${nome} busca o arquivo local`);
-  t.ok(!s.includes('PublicaMundi'), `${nome} não busca mais no repositório de terceiros`);
+// Quem busca o arquivo é o js/geo.js, compartilhado pelas duas telas de mapa. O laço abaixo
+// varre TODO arquivo servido, e não só as páginas, porque quando o carregador saiu do HTML e
+// foi pro módulo esta checagem passou a não olhar em lugar nenhum e aprovou em silêncio uma
+// volta pro repositório de terceiros. Teste que deixa de encontrar o que devia checar precisa
+// falhar, nunca passar por omissão.
+const servidos = [];
+(function varrer(d) {
+  for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    const f = path.join(d, e.name);
+    if (e.isDirectory()) varrer(f);
+    else if (/\.(html|js)$/.test(e.name)) servidos.push(f);
+  }
+})(PUB);
+
+const citam = servidos.filter(f => fs.readFileSync(f, 'utf8').includes('us-states.json'));
+t.ok(citam.length > 0, `algum arquivo busca o us-states.json (achei ${citam.length})`);
+for (const f of citam) {
+  const s = fs.readFileSync(f, 'utf8');
+  const rel = path.relative(PUB, f).replace(/\\/g, '/');
+  t.ok(s.includes(`'${CAMINHO}'`), `${rel} busca o arquivo local`);
+  t.ok(!s.includes('PublicaMundi'), `${rel} não busca mais no repositório de terceiros`);
 }
 
 const app = express();

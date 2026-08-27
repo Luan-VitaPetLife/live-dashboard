@@ -1,7 +1,10 @@
 // ─────────────────────────────────────────────
-//  colors.js — sistema de cores compartilhado (Coco and Luna)
+//  colors.js — catálogo de canais e sistema de cores (Coco and Luna)
 //  IIFE incluído via <script src="js/colors.js"> em qualquer página, mesmo
 //  padrão de sidebar.js. Expõe window.CocoColors com:
+//   - o catálogo de canais (DEFAULT_CH): nome, cor, logo e mercado de cada
+//     canal, fonte única de todas as telas — ver o comentário sobre ele
+//   - channelsFor(market) e chLabel(chave) pra montar seletor de canal
 //   - defaults (DEFAULT_CH/DEFAULT_MKT) + objetos vivos (.ch/.mkt)
 //   - persistência em localStorage('coco_colors') (mesma chave de sempre)
 //   - o novo seletor de cor (paleta de swatches curados + hex), substituindo
@@ -12,15 +15,29 @@
 (function () {
   const STORAGE_KEY = 'coco_colors';
 
+  // ── Catálogo de canais: a ÚNICA fonte de nome, cor, logo e mercado ──
+  // Antes isso vivia em cinco lugares (CH_META em produtos.html e estoque.html, CHAN e
+  // MARKET_CHANNELS em index.html, CHAN_COLORS_MAP/CHAN_LABELS_MAP em geografia.html,
+  // CH_BY_MARKET em segmentos.html) e as cópias já discordavam entre si: a mesma Shopify era
+  // verde numa tela e vermelha na outra, a Amazon BR era preta aqui e laranja na Geografia.
+  // Pior, só quem lia daqui enxergava a cor que o usuário salva no seletor de cores — mudar a
+  // cor de um canal em Configurações não mexia em Produtos, Estoque nem Geografia.
+  // Canal novo agora é uma linha só: acrescentar aqui e ele aparece em todas as telas.
+  //   bg       cor do canal (o usuário pode sobrescrever, ver load())
+  //   label    nome exibido; "Shopify - <marca>" desambigua as duas marcas na mesma plataforma
+  //   logo     caminho a partir da raiz de public/ (as páginas ficam lá, ver CLAUDE.md)
+  //   logoFill logo largo, que preenche o quadro; sem isso ele fica contido com respiro
+  //   market   'br' | 'us' — decide em qual seletor de canal o item aparece
+  // A ORDEM aqui é a ordem em que os canais aparecem em toda tela que lista canal.
   const DEFAULT_CH = {
-    shopify:      { bg: '#ee4144', label: 'Shopify - Coco and Luna BR' },
-    shopify_us:   { bg: '#ee4144', label: 'Shopify - Coco and Luna EUA' },
-    shopee:       { bg: '#EE4D2D', label: 'Shopee' },
-    mercadolivre: { bg: '#FFE600', label: 'Mercado Livre' },
-    amazon:       { bg: '#111111', label: 'Amazon BR' },
-    amazon_us:    { bg: '#FF9900', label: 'Amazon EUA' },
-    yucaloo_br:   { bg: '#4466ff', label: 'Shopify - Yucaloo BR' },
-    yucaloo_us:   { bg: '#4466ff', label: 'Shopify - Yucaloo EUA' },
+    shopify:      { bg: '#95BF47', label: 'Shopify - Coco and Luna BR',  market: 'br', logo: 'img/marca/Logo2.png', logoFill: true },
+    yucaloo_br:   { bg: '#4466FF', label: 'Shopify - Yucaloo BR',        market: 'br', logo: 'img/integracoes/Yucaloo2.png' },
+    shopee:       { bg: '#EE4D2D', label: 'Shopee',                      market: 'br', logo: 'img/canais/logo_shopee.svg' },
+    mercadolivre: { bg: '#FFE600', label: 'Mercado Livre',               market: 'br', logo: 'img/canais/logo_mercadolivre.png', logoFill: true },
+    amazon:       { bg: '#111111', label: 'Amazon BR',                   market: 'br', logo: 'img/canais/logo_amazon.webp' },
+    shopify_us:   { bg: '#7EAD3C', label: 'Shopify - Coco and Luna EUA', market: 'us', logo: 'img/marca/Logo2.png', logoFill: true },
+    yucaloo_us:   { bg: '#4466FF', label: 'Shopify - Yucaloo EUA',       market: 'us', logo: 'img/integracoes/Yucaloo2.png' },
+    amazon_us:    { bg: '#FF9900', label: 'Amazon EUA',                  market: 'us', logo: 'img/canais/logo_amazon.webp' },
   };
   // Segmentos de público (Segmentos → "Gato vs Cachorro"). As duas cores principais NÃO são
   // escolha estética avulsa: saem direto dos mascotes da marca — #FF002B é a cor da Luna
@@ -66,6 +83,16 @@
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? '#333' : '#fff';
   }
 
+  // Cor com transparência, para preenchimento de área de gráfico. Aceita a forma curta (#abc).
+  // Estava copiada em index.html e campanhas.html; vive aqui porque toda página que desenha
+  // gráfico já carrega este arquivo.
+  function hexToRgba(hex, a) {
+    const h = String(hex).replace('#', '');
+    const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(n.slice(i, i + 2), 16));
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
   function readSaved() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
   function save(key, value) {
     const saved = readSaved();
@@ -80,7 +107,9 @@
     const saved = readSaved();
     for (const k in DEFAULT_CH) {
       const bg = saved[`ch.${k}`] || DEFAULT_CH[k].bg;
-      ch[k] = { bg, text: contrastText(bg), label: DEFAULT_CH[k].label };
+      // Só a cor é personalizável. Nome, logo e mercado vêm sempre do catálogo, senão uma
+      // cópia salva no navegador de alguém envelheceria junto e a tela mostraria o nome antigo.
+      ch[k] = { ...DEFAULT_CH[k], bg, text: contrastText(bg) };
     }
     for (const k in DEFAULT_MKT) {
       mkt[k] = saved[`mkt.${k}`] || DEFAULT_MKT[k];
@@ -99,6 +128,29 @@
   function resetAll() {
     localStorage.removeItem(STORAGE_KEY);
     load();
+  }
+
+  // Troca a cor de um canal e persiste. Existe pra que as telas não montem a entrada na mão:
+  // cada uma escrevia `ch[k] = { bg, text, label }`, o que agora apagaria logo, logoFill e
+  // market do canal — a logo sumiria do card e o canal deixaria de saber a que mercado pertence,
+  // logo depois de alguém escolher uma cor nova.
+  function setChannelColor(k, hex) {
+    if (!ch[k]) return;
+    ch[k] = { ...ch[k], bg: hex, text: contrastText(hex) };
+    save(`ch.${k}`, hex);
+  }
+
+  // Chaves de canal de um mercado, na ordem do catálogo. `todos` na frente quando a tela usa
+  // um seletor com a opção de somar tudo.
+  function channelsFor(market, { comTodos = false } = {}) {
+    const lista = Object.keys(DEFAULT_CH).filter(k => DEFAULT_CH[k].market === market);
+    return comTodos ? ['todos', ...lista] : lista;
+  }
+  // Rótulo tolerante: canal desconhecido devolve a própria chave em vez de quebrar a tela.
+  // 'todos' não está no catálogo (não é um canal, é a ausência de filtro) e cai aqui.
+  function chLabel(chKey) {
+    if (chKey === 'todos') return 'Todos os canais';
+    return ch[chKey]?.label || chKey || '?';
   }
 
   function chBadgeHTML(chKey) {
@@ -267,7 +319,8 @@
 
   window.CocoColors = {
     DEFAULT_CH, DEFAULT_MKT, DEFAULT_SEG, ch, mkt, seg,
-    load, save, resetAll, contrastText, chBadgeHTML,
+    channelsFor, chLabel, setChannelColor,
+    load, save, resetAll, contrastText, hexToRgba, chBadgeHTML,
     buildSection, openPicker, makeTrigger,
   };
 })();
