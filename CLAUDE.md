@@ -114,6 +114,7 @@ public/
   img/integracoes/       antiga logos-integracao/ — logos da tela de Integrações (LOGO_BASE)
   img/mascotes/          coco.svg (cachorro) luna.svg (gata)
   img/ilustracoes/       404.png
+  geo/                   us-states.json (contorno dos estados dos EUA, ver Geografia)
 ```
 
 Duas armadilhas ao mexer nisso:
@@ -439,6 +440,24 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Recuperação se travar: editar `kv` direto no Postgres (`UPDATE kv SET value='{"enabled":false}'
   WHERE key='authConfig'` reabre sem login; apagar a linha `key='users'` re-semeia o admin).
 
+### Cabeçalhos de segurança (`server.js`, topo)
+- CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` e HSTS
+  (só sob HTTPS), tudo à mão, sem helmet. Rate limit geral em `/api` e um específico de login.
+- **A CSP é a armadilha: domínio que falta nela é bloqueado SEM erro visível.** A página abre
+  normalmente, só falta o recurso, e ninguém percebe. Foi o que aconteceu com a fonte Inter: as 11
+  páginas pediam ela ao Google Fonts, a CSP não liberava nem `fonts.googleapis.com` (a folha) nem
+  `fonts.gstatic.com` (os `.woff2`), e a dashboard inteira rodou na fonte do sistema até
+  27/08/2026 sem ninguém entender por que "estava um pouco diferente". Corrigido.
+- Ao adicionar QUALQUER recurso externo novo (script, folha de estilo, fonte, `fetch`), conferir a
+  diretiva certa: script → `script-src`, folha → `style-src`, fonte → `font-src`, `fetch` →
+  `connect-src`. Uma folha do Google Fonts precisa de DOIS domínios, um em cada diretiva.
+  `preconnect` não conta, ele não carrega nada.
+- `'unsafe-inline'` em `script-src`/`style-src` é exigido porque a lógica de cada página vive em
+  `<script>`/`<style>` dentro do próprio HTML. Fechar isso depende de tirar o JS de dentro do
+  HTML, não de ajustar a regra.
+- Nenhum recurso de CDN usa `integrity` (SRI) ainda — ECharts, Leaflet e Bootstrap Icons entram
+  sem verificação. Pendência conhecida.
+
 ### Integrações (`public/integracoes.html`)
 - Admin only. `GET /api/integrations` monta status ao vivo por canal; `POST
   /api/integrations/:key/toggle` liga/desliga, persistido em `kv.integrationsConfig`
@@ -548,7 +567,11 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (bookmark antigo), lidos por `geografia.html` via `?market=` na URL na carga inicial.
 - Leaflet 1.9.4, tile CartoDB Voyager. Dois modos: coroplético (polígono colorido por intensidade)
   e calor (também preenche o polígono, com gradiente — não usa círculos, evita sobreposição).
-- BR: GeoJSON do IBGE em runtime, casa por `codarea`. US: `us-states.json`, casa por `_uf`.
+- BR: GeoJSON do IBGE em runtime, casa por `codarea`. US: `public/geo/us-states.json`, servido do
+  próprio domínio, casa por `_uf`. Esse arquivo vinha de um repositório de TERCEIROS via jsDelivr
+  (`PublicaMundi/MappingAPI`) até 27/08/2026 — o mapa dos EUA parava de desenhar se aquele
+  repositório fosse apagado ou renomeado, e nada avisava. Mesmo arquivo, mesma estrutura
+  (`properties.name` → `_uf`), só a origem mudou. Não voltar a apontar pra CDN externa.
   Os dois ficam cacheados em memória (`geojsonDataBR`/`geojsonDataUS`) depois da 1ª carga — trocar
   de mercado não rebusca o GeoJSON se já visitado nesta sessão. Bounds/centro/zoom do Leaflet
   (`MAP_VIEW`) e as tabelas de nomes/centróides/sub-regiões (`STATE_NAMES`/`CENTROIDS`/
@@ -646,6 +669,12 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   IIFE — nunca duplicar CSS/markup deles numa página nova, sempre incluir o script
   (`confirm-modal.js` logo depois de `sidebar.js`, `jobs-widget.js` logo depois desse, em toda
   página exceto `login.html`).
+- **"Financeiro" na sidebar é um item de página que ainda não existe, e FICA** (decisão explícita
+  do Luan, 27/08/2026, ao revisar o código: "não tire a seção de financeiro da sidebar"). Ele
+  sinaliza o que vem por aí. Só não pode fingir que é clicável: leva `.nav-soon` (sem hover,
+  cursor normal, opacidade menor) e o selo "em breve". Quando a página existir, tirar a classe e o
+  selo e dar a ele `href` + `data-page` como os outros — **sem `data-page` o item escapa do
+  controle de permissão** e aparece pra usuário `padrao` que não teria acesso a ele.
 - **Cabeçalho da sidebar** (logo + texto no topo, `.brand`): layout/tamanho igual ao da sidebar de
   `dashboard-social-media` (projeto irmão) — ícone pequeno (34px) à esquerda + nome/subtítulo à
   direita, em vez do logo grande empilhado em cima do texto. Pedido do Luan, 21/08/2026. Só o
@@ -1073,7 +1102,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 ## 10. Convenções
 
 - ES Modules (`"type": "module"`), Node 18+ (usa `fetch` nativo).
-- Dependências mínimas: `express`, `dotenv`, `pg`. Sem aws-sdk, sem axios.
+- Dependências mínimas: `express`, `dotenv`, `pg`, `express-rate-limit`. Sem aws-sdk, sem axios —
+  B2, Telegram e o SigV4 da Amazon são feitos à mão com `fetch`.
 - UI e textos em pt-BR. Valores em BRL/USD via `Intl`/`toLocaleString`.
 - `.gitignore`: `node_modules/`, `.env`, `data/db.json`, `*.log`, `.claude/`.
 - Repositório é público — nunca commitar `.env`, token, secret ou qualquer credencial real. Revisar

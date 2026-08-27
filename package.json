@@ -1,7 +1,7 @@
 {
   "name": "coco-luna-dashboard",
   "version": "0.1.0",
-  "description": "Dashboard de vendas multicanal (Shopify + Shopee) — backend + interface.",
+  "description": "Dashboard de vendas multimercado e multicanal da Vita Pet Life (Coco and Luna + Yucaloo) — backend + interface.",
   "type": "module",
   "engines": {
     "node": ">=18"
