@@ -301,8 +301,16 @@
      scrollLeft, e a restauração de posição feita depois de remontar a tira (ver renderInsights)
      precisa ser instantânea, não animada. O deslize suave dos botões vem do `behavior:'smooth'`
      passado no próprio scrollBy, onde a intenção é explícita. */
-  .ins-list{display:flex;gap:8px;min-width:0;flex:1;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+  /* `overscroll-behavior-x:contain`: chegando no fim da tira, o gesto morre aqui em vez de vazar
+     pro navegador e virar "voltar pagina" (gesto horizontal de trackpad/celular). */
+  .ins-list{display:flex;gap:8px;min-width:0;flex:1;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none}
   .ins-list::-webkit-scrollbar{display:none}
+  /* Arraste com o mouse (ver insEnableDrag). A mãozinha só aparece quando a tira REALMENTE rola:
+     `ins-dragavel` é ligada/desligada por insSyncNav, a mesma checagem que mostra as setas. Sem
+     isso o cursor prometeria um arraste que não acontece quando os insights cabem todos na linha. */
+  .ins-list.ins-dragavel{cursor:grab}
+  .ins-list.ins-arrastando{cursor:grabbing;user-select:none}
+  .ins-list.ins-arrastando .ins-item{cursor:grabbing}
   /* `flex:1 1 200px` + `min-width:200px`: com poucas abas elas crescem e preenchem a linha toda
      (sem sobra à direita); passando do que cabe, param de encolher em 200px e a tira rola. É o
      que faz o carrossel aparecer sozinho só "quando tem muito", sem contar itens no JS. */
@@ -1198,6 +1206,10 @@ function renderInsights(list) {
   // (como era antes) zerava a rolagem do carrossel a cada clique, o que tornava impossível
   // navegar até o fim da lista.
   tira.onclick = e => {
+    // Um arraste que percorreu distância termina em `click` também (ele nasce do mouseup). Sem
+    // essa guarda, puxar a tira a partir de cima de uma aba trocaria o insight selecionado no
+    // fim do gesto, que não é o que a pessoa pediu ao arrastar.
+    if (tira._arrastou) { tira._arrastou = false; return; }
     const b = e.target.closest('.ins-item');
     if (!b) return;
     _insightSel = Number(b.dataset.n);
@@ -1206,6 +1218,7 @@ function renderInsights(list) {
   };
   tira.scrollLeft = scrollAnterior;
   tira.onscroll = insSyncNav;
+  insEnableDrag(tira);
   document.getElementById('insPrev').onclick = () => insScroll(-1);
   document.getElementById('insNext').onclick = () => insScroll(1);
   // O ResizeObserver cobre recolher/expandir a sidebar e redimensionar a janela, que mudam a
@@ -1242,6 +1255,49 @@ function insScroll(dir) {
   }, 250);
 }
 
+// Arrastar a tira com o ponteiro pra passar de insight, sem depender das setas (pedido do Luan,
+// 27/08/2026). Só liga pra mouse/caneta: no toque o navegador já rola a tira sozinho por causa do
+// `overflow-x:auto`, com inércia e sem brigar com o gesto de rolar a página, e reimplementar isso
+// à mão só pioraria. Por isso também não existe `touch-action:none` aqui (ao contrário do drag do
+// jobs-widget, onde o arraste é a única forma de mover o card e a rolagem nativa é que atrapalha).
+function insEnableDrag(tira) {
+  let ativo = false, xInicial = 0, scrollInicial = 0, distancia = 0;
+  tira.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch' || e.button !== 0) return;
+    // Tira que cabe inteira na linha não tem pra onde arrastar: fica tudo como era antes, e um
+    // clique com a mão trêmula continua selecionando o insight (a guarda do onclick só entra em
+    // cena quando um arraste de verdade aconteceu).
+    if (tira.scrollWidth <= tira.clientWidth + 1) return;
+    ativo = true; distancia = 0; xInicial = e.clientX; scrollInicial = tira.scrollLeft;
+  });
+  tira.addEventListener('pointermove', e => {
+    if (!ativo) return;
+    const d = e.clientX - xInicial;
+    distancia = Math.max(distancia, Math.abs(d));
+    // Limiar de 3px: um clique normal treme uns pixels, e capturar o ponteiro já no pointerdown
+    // roubaria o clique da aba (com a captura ativa o alvo do evento passa a ser a tira, então
+    // `closest('.ins-item')` no onclick viria vazio e selecionar um insight pararia de funcionar).
+    if (distancia <= 3) return;
+    if (!tira.hasPointerCapture(e.pointerId)) tira.setPointerCapture(e.pointerId);
+    tira.classList.add('ins-arrastando');
+    tira.scrollLeft = scrollInicial - d;
+    e.preventDefault();
+  });
+  const soltar = e => {
+    if (!ativo) return;
+    ativo = false;
+    tira.classList.remove('ins-arrastando');
+    if (tira.hasPointerCapture(e.pointerId)) tira.releasePointerCapture(e.pointerId);
+    if (distancia > 3) tira._arrastou = true;
+    insSyncNav();
+  };
+  tira.addEventListener('pointerup', soltar);
+  tira.addEventListener('pointercancel', soltar);
+  // O arraste nativo do navegador (levar o elemento como se fosse uma imagem/link) dispararia por
+  // cima do nosso gesto e deixaria um "fantasma" preso no cursor.
+  tira.addEventListener('dragstart', e => e.preventDefault());
+}
+
 // Mostra as setas só quando a tira realmente rola, e desabilita a que já chegou no fim.
 function insSyncNav() {
   const list = document.getElementById('insList');
@@ -1249,6 +1305,7 @@ function insSyncNav() {
   const next = document.getElementById('insNext');
   if (!list || !prev || !next) return;
   const rola = list.scrollWidth > list.clientWidth + 1;
+  list.classList.toggle('ins-dragavel', rola);
   prev.hidden = next.hidden = !rola;
   if (!rola) return;
   prev.disabled = list.scrollLeft <= 1;
