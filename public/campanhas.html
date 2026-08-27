@@ -392,12 +392,8 @@ function setCampChartType(t) {
   document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === t));
   if (current) render();
 }
-function hexToRgba(hex, a) {
-  const h = hex.replace('#','');
-  const n = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
-  const r = parseInt(n.slice(0,2),16), g = parseInt(n.slice(2,4),16), b = parseInt(n.slice(4,6),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
+// hexToRgba vive em js/colors.js, junto dos outros utilitários de cor.
+const hexToRgba = (hex, a) => CocoColors.hexToRgba(hex, a);
 function areaGradient(color) {
   return { type:'linear', x:0, y:0, x2:0, y2:1, colorStops:[
     { offset:0, color:hexToRgba(color, 0.28) },

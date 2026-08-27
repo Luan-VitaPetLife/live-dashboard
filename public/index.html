@@ -1359,12 +1359,8 @@ const EC_TOOLTIP = {
 // Preenchimento em degradê sob a linha (do tom sólido no topo até transparente) — efeito comum em
 // libs de gráfico mais "premium", nativo no ECharts via areaStyle.color com um descritor de
 // gradiente linear (x/y de 0 a 1 = relativo à própria área desenhada, sem precisar de canvas/ctx).
-function hexToRgba(hex, a) {
-  const h = hex.replace('#','');
-  const n = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
-  const r = parseInt(n.slice(0,2),16), g = parseInt(n.slice(2,4),16), b = parseInt(n.slice(4,6),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
+// hexToRgba vive em js/colors.js, junto dos outros utilitários de cor.
+const hexToRgba = (hex, a) => CocoColors.hexToRgba(hex, a);
 function areaGradient(color) {
   return { type:'linear', x:0, y:0, x2:0, y2:1, colorStops:[
     { offset:0, color:hexToRgba(color, 0.22) },

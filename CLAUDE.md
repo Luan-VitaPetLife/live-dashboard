@@ -107,7 +107,7 @@ public/
   *.html                 as 11 páginas (raiz obrigatória)
   favicon.png            convenção de raiz, fica onde está
   css/                   switch.css
-  js/                    sidebar.js colors.js confirm-modal.js jobs-widget.js
+  js/                    sidebar.js colors.js geo.js confirm-modal.js jobs-widget.js
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
   img/canais/            logo_* usados nos cards de canal (Campanhas/Produtos/Estoque)
@@ -567,15 +567,21 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (bookmark antigo), lidos por `geografia.html` via `?market=` na URL na carga inicial.
 - Leaflet 1.9.4, tile CartoDB Voyager. Dois modos: coroplético (polígono colorido por intensidade)
   e calor (também preenche o polígono, com gradiente — não usa círculos, evita sobreposição).
-- **Fundo do mapa: Esri "Light Gray Canvas"**, DUAS camadas (`World_Light_Gray_Base` +
-  `World_Light_Gray_Reference`) — a base do Esri não traz nome de cidade nenhum, os rótulos vêm
-  separados. Sem chave de API. Era CartoDB Voyager até 27/08/2026, quando a CARTO passou a exigir
-  chave e começou a devolver o tile com **"API KEY REQUIRED" carimbado por cima do mapa**: HTTP
-  200, imagem válida, nada falhando no código, só a marca d'água na tela do usuário. Cinza claro
-  também é melhor aqui do que o Voyager colorido — o mapa é fundo pro coroplético e não pode
-  disputar cor com o dado desenhado em cima. Constantes `ESRI_TILE`/`ESRI_ATTR`/`ESRI_MAX_ZOOM`
-  duplicadas em `geografia.html` e `segmentos.html`: ao trocar de provedor, trocar nos DOIS
-  (`scripts/test/mapa.test.mjs` falha se divergirem ou se voltarem pra um provedor com chave).
+- **`public/js/geo.js` (`window.CocoGeo`) é a fonte única de tudo que Geografia e Segmentos
+  compartilham**: as oito tabelas (nome de estado, centróide, sub-região do mapa de calor,
+  códigos do IBGE e FIPS, nome→sigla dos EUA), o carregador de contorno com cache por mercado,
+  o fundo do mapa e a interpolação de cor. Eram ~150 linhas IDÊNTICAS dentro de cada um dos dois
+  HTML (conferido chave a chave antes de extrair, 27/08/2026), e corrigir um lado nunca chegava
+  no outro. Uma tela nova que desenhe mapa carrega esse script em vez de copiar tabela.
+- **Fundo do mapa: Esri "Light Gray Canvas"** (`CocoGeo.addBasemap(map)`), DUAS camadas
+  (`World_Light_Gray_Base` + `World_Light_Gray_Reference`) — a base do Esri não traz nome de
+  cidade nenhum, os rótulos vêm separados. Sem chave de API. Era CartoDB Voyager até 27/08/2026,
+  quando a CARTO passou a exigir chave e começou a devolver o tile com **"API KEY REQUIRED"
+  carimbado por cima do mapa**: HTTP 200, imagem válida, nada falhando no código, só a marca
+  d'água na tela do usuário. Cinza claro também é melhor aqui do que o Voyager colorido — o mapa
+  é fundo pro coroplético e não pode disputar cor com o dado desenhado em cima.
+  `scripts/test/mapa.test.mjs` falha se alguém voltar pra um provedor que exige chave ou se uma
+  página montar o próprio `L.tileLayer` em vez de chamar `addBasemap`.
 - BR: GeoJSON do IBGE em runtime, casa por `codarea`. US: `public/geo/us-states.json`, servido do
   próprio domínio, casa por `_uf`. Esse arquivo vinha de um repositório de TERCEIROS via jsDelivr
   (`PublicaMundi/MappingAPI`) até 27/08/2026 — o mapa dos EUA parava de desenhar se aquele

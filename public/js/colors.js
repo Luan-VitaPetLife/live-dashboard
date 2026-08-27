@@ -83,6 +83,16 @@
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? '#333' : '#fff';
   }
 
+  // Cor com transparência, para preenchimento de área de gráfico. Aceita a forma curta (#abc).
+  // Estava copiada em index.html e campanhas.html; vive aqui porque toda página que desenha
+  // gráfico já carrega este arquivo.
+  function hexToRgba(hex, a) {
+    const h = String(hex).replace('#', '');
+    const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(n.slice(i, i + 2), 16));
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
   function readSaved() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
   function save(key, value) {
     const saved = readSaved();
@@ -310,7 +320,7 @@
   window.CocoColors = {
     DEFAULT_CH, DEFAULT_MKT, DEFAULT_SEG, ch, mkt, seg,
     channelsFor, chLabel, setChannelColor,
-    load, save, resetAll, contrastText, chBadgeHTML,
+    load, save, resetAll, contrastText, hexToRgba, chBadgeHTML,
     buildSection, openPicker, makeTrigger,
   };
 })();
