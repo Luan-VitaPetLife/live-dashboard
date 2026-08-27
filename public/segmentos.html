@@ -547,7 +547,6 @@ function fmtMoney(v) {
   if (market === 'us') return '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   return v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 }
-function fmtUnits(n) { return n.toLocaleString('pt-BR') + ' un'; }
 function rangeLabel(s, u) {
   const fmt = d => { const [y,m,dd]=d.split('-'); return `${dd}/${m}`; };
   return s===u ? fmt(s) : `${fmt(s)} – ${fmt(u)}`;
@@ -973,7 +972,8 @@ async function loadGeoJSONFor(mkt) {
       data.features.forEach(f => { const code = f.properties?.codarea; f.properties._uf = IBGE_UF[String(code)] || null; });
       geoJsonCache[mkt] = data;
     } else {
-      const res = await fetch('https://cdn.jsdelivr.net/gh/PublicaMundi/MappingAPI/data/geojson/us-states.json');
+      // Servido do próprio domínio (public/geo/), não mais de um repositório de terceiros.
+      const res = await fetch('/geo/us-states.json');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       data.features.forEach(f => {

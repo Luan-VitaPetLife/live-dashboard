@@ -872,12 +872,15 @@ function showMapOverlay(icon, html, btnLabel, btnFn) {
 }
 function removeMapOverlay() { document.getElementById('mapOverlay')?.remove(); }
 
-// ── Load GeoJSON (BR via IBGE, EUA via jsDelivr — cacheado por mercado) ──
+// ── Load GeoJSON (BR via IBGE, EUA do próprio domínio — cacheado por mercado) ──
+// O contorno dos estados dos EUA é servido de public/geo/ e não mais de um repositório de
+// terceiros no jsDelivr: o mapa parava de desenhar se aquele repositório fosse apagado ou
+// renomeado, e nada avisava. O do Brasil continua vindo do IBGE, que é a fonte oficial.
 async function loadGeoJSONFor(m) {
   if (m === 'us') {
     if (geojsonDataUS) return true;
     try {
-      const res = await fetch('https://cdn.jsdelivr.net/gh/PublicaMundi/MappingAPI/data/geojson/us-states.json');
+      const res = await fetch('/geo/us-states.json');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       data.features.forEach(f => {
