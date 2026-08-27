@@ -843,16 +843,29 @@ function applyMapView(m) {
 }
 applyMapView(market);
 
-// Tile layer — CartoDB Voyager (city and state labels)
+// ── Fundo do mapa: Esri "Light Gray Canvas" ──
+// A CartoDB Voyager, usada até 27/08/2026, passou a exigir chave de API e começou a devolver o
+// tile com "API KEY REQUIRED" carimbado por cima do mapa. O tile chega com HTTP 200 e imagem
+// válida, então nada falha: a marca d'água simplesmente aparece na tela do usuário. Trocado por
+// um provedor sem chave. Cinza claro combina melhor com o coroplético do que o Voyager colorido:
+// o mapa aqui é fundo, não pode disputar cor com o dado desenhado por cima.
+// São DUAS camadas de propósito — a base do Esri não traz nome de cidade nenhum, os rótulos vêm
+// separados. Ordem importa: rótulo depois da base.
+const ESRI_TILE = camada =>
+  `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_${camada}/MapServer/tile/{z}/{y}/{x}`;
+const ESRI_ATTR = 'Tiles &copy; Esri, DeLorme, NAVTEQ';
+// O mapa trava em maxZoom 8 (ver L.map acima), bem abaixo do teto do provedor.
+const ESRI_MAX_ZOOM = 16;
+
 let currentTile = null;
-function setTileLayer(withLabels) {
+let currentTileLabels = null;
+function setTileLayer() {
   if (currentTile) map.removeLayer(currentTile);
-  currentTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains:'abcd', maxZoom:19
-  }).addTo(map);
+  if (currentTileLabels) map.removeLayer(currentTileLabels);
+  currentTile = L.tileLayer(ESRI_TILE('Base'), { attribution: ESRI_ATTR, maxZoom: ESRI_MAX_ZOOM }).addTo(map);
+  currentTileLabels = L.tileLayer(ESRI_TILE('Reference'), { maxZoom: ESRI_MAX_ZOOM }).addTo(map);
 }
-setTileLayer(false);
+setTileLayer();
 
 let geojsonDataBR = null;  // Brazil states GeoJSON (loaded once, cacheado)
 let geojsonDataUS = null;  // US states GeoJSON (loaded once, cacheado)
@@ -954,7 +967,7 @@ function drawMap() {
 }
 
 function drawChoropleth(isMoney, getValue, maxVal) {
-  setTileLayer(false);
+  setTileLayer();
   const layer = L.geoJSON(geojsonData, {
     filter: f => !!f.properties._uf, // pula territórios/regiões sem UF conhecida
     style: feature => {
@@ -1017,7 +1030,7 @@ function drawChoropleth(isMoney, getValue, maxVal) {
 }
 
 function drawHeatmap(isMoney, getValue, maxVal) {
-  setTileLayer(false);
+  setTileLayer();
   const totalAll = Object.values(stateData).reduce((a, x) => a + getValue(x), 0);
 
   // Bordas finas dos estados sobre o tile
