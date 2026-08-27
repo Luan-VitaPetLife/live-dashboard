@@ -30,20 +30,23 @@ const PORT = process.env.PORT || 3000;
 const isHttps = req => req.secure || req.headers['x-forwarded-proto'] === 'https';
 
 // ── Segurança: cabeçalhos defensivos (sem libs externas) ──
-// CSP construída a partir dos domínios que a interface realmente carrega (CDN do
-// Chart.js/Bootstrap Icons/Leaflet, tile server do mapa, API de GeoJSON do IBGE) —
-// confirmado varrendo todo public/ por "https://", não uma lista genérica.
-// script-src/style-src precisam de 'unsafe-inline' porque toda a lógica das páginas
-// vive em <script>/<style> inline no próprio HTML (arquitetura atual, sem bundler
-// nem build step) — isso ainda bloqueia injeção de script/domínio externo (o vetor
-// mais comum de exfiltração de cookie/dado via XSS refletido), mas não elimina XSS
-// via inline. Migrar pra nonce por requisição é o próximo passo se isso virar
-// prioridade — exigiria trocar o public/*.html de "arquivo estático" pra "renderizado
-// por request", mudança maior, fora do escopo desta rodada.
+// A lista de domínios sai de varrer public/ por "https://", não de um exemplo genérico:
+// ECharts e Bootstrap Icons (cdn.jsdelivr.net), Leaflet (unpkg.com), a fonte Inter
+// (fonts.googleapis.com serve o CSS, fonts.gstatic.com serve os arquivos .woff2), o tile
+// server do mapa e a malha do IBGE.
+// ATENÇÃO ao mexer: um domínio que falta aqui é bloqueado SEM erro visível na tela — as
+// páginas continuam abrindo, só que sem o recurso. Foi o que aconteceu com a Inter: o <link>
+// do HTML estava certo, faltava liberar o domínio aqui, e a dashboard inteira rodou na fonte
+// do sistema sem ninguém entender por quê. Uma folha do Google Fonts precisa de DOIS
+// domínios: googleapis em style-src e gstatic em font-src.
+// 'unsafe-inline' em script-src/style-src é exigido porque a lógica de cada página vive em
+// <script>/<style> dentro do próprio HTML. Isso ainda barra script de domínio externo (o
+// vetor mais comum de roubo de cookie via XSS refletido), mas não barra XSS inline. Fechar
+// de vez depende de tirar o JS de dentro do HTML, não de ajustar esta regra.
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
-  "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+  "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com",
   // Imagem de produto (Shopify BR/US, Shopee, Mercado Livre, e futuramente Amazon) vem de
   // URL dinâmica de CDN de cada marketplace — nunca é um domínio fixo no código, é campo de
   // resposta de API (cdn.shopify.com, http2.mlstatic.com, subdomínios de img.susercontent.com
@@ -51,7 +54,7 @@ const CSP = [
   // e quebrando imagem sem aviso; liberar https: geral pra img-src é o padrão pragmático (o
   // vetor de ataque de <img src> é bem mais fraco que script-src/connect-src, que continuam travados).
   "img-src 'self' data: https:",
-  "font-src 'self' https://cdn.jsdelivr.net data:",
+  "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com data:",
   "connect-src 'self' https://servicodados.ibge.gov.br https://unpkg.com https://cdn.jsdelivr.net",
   "frame-ancestors 'none'",
   "base-uri 'self'",
