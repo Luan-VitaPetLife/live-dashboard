@@ -455,8 +455,15 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - `'unsafe-inline'` em `script-src`/`style-src` é exigido porque a lógica de cada página vive em
   `<script>`/`<style>` dentro do próprio HTML. Fechar isso depende de tirar o JS de dentro do
   HTML, não de ajustar a regra.
-- Nenhum recurso de CDN usa `integrity` (SRI) ainda — ECharts, Leaflet e Bootstrap Icons entram
-  sem verificação. Pendência conhecida.
+- **Todo recurso de CDN carrega com `integrity` + `crossorigin="anonymous"`** (SRI): ECharts,
+  Leaflet e Bootstrap Icons. Sem isso, um pacote adulterado na origem roda dentro da dashboard
+  já logada. Os dois atributos são indivisíveis — sem `crossorigin` o navegador não consegue
+  verificar recurso de outro domínio e bloqueia igual.
+  - Ao trocar a VERSÃO de qualquer um deles, recalcular o hash:
+    `sha384-` + sha384 do arquivo em base64. `scripts/test/sri.test.mjs` baixa cada recurso e
+    compara, então um hash esquecido falha no teste em vez de sumir com o gráfico em produção.
+  - A folha do **Google Fonts fica de fora de propósito**: o CSS que ela devolve varia conforme
+    o navegador que pede, então o hash nunca bateria e a fonte ficaria bloqueada pra sempre.
 
 ### Integrações (`public/integracoes.html`)
 - Admin only. `GET /api/integrations` monta status ao vivo por canal; `POST
