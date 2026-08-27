@@ -247,9 +247,12 @@
       if (cancelBtn) {
         const id = cancelBtn.dataset.cancelId;
         const label = cancelBtn.dataset.cancelLabel || 'esse processo';
-        const ok = window.cocoConfirm
-          ? await window.cocoConfirm('O que já foi feito até agora fica salvo.', { title: `Cancelar "${label}"?`, confirmText: 'Cancelar processo', danger: true })
-          : confirm(`Cancelar "${label}"? O que já foi feito até agora fica salvo.`);
+        // confirm-modal.js é carregado nas mesmas páginas que este widget, então cocoConfirm
+        // sempre existe aqui. Sem fallback pro confirm() do navegador de propósito: a barra
+        // cinza "o site diz" não deve aparecer em lugar nenhum do app.
+        const ok = await window.cocoConfirm('O que já foi feito até agora fica salvo.', {
+          title: `Cancelar "${label}"?`, confirmText: 'Cancelar processo', danger: true,
+        });
         if (!ok) return;
         cancelBtn.disabled = true;
         fetch('/api/jobs/' + id + '/cancel', { method: 'POST', credentials: 'same-origin' })

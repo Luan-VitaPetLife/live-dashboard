@@ -98,7 +98,7 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   <div class="nav-group"><div class="nav-label">Operações</div>
     <a class="nav-item" data-page="produtos.html" data-label="Produtos" href="/produtos"><i class="bi bi-box-seam nav-icon"></i><span class="nav-text">Produtos</span></a>
     <a class="nav-item" data-page="estoque.html" data-label="Estoque" href="/estoque"><i class="bi bi-layers nav-icon"></i><span class="nav-text">Estoque</span></a>
-    <a class="nav-item" data-label="Financeiro"><i class="bi bi-wallet2 nav-icon"></i><span class="nav-text">Financeiro</span></a></div>
+    <a class="nav-item nav-soon" data-label="Financeiro (em breve)" aria-disabled="true"><i class="bi bi-wallet2 nav-icon"></i><span class="nav-text">Financeiro</span><span class="nav-soon-tag">em breve</span></a></div>
   <div class="nav-group"><div class="nav-label">Marketing</div>
     <a class="nav-item" data-page="campanhas.html" data-label="Campanhas" href="/campanhas"><i class="bi bi-megaphone nav-icon"></i><span class="nav-text">Campanhas</span></a></div>
   <div class="nav-group" id="navGroupSistema"><div class="nav-label">Sistema</div>
@@ -144,6 +144,14 @@ window.initCollapsibleNotice = initCollapsibleNotice;
 .nav-item.active{background:var(--side-active);color:var(--side-text);font-weight:500}
 .nav-icon{font-size:15px;width:16px;text-align:center;flex-shrink:0;line-height:1;opacity:.75}
 .nav-text{white-space:nowrap}
+/* Item de página que ainda não existe (Financeiro). Fica no menu de propósito, pra sinalizar
+   o que vem por aí, mas sem fingir que é clicável: sem hover, cursor normal e um selo. Quando
+   a página existir, é só tirar a classe/selo e dar a ele href + data-page como os outros
+   (sem data-page o item escapa do controle de permissão). */
+.nav-item.nav-soon{cursor:default;color:rgba(240,235,224,0.30)}
+.nav-item.nav-soon:hover{background:none;color:rgba(240,235,224,0.30)}
+.nav-soon-tag{margin-left:auto;font-size:8.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:rgba(240,235,224,0.32);border:1px solid rgba(240,235,224,0.16);border-radius:3px;padding:1px 4px;white-space:nowrap}
+body.sidebar-hidden .nav-soon-tag{display:none}
 .sidebar-header{display:flex;justify-content:flex-end;padding:6px 10px 0;transition:padding .2s}
 .sidebar-close-btn{width:30px;height:30px;border-radius:8px;border:none;background:transparent;color:rgba(240,235,224,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s;flex-shrink:0}
 .sidebar-close-btn:hover{background:rgba(240,235,224,.12);color:rgba(240,235,224,.9)}
