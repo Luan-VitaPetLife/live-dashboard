@@ -106,7 +106,7 @@ imagens estavam soltas no meio dos HTML e não dava pra ver o que era página e 
 public/
   *.html                 as 11 páginas (raiz obrigatória)
   favicon.png            convenção de raiz, fica onde está
-  css/                   switch.css
+  css/                   switch.css anim.css
   js/                    sidebar.js colors.js geo.js pill-switch.js confirm-modal.js jobs-widget.js
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
@@ -711,6 +711,31 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   tabelas antigas, se um hex de canal aparecer solto numa página, se um logo apontar pra arquivo
   inexistente, se dois canais tiverem o mesmo nome — e executa o `colors.js` de verdade (com
   dublês de window/localStorage/document) pra testar o comportamento, não só o texto do arquivo.
+
+### Animação de abrir e fechar (`public/css/anim.css`)
+- **Tudo que abre e fecha na dashboard entra e sai suave** (pedido do Luan, 27/08/2026: "tudo que
+  acontecesse na dashboard tivesse uma animação suave"). Cobre as 20 caixas do app: menus
+  (`.csel-pop`, `.period-pop`, `.fp-pop`, `.chan-pop`, `.bulk-pop`, `.ccp-pop`), os fundos
+  escurecidos, os modais centralizados (`.sp-panel`, `.smd-modal`, `.geo-modal`, `.exp-modal`,
+  `.tr-modal`) e os blocos que surgem na própria página (`.card-bank`, `.select-bar`,
+  `.pop-chan-detail`).
+- Nenhuma linha de JavaScript de tela foi tocada: o padrão de todas elas é `display:none` na base
+  e `display:flex` com a classe `open`, e os handlers continuam só pondo e tirando essa classe.
+  Quem anima é `transition-behavior: allow-discrete` (segura o display até a saída terminar) mais
+  `@starting-style` (dá o estado de onde a entrada parte).
+- **O `@supports` em volta de tudo é o que impede um estrago.** Sem ele, num navegador sem
+  suporte o `opacity:0` da regra base valeria e TODO menu do app abriria invisível. Não remover.
+- **Modal centralizado usa `transform` pra se centralizar.** A escala precisa vir composta
+  (`translate(-50%,-50%) scale(.97)`); escrever só `scale()` joga o modal pro canto inferior
+  direito da tela. `scripts/test/animacao.test.mjs` falha se isso acontecer.
+- **Card que expande** (Tendência e Tráfego, `index.html`): muda altura E largura, e a largura vem
+  de `grid-column`, que não é animável. Quem cobre é uma **View Transition**
+  (`comAnimacao()`), disparada só no CLIQUE — no carregamento não existe estado anterior pra
+  interpolar. Se uma segunda página precisar do mesmo, `comAnimacao` sai do `index.html` pra um
+  arquivo compartilhado.
+- Ao criar uma caixa nova que abre e fecha, acrescentar o seletor ao grupo certo em `anim.css`:
+  o teste varre todas as regras `.x.open{display:` do app e falha se alguma ficou de fora, e
+  falha de novo se ela não tiver estado de entrada declarado (sairia suave e entraria seca).
 
 ### Seletor de opção (`public/js/pill-switch.js`, `.pill-switch`)
 - **Padrão único de todo seletor de duas ou mais opções mutuamente exclusivas**: moldura discreta
