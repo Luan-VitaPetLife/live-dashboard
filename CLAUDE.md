@@ -567,6 +567,15 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (bookmark antigo), lidos por `geografia.html` via `?market=` na URL na carga inicial.
 - Leaflet 1.9.4, tile CartoDB Voyager. Dois modos: coroplético (polígono colorido por intensidade)
   e calor (também preenche o polígono, com gradiente — não usa círculos, evita sobreposição).
+- **Fundo do mapa: Esri "Light Gray Canvas"**, DUAS camadas (`World_Light_Gray_Base` +
+  `World_Light_Gray_Reference`) — a base do Esri não traz nome de cidade nenhum, os rótulos vêm
+  separados. Sem chave de API. Era CartoDB Voyager até 27/08/2026, quando a CARTO passou a exigir
+  chave e começou a devolver o tile com **"API KEY REQUIRED" carimbado por cima do mapa**: HTTP
+  200, imagem válida, nada falhando no código, só a marca d'água na tela do usuário. Cinza claro
+  também é melhor aqui do que o Voyager colorido — o mapa é fundo pro coroplético e não pode
+  disputar cor com o dado desenhado em cima. Constantes `ESRI_TILE`/`ESRI_ATTR`/`ESRI_MAX_ZOOM`
+  duplicadas em `geografia.html` e `segmentos.html`: ao trocar de provedor, trocar nos DOIS
+  (`scripts/test/mapa.test.mjs` falha se divergirem ou se voltarem pra um provedor com chave).
 - BR: GeoJSON do IBGE em runtime, casa por `codarea`. US: `public/geo/us-states.json`, servido do
   próprio domínio, casa por `_uf`. Esse arquivo vinha de um repositório de TERCEIROS via jsDelivr
   (`PublicaMundi/MappingAPI`) até 27/08/2026 — o mapa dos EUA parava de desenhar se aquele
@@ -988,6 +997,26 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 
 `npm install` → `npm start` (porta 3000, sync roda ao subir e a cada `SYNC_INTERVAL_MINUTES`).
 `npm run sync` faz uma sincronização única.
+
+### Testes (`npm test`, `scripts/test/`)
+- Runner próprio (`run.mjs`), sem framework: o projeto não tem etapa de build nem dependência de
+  desenvolvimento, e 40 linhas cobrem o que precisamos. Cada `*.test.mjs` roda no seu processo,
+  código de saída 0 passou / 1 falhou / **2 pulado** (teste que precisa de rede não vira falha
+  numa máquina offline, mas também não se declara aprovado). `npm test -- mapa` roda só um.
+- Cobre hoje o que **falha em silêncio**, que é onde este projeto machuca: `csp` (todo host
+  externo de `public/` autorizado na CSP), `mapa` (nenhuma página volta pra provedor de tile com
+  chave, e as duas telas usam o mesmo), `geojson` (o arquivo dos EUA é local, servido e no formato
+  certo), `paginas` (sintaxe dos `<script>` inline), `assets` (caminho de arquivo local existe) e
+  `insights` (as regras do card, incluindo os pisos anti-ruído).
+- **Nenhum teste sobe o `server.js` nem toca no banco.** `geojson.test.mjs` levanta só um
+  `express.static` sobre `public/`. Isso é regra, não detalhe: subir o servidor de verdade dispara
+  o sync, e a cota da Amazon é por CONTA, não por processo — teste local competindo com o sync de
+  produção já quebrou o BR uma vez.
+- Testes de `metrics.js`/`store.js` (tag mãe, tipo de produto, catálogo) ainda estão de fora: eles
+  gravam no store e precisam de um banco temporário próprio antes de entrar aqui, senão `npm test`
+  suja o `data/db.json` de quem estiver desenvolvendo.
+- Ao escrever um teste novo, conferir que ele FALHA com o defeito reintroduzido. Teste que nunca
+  falha não protege nada — os seis atuais foram validados assim, um bug real de cada vez.
 
 - `GET /api/dashboard?channel=&metric=&since=&until=&market=br|us` — payload principal
 - `GET /api/campaigns?market=&since=&until=` — campanha a campanha, ao vivo, cache 5min

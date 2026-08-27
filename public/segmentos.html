@@ -858,6 +858,13 @@ const MAP_BOUNDS = {
   us: { fit:[[24,-125],[49.5,-66.5]], center:[38,-97] },
 };
 
+// Provedor do fundo do mapa. Cópia igual à de geografia.html — as duas telas desenham o mesmo
+// tipo de mapa e precisam do mesmo fundo; ao trocar de provedor, trocar nos DOIS arquivos.
+const ESRI_TILE = camada =>
+  `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_${camada}/MapServer/tile/{z}/{y}/{x}`;
+const ESRI_ATTR = 'Tiles &copy; Esri, DeLorme, NAVTEQ';
+const ESRI_MAX_ZOOM = 16;
+
 // Coordenadas pro modo Calor do modal ampliado (mesmas tabelas de geografia.html —
 // ver drawModalHeat). CENTROIDS = posição da pill de rótulo; SUB_REGIONS = pontos onde as manchas de
 // calor são desenhadas (1º ponto = centróide); estado sem entrada usa só o centróide como mancha única.
@@ -1251,9 +1258,12 @@ function initModalMap(p) {
   const bounds = MAP_BOUNDS[market];
   const map = L.map('geoModalMap', { center: bounds.center, zoom: 4, minZoom: 3, maxZoom: 8, zoomControl: true, zoomSnap: 0.5 });
   geoModalMapInst = map;
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19,
-  }).addTo(map);
+  // Fundo do mapa: Esri "Light Gray Canvas", base + rótulos (a base vem sem nome de cidade).
+  // Substituiu a CartoDB Voyager, que passou a exigir chave e devolvia o tile com a marca
+  // d'água "API KEY REQUIRED" carimbada, sem erro nenhum. Mesmo par de camadas usado em
+  // geografia.html — se um dia trocar de provedor, lembrar dos DOIS arquivos.
+  L.tileLayer(ESRI_TILE('Base'), { attribution: ESRI_ATTR, maxZoom: ESRI_MAX_ZOOM }).addTo(map);
+  L.tileLayer(ESRI_TILE('Reference'), { maxZoom: ESRI_MAX_ZOOM }).addTo(map);
   map.fitBounds(bounds.fit);
   // O modal acabou de ficar visível (display:none → flex) — o Leaflet precisa recalcular o
   // tamanho do container depois que o layout se assenta, senão os tiles ficam em branco/cortados.
