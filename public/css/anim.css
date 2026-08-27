@@ -1,0 +1,134 @@
+/* ─────────────────────────────────────────────
+   anim.css — entrada e saída suave de tudo que abre e fecha na dashboard.
+
+   Todo menu, popover, painel e modal do app aparecia e sumia num quadro só: as regras são
+   sempre `display:none` na base e `display:flex` (ou block) quando a classe `open` entra, e
+   display não é animável. Este arquivo resolve isso sem tocar em uma linha de JavaScript de
+   nenhuma tela: os handlers continuam só pondo e tirando a classe `open`.
+
+   Como funciona: `transition-behavior: allow-discrete` faz o navegador segurar o display até a
+   transição terminar (senão a saída seria instantânea, porque o elemento sumiria antes de
+   desbotar), e `@starting-style` dá o estado de onde a ENTRADA parte — sem ele o navegador não
+   tem de onde animar um elemento que acabou de existir na tela.
+
+   O bloco inteiro vive dentro de um `@supports`. Navegador sem suporte simplesmente não recebe
+   nada disso e continua com o comportamento de antes, instantâneo mas funcionando. Sem essa
+   guarda, o `opacity:0` da regra base valeria e todo menu do app abriria invisível.
+
+   Ao criar uma caixa nova que abre e fecha, acrescente o seletor dela ao grupo certo aqui.
+   ───────────────────────────────────────────── */
+
+@supports (transition-behavior: allow-discrete) {
+
+  /* A mesma curva do pill dos seletores (js/pill-switch.js): sai rápido, chega devagar. */
+  :root{
+    --anim-curva: cubic-bezier(.32,.72,0,1);
+    --anim-tempo: .17s;
+    --anim-tempo-modal: .21s;
+  }
+
+  /* ── Menus e popovers ancorados num botão ──
+     Só opacidade e um deslize curto pra baixo, sem escala: o popover de cor e o de edição em
+     lote são posicionados por JavaScript, e uma escala mudaria a medida que esse código lê. */
+  .csel-pop, .period-pop, .fp-pop, .chan-pop, .bulk-pop, .ccp-pop {
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity var(--anim-tempo) var(--anim-curva),
+                transform var(--anim-tempo) var(--anim-curva),
+                display var(--anim-tempo) allow-discrete;
+  }
+  .csel.open .csel-pop,
+  .filter-pill.open .fp-pop,
+  .period-pop.open, .chan-pop.open, .bulk-pop.open, .ccp-pop.open {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @starting-style {
+    .csel.open .csel-pop,
+    .filter-pill.open .fp-pop,
+    .period-pop.open, .chan-pop.open, .bulk-pop.open, .ccp-pop.open {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
+
+  /* ── Fundo escurecido dos modais ──
+     Só desbota. Qualquer movimento aqui competiria com a entrada do próprio modal. */
+  .sp-overlay, .smd-overlay, .geo-modal-overlay, .exp-modal-overlay,
+  .tr-modal-overlay, .modal-overlay {
+    opacity: 0;
+    transition: opacity var(--anim-tempo-modal) ease,
+                display var(--anim-tempo-modal) allow-discrete;
+  }
+  .sp-overlay.open, .smd-overlay.open, .geo-modal-overlay.open,
+  .exp-modal-overlay.open, .tr-modal-overlay.open, .modal-overlay.open { opacity: 1; }
+  @starting-style {
+    .sp-overlay.open, .smd-overlay.open, .geo-modal-overlay.open,
+    .exp-modal-overlay.open, .tr-modal-overlay.open, .modal-overlay.open { opacity: 0; }
+  }
+
+  /* ── Modais centralizados ──
+     Estes já usam transform pra se centralizar, então a escala precisa vir COMPOSTA com o
+     translate — escrever só `scale()` aqui jogaria o modal pro canto inferior direito da tela. */
+  .sp-panel, .smd-modal, .geo-modal, .exp-modal, .tr-modal {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(.97);
+    transition: opacity var(--anim-tempo-modal) var(--anim-curva),
+                transform var(--anim-tempo-modal) var(--anim-curva),
+                display var(--anim-tempo-modal) allow-discrete;
+  }
+  .sp-panel.open, .smd-modal.open, .geo-modal.open, .exp-modal.open, .tr-modal.open {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  @starting-style {
+    .sp-panel.open, .smd-modal.open, .geo-modal.open, .exp-modal.open, .tr-modal.open {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(.97);
+    }
+  }
+
+  /* ── Blocos que surgem dentro da própria página ──
+     Banco de cards do modo de edição, barra de seleção do Unificador, detalhe por canal do
+     mapa. Não flutuam sobre nada, então empurram o conteúdo: um deslize curto basta. */
+  .card-bank, .select-bar, .pop-chan-detail {
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity var(--anim-tempo) var(--anim-curva),
+                transform var(--anim-tempo) var(--anim-curva),
+                display var(--anim-tempo) allow-discrete;
+  }
+  .card-bank.open, .select-bar.open, .pop-chan-detail.open {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @starting-style {
+    .card-bank.open, .select-bar.open, .pop-chan-detail.open {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+}
+
+/* ── Card que cresce e encolhe ──
+   O card de Tendência e o de Tráfego trocam de altura ao expandir. A largura muda junto, por
+   `grid-column`, que não é animável — quem cuida dessa parte é a View Transition disparada no
+   próprio index.html. Aqui fica só a altura, que a View Transition sozinha não interpola bem
+   por causa do canvas do gráfico dentro. */
+.ch220, .ch180, .ch380 {
+  transition: min-height var(--anim-tempo-modal, .21s) cubic-bezier(.32,.72,0,1),
+              height var(--anim-tempo-modal, .21s) cubic-bezier(.32,.72,0,1);
+}
+
+/* Movimento reduzido no sistema operacional desliga tudo: o estado final é o mesmo, só
+   acontece na hora. */
+@media (prefers-reduced-motion: reduce) {
+  .csel-pop, .period-pop, .fp-pop, .chan-pop, .bulk-pop, .ccp-pop,
+  .sp-overlay, .smd-overlay, .geo-modal-overlay, .exp-modal-overlay,
+  .tr-modal-overlay, .modal-overlay,
+  .sp-panel, .smd-modal, .geo-modal, .exp-modal, .tr-modal,
+  .card-bank, .select-bar, .pop-chan-detail,
+  .ch220, .ch180, .ch380 {
+    transition: none !important;
+  }
+}

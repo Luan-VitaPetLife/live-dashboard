@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard — Vita Pet Life</title>
 <link rel="icon" href="favicon.png" type="image/png">
+<link rel="stylesheet" href="css/anim.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js" integrity="sha384-C2iskrW/uPW46KzOjrvJIQo4YkV8lkD+QS0CrDN18IIPIpT/g2USu8bTP3nvmIAD" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -969,10 +970,21 @@ function applyTrendExpanded() {
   btn.title = trendExpanded ? 'Recolher card' : 'Expandir card';
   btn.querySelector('i').className = 'bi ' + (trendExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand');
 }
+// Expandir um card muda a ALTURA e a LARGURA ao mesmo tempo, e a largura vem de `grid-column`,
+// que não é animável por CSS: sem isso o card saltava de tamanho num quadro só. A View
+// Transition tira um retrato da página antes e depois e interpola a diferença, inclusive o
+// reposicionamento dos cards vizinhos que cedem espaço.
+// Só no CLIQUE: chamar applyTrendExpanded() no carregamento não tem estado anterior pra animar.
+function comAnimacao(fn) {
+  const reduzido = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (reduzido || !document.startViewTransition) return fn();
+  document.startViewTransition(fn);
+}
+
 document.getElementById('trendExpandBtn')?.addEventListener('click', () => {
   trendExpanded = !trendExpanded;
   localStorage.setItem('coco_trend_expanded', trendExpanded ? '1' : '0');
-  applyTrendExpanded();
+  comAnimacao(applyTrendExpanded);
 });
 applyTrendExpanded();
 
@@ -1005,7 +1017,7 @@ function applyTrafficExpanded() {
 document.getElementById('trafficExpandBtn')?.addEventListener('click', () => {
   trafficExpanded = !trafficExpanded;
   localStorage.setItem('coco_traffic_expanded', trafficExpanded ? '1' : '0');
-  applyTrafficExpanded();
+  comAnimacao(applyTrafficExpanded);
 });
 applyTrafficExpanded();
 
