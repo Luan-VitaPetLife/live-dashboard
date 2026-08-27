@@ -672,6 +672,33 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Quantidade/receita por produto usa `LineItem.currentQuantity` (Shopify) e desconta refund do
   valor do item — ver "Receita" acima. Sem isso, produto devolvido continuava contando venda.
 
+### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
+- **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
+  aparece em todas as telas. Antes disso a mesma informação vivia em cinco tabelas
+  (`CH_META` em Produtos e Estoque, `CHAN`/`MARKET_CHANNELS` na Visão geral,
+  `CHAN_COLORS_MAP`/`CHAN_LABELS_MAP` na Geografia, `CH_BY_MARKET` em Segmentos) e as cópias já
+  discordavam: Shopify verde numa tela e vermelha na outra, Amazon BR preta em quase tudo e
+  laranja na Geografia e nos mini-gráficos de Campanhas. Pior: só quem lia daqui enxergava a cor
+  que o usuário salva no seletor de cores, então mudar a cor de um canal não mexia em Produtos,
+  Estoque nem Geografia (27/08/2026).
+- Cores confirmadas pelo Luan na mesma data, a partir do que a Visão geral BR já mostrava:
+  Shopify Coco and Luna verde (`#95BF47` BR / `#7EAD3C` EUA), Yucaloo azul `#4466FF`,
+  Amazon BR preto `#111111`, Amazon EUA laranja `#FF9900`, Shopee `#EE4D2D`, Mercado Livre
+  `#FFE600`. A ORDEM das chaves no objeto é a ordem em que os canais aparecem em toda tela.
+- API: `CocoColors.channelsFor(market, {comTodos})` monta seletor de canal;
+  `CocoColors.chLabel(chave)` dá o nome (trata `'todos'` e chave desconhecida sem quebrar);
+  `CocoColors.setChannelColor(k, hex)` troca a cor E persiste. **Nunca escrever
+  `CocoColors.ch[k] = {...}` na mão** — era o que as quatro telas com seletor de cor faziam, e
+  isso agora apagaria `logo`/`logoFill`/`market` do canal: a logo sumiria do card e o canal
+  deixaria de aparecer no seletor do próprio mercado, logo depois de alguém escolher uma cor.
+- Só a COR é personalizável. Nome, logo e mercado vêm sempre do catálogo, nunca do que está
+  salvo no navegador — senão uma cópia antiga no `localStorage` de alguém mostraria o nome velho.
+- `'todos'` não está no catálogo de propósito: não é um canal, é a ausência de filtro.
+- `scripts/test/canais.test.mjs` guarda tudo isso: falha se uma tela redeclarar qualquer das
+  tabelas antigas, se um hex de canal aparecer solto numa página, se um logo apontar pra arquivo
+  inexistente, se dois canais tiverem o mesmo nome — e executa o `colors.js` de verdade (com
+  dublês de window/localStorage/document) pra testar o comportamento, não só o texto do arquivo.
+
 ### Padrões de UI compartilhados
 - Sidebar (`sidebar.js`), sistema de cores (`colors.js`) e o widget de processos em segundo plano
   (`jobs-widget.js`) e o pop-up de confirmação (`confirm-modal.js`) são componentes injetados via

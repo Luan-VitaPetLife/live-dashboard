@@ -653,8 +653,10 @@ const CENTROIDS_US = {
 };
 
 // ── Canais por mercado ──
-const CHAN_BR = { todos:'Todos os canais', shopify:'Shopify - Coco and Luna BR', yucaloo_br:'Shopify - Yucaloo BR', shopee:'Shopee', amazon:'Amazon BR', mercadolivre:'Mercado Livre' };
-const CHAN_US = { todos:'Todos os canais', shopify_us:'Shopify - Coco and Luna EUA', yucaloo_us:'Shopify - Yucaloo EUA', amazon_us:'Amazon EUA' };
+// Canais por mercado vêm do catálogo único (js/colors.js). Esta tela chegou a ter QUATRO
+// tabelas próprias e era a mais divergente de todas: a Shopify saía verde e a Amazon BR
+// laranja, enquanto o resto do app usava preto — e nenhuma delas enxergava a cor que o
+// usuário salva no seletor de cores.
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos' };
 
 // ── Formatting (BRL/pt-BR ou USD/en-US conforme o mercado ativo) ──
@@ -673,8 +675,8 @@ function pctStr(n) {
 }
 
 // ── Canal breakdown helpers ──
-const CHAN_COLORS_MAP = { shopify:'#95BF47', shopee:'#EE4D2D', mercadolivre:'#FFE600', amazon:'#FF9900', amazon_us:'#FF9900', shopify_us:'#7EAD3C', yucaloo_br:'#4466FF', yucaloo_us:'#4466FF' };
-const CHAN_LABELS_MAP = { shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon BR', amazon_us:'Amazon EUA', shopify_us:'Shopify - Coco and Luna EUA', yucaloo_br:'Shopify - Yucaloo BR', yucaloo_us:'Shopify - Yucaloo EUA' };
+// Cor de canal, sempre a do catálogo — inclusive a que o usuário personalizou.
+const chColor = ch => CocoColors.ch[ch]?.bg || '#888';
 function isChanMap() { return localStorage.getItem('coco_chan_map') !== '0'; }
 function isChanExpand() { return localStorage.getItem('coco_chan_expand') === '1'; }
 function togglePopupExpand(uid) {
@@ -691,17 +693,17 @@ function popupChanHTML(byChannel) {
   if (!entries.length) return '';
   const total = entries.reduce((s,[,v])=>s+v,0)||1;
   const [topCh, topVal] = entries[0];
-  const topColor = CHAN_COLORS_MAP[topCh]||'#888';
+  const topColor = chColor(topCh);
   const topPct = Math.round(topVal/total*100);
-  const topLabel = CHAN_LABELS_MAP[topCh]||topCh;
+  const topLabel = CocoColors.chLabel(topCh);
   const topTxt = topCh === 'mercadolivre' ? '#1a1a1a' : '#fff';
   const uid = Math.random().toString(36).slice(2,8);
   const initOpen = isChanExpand();
   const detailRows = entries.length > 1 ? entries.map(([ch,v])=>{
     const pct=Math.round(v/total*100);
     return `<div class="pop-chan-bar-row">
-      <span class="pop-chan-bar-name">${CHAN_LABELS_MAP[ch]||ch}</span>
-      <div class="pop-chan-bar"><div class="pop-chan-bar-fill" style="width:${pct}%;background:${CHAN_COLORS_MAP[ch]||'#888'}"></div></div>
+      <span class="pop-chan-bar-name">${CocoColors.chLabel(ch)}</span>
+      <div class="pop-chan-bar"><div class="pop-chan-bar-fill" style="width:${pct}%;background:${chColor(ch)}"></div></div>
       <span class="pop-chan-bar-pct">${pct}%</span>
     </div>`;
   }).join('') : '';
@@ -721,10 +723,10 @@ function modalChanHTML(byChannel) {
   const total = entries.reduce((s,[,v])=>s+v,0)||1;
   const rows = entries.map(([ch,v])=>{
     const pct=Math.round(v/total*100);
-    const color=CHAN_COLORS_MAP[ch]||'#888';
+    const color=chColor(ch);
     return `<div class="smd-chan-row">
       <span class="smd-chan-dot" style="background:${color}"></span>
-      <span class="smd-chan-name">${CHAN_LABELS_MAP[ch]||ch}</span>
+      <span class="smd-chan-name">${CocoColors.chLabel(ch)}</span>
       <div class="smd-chan-bar"><div class="smd-chan-fill" style="width:${pct}%;background:${color}"></div></div>
       <span class="smd-chan-val">${fmtMoney(v)}</span>
       <span class="smd-chan-pct">${pct}%</span>
@@ -801,11 +803,11 @@ let vizMode   = 'choropleth'; // 'choropleth' | 'heat'
 function loadChannel(m) {
   const key = m === 'us' ? 'coco_ch_us' : 'coco_channel';
   const val = localStorage.getItem(key) || 'todos';
-  const chans = m === 'us' ? CHAN_US : CHAN_BR;
-  return chans[val] ? val : 'todos';
+  // Canal salvo que não existe neste mercado (veio da outra bandeira) volta pra "todos".
+  return CocoColors.channelsFor(m, { comTodos: true }).includes(val) ? val : 'todos';
 }
 
-let CHAN         = market === 'us' ? CHAN_US : CHAN_BR;
+let CHAN         = CocoColors.channelsFor(market, { comTodos: true });
 let STATE_NAMES  = market === 'us' ? STATE_NAMES_US : STATE_NAMES_BR;
 let CENTROIDS    = market === 'us' ? CENTROIDS_US : CENTROIDS_BR;
 let SUB_REGIONS  = market === 'us' ? SUB_REGIONS_US : SUB_REGIONS_BR;
@@ -1111,7 +1113,7 @@ function render(d) {
   const marketLabel = market === 'us' ? 'EUA' : 'Brasil';
 
   document.getElementById('pageSub').textContent =
-    `Vita Pet Life · ${marketLabel} · ${CHAN[d.channel] || d.channel} · ${label}`;
+    `Vita Pet Life · ${marketLabel} · ${CocoColors.chLabel(d.channel)} · ${label}`;
   document.getElementById('mapTitle').textContent =
     `${vizMode === 'choropleth' ? 'Coropleto' : 'Mapa de calor'} · ${METRIC_LABEL[metric]} por estado`;
   document.getElementById('rankTitle').textContent =
@@ -1180,7 +1182,7 @@ function render(d) {
   setLive('ok', `Ao vivo · ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
   document.getElementById('footerDate').textContent =
-    `Vita Pet Life · ${marketLabel} · ${CHAN[d.channel] || d.channel} · ${label} · última sincronização: ${up}`;
+    `Vita Pet Life · ${marketLabel} · ${CocoColors.chLabel(d.channel)} · ${label} · última sincronização: ${up}`;
 
   drawMap();
 }
@@ -1365,8 +1367,8 @@ document.getElementById('smdOverlay').addEventListener('click', closeStateModal)
 function renderChannelOptions() {
   const wrap = document.getElementById('cselChannel');
   const pop = document.getElementById('channelPop');
-  pop.innerHTML = Object.entries(CHAN).map(([k,label]) =>
-    `<div class="csel-opt${k===channel?' active':''}" data-value="${k}">${label}</div>`
+  pop.innerHTML = CHAN.map(k =>
+    `<div class="csel-opt${k===channel?' active':''}" data-value="${k}">${CocoColors.chLabel(k)}</div>`
   ).join('');
   pop.querySelectorAll('.csel-opt').forEach(opt => {
     opt.addEventListener('click', e => {
@@ -1383,7 +1385,7 @@ function renderChannelOptions() {
 function syncControls() {
   document.getElementById('metricVal').textContent = METRIC_LABEL[metric];
   document.querySelectorAll('#cselMetric .csel-opt').forEach(o=>o.classList.toggle('active',o.dataset.value===metric));
-  document.getElementById('channelVal').textContent = CHAN[channel]||channel;
+  document.getElementById('channelVal').textContent = CocoColors.chLabel(channel);
   document.querySelectorAll('#cselChannel .csel-opt').forEach(o=>o.classList.toggle('active',o.dataset.value===channel));
   document.getElementById('periodValue').textContent = rangeLabel(sinceDate,untilDate);
 }
@@ -1477,7 +1479,7 @@ async function setMarket(m) {
   document.getElementById('mktBtnUs').classList.toggle('active', m === 'us');
   document.body.classList.toggle('market-us', m === 'us');
 
-  CHAN        = m === 'us' ? CHAN_US : CHAN_BR;
+  CHAN        = CocoColors.channelsFor(m, { comTodos: true });
   STATE_NAMES = m === 'us' ? STATE_NAMES_US : STATE_NAMES_BR;
   CENTROIDS   = m === 'us' ? CENTROIDS_US : CENTROIDS_BR;
   SUB_REGIONS = m === 'us' ? SUB_REGIONS_US : SUB_REGIONS_BR;

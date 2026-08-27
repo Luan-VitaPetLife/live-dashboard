@@ -326,18 +326,10 @@ function fmtMoney(v, mkt = market) {
 }
 
 // ── Metadados de canal (mesmas cores de index.html/DEFAULT_CH) ──
-const CH_META = {
-  shopify:      { name: 'Shopify - Coco and Luna BR',  color: '#95BF47', logo: 'img/marca/Logo2.png', logoFill: true },
-  shopee:       { name: 'Shopee',                      color: '#EE4D2D', logo: 'img/canais/logo_shopee.svg' },
-  mercadolivre: { name: 'Mercado Livre',                color: '#FFE600', logo: 'img/canais/logo_mercadolivre.png', logoFill: true },
-  amazon:       { name: 'Amazon BR',                    color: '#111111', logo: 'img/canais/logo_amazon.webp' },
-  yucaloo_br:   { name: 'Shopify - Yucaloo BR',         color: '#4466FF', logo: 'img/integracoes/Yucaloo2.png' },
-  shopify_us:   { name: 'Shopify - Coco and Luna EUA',  color: '#7EAD3C', logo: 'img/marca/Logo2.png', logoFill: true },
-  amazon_us:    { name: 'Amazon EUA',                   color: '#FF9900', logo: 'img/canais/logo_amazon.webp' },
-  yucaloo_us:   { name: 'Shopify - Yucaloo EUA',        color: '#4466FF', logo: 'img/integracoes/Yucaloo2.png' },
-};
-const CHANNELS_BR = ['shopify', 'yucaloo_br', 'shopee', 'amazon', 'mercadolivre'];
-const CHANNELS_US = ['shopify_us', 'yucaloo_us', 'amazon_us'];
+// Nome, cor, logo e mercado de cada canal vêm do catálogo único em js/colors.js — antes esta
+// tabela existia igualzinha aqui e em outras quatro telas, e as cópias já discordavam entre si.
+// Lendo de lá, a página também passa a respeitar a cor que o usuário salva em Configurações.
+const chMeta = ch => CocoColors.ch[ch] || { label: ch, bg: '#999', text: '#fff' };
 // Exportar quantidade vendida pra planilha: por enquanto só Shopify US (mesmo escopo do backend,
 // ver GET /api/products/export em server.js). Outros canais ganham o botão quando o backend abrir.
 const EXPORTABLE_PRODUCT_CHANNELS = new Set(['shopify_us']);
@@ -372,7 +364,7 @@ function applyRefresh() {
 // ── Ordem dos canais (drag and drop) ───────────────────────
 let channelOrder = JSON.parse(localStorage.getItem('coco_produtos_order') || '{}');
 function getOrderedChannels(m) {
-  const base = m === 'us' ? CHANNELS_US : CHANNELS_BR;
+  const base = CocoColors.channelsFor(m);
   const saved = channelOrder[m];
   if (!saved || !saved.length) return base.slice();
   const ordered = saved.filter(ch => base.includes(ch));
@@ -518,7 +510,7 @@ function openBulkPop(e, field, ch, label) {
   e.stopPropagation();
   bulkTarget = { field, ch };
   const pop = document.getElementById('bulkPop');
-  document.getElementById('bulkPopLabel').textContent = `${label} — ${CH_META[ch]?.name || ch}`;
+  document.getElementById('bulkPopLabel').textContent = `${label} — ${CocoColors.chLabel(ch)}`;
   const input = document.getElementById('bulkPopInput');
   input.value = '';
   const rect = e.currentTarget.getBoundingClientRect();
@@ -633,8 +625,7 @@ document.getElementById('syncBtn').addEventListener('click', async () => {
 // ── Painel de Configurações (cores, via colors.js) ──────────
 function buildSettingsPanel() {
   CocoColors.buildSection('sp-ch-colors', CocoColors.DEFAULT_CH, 'ch', k => CocoColors.ch[k].bg, (k, v) => {
-    CocoColors.ch[k] = { bg: v, text: CocoColors.contrastText(v), label: CocoColors.DEFAULT_CH[k].label };
-    CocoColors.save(`ch.${k}`, v);
+    CocoColors.setChannelColor(k, v);
   });
   CocoColors.buildSection('sp-mkt-colors', CocoColors.DEFAULT_MKT, 'mkt', k => CocoColors.mkt[k], (k, v) => {
     CocoColors.mkt[k] = v;
@@ -665,9 +656,11 @@ const setText = (id, t) => { const e = document.getElementById(id); if (e) e.tex
 function logoHTML(meta) {
   if (meta.logo) {
     const cls = meta.logoFill ? 'camp-logo camp-logo-img camp-logo-fill' : 'camp-logo camp-logo-img';
-    return `<div class="${cls}"><img src="${meta.logo}" alt="${meta.name}" draggable="false"></div>`;
+    return `<div class="${cls}"><img src="${meta.logo}" alt="${meta.label}" draggable="false"></div>`;
   }
-  return `<div class="camp-logo" style="background:${meta.color};color:${contrastText(meta.color)}">${meta.badge}</div>`;
+  // Canal sem logo cadastrada: quadro na cor do canal com a inicial. `text` já vem do catálogo
+  // com o contraste calculado, então a letra nunca some no fundo.
+  return `<div class="camp-logo" style="background:${meta.bg};color:${meta.text}">${(meta.label || '?')[0]}</div>`;
 }
 
 function comboBits(p) {
@@ -728,8 +721,8 @@ function rowHTML(p, ch) {
 }
 
 function cardHTML(ch) {
-  const meta = CH_META[ch];
-  const chClass = CHANNELS_US.includes(ch) ? 'ch-us' : 'ch-br';
+  const meta = chMeta(ch);
+  const chClass = meta.market === 'us' ? 'ch-us' : 'ch-br';
   const data = current?.channels?.[ch];
   const products = data?.products || [];
   const rows = products.length
@@ -766,7 +759,7 @@ function cardHTML(ch) {
         <button class="prod-collapse-btn" onclick="toggleCollapse('${ch}')" title="Minimizar/expandir"><i class="bi bi-chevron-down"></i></button>
         ${logoHTML(meta)}
         <div>
-          <div class="camp-ch-name">${meta.name}</div>
+          <div class="camp-ch-name">${meta.label}</div>
           <div class="camp-ch-type">${products.length} produto${products.length === 1 ? '' : 's'}</div>
         </div>
         ${EXPORTABLE_PRODUCT_CHANNELS.has(ch) ? `<button type="button" class="prod-export-btn" onclick="event.stopPropagation();exportProductsCsv('${ch}')" title="Exportar quantidade vendida de cada produto"><i class="bi bi-download"></i> Exportar</button>` : ''}

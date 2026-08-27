@@ -531,8 +531,8 @@ let untilDate = localStorage.getItem('coco_until') || todayISO;
 
 // Canal — dropdown por mercado (mesmos canais do dashboard principal). O backend já
 // filtra os segmentos pelo parâmetro `channel` do /api/dashboard.
-const CH_LABELS = { todos:'Todos', shopify:'Shopify - Coco and Luna BR', shopee:'Shopee', mercadolivre:'Mercado Livre', amazon:'Amazon BR', shopify_us:'Shopify - Coco and Luna EUA', amazon_us:'Amazon EUA', yucaloo_br:'Shopify - Yucaloo BR', yucaloo_us:'Shopify - Yucaloo EUA' };
-const CH_BY_MARKET = { br:['todos','shopify','yucaloo_br','shopee','mercadolivre','amazon'], us:['todos','shopify_us','yucaloo_us','amazon_us'] };
+// Nome e ordem dos canais vêm do catálogo único (js/colors.js), que esta página já carrega
+// no <head> por causa das cores de segmento.
 let channel = 'todos';
 // Estado de expansão dos "top produtos" por segmento (ver mais / ver menos).
 const segExpanded = { cat:false, dog:false, other:false, hidden:false };
@@ -1036,7 +1036,7 @@ function geoStatsHtml(p) {
   const stats = [`<div class="geo-stat"><span class="geo-stat-lbl">Estados alcançados</span><span class="geo-stat-val">${p.byState.length}</span></div>`];
   if (p.byChannel.length) {
     const top = p.byChannel[0];
-    stats.push(`<div class="geo-stat"><span class="geo-stat-lbl">Canal principal</span><span class="geo-stat-val">${CH_LABELS[top.channel] || top.channel} · ${(top.qty / totalQty * 100).toFixed(0)}%</span></div>`);
+    stats.push(`<div class="geo-stat"><span class="geo-stat-lbl">Canal principal</span><span class="geo-stat-val">${CocoColors.chLabel(top.channel)} · ${(top.qty / totalQty * 100).toFixed(0)}%</span></div>`);
   }
   if (p.byState.length) {
     const top = p.byState[0];
@@ -1110,7 +1110,7 @@ function geoDetailHtml(p) {
       </div>` : '';
   const dataHtml = geoViewMode === 'table' ? geoTableHtml(p) : geoViewMode === 'chart' ? geoChartHtml(p) : geoRankingHtml(p);
   const chanItems = p.byChannel.map(c => `
-      <div class="geo-chan-pill"><span class="geo-chan-name">${CH_LABELS[c.channel] || c.channel}</span><span class="geo-chan-qty">${c.qty.toLocaleString('pt-BR')} un</span></div>`).join('');
+      <div class="geo-chan-pill"><span class="geo-chan-name">${CocoColors.chLabel(c.channel)}</span><span class="geo-chan-qty">${c.qty.toLocaleString('pt-BR')} un</span></div>`).join('');
   // Gerenciar o grupo (adicionar/remover produto, desfazer) agora é só na tela Unificador,
   // dentro de Configurações — aqui é só leitura, pra deixar claro por que os números somam.
   const unifiedSection = p._grouped ? `
@@ -1410,7 +1410,7 @@ function render(d) {
   lastProductGeo = d.productGeo || [];
   renderGeoBlocks();
   const up = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
-  const chLbl = CH_LABELS[channel] || channel;
+  const chLbl = CocoColors.chLabel(channel);
   document.getElementById('pageSub').textContent = `Gato vs Cachorro · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · última sincronização: ${up}`;
   document.getElementById('footerDate').textContent = `Vita Pet Life · Segmentos · ${chLbl} · ${rangeLabel(sinceDate, untilDate)} · receita exclui cancelados · última sincronização: ${up}`;
   setLive('ok', `Ao vivo · ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`);
@@ -1453,11 +1453,11 @@ document.querySelectorAll('.mkt-btn').forEach(btn => {
 
 // ── Channel dropdown ──
 function buildChannelDropdown() {
-  const chans = CH_BY_MARKET[market] || ['todos'];
+  const chans = CocoColors.channelsFor(market, { comTodos: true });
   if (!chans.includes(channel)) channel = 'todos';
   document.getElementById('channelPop').innerHTML = chans
-    .map(c => `<button data-ch="${c}" class="${c===channel?'active':''}">${CH_LABELS[c]||c}</button>`).join('');
-  document.getElementById('channelValue').textContent = CH_LABELS[channel] || channel;
+    .map(c => `<button data-ch="${c}" class="${c===channel?'active':''}">${CocoColors.chLabel(c)}</button>`).join('');
+  document.getElementById('channelValue').textContent = CocoColors.chLabel(channel);
 }
 document.getElementById('channelPill').addEventListener('click', e => {
   e.stopPropagation();

@@ -673,11 +673,15 @@ async function render() {
   // ── Mini charts (séries reais) ──
   const metaSeries = d.trend?.metaSpendDaily || labels.map(() => 0);
   drawMini(metaKey, labels, metaSeries, '#1877F2', 'Gasto Meta / dia', 'Gasto');
+  // Cor de canal sempre do catálogo (js/colors.js), nunca escrita aqui: estes três gráficos
+  // eram os últimos lugares onde o hex de um canal ficava solto numa página, e já discordavam
+  // do resto do app — a Amazon BR era laranja aqui e preta em todas as outras telas.
+  const corCanal = k => CocoColors.ch[k]?.bg || '#888';
   if (market === 'br') {
-    drawMini('ml',        labels, tb.map(b => b.mercadolivre || 0), '#FFE600', 'Receita / dia', 'Receita');
-    drawMini('amazon_br', labels, tb.map(b => b.amazon       || 0), '#FF9900', 'Receita / dia', 'Receita');
+    drawMini('ml',        labels, tb.map(b => b.mercadolivre || 0), corCanal('mercadolivre'), 'Receita / dia', 'Receita');
+    drawMini('amazon_br', labels, tb.map(b => b.amazon       || 0), corCanal('amazon'),       'Receita / dia', 'Receita');
   } else {
-    drawMini('amazon', labels, tb.map(b => b.amazon_us || 0), '#FF9900', 'Receita / dia', 'Receita');
+    drawMini('amazon', labels, tb.map(b => b.amazon_us || 0), corCanal('amazon_us'), 'Receita / dia', 'Receita');
   }
 
   // re-renderiza painéis de campanha abertos (mercado/período mudou)
@@ -877,8 +881,7 @@ document.getElementById('syncBtn').addEventListener('click', async () => {
 // ── Painel de configurações (cores) ────────────────────────
 function buildSettingsPanel() {
   CocoColors.buildSection('sp-ch-colors', CocoColors.DEFAULT_CH, 'ch', k => CocoColors.ch[k].bg, (k, v) => {
-    CocoColors.ch[k] = { bg: v, text: CocoColors.contrastText(v), label: CocoColors.DEFAULT_CH[k].label };
-    CocoColors.save(`ch.${k}`, v);
+    CocoColors.setChannelColor(k, v);
   });
   CocoColors.buildSection('sp-mkt-colors', CocoColors.DEFAULT_MKT, 'mkt', k => CocoColors.mkt[k], (k, v) => {
     CocoColors.mkt[k] = v;
