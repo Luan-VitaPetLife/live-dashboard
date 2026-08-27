@@ -33,20 +33,14 @@
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
   /* ── Market toggle ── */
-  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px}
-  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
-  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
-  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
-  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+  /* Seletor Brasil/EUA: a aparência vem do componente compartilhado (.seg/.ps-opt em
+     js/pill-switch.js). Aqui fica só o que é posicionamento desta página. */
 
   /* ── Alternar tipo de gráfico dos cards de canal (barra x linha) — fica acima da lista de
        canais, não mais no header (pedido do Luan, 19/08/2026). ── */
   .camp-grid-tools{display:flex;align-items:center;gap:10px;margin-bottom:12px}
   .camp-grid-tools-label{font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)}
-  .chart-toggle-wrap{display:flex;align-items:center;gap:4px}
-  .chart-type-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s;font-size:13px}
-  .chart-type-btn:hover{border-color:var(--ink);color:var(--text)}
-  .chart-type-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  /* Barra x linha dos mini-gráficos: componente compartilhado (js/pill-switch.js). */
 
   /* ── Filter pill ── */
   .filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none;position:relative}
@@ -211,17 +205,19 @@
 <body>
 
 <script src="js/sidebar.js"></script>
+<script src="js/pill-switch.js"></script>
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
 
 <div class="main">
   <div class="topbar">
-    <div class="mkt-toggle-wrap">
-      <button class="mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
+    <div class="pill-switch mkt-toggle-wrap">
+      <span class="ps-pill" aria-hidden="true"></span>
+      <button class="ps-opt mkt-btn active" id="mktBtnBr" onclick="setMarket('br')">
         <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img"><span>Brasil</span>
       </button>
-      <button class="mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
+      <button class="ps-opt mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
         <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img"><span>EUA</span>
       </button>
     </div>
@@ -310,9 +306,10 @@
          controla (pedido do Luan, 19/08/2026). -->
     <div class="camp-grid-tools">
       <span class="camp-grid-tools-label">Gráfico dos canais</span>
-      <div class="chart-toggle-wrap" id="chartTypeToggle">
-        <button class="chart-type-btn active" data-type="bar" onclick="setCampChartType('bar')" title="Barras"><i class="bi bi-bar-chart-line"></i></button>
-        <button class="chart-type-btn" data-type="line" onclick="setCampChartType('line')" title="Linha"><i class="bi bi-graph-up"></i></button>
+      <div class="pill-switch" id="chartTypeToggle">
+        <span class="ps-pill" aria-hidden="true"></span>
+        <button class="ps-opt chart-type-btn active" data-type="bar" onclick="setCampChartType('bar')" title="Barras"><i class="bi bi-bar-chart-line"></i></button>
+        <button class="ps-opt chart-type-btn" data-type="line" onclick="setCampChartType('line')" title="Linha"><i class="bi bi-graph-up"></i></button>
       </div>
     </div>
 

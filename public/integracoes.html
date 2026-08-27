@@ -46,10 +46,8 @@
   .back-link:hover{color:var(--text)}
 
   /* ── Seletor de modo de visualização ── */
-  .view-switch{display:flex;gap:3px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:3px;flex-shrink:0}
-  .vs-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border:none;background:none;border-radius:7px;font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;font-family:inherit;white-space:nowrap}
-  .vs-btn:hover{color:var(--text)}
-  .vs-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  /* Cards/Colunas/Linhas/Compacto: aparência no componente compartilhado (js/pill-switch.js).
+     Foi este seletor que virou o padrão de todos os outros do app. */
 
   /* ── Retenção de histórico da Amazon (admin) ── */
   .ret-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;gap:14px}
@@ -202,8 +200,6 @@
   }
   @media(max-width:560px){
     .content{padding:20px 16px}
-    .view-switch{width:100%}
-    .vs-btn{flex:1;justify-content:center}
     .integ-flow>.integ-card,.fam-cards>.integ-card{flex-basis:100%}
     .compact-grid{grid-template-columns:repeat(auto-fill,minmax(78px,1fr))}
   }
@@ -212,6 +208,7 @@
 <body>
 
 <script src="js/sidebar.js"></script>
+<script src="js/pill-switch.js"></script>
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 
@@ -228,11 +225,12 @@
         <div class="page-title" style="margin-top:8px">Integrações</div>
         <div class="page-sub">Vita Pet Life · status e controle de cada canal conectado</div>
       </div>
-      <div class="view-switch" id="viewSwitch">
-        <button type="button" class="vs-btn" data-mode="cards"><i class="bi bi-grid-3x3-gap"></i> Cards</button>
-        <button type="button" class="vs-btn" data-mode="colunas"><i class="bi bi-layout-three-columns"></i> Colunas</button>
-        <button type="button" class="vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
-        <button type="button" class="vs-btn" data-mode="compacto"><i class="bi bi-grid-1x2"></i> Compacto</button>
+      <div class="pill-switch pill-switch--full" id="viewSwitch">
+        <span class="ps-pill" aria-hidden="true"></span>
+        <button type="button" class="ps-opt vs-btn active" data-mode="cards"><i class="bi bi-grid-3x3-gap"></i> Cards</button>
+        <button type="button" class="ps-opt vs-btn" data-mode="colunas"><i class="bi bi-layout-three-columns"></i> Colunas</button>
+        <button type="button" class="ps-opt vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
+        <button type="button" class="ps-opt vs-btn" data-mode="compacto"><i class="bi bi-grid-1x2"></i> Compacto</button>
       </div>
     </div>
 

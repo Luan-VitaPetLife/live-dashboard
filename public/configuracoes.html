@@ -76,10 +76,8 @@
   .users-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 
   /* Seletor de modo de visualização (mesmo padrão de integracoes.html) */
-  .view-switch{display:flex;gap:3px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:3px;flex-shrink:0}
-  .vs-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border:none;background:none;border-radius:7px;font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;font-family:inherit;white-space:nowrap}
-  .vs-btn:hover{color:var(--text)}
-  .vs-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  /* Colunas/Linhas: aparência no componente compartilhado (js/pill-switch.js). Foi este
+     seletor que virou o padrão de todos os outros do app. */
 
   .avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;letter-spacing:.5px}
   .user-name{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -142,6 +140,7 @@
 <body>
 
 <script src="js/sidebar.js"></script>
+<script src="js/pill-switch.js"></script>
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 
@@ -226,9 +225,10 @@
           <p class="desc">Quem pode acessar e o que cada pessoa enxerga.</p>
         </div>
         <div class="users-head-actions">
-          <div class="view-switch" id="userViewSwitch">
-            <button type="button" class="vs-btn" data-mode="colunas"><i class="bi bi-grid-3x3-gap"></i> Colunas</button>
-            <button type="button" class="vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
+          <div class="pill-switch" id="userViewSwitch">
+            <span class="ps-pill" aria-hidden="true"></span>
+            <button type="button" class="ps-opt vs-btn active" data-mode="colunas"><i class="bi bi-grid-3x3-gap"></i> Colunas</button>
+            <button type="button" class="ps-opt vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
           </div>
           <button class="btn btn-primary" id="addUserBtn"><i class="bi bi-plus-lg"></i> Adicionar usuário</button>
         </div>

@@ -107,7 +107,7 @@ public/
   *.html                 as 11 páginas (raiz obrigatória)
   favicon.png            convenção de raiz, fica onde está
   css/                   switch.css
-  js/                    sidebar.js colors.js geo.js confirm-modal.js jobs-widget.js
+  js/                    sidebar.js colors.js geo.js pill-switch.js confirm-modal.js jobs-widget.js
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
   img/canais/            logo_* usados nos cards de canal (Campanhas/Produtos/Estoque)
@@ -711,6 +711,36 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   tabelas antigas, se um hex de canal aparecer solto numa página, se um logo apontar pra arquivo
   inexistente, se dois canais tiverem o mesmo nome — e executa o `colors.js` de verdade (com
   dublês de window/localStorage/document) pra testar o comportamento, não só o texto do arquivo.
+
+### Seletor de opção (`public/js/pill-switch.js`, `.pill-switch`)
+- **Padrão único de todo seletor de duas ou mais opções mutuamente exclusivas**: moldura discreta
+  e um pill claro que DESLIZA até a opção ativa. Pedido do Luan (27/08/2026) a partir do
+  Colunas/Linhas de Integrações, que era o único com esse visual. Antes eram quatro aparências
+  pra mesma decisão de interface — `.mkt-btn` (Brasil/EUA, 7 telas), `.chart-type-btn` (tipo de
+  gráfico, 2 telas), `.mode-btn` (Coropleto/Calor) e `.vs-btn` — e três delas marcavam o ativo
+  com fundo escuro em vez do pill.
+- **O componente é PURA APRESENTAÇÃO.** Ele não trata clique, não muda estado, não decide nada:
+  observa (`MutationObserver`) qual botão tem a classe `active` e leva o pill até lá. É o que
+  permitiu converter 9 telas mexendo só em CSS e markup, sem tocar em um handler sequer — cada
+  página continua sendo a única fonte da verdade sobre o que está selecionado. Se um clique for
+  recusado pela lógica da tela, o pill não anda, em vez de mentir e se corrigir depois.
+- Markup: `<div class="pill-switch">` + `<span class="ps-pill">` como PRIMEIRO filho (ele fica
+  atrás e, vindo depois, cobriria o texto) + um `<button class="ps-opt">` por opção. As classes
+  antigas (`mkt-btn`, `vs-btn`, `chart-type-btn`, `mode-btn`) seguem nos botões de propósito:
+  são o gancho dos handlers de cada página, não têm mais CSS de aparência.
+- Variantes: `pill-switch--sm` (só ícone, pro cabeçalho de card) e `pill-switch--full` (ocupa a
+  linha toda, usado no celular em Integrações).
+- **A opção padrão precisa nascer com `active` no HTML.** Quatro seletores marcavam o ativo só
+  via JS, e antes do script rodar o controle aparecia sem nada selecionado.
+- Nome NÃO é `seg`: nesse projeto `seg` já quer dizer segmento de público (gato/cachorro), em
+  `segmentos.html`, em vinte classes `.seg-*` e em `DEFAULT_SEG`/`CocoColors.seg`.
+- `scripts/test/seletores.test.mjs` guarda a estrutura (pill presente e em primeiro, pelo menos
+  duas opções, exatamente uma ativa, script carregado, aparência antiga não ressuscitada) e
+  confere que toda classe citada no CSS do componente existe mesmo no markup — regra apontando
+  pra classe inexistente não dá erro, só deixa de se aplicar, e foi assim que um rename quase
+  devolveu o pill deslizando da borda a cada carga de página.
+- O `.ios-switch` (liga/desliga, `public/css/switch.css`) é outro controle e continua como está:
+  ele não escolhe entre opções, ele liga ou desliga uma coisa.
 
 ### Padrões de UI compartilhados
 - Sidebar (`sidebar.js`), sistema de cores (`colors.js`) e o widget de processos em segundo plano

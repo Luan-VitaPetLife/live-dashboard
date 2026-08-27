@@ -63,11 +63,9 @@
   .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
 
   /* ── Market toggle buttons ── */
-  .mkt-toggle-wrap{display:flex;align-items:center;gap:4px;margin-right:auto}
-  .mkt-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
-  .mkt-btn:hover{border-color:var(--ink);color:var(--text)}
-  .mkt-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
-  .mkt-flag-img{width:18px;height:13px;object-fit:cover;border-radius:2px;flex-shrink:0}
+  /* Seletor Brasil/EUA: a aparência vem do componente compartilhado (.seg/.ps-opt em
+     js/pill-switch.js). Aqui fica só o que é posicionamento desta página. */
+  .mkt-toggle-wrap{margin-right:auto}
 
   /* ── Period picker popup ── */
   .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
@@ -143,10 +141,8 @@
   .ct-top-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
   /* Toggle Geral/Por canal — mesmo visual do seletor de tipo de gráfico do campanhas.html, só
      menor pra caber ao lado do valor no cabeçalho do card. */
-  .chart-type-toggle{display:flex;gap:3px}
-  .chart-type-btn{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:12px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s;font-size:10px;padding:0}
-  .chart-type-btn:hover{border-color:var(--ink);color:var(--text)}
-  .chart-type-btn.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  /* Geral x Por canal, no cabeçalho dos cards: mesma aparência dos outros seletores, na
+     variante compacta (js/pill-switch.js). */
   .ct-expand{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;display:flex;align-items:center}
   .ct-expand:hover{color:var(--text)}
   /* Mesma lógica de crescimento do ch220/ch180 abaixo, aplicada ao anel (Canais/Marketing por
@@ -542,6 +538,7 @@
 <body>
 
 <script src="js/sidebar.js"></script>
+<script src="js/pill-switch.js"></script>
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
@@ -549,12 +546,13 @@
 <div class="main">
   <div class="topbar">
     <!-- Market toggle -->
-    <div class="mkt-toggle-wrap" id="mktToggleWrap">
-      <button class="mkt-btn active" id="mktBtnBr" data-market="br">
+    <div class="pill-switch mkt-toggle-wrap" id="mktToggleWrap">
+      <span class="ps-pill" aria-hidden="true"></span>
+      <button class="ps-opt mkt-btn active" id="mktBtnBr" data-market="br">
         <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img">
         <span>Brasil</span>
       </button>
-      <button class="mkt-btn" id="mktBtnUs" data-market="us">
+      <button class="ps-opt mkt-btn" id="mktBtnUs" data-market="us">
         <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img">
         <span>EUA</span>
       </button>
@@ -693,9 +691,10 @@
           <div class="card-top">
             <div><div class="ct-title" id="trendTitle">Tendência</div><div class="ct-sub" id="trendSub">Ao longo do período</div></div>
             <div class="ct-top-right">
-              <div class="chart-type-toggle" id="trendViewToggle">
-                <button class="chart-type-btn" data-view="geral" onclick="setTrendView('geral')" title="Linha geral"><i class="bi bi-graph-up"></i></button>
-                <button class="chart-type-btn" data-view="canal" onclick="setTrendView('canal')" title="Uma linha por canal"><i class="bi bi-bar-chart-steps"></i></button>
+              <div class="pill-switch pill-switch--sm" id="trendViewToggle">
+                <span class="ps-pill" aria-hidden="true"></span>
+                <button class="ps-opt chart-type-btn active" data-view="geral" onclick="setTrendView('geral')" title="Linha geral"><i class="bi bi-graph-up"></i></button>
+                <button class="ps-opt chart-type-btn" data-view="canal" onclick="setTrendView('canal')" title="Uma linha por canal"><i class="bi bi-bar-chart-steps"></i></button>
               </div>
               <div class="ct-val" id="trendVal">—</div>
               <button class="ct-expand" id="trendExpandBtn" title="Expandir card"><i class="bi bi-arrows-angle-expand"></i></button>
@@ -722,9 +721,10 @@
           <div class="card-top">
             <div><div class="ct-title">Tráfego &amp; conversão</div><div class="ct-sub" id="trafficSub">Shopify · período selecionado</div></div>
             <div class="ct-top-right">
-              <div class="chart-type-toggle" id="trafficViewToggle">
-                <button class="chart-type-btn" data-view="geral" onclick="setTrafficView('geral')" title="Linha geral"><i class="bi bi-graph-up"></i></button>
-                <button class="chart-type-btn" data-view="canal" onclick="setTrafficView('canal')" title="Coco and Luna × Yucaloo"><i class="bi bi-bar-chart-steps"></i></button>
+              <div class="pill-switch pill-switch--sm" id="trafficViewToggle">
+                <span class="ps-pill" aria-hidden="true"></span>
+                <button class="ps-opt chart-type-btn active" data-view="geral" onclick="setTrafficView('geral')" title="Linha geral"><i class="bi bi-graph-up"></i></button>
+                <button class="ps-opt chart-type-btn" data-view="canal" onclick="setTrafficView('canal')" title="Coco and Luna × Yucaloo"><i class="bi bi-bar-chart-steps"></i></button>
               </div>
               <div class="ct-val" id="trafficVal">—</div>
               <button class="ct-expand" id="trafficExpandBtn" title="Expandir card"><i class="bi bi-arrows-angle-expand"></i></button>
