@@ -1,10 +1,9 @@
-// backup.js — snapshot diário do banco pra Backblaze B2.
-// Sem SDK (mesma regra do resto do projeto — ver CLAUDE.md
-// "Dependências mínimas"): API nativa do B2 direto via fetch,
-// igual ao SigV4 feito à mão pra Amazon em amazon.js.
+// backup.js — snapshot diário do banco pra Backblaze B2. Sem SDK (mesma regra do resto do
+// projeto — ver CLAUDE.md "Dependências mínimas"): API nativa do B2 direto via fetch, igual ao
+// SigV4 feito à mão pra Amazon em amazon.js.
 //
-// Motivo: sem plano Pro no Railway, não existe backup automático
-// do Postgres (só um manual antigo) — pedido do Luan, 18/08/2026.
+// Motivo: sem plano Pro no Railway, não existe backup automático do Postgres (só um manual
+// antigo).
 import 'dotenv/config';
 import zlib from 'zlib';
 import crypto from 'crypto';

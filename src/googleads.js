@@ -31,9 +31,9 @@ export function isConfigured() {
   return Boolean(CLIENT_ID && CLIENT_SECRET && DEVELOPER_TOKEN && CUSTOMER_ID);
 }
 
-// URL para o Luan autorizar o app (só precisa ser feito uma vez).
-// `state` (opcional) é usado pela proteção CSRF (double-submit cookie, ver server.js) — OAuth2
-// padrão do Google, o parâmetro é suportado e devolvido de volta no callback.
+// URL para autorizar o app (só precisa ser feito uma vez). `state` (opcional) é usado pela
+// proteção CSRF (double-submit cookie, ver server.js) — OAuth2 padrão do Google, o parâmetro é
+// suportado e devolvido de volta no callback.
 export function buildAuthUrl(state) {
   if (!CLIENT_ID || !REDIRECT) throw new Error('Google Ads não configurado (.env: GOOGLE_ADS_CLIENT_ID / GOOGLE_ADS_REDIRECT_URL).');
   const params = new URLSearchParams({

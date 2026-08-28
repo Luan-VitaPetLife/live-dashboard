@@ -1,26 +1,23 @@
-// jobs-widget.js — indicador flutuante de processos em segundo plano
-// (backfill/imagens/itens da Amazon, geografia via Bling, backup),
-// compartilhado por TODAS as páginas — mesmo padrão do sidebar.js.
+// jobs-widget.js — indicador flutuante de processos em segundo plano (backfill/imagens/itens da
+// Amazon, geografia via Bling, backup), compartilhado por TODAS as páginas — mesmo padrão do
+// sidebar.js.
 //
-// Uso: <script src="js/jobs-widget.js"></script> logo depois de sidebar.js.
-// Sozinho: puxa GET /api/jobs a cada poucos segundos, mostra um card
-// flutuante e arrastável quando há algo rodando, some sozinho um tempo
-// depois de tudo terminar. Continua visível ao navegar pra outra página
-// (cada página carrega o script de novo, mas a posição/tamanho ficam em
-// localStorage — pedido do Luan, 18/08/2026: "quando sair dessa página,
-// a barra de progresso continua na tela"). Redimensionável pelas bordas;
-// cada job em andamento tem um × pra cancelar (com confirmação) e cada
-// job já terminado tem um × pra fechar (sem confirmação — só some da
-// lista); o cabeçalho também tem um × pra fechar o widget inteiro. Fechar
-// (job avulso ou o widget inteiro) sobrevive a trocar de página dentro da
-// mesma aba (sessionStorage) — pedido do Luan, 19/08/2026.
+// Uso: <script src="js/jobs-widget.js"></script> logo depois de sidebar.js. Sozinho: puxa GET
+// /api/jobs a cada poucos segundos, mostra um card flutuante e arrastável quando há algo
+// rodando, some sozinho um tempo depois de tudo terminar. Continua visível ao navegar pra outra
+// página (cada página carrega o script de novo, mas a posição/tamanho ficam em localStorage:
+// "quando sair dessa página, a barra de progresso continua na tela"). Redimensionável pelas
+// bordas; cada job em andamento tem um × pra cancelar (com confirmação) e cada job já terminado
+// tem um × pra fechar (sem confirmação — só some da lista); o cabeçalho também tem um × pra
+// fechar o widget inteiro. Fechar (job avulso ou o widget inteiro) sobrevive a trocar de página
+// dentro da mesma aba (sessionStorage).
 (function () {
   const POS_KEY = 'coco_jobs_widget_pos';
   const SIZE_KEY = 'coco_jobs_widget_size';
   const COLLAPSED_KEY = 'coco_jobs_widget_collapsed';
   // Fechar (× de um job ou o × do cabeçalho) precisa sobreviver a trocar de página — antes só
-  // vivia em variável de memória, então voltava tudo do zero a cada navegação (relatado pelo
-  // Luan, 19/08/2026: "fecho e troco de página, ele volta a aparecer"). sessionStorage em vez de
+  // vivia em variável de memória, então voltava tudo do zero a cada navegação (reportado em
+  // produção: "fecho e troco de página, ele volta a aparecer"). sessionStorage em vez de
   // localStorage de propósito: precisa durar a navegação dentro da mesma aba/sessão, mas não pode
   // durar PARA SEMPRE — se durasse, fechar um "amazon-backfill" hoje esconderia silenciosamente
   // um "amazon-backfill" novo disparado daqui a uma semana (mesmo id, execução diferente); fechar
@@ -47,7 +44,7 @@
     + '.jw-head{display:flex;align-items:center;gap:8px;padding:9px 10px;cursor:grab;user-select:none;'
     // touch-action:none — sem isso, no celular o navegador interpreta o toque como início de
     // scroll da página em vez de entregar os eventos de pointer pro nosso drag (arrastar não
-    // funcionava no mobile, só no desktop com mouse; reportado pelo Luan 19/08/2026).
+    // funcionava no mobile, só no desktop com mouse; reportado em produção).
     + 'touch-action:none;background:var(--surface2);border-bottom:1px solid var(--border2);flex-shrink:0}'
     + '.jw-widget.jw-collapsed .jw-head{border-bottom:none}'
     + '.jw-head:active{cursor:grabbing}'
@@ -179,8 +176,8 @@
       head.releasePointerCapture(e.pointerId);
     });
 
-    // Redimensionar puxando pelas bordas/cantos, igual uma janela normal — pedido do Luan,
-    // 19/08/2026. Puxar por N/W move a origem também (senão o canto oposto "andaria" junto).
+    // Redimensionar puxando pelas bordas/cantos, igual uma janela normal. Puxar por N/W move a
+    // origem também (senão o canto oposto "andaria" junto).
     ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(dir => {
       const handle = document.createElement('div');
       handle.className = 'jw-resize';
@@ -224,10 +221,10 @@
       });
     });
 
-    // Fechar o widget inteiro — pedido do Luan 19/08/2026 ("não consigo simplesmente fechar
-    // ela"). Diferente de minimizar: some de vez, e só volta a aparecer sozinho quando surgir um
-    // job rodando que não existia no momento do fechamento (senão o próprio ato de fechar nunca
-    // "pegaria" durante um processo longo, e o × ficaria inútil).
+    // Fechar o widget inteiro ("não consigo simplesmente fechar ela"). Diferente de minimizar:
+    // some de vez, e só volta a aparecer sozinho quando surgir um job rodando que não existia no
+    // momento do fechamento (senão o próprio ato de fechar nunca "pegaria" durante um processo
+    // longo, e o × ficaria inútil).
     closeBtn.addEventListener('click', e => {
       e.stopPropagation();
       dismissed = true;
@@ -238,8 +235,8 @@
 
     // Cancelar um job em andamento (confirmação antes) ou fechar um já concluído/erro/cancelado
     // (sem confirmação — não desfaz nada, só some da lista; some pra sempre até um novo job desse
-    // tipo rodar) — delegado no body, que é recriado a cada render. Pedido do Luan 19/08/2026:
-    // "não consigo fechar... a tarefa que deu erro".
+    // tipo rodar) — delegado no body, que é recriado a cada render. Decisão de produto: "não
+    // consigo fechar... a tarefa que deu erro".
     body.addEventListener('click', async e => {
       const cancelBtn = e.target.closest('.jw-job-cancel[data-cancel-id]');
       if (cancelBtn) {
@@ -278,7 +275,7 @@
 
     // Concluído/erro/cancelado sempre com a barra cheia e sólida — o "correndo rapidinho" só faz
     // sentido enquanto o processo está de fato rodando sem uma % conhecida ainda (iniciando).
-    // Bug relatado pelo Luan (19/08/2026): job já concluído aparecia com a barrinha animada e só
+    // Bug reportado em produção: job já concluído aparecia com a barrinha animada e só
     // parcialmente preenchida, parecendo travado.
     const indeterminate = running && job.progressPct == null;
     const barClass = indeterminate ? 'jw-bar jw-bar-indeterminate' : 'jw-bar';

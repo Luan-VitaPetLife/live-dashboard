@@ -123,11 +123,10 @@ export async function fetchOrders(sinceISO, untilISO) {
 
     const results = data.results || [];
     for (const o of results) {
-      // Decisão (28/07/2026): só pedido com pagamento de verdade conta como venda.
-      // 'confirmed' (inicial, ainda sem pagamento), 'payment_required' e
-      // 'payment_in_process' (pagamento existe mas não aprovado) somam-se a
-      // cancelled/invalid. 'paid' e 'partially_paid' (teve pagamento real, mesmo que
-      // insuficiente) continuam contando.
+      // Decisão: só pedido com pagamento de verdade conta como venda. 'confirmed' (inicial,
+      // ainda sem pagamento), 'payment_required' e 'payment_in_process' (pagamento existe mas
+      // não aprovado) somam-se a cancelled/invalid. 'paid' e 'partially_paid' (teve pagamento
+      // real, mesmo que insuficiente) continuam contando.
       const cancelled = ['cancelled', 'invalid', 'confirmed', 'payment_required', 'payment_in_process'].includes(o.status);
       out.push({
         id:          'mercadolivre:' + o.id,

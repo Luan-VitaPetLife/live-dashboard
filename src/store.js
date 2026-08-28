@@ -194,11 +194,11 @@ function pgKv(key, value) {
 }
 
 // ── Pedidos ──────────────────────────────────
-// Grava em LOTE (INSERT multi-linha), não uma query por pedido. Um backfill que
-// despejava ~30 mil INSERTs autocommit por chunk gerava um pico de WAL que encheu
-// o disco do Postgres e derrubou o banco (incidente 10/07/2026 — Hobby, sem como
-// aumentar o volume). Em lotes de PG_BATCH linhas, são ~60 statements em vez de
-// 30 mil, com uma fração do WAL. Limite de params do pg é 65535 (2 por linha).
+// Grava em LOTE (INSERT multi-linha), não uma query por pedido. Um backfill que despejava ~30
+// mil INSERTs autocommit por chunk gerava um pico de WAL que encheu o disco do Postgres e
+// derrubou o banco (incidente — Hobby, sem como aumentar o volume). Em lotes de PG_BATCH
+// linhas, são ~60 statements em vez de 30 mil, com uma fração do WAL. Limite de params do pg é
+// 65535 (2 por linha).
 const PG_BATCH = 500;
 
 function pgUpsertOrders(orders) {
@@ -278,8 +278,8 @@ export function pruneOrders({ channels, olderThanIso }) {
 
 // Prévia (sem apagar nada) de quanto uma poda removeria — usado pela tela de Integrações antes
 // de aplicar uma janela de retenção nova, pra mostrar "isso vai apagar N pedidos" e pedir
-// confirmação explícita em vez de deixar a primeira poda de um valor novo acontecer sozinha
-// no próximo sync (ver CLAUDE.md — poda agressiva quase apagou 9 meses em 10/07/2026).
+// confirmação explícita em vez de deixar a primeira poda de um valor novo acontecer sozinha no
+// próximo sync (ver CLAUDE.md — poda agressiva quase apagou 9 meses).
 export function countOrdersOlderThan({ channel, olderThanIso }) {
   const db = load();
   let count = 0;
@@ -362,20 +362,19 @@ export async function restoreSnapshot(snapshot) {
   return { mode: 'postgres', orders: orderRows.length, sessions: sessionRows.length, kvKeys: Object.keys(kvFields).length };
 }
 
-// Preenche items[] (títulos de produto) em pedidos JÁ existentes, sem tocar em
-// total/status — usado pela reconciliação de nomes da Amazon (Reports API), já que
-// o sync de pedidos (Orders API) não traz o título do item. Ver CLAUDE.md 4.7.6 /
-// backlog item 8.
+// Preenche items[] (títulos de produto) em pedidos JÁ existentes, sem tocar em total/status —
+// usado pela reconciliação de nomes da Amazon (Reports API), já que o sync de pedidos (Orders
+// API) não traz o título do item. Ver CLAUDE.md 4.7.6 /backlog item 8.
 //
-// **NÃO insere pedido novo (allowInsert padrão false).** Antes inseria o pedido inteiro
-// quando o id não existia — mas isso abriu um vazamento de mercado: o relatório "BR"
-// (fetchRecentNamedOrders market='br') vinha contaminado com pedidos US (tokens iguais /
-// conta US enxergando o relatório), e como esses ids `amazon-br:<idUS>` não existiam no
-// store, eram INSERIDOS como pedidos Amazon BR com títulos em inglês — inflando a receita
-// do Brasil (incidente 13/07/2026). A reconciliação só deve CORRIGIR TÍTULO de pedido que
-// o sync de pedidos (Orders API, a fonte de verdade do pedido e do seu mercado) já gravou;
-// o sync roda a cada 15 min e sempre insere o pedido antes da reconciliação (a cada 12h),
-// então o insert aqui nunca era necessário de verdade. Ver CLAUDE.md 4.7.8.
+// **NÃO insere pedido novo (allowInsert padrão false).** Antes inseria o pedido inteiro quando
+// o id não existia — mas isso abriu um vazamento de mercado: o relatório "BR"
+// (fetchRecentNamedOrders market='br') vinha contaminado com pedidos US (tokens iguais /conta
+// US enxergando o relatório), e como esses ids `amazon-br:<idUS>` não existiam no store, eram
+// INSERIDOS como pedidos Amazon BR com títulos em inglês — inflando a receita do Brasil
+// (incidente). A reconciliação só deve CORRIGIR TÍTULO de pedido que o sync de pedidos (Orders
+// API, a fonte de verdade do pedido e do seu mercado) já gravou; o sync roda a cada 15 min e
+// sempre insere o pedido antes da reconciliação (a cada 12h), então o insert aqui nunca era
+// necessário de verdade. Ver CLAUDE.md 4.7.8.
 export function patchOrderItems(orders, { allowInsert = false } = {}) {
   const db = load();
   let patched = 0, inserted = 0;
@@ -478,19 +477,18 @@ export function removeAmazonMarketLeak() {
   return ids.length;
 }
 
-// Correção pontual (28/07/2026): decisão de só contar pedido com pagamento de verdade
-// como venda (CLAUDE.md 4.1) — expandiu o que cada canal trata como "não conta" em
-// shopify.js/mercadolivre.js/amazon.js. Pedido já gravado com um desses status continua
-// com cancelled:false (contando errado) até ser re-sincronizado — o sync incremental só
-// busca quem mudou de status recentemente, então o histórico não se autocorrige sozinho.
-// Corrige o flag local de quem já está no banco, sem chamar nenhuma API de novo. Só vira
-// false→true (nunca desfaz um cancelamento real já marcado). Rodar uma vez após o deploy.
+// Correção pontual: decisão de só contar pedido com pagamento de verdade como venda (CLAUDE.md
+// 4.1) — expandiu o que cada canal trata como "não conta" em
+// shopify.js/mercadolivre.js/amazon.js. Pedido já gravado com um desses status continua com
+// cancelled:false (contando errado) até ser re-sincronizado — o sync incremental só busca quem
+// mudou de status recentemente, então o histórico não se autocorrige sozinho. Corrige o flag
+// local de quem já está no banco, sem chamar nenhuma API de novo. Só vira false→true (nunca
+// desfaz um cancelamento real já marcado). Rodar uma vez após o deploy.
 //
 // Substitui a correção pontual anterior (fixAmazonPendingAvailability, mesmo dia) — aquela
-// tratava 'PendingAvailability' como "não deveria estar cancelado"; a decisão de negócio
-// mudou: ele deve ficar de fora mesmo, só que pelo motivo certo (sem pagamento, não
-// cancelamento). Já rodou em produção sem nenhum pedido afetado (fixed:0), então não há
-// nada pra desfazer.
+// tratava 'PendingAvailability' como "não deveria estar cancelado"; a decisão de negócio mudou:
+// ele deve ficar de fora mesmo, só que pelo motivo certo (sem pagamento, não cancelamento). Já
+// rodou em produção sem nenhum pedido afetado (fixed:0), então não há nada pra desfazer.
 // Exportada (não só usada aqui) — metrics.js reaproveita pra rotular pedido "não pago"
 // diferente de cancelado de verdade na busca (ver statusLabelPt / CLAUDE.md 4.7.10).
 export const UNPAID_STATUS_BY_CHANNEL = {
@@ -520,17 +518,17 @@ export function fixUnpaidOrders() {
   return toPersist.length;
 }
 
-// Offset UTC do horário do Pacífico (fuso que a Amazon Seller Central usa nos relatórios
-// da conta US — confirmado ao vivo: Sales Snapshot mostra "taken at ... PDT") pra uma data
-// específica. Diferente do BR (fixo -03:00, sem horário de verão), os EUA trocam de fuso
-// 2x por ano (PDT -07:00 no verão, PST -08:00 no resto) — calculado por data em vez de
-// fixo. Bug corrigido (28/07/2026): antes usava 'Z' (UTC puro) pra cortar o dia da Amazon
-// US — UTC fica até 8h à frente do Pacífico, então "hoje" no nosso sistema pegava um pedaço
-// da noite anterior (horário local) e perdia um pedaço do fim do dia atual, fazendo
-// receita/pedidos "diários" da Amazon US não baterem com o Seller Central (confirmado
-// comparando um dia real: nossa dashboard vinha ~5% acima do Seller Central nesse dia).
-// Ref ao meio-dia UTC daquele dia — sempre depois da 1h da manhã (o horário em que a troca
-// de horário de verão acontece), então nunca cai do lado errado da transição.
+// Offset UTC do horário do Pacífico (fuso que a Amazon Seller Central usa nos relatórios da
+// conta US — confirmado ao vivo: Sales Snapshot mostra "taken at ... PDT") pra uma data
+// específica. Diferente do BR (fixo -03:00, sem horário de verão), os EUA trocam de fuso 2x por
+// ano (PDT -07:00 no verão, PST -08:00 no resto) — calculado por data em vez de fixo. Bug
+// corrigido: antes usava 'Z' (UTC puro) pra cortar o dia da Amazon US — UTC fica até 8h à
+// frente do Pacífico, então "hoje" no nosso sistema pegava um pedaço da noite anterior (horário
+// local) e perdia um pedaço do fim do dia atual, fazendo receita/pedidos "diários" da Amazon US
+// não baterem com o Seller Central (confirmado comparando um dia real: nossa dashboard vinha
+// ~5% acima do Seller Central nesse dia). Ref ao meio-dia UTC daquele dia — sempre depois da 1h
+// da manhã (o horário em que a troca de horário de verão acontece), então nunca cai do lado
+// errado da transição.
 function usOffsetForDate(dateStr) {
   const ref = new Date(dateStr + 'T12:00:00Z');
   const part = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', timeZoneName: 'shortOffset' })

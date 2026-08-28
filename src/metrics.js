@@ -26,10 +26,10 @@ function usOffsetMinutes(date) {
   const mm = m && m[2] ? parseInt(m[2], 10) : 0;
   return (h < 0 ? -1 : 1) * (Math.abs(h) * 60 + mm);
 }
-// Bug corrigido (28/07/2026): usava sempre OFFSET (o fuso do BR, -180min) pra decidir de
-// qual "dia" um pedido é no gráfico de tendência — inclusive pra pedidos da Amazon US, que
-// deviam usar o fuso americano. Fazia o "diário" da Amazon US não bater com o Seller
-// Central (confirmado comparando um dia real, ver store.js getOrders/usOffsetForDate).
+// Bug corrigido: usava sempre OFFSET (o fuso do BR, -180min) pra decidir de qual "dia" um
+// pedido é no gráfico de tendência — inclusive pra pedidos da Amazon US, que deviam usar o fuso
+// americano. Fazia o "diário" da Amazon US não bater com o Seller Central (confirmado
+// comparando um dia real, ver store.js getOrders/usOffsetForDate).
 function localParts(iso, market) {
   const instant = Date.parse(iso);
   const offsetMin = market === 'us' ? usOffsetMinutes(new Date(instant)) : OFFSET;
@@ -109,9 +109,9 @@ function classifyType(item) {
   // productType do Shopify é a fonte autoritativa, mas alguns produtos foram cadastrados com
   // grafias diferentes do mesmo tipo ("Tablets", "Tablet 120", "3 Pack - Tablet") — normaliza por
   // palavra-chave em vez de usar o valor cru, senão a mesma categoria fragmenta em várias pills
-  // (bug reportado 16/07/2026, Segmentos). "Pó" (BR) e "Powder" (US) continuam distintos de
-  // propósito (grafias por mercado, nunca aparecem juntas no mesmo cálculo — sempre filtrado por
-  // market); productType sem palavra-chave reconhecida mantém o valor cru (ex: "Pó").
+  // (bug reportado, Segmentos). "Pó" (BR) e "Powder" (US) continuam distintos de propósito
+  // (grafias por mercado, nunca aparecem juntas no mesmo cálculo — sempre filtrado por market);
+  // productType sem palavra-chave reconhecida mantém o valor cru (ex: "Pó").
   const raw = item.productType || item.title || '';
   const t = raw.toLowerCase();
   for (const [type, kws] of Object.entries(TYPE_KW)) {
@@ -122,8 +122,7 @@ function classifyType(item) {
 
 // Macro-categorias de produto usadas em Segmentos pra organizar o "Top produtos" de cada card
 // (Gato/Cachorro) por tipo — CRIADAS PELO USUÁRIO pela tela (Segmentos → "Tipos de produto"), nada fixo
-// no código (substituiu a 1ª versão hardcoded "Areia x Suplementos" do mesmo dia, 05/08/2026, a
-// pedido do Luan). Cada regra é { nome: [palavra-chave,...] }; a palavra-chave é buscada (contains,
+// no código (substituiu uma 1ª versão hardcoded, "Areia x Suplementos"). Cada regra é { nome: [palavra-chave,...] }; a palavra-chave é buscada (contains,
 // case-insensitive) no título, no productType (Shopify) e em CADA tag do item — "em qualquer lugar",
 // como pedido. A primeira regra que bater (na ordem em que foi criada) vence; sem nenhuma regra
 // cadastrada, ou nenhuma batendo, cai em 'Outros' (nunca quebra, sempre uma string).
@@ -136,11 +135,11 @@ function classifyTypeGroup(it, market) {
   return 'Outros';
 }
 
-// Produtos ocultados manualmente (Segmentos → "Ocultar produtos", pedido do Luan 06/08/2026) —
-// item cuja tag bate (contains, case-insensitive) com alguma palavra-chave cadastrada sai do
-// fluxo normal (segAcc cat/dog/other, productGeo) e vai só pro card "Ocultos". Diferente de
-// classifyTypeGroup: busca SÓ nas tags do item (o pedido foi "produtos com as tags que o usuário
-// escrever"), não em título/productType.
+// Produtos ocultados manualmente (Segmentos → "Ocultar produtos") — item cuja tag bate
+// (contains, case-insensitive) com alguma palavra-chave cadastrada sai do fluxo normal (segAcc
+// cat/dog/other, productGeo) e vai só pro card "Ocultos". Diferente de classifyTypeGroup: busca
+// SÓ nas tags do item (o pedido foi "produtos com as tags que o usuário escrever"), não em
+// título/productType.
 function isHiddenItem(it, market) {
   const hideWords = getProductHiddenTags()[market] || [];
   if (!hideWords.length) return false;
@@ -151,7 +150,7 @@ function isHiddenItem(it, market) {
 const EMPTY_SESSION_ROW = { sessions: 0, visitors: 0, cart: 0, checkout: 0, completed: 0 };
 // channel decide qual loja Shopify entra na soma: 'todos' combina Coco and Luna + Yucaloo (mesmo
 // mercado), um canal específico ('shopify'/'shopify_us' ou 'yucaloo_br'/'yucaloo_us') mostra só a
-// loja dele. Pedido do Luan (18/08/2026): Yucaloo também tem card de Tráfego & conversão.
+// loja dele. Decisão de produto: Yucaloo também tem card de Tráfego & conversão.
 function aggregateSessions(since, until, market = 'br', channel = 'todos') {
   const includeCoco    = channel === 'todos' || channel === 'shopify' || channel === 'shopify_us';
   const includeYucaloo = channel === 'todos' || channel === 'yucaloo_br' || channel === 'yucaloo_us';
@@ -160,10 +159,10 @@ function aggregateSessions(since, until, market = 'br', channel = 'todos') {
   let s = 0, v = 0, c = 0, ck = 0, cp = 0;
   let d = parseISO(since); const end = parseISO(until);
   // seriesCoco/seriesYucaloo: mesmo formato de `series`, mas cada marca sozinha — alimenta o
-  // toggle "Por canal" do card Tráfego & conversão (index.html), pedido do Luan 19/08/2026,
-  // mesmo padrão já usado no card Tendência. Sempre calculado (não só quando channel="todos") —
-  // custa quase nada por cima do que já era somado, e evita duplicar a lógica quando o filtro
-  // muda; o front decide se usa ou não.
+  // toggle "Por canal" do card Tráfego & conversão (index.html), mesmo padrão já usado no card
+  // Tendência. Sempre calculado (não só quando channel="todos") — custa quase nada por cima do
+  // que já era somado, e evita duplicar a lógica quando o filtro muda; o front decide se usa ou
+  // não.
   const series = [], seriesCoco = [], seriesYucaloo = [];
   while (d <= end) {
     const k = isoUTC(d);
@@ -225,25 +224,25 @@ function legacyComboSize(it) {
   return null;
 }
 
-// Alias de título pra produto com nome cadastrado incompleto no Shopify (confirmado por Luan em
-// 08/07/2026): o avulso "SAMe LO" e o combo "SAMe LO 225 - 3 Pack" são o mesmo produto — o nome
-// completo e correto é "SAMe LO 225". Mapeamento pontual (não fundir por aproximação de nome:
-// produtos com o mesmo nome-base podem ser tipos diferentes, ex: Hip & Joint em pó/tablet/soft chews).
+// Alias de título pra produto com nome cadastrado incompleto no Shopify (informado pela empresa): o
+// avulso "SAMe LO" e o combo "SAMe LO 225 - 3 Pack" são o mesmo produto — o nome completo e correto é
+// "SAMe LO 225". Mapeamento pontual (não fundir por aproximação de nome: produtos com o mesmo
+// nome-base podem ser tipos diferentes, ex: Hip & Joint em pó/tablet/soft chews).
 const TITLE_ALIASES = { 'same lo': 'SAMe LO 225' };
 function canonicalTitle(title) {
   const key = (title || '').trim().toLowerCase();
   return TITLE_ALIASES[key] || title;
 }
 
-// Alíquota efetiva de Simples Nacional (DAS sobre o faturamento) — informada pelo Luan em 02/07/2026.
-// É um valor único da empresa (não varia por produto); editável por linha se um produto tiver regra diferente.
+// Alíquota efetiva de Simples Nacional (DAS sobre o faturamento), informada pela empresa. Vale pra
+// empresa toda (não varia por produto); editável por linha se um produto tiver regra diferente.
 const TAX_PCT_DEFAULT = 2.64;
 
-// COG (custo do produto) de referência por linha de produto — informado pelo Luan em 02/07/2026.
-// Vale para o SKU principal citado; variações de tamanho/combo herdam o mesmo valor até serem ajustadas
-// manualmente (o custo real por grama pode diferir). Sem correspondência conhecida, fica null (editável).
-// Família do produto físico (independe de canal/tamanho/combo) — usada tanto pro COG de
-// referência quanto pro panorama agregado de Estoque (ver computeStock/agg).
+// COG (custo do produto) de referência por linha de produto — informado pela empresa. Vale para o SKU
+// principal citado; variações de tamanho/combo herdam o mesmo valor até serem ajustadas manualmente (o
+// custo real por grama pode diferir). Sem correspondência conhecida, fica null (editável). Família do
+// produto físico (independe de canal/tamanho/combo) — usada tanto pro COG de referência quanto pro
+// panorama agregado de Estoque (ver computeStock/agg).
 function classifyFamily(title) {
   const t = (title || '').toLowerCase();
   if (t.includes('daily')) return 'Daily';
@@ -251,7 +250,7 @@ function classifyFamily(title) {
   // Shopee o título descreve os ingredientes em vez de usar o nome "Daily" (ex: "Suplemento Para
   // Gatos Com Taurina, Espirulina E L-Lisina") e por isso também contém "lisina" — a checagem de
   // taurina/espirulina precisa vir ANTES da de lisina/lysine pura, senão cai errado em "Lysine"
-  // (bug real, confirmado 07/07/2026: 20 unidades de ML/Shopee ficavam fora do total de "Daily").
+  // (bug real, confirmado: 20 unidades de ML/Shopee ficavam fora do total de "Daily").
   if (t.includes('taurina') || t.includes('espirulina') || t.includes('spirulina')) return 'Daily';
   if (t.includes('lisina') || t.includes('lysine')) return 'Lysine';
   return null;
@@ -440,16 +439,15 @@ function shopifyCatalogTagsByChannel(market) {
 // FOTO de quando o pedido foi buscado e nunca é re-sincronizado depois — exatamente o mesmo
 // problema que já existia com tag (ver isHiddenProduct/catalogTagsIdx): produto com Type certinho
 // HOJE na Shopify continuava aparecendo sem tipo em Segmentos por causa de um pedido antigo,
-// sincronizado antes do campo "Type" ter sido preenchido no Admin (ou antes da consulta de
-// pedidos passar a buscar esse campo). Reportado pelo Luan, 25/08/2026 — "Daily"/Areia caindo em
-// "Outros" mesmo com o tipo certo cadastrado na Shopify.
-// Por que POR CANAL, e não um índice único pro mercado inteiro (como cheguei a fazer na 1ª
-// versão): o catálogo bruto da Shopify tem título repetido apontando pra produtos DIFERENTES —
-// ex. "Urinary Tract" e "Liver & Kidney" (loja EUA) existem como Tablet, Soft Chews E Powder for
-// Cats ao mesmo tempo, listagens distintas com o mesmo nome de exibição. Um índice único (título
-// → tipo) escolheria um dos três às cegas e classificaria unidade errada. Por canal reduz esse
-// risco (mesma ambiguidade que catalogTagsIdx já aceita hoje pra tag, não pior), mas não elimina
-// de vez — título duplicado dentro do MESMO canal ainda existe nos dados reais.
+// sincronizado antes do campo "Type" ter sido preenchido no Admin (ou antes da consulta de pedidos
+// passar a buscar esse campo). Reportado em produção — "Daily"/Areia caindo em "Outros" mesmo com o
+// tipo certo cadastrado na Shopify. Por que POR CANAL, e não um índice único pro mercado inteiro
+// (como cheguei a fazer na 1ª versão): o catálogo bruto da Shopify tem título repetido apontando
+// pra produtos DIFERENTES — ex. "Urinary Tract" e "Liver & Kidney" (loja EUA) existem como Tablet,
+// Soft Chews E Powder for Cats ao mesmo tempo, listagens distintas com o mesmo nome de exibição. Um
+// índice único (título → tipo) escolheria um dos três às cegas e classificaria unidade errada. Por
+// canal reduz esse risco (mesma ambiguidade que catalogTagsIdx já aceita hoje pra tag, não pior),
+// mas não elimina de vez — título duplicado dentro do MESMO canal ainda existe nos dados reais.
 function shopifyCatalogTypeByChannel(market) {
   const raw = getShopifyProductCatalog();
   const idx = {};
@@ -468,10 +466,10 @@ function shopifyCatalogTypeByChannel(market) {
 // pedidos antigos já gravados continuam com ela presa pra sempre, e a união de tags feita em
 // aggregateProductsByChannel carregava esse resíduo junto indefinidamente. Resultado: um produto
 // com tags limpas HOJE continuava oculto pra sempre por causa de uma tag que nem existe mais
-// (reportado pelo Luan, 17/08/2026 — "Lisina para gatos - 120g" sumia de Produtos/Estoque mesmo
-// com tags atuais "Suplemento"/"Para gatos", sem nenhuma palavra-chave oculta batendo). Catálogo
-// bruto não existe pra Shopee/ML/Amazon (sem endpoint de catálogo, ver SHOPIFY_CATALOG_CHANNELS) —
-// nesses o único dado disponível continua sendo a tag do pedido.
+// (reportado em produção: "Lisina para gatos - 120g" sumia de Produtos/Estoque mesmo com tags
+// atuais "Suplemento"/"Para gatos", sem nenhuma palavra-chave oculta batendo). Catálogo bruto não
+// existe pra Shopee/ML/Amazon (sem endpoint de catálogo, ver SHOPIFY_CATALOG_CHANNELS) — nesses o
+// único dado disponível continua sendo a tag do pedido.
 function isHiddenProduct(channel, title, orderTags, catalogTagsIdx, market) {
   const catTags = catalogTagsIdx[channel]?.[title];
   return isHiddenItem({ tags: catTags !== undefined ? catTags : (orderTags || []) }, market);
@@ -491,8 +489,8 @@ export function listProductCatalog({ market = 'br' } = {}) {
       seen.add(channel + '|||' + title);
     }
   }
-  // Produto cadastrado na Shopify mas nunca vendido (0 pedidos) não aparecia — o Unificador
-  // precisa organizar o catálogo inteiro, não só o que já vendeu (reportado pelo Luan, 06/08/2026).
+  // Produto cadastrado na Shopify mas nunca vendido (0 pedidos) não aparecia — o Unificador precisa
+  // organizar o catálogo inteiro, não só o que já vendeu (reportado em produção).
   const rawCatalog = getShopifyProductCatalog();
   for (const channel of SHOPIFY_CATALOG_CHANNELS[market] || []) {
     for (const p of rawCatalog[channel] || []) {
@@ -542,14 +540,14 @@ function productRevenueRows(validOrders, market, groups, catalogTagsIdx) {
   return rows.filter(p => p.revenue > 0).sort((a, b) => b.revenue - a.revenue);
 }
 
-// Receita/pedidos por estado de entrega. Mesma extração e mesmo motivo da função acima.
-// US: normaliza a grafia do estado ("California"/"CALIFORNIA"/"CA."/"N.Y." → "CA"/"NY"),
-// senão cada variante da Amazon vira uma linha no ranking e o mapa subconta. Ver 4.10/4.7.5.
-// Endereços que não são região dos EUA (províncias do Canadá, etc.) são agrupados num
-// único bucket 'INTL' — não poluem o ranking com cada país, mas não perdem receita.
-// BR: mesmo princípio (ver br-states.js) — nem todo canal grava o estado como código UF; sem
-// normalizar, "SP" e "SÃO PAULO" viravam duas linhas separadas pro mesmo estado (reportado
-// pelo Luan, 07/08/2026, no ranking de "Onde os produtos vendem" e na Geografia BR).
+// Receita/pedidos por estado de entrega. Mesma extração e mesmo motivo da função acima. US:
+// normaliza a grafia do estado ("California"/"CALIFORNIA"/"CA."/"N.Y." → "CA"/"NY"), senão cada
+// variante da Amazon vira uma linha no ranking e o mapa subconta. Ver 4.10/4.7.5. Endereços que
+// não são região dos EUA (províncias do Canadá, etc.) são agrupados num único bucket 'INTL' —
+// não poluem o ranking com cada país, mas não perdem receita. BR: mesmo princípio (ver
+// br-states.js) — nem todo canal grava o estado como código UF; sem normalizar, "SP" e "SÃO
+// PAULO" viravam duas linhas separadas pro mesmo estado (reportado em produção, no ranking de
+// "Onde os produtos vendem" e na Geografia BR).
 function revenueByState(validOrders, market) {
   const byState = {};
   validOrders.forEach(o => {
@@ -656,23 +654,23 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // a quebra avulso x combo (Shopify Bundles e combos legados, ver legacyComboSize). Retornamos o
   // top 5 (topProducts) e a lista completa (topProductsAll) pra permitir expandir o card na revenue.
   const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações) — ver acima
-  // Produto oculto (Unificador → "Ocultar produtos") não pode aparecer em nenhuma lista de produto
-  // fora do card "Ocultos" — antes só computeSegments (Gato/Cachorro/"Onde os produtos vendem") respeitava
-  // isso; Top Produtos, Produtos e Estoque continuavam mostrando o produto normalmente (reportado
-  // pelo Luan, 17/08/2026). isHiddenProduct prioriza a tag atual do catálogo Shopify sobre a tag
-  // presa no pedido (ver isHiddenProduct).
+  // Produto oculto (Unificador → "Ocultar produtos") não pode aparecer em nenhuma lista de produto fora do
+  // card "Ocultos" — antes só computeSegments (Gato/Cachorro/"Onde os produtos vendem") respeitava isso;
+  // Top Produtos, Produtos e Estoque continuavam mostrando o produto normalmente (reportado em produção).
+  // isHiddenProduct prioriza a tag atual do catálogo Shopify sobre a tag presa no pedido (ver
+  // isHiddenProduct).
   const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
   const allProducts = productRevenueRows(valid, market, productGroupsMkt, catalogTagsIdx);
   const topProducts = allProducts.slice(0, 5);
 
-  // por estado (endereço de entrega dos pedidos válidos)
-  // US: normaliza a grafia do estado ("California"/"CALIFORNIA"/"CA."/"N.Y." → "CA"/"NY"),
-  // senão cada variante da Amazon vira uma linha no ranking e o mapa subconta. Ver 4.10/4.7.5.
-  // Endereços que não são região dos EUA (províncias do Canadá, etc.) são agrupados num
-  // único bucket 'INTL' — não poluem o ranking com cada país, mas não perdem receita.
-  // BR: mesmo princípio (ver br-states.js) — nem todo canal grava o estado como código UF; sem
-  // normalizar, "SP" e "SÃO PAULO" viravam duas linhas separadas pro mesmo estado (reportado
-  // pelo Luan, 07/08/2026, no ranking de "Onde os produtos vendem" e na Geografia BR).
+  // por estado (endereço de entrega dos pedidos válidos) US: normaliza a grafia do estado
+  // ("California"/"CALIFORNIA"/"CA."/"N.Y." → "CA"/"NY"), senão cada variante da Amazon vira
+  // uma linha no ranking e o mapa subconta. Ver 4.10/4.7.5. Endereços que não são região dos
+  // EUA (províncias do Canadá, etc.) são agrupados num único bucket 'INTL' — não poluem o
+  // ranking com cada país, mas não perdem receita. BR: mesmo princípio (ver br-states.js) — nem
+  // todo canal grava o estado como código UF; sem normalizar, "SP" e "SÃO PAULO" viravam duas
+  // linhas separadas pro mesmo estado (reportado em produção, no ranking de "Onde os produtos
+  // vendem" e na Geografia BR).
   const byState = revenueByState(valid, market);
 
   // segmentos por espécie (gato vs cão) + tipo de produto
@@ -706,7 +704,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       // Mesma normalização de combo legado usada em aggregateProductsByChannel (ver 4.13.1): um
       // item "3 Pack"/"Combo de N unidades" vendido como SKU próprio (não Shopify Bundles) conta
       // N unidades do produto-base, não 1 — e a venda entra na linha do produto-base, não numa
-      // linha própria minúscula ("3 Pack" reportado 16/07/2026 — 16 pacotes viravam "16 un" de um
+      // linha própria minúscula ("3 Pack" reportado — 16 pacotes viravam "16 un" de um
       // tipo/produto separado em vez de 48 un de Tablets).
       const taggedSize = legacyComboSize(it);
       const title = canonicalTitle(taggedSize ? stripComboSuffix(it.title) : it.title);
@@ -781,26 +779,25 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   const segments = {};
   for (const [k, v] of Object.entries(segAcc)) {
     // Unificador (Configurações) — junta produtos do mesmo grupo manual (mesmo mecanismo de
-    // topProducts/productGeo acima); estava faltando aqui até 05/08/2026 (bug reportado pelo Luan:
+    // topProducts/productGeo acima); estava faltando aqui até então (bug reportado em produção:
     // "ficou sem unificar" em Segmentos — era esta lista, a de "Onde os produtos vendem" já ia).
     let topProducts = Object.entries(v.products)
       .map(([title, d]) => ({ title, qty: d.qty, revenue: d.revenue, avulsoQty: d.avulsoQty, comboQty: d.comboQty, comboBySize: d.comboBySize, type: d.type, typeGroup: d.typeGroup }));
     // typeGroup: macro-categoria criada pelo usuário (Segmentos → "Tipos de produto", ver
-    // classifyTypeGroup) usada pra organizar "Top produtos" por tipo em vez de uma lista só.
-    // `type` (Pó/Powder/Tablets/...) segue o MESMO princípio, e pelo MESMO motivo: um produto
-    // unificado no Unificador é UM produto físico só, vendido por vários canais/títulos — e só o
-    // membro Shopify carrega o campo "Type" de verdade (Shopee/ML/Amazon não têm esse conceito, e
-    // o próprio Shopify só popula em parte dos cadastros). `preferNonDefault` (não `pickFirst`):
-    // qualquer membro do grupo com um tipo real vence, mesmo que não seja o primeiro da lista —
-    // "Lysine"/"Daily"/as Areias tinham a maioria das unidades vindas de títulos SEM Type
-    // cadastrado (Amazon/Shopee, ou variante Shopify legada) enquanto o título Shopify "de
-    // verdade" tinha "Pó" certinho; com pickFirst, se esse título Shopify não fosse o primeiro do
-    // grupo, TODO o grupo perdia o tipo. Reportado pelo Luan, 25/08/2026, com prints mostrando
-    // "Lysine"/"Daily"/a Areia caindo quase inteiros em "Outros" apesar de serem produtos de Pó
-    // conhecidos e já unificados.
-    // applyGroupTypes vem DEPOIS e tem a palavra final: `preferNonDefault` resolve o tipo a partir
-    // dos membros que venderam no período (bom como último recurso, instável como fonte principal),
-    // e resolveGroupTypes resolve a partir da definição do grupo, que não muda com a data escolhida.
+    // classifyTypeGroup) usada pra organizar "Top produtos" por tipo em vez de uma lista só. `type`
+    // (Pó/Powder/Tablets/...) segue o MESMO princípio, e pelo MESMO motivo: um produto unificado no
+    // Unificador é UM produto físico só, vendido por vários canais/títulos — e só o membro Shopify
+    // carrega o campo "Type" de verdade (Shopee/ML/Amazon não têm esse conceito, e o próprio Shopify
+    // só popula em parte dos cadastros). `preferNonDefault` (não `pickFirst`): qualquer membro do
+    // grupo com um tipo real vence, mesmo que não seja o primeiro da lista — "Lysine"/"Daily"/as
+    // Areias tinham a maioria das unidades vindas de títulos SEM Type cadastrado (Amazon/Shopee, ou
+    // variante Shopify legada) enquanto o título Shopify "de verdade" tinha "Pó" certinho; com
+    // pickFirst, se esse título Shopify não fosse o primeiro do grupo, TODO o grupo perdia o tipo.
+    // Reportado em produção, com prints mostrando "Lysine"/"Daily"/a Areia caindo quase inteiros em
+    // "Outros" apesar de serem produtos de Pó conhecidos e já unificados. applyGroupTypes vem DEPOIS
+    // e tem a palavra final: `preferNonDefault` resolve o tipo a partir dos membros que venderam no
+    // período (bom como último recurso, instável como fonte principal), e resolveGroupTypes resolve
+    // a partir da definição do grupo, que não muda com a data escolhida.
     topProducts = applyGroupTypes(applyProductGroups(topProducts, productGroupsMkt, {
       sumKeys: ['qty', 'revenue', 'avulsoQty', 'comboQty'],
       objSumKeys: ['comboBySize'],
@@ -1034,16 +1031,15 @@ export function exportOrdersList({ market = 'br', channel = 'todos', since, unti
 
 // Agrupa itens de uma lista de pedidos por canal → por título de produto (com quebra avulso x
 // combo, Shopify Bundles, tipo e imagem). Compartilhado por computeProducts e computeStock —
-// mesma regra de agrupamento usada em Top Produtos/Segmentos.
-// Escala a receita dos ITENS ao total CAPTURADO do pedido. Os itens da Amazon vêm do relatório
-// com preço BRUTO, e pedidos Pending têm total 0 até a captura no envio — sem escalar, a receita
-// por produto soma pedidos não capturados a preço cheio e estoura (num dia de US$ 5k capturado,
-// Segmentos/Produtos mostravam US$ 17k). O total do pedido (`o.total`) é a fonte de verdade da
-// receita em todo o app; na Amazon distribuímos ele entre os itens na proporção do preço deles.
-// Ver CLAUDE.md 4.7.6.
-// Outros canais normalmente devolvem fator 1 (item.amount já é a receita líquida do produto) —
-// EXCETO quando o pedido não gerou receita nenhuma (`o.total === 0`) mas os itens carregam preço
-// de catálogo mesmo assim. Achado testando a exportação de Produtos (Shopify US, 03/08/2026):
+// mesma regra de agrupamento usada em Top Produtos/Segmentos. Escala a receita dos ITENS ao
+// total CAPTURADO do pedido. Os itens da Amazon vêm do relatório com preço BRUTO, e pedidos
+// Pending têm total 0 até a captura no envio — sem escalar, a receita por produto soma pedidos
+// não capturados a preço cheio e estoura (num dia de US$ 5k capturado, Segmentos/Produtos
+// mostravam US$ 17k). O total do pedido (`o.total`) é a fonte de verdade da receita em todo o
+// app; na Amazon distribuímos ele entre os itens na proporção do preço deles. Ver CLAUDE.md
+// 4.7.6. Outros canais normalmente devolvem fator 1 (item.amount já é a receita líquida do
+// produto) — EXCETO quando o pedido não gerou receita nenhuma (`o.total === 0`) mas os itens
+// carregam preço de catálogo mesmo assim. Achado testando a exportação de Produtos (Shopify US):
 // pedidos com `customer: "Walmart DFW6s"` (fulfillment por atacado — o Shopify só despacha, quem
 // cobra é o Walmart) chegam com `status: PAID`/`cancelled: false` e `total: 0`, mas item com
 // `qty`/`amount` de catálogo cheio (ex: 72 un. a preço unitário normal). Sem essa guarda, cada
@@ -1236,8 +1232,8 @@ export function computeProducts({ market = 'br', since, until } = {}) {
 // em 30 — usado pra converter vendas do período em vendas/dia (salesDaily).
 const STOCK_WINDOW_DAYS = 30;
 
-// Sugestão de reposição a partir do Tempo de Estoque com Produção (totalMonthsOfStock).
-// Limites definidos pelo Luan em 06/07/2026: <3 meses = urgente, 3–7 = atenção, >=7 = aguardar.
+// Sugestão de reposição a partir do Tempo de Estoque com Produção (totalMonthsOfStock). Limites
+// definidos pela empresa: <3 meses = urgente, 3–7 = atenção, >=7 = aguardar.
 function stockSuggestion(months) {
   if (months == null) return null;
   if (months < 3) return 'urgente';
@@ -1316,8 +1312,8 @@ export function computeStock({ market = 'br', since, until } = {}) {
     // título por SKU/listagem, mesmo quando o Unificador já tinha um grupo juntando duplicatas do
     // mesmo produto físico (comum em Amazon/Shopee, onde o mesmo produto aparece com título
     // ligeiramente diferente por listagem). Só o "Panorama geral" (cross-canal) respeitava o grupo;
-    // o card por canal, não (reportado pelo Luan, 17/08/2026). monthsOfStock é recalculado depois
-    // do merge porque é uma razão, não soma diretamente.
+    // o card por canal, não (reportado em produção). monthsOfStock é recalculado depois do merge
+    // porque é uma razão, não soma diretamente.
     products = applyGroupTypes(applyProductGroups(products, productGroupsMkt, {
       sumKeys: ['avulsoQty', 'comboQty', 'salesDaily', 'salesMonth', 'stock', 'incoming'],
       objSumKeys: ['comboBySize'],

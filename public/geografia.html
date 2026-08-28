@@ -681,8 +681,8 @@ function setLive(s,t) {
 
 // ── Leaflet map ──
 // Sem maxBounds de propósito — só usado pra enquadrar a vista inicial de cada mercado
-// (fitBounds), não pra travar o arraste. Pedido do Luan, 20/08/2026: tirar a trava de
-// arrastar o mapa (tanto BR quanto EUA ficavam presos numa caixa ao redor do país).
+// (fitBounds), não pra travar o arraste. Decisão de produto: tirar a trava de arrastar o mapa
+// (tanto BR quanto EUA ficavam presos numa caixa ao redor do país).
 const MAP_VIEW = {
   br: { center:[-15,-52], bounds:[[-33.75,-73.99],[5.26,-28.84]] },
   us: { center:[38,-97],  bounds:[[24.0,-125.0],[49.5,-66.5]] },
@@ -694,13 +694,13 @@ function applyMapView(m) {
 applyMapView(market);
 
 // ── Fundo do mapa: Esri "Light Gray Canvas" ──
-// A CartoDB Voyager, usada até 27/08/2026, passou a exigir chave de API e começou a devolver o
-// tile com "API KEY REQUIRED" carimbado por cima do mapa. O tile chega com HTTP 200 e imagem
-// válida, então nada falha: a marca d'água simplesmente aparece na tela do usuário. Trocado por
-// um provedor sem chave. Cinza claro combina melhor com o coroplético do que o Voyager colorido:
-// o mapa aqui é fundo, não pode disputar cor com o dado desenhado por cima.
-// São DUAS camadas de propósito — a base do Esri não traz nome de cidade nenhum, os rótulos vêm
-// separados. Ordem importa: rótulo depois da base.
+// A CartoDB Voyager, usada até então, passou a exigir chave de API e começou a devolver o tile
+// com "API KEY REQUIRED" carimbado por cima do mapa. O tile chega com HTTP 200 e imagem válida,
+// então nada falha: a marca d'água simplesmente aparece na tela do usuário. Trocado por um
+// provedor sem chave. Cinza claro combina melhor com o coroplético do que o Voyager colorido: o
+// mapa aqui é fundo, não pode disputar cor com o dado desenhado por cima. São DUAS camadas de
+// propósito — a base do Esri não traz nome de cidade nenhum, os rótulos vêm separados. Ordem
+// importa: rótulo depois da base.
 let tileAtual = null;
 function setTileLayer() {
   if (tileAtual) { map.removeLayer(tileAtual.base); map.removeLayer(tileAtual.rotulos); }

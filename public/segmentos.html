@@ -677,8 +677,8 @@ function toggleSegExpand(key) {
 }
 
 // Separa os "top produtos" de um card em Areia x Suplementos (classifyTypeGroup no backend, ver
-// metrics.js) — pedido do Luan: mais organizado que uma lista só misturando os dois. `cardKey` é
-// 'cat' | 'dog' | 'other'.
+// metrics.js) — decisão de produto: mais organizado que uma lista só misturando os dois.
+// `cardKey` é 'cat' | 'dog' | 'other'.
 function prodByTypeGroupHtml(products, cardKey) {
   if (!products || !products.length) return '<div class="seg-empty">Sem produtos no período</div>';
   const buckets = {};
@@ -847,10 +847,10 @@ let geoLayoutMode = localStorage.getItem('coco_seg_geolayout') || 'rows';       
 let geoSearchQuery = '';                                                        // filtro por título, client-side (não persiste entre sessões)
 function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// "Unificar" deixou de ser uma opção local desta tela (16/07 → 05/08/2026): agora é global,
-// gerenciado na tela Unificador (dentro de Configurações) e já aplicado pelo backend em
-// `productGeo` quando ligado — ver metrics.js applyProductGroups. Aqui só exibimos o resultado
-// (badge 🔗 nas linhas já agrupadas, ver geoProdRowHtml), sem toggle nem criação de grupo.
+// "Unificar" deixou de ser uma opção local desta tela: agora é global, gerenciado na tela
+// Unificador (dentro de Configurações) e já aplicado pelo backend em `productGeo` quando ligado
+// — ver metrics.js applyProductGroups. Aqui só exibimos o resultado (badge 🔗 nas linhas já
+// agrupadas, ver geoProdRowHtml), sem toggle nem criação de grupo.
 const GEO_CHART_MAX = 12; // nº de estados no modo Gráfico (o resto continua em Ranking/Tabela)
 
 function destroyGeoMap() {

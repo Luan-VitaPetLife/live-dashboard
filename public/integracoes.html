@@ -629,7 +629,7 @@ $('viewSwitch').addEventListener('click', e => {
 // "Dias de histórico desejado": se for menos do que já existe, poda (pede prévia + confirmação,
 // só essa ação apaga pedido de verdade); se for mais, busca automaticamente o que falta
 // (backfill, não precisa de confirmação — só soma). Nunca os dois separados, evita confundir
-// "isso soma com aquilo?" (pergunta real do Luan, 18/08/2026). Ver server.js /api/amazon/history.
+// "isso soma com aquilo?" (pergunta real de quem usa a tela). Ver server.js /api/amazon/history.
 const RET_MARKET_LABEL = { br: 'BR', us: 'EUA' };
 let retBackfillPolling = null;
 function retCoverageText(info){

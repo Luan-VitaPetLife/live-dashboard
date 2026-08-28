@@ -555,8 +555,8 @@ async function render() {
   const k = d.kpis || {}, ml = d.mlBreakdown || {}, cs = d.channelSplit || {};
   const labels = d.trend?.labels || [], tb = d.trend?.byChannel || [];
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
-  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html;
-  // aqui ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho (pedido do Luan, 19/08/2026).
+  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html; aqui
+  // ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho.
   const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
   setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
   setText('pageSub', 'Vita Pet Life · ' + state.label);
@@ -755,7 +755,7 @@ function drawMini(key, labels, data, color, headerTxt, legendTxt) {
       extraCssText:'border-radius:8px;box-shadow:0 8px 20px rgba(30,28,24,.14);', appendToBody:true, confine:true,
       textStyle:{ fontFamily:EC_FONT_FAMILY, fontSize:11 },
       // key===valor monetário em todo card de canal (Gasto Meta, Receita ML/Amazon) — sempre com
-      // R$/US$ no tooltip, nunca número cru (pedido do Luan, 18/08/2026).
+      // R$/US$ no tooltip, nunca número cru.
       formatter: params => params.length ? `${params[0].axisValueLabel}<br>${params[0].marker} ${fmtMoney(params[0].value)}` : '' },
     series: [miniSeries(data, color)],
   });
