@@ -453,10 +453,6 @@ export async function fetchOrders(sinceISO, untilISO) {
   return results;
 }
 
-export async function fetchOrdersBR() {
-  return []; // BR já vem incluído em fetchOrders
-}
-
 // Reports API — backfill histórico
 //
 // Paginar /orders/v0/orders para trás é inviável: 100 pedidos por página a 1 req/min.
