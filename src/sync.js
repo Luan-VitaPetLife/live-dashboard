@@ -1,8 +1,6 @@
-// ─────────────────────────────────────────────
-//  sync.js — busca dados dos canais e grava no store.
-//  Pode rodar via "npm run sync" (uma vez) ou pelo
-//  agendador do server.js (a cada N minutos).
-// ─────────────────────────────────────────────
+// sync.js — busca dados dos canais e grava no store.
+// Pode rodar via "npm run sync" (uma vez) ou pelo
+// agendador do server.js (a cada N minutos).
 
 import 'dotenv/config';
 import * as shopify from './shopify.js';
@@ -120,9 +118,8 @@ async function doSync() {
       report.yucaloo_br = orders.length;
     } catch (e) { report.errors.push('yucaloo_br.orders: ' + e.message); }
 
-    // Yucaloo BR — sessões diárias (loja Shopify própria, balde separado da Coco and Luna —
-    // ver storeYucalooSessions/CLAUDE.md). Card "Tráfego & conversão" da Visão geral, pedido
-    // do Luan 18/08/2026.
+    // Yucaloo BR — sessões diárias (loja Shopify própria, balde separado da Coco and Luna — ver
+    // storeYucalooSessions/CLAUDE.md). Card "Tráfego & conversão" da Visão geral.
     try {
       const sessions = await shopifyYucaloo.fetchSessionsDaily('br', 90);
       storeYucalooSessions('br', sessions);
@@ -275,16 +272,15 @@ async function doSync() {
   } catch (e) { report.errors.push('amazon.orders: ' + e.message); }
 
   // Poda de retenção da Amazon: mantém só os últimos N dias, por mercado (BR/EUA configurados
-  // separadamente na tela Integrações, kv.amazonRetentionConfig — pedido do Luan 18/08/2026,
-  // Amazon EUA sozinha tem ~342 mil pedidos/ano, Amazon BR só ~200). Mercado sem config própria
-  // ainda cai no legado AMAZON_RETENTION_DAYS (env var) — preserva o comportamento já ativo em
-  // produção (365, BR+US juntos) até o usuário mudar algo pela tela.
-  // **A primeira poda de uma janela nova nunca acontece sozinha aqui** — mudar o número na tela
-  // só grava a config depois de o usuário confirmar (ver POST /api/amazon/retention, que já
-  // aplica a poda inicial na hora, com prévia de quantos pedidos seriam apagados). Este bloco só
-  // continua a poda incremental de dia-a-dia depois disso (a poda com padrão agressivo quase
-  // apagou 9 meses recém-recuperados em 10/07/2026 — daí o cuidado). Só Amazon; Shopify/
-  // Shopee/ML ficam completos. Ver CLAUDE.md 4.7.7.
+  // separadamente na tela Integrações, kv.amazonRetentionConfig, Amazon EUA sozinha tem ~342 mil
+  // pedidos/ano, Amazon BR só ~200). Mercado sem config própria ainda cai no legado
+  // AMAZON_RETENTION_DAYS (env var) — preserva o comportamento já ativo em produção (365, BR+US
+  // juntos) até o usuário mudar algo pela tela. **A primeira poda de uma janela nova nunca
+  // acontece sozinha aqui** — mudar o número na tela só grava a config depois de o usuário
+  // confirmar (ver POST /api/amazon/retention, que já aplica a poda inicial na hora, com prévia
+  // de quantos pedidos seriam apagados). Este bloco só continua a poda incremental de dia-a-dia
+  // depois disso (a poda com padrão agressivo quase apagou 9 meses recém-recuperados — daí o
+  // cuidado). Só Amazon; Shopify/Shopee/ML ficam completos. Ver CLAUDE.md 4.7.7.
   try {
     const legacyDefault = Number(process.env.AMAZON_RETENTION_DAYS || 0);
     const retentionCfg = getAmazonRetentionConfig();

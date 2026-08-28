@@ -1,12 +1,10 @@
-// ─────────────────────────────────────────────
-//  sidebar.js — Sidebar única e compartilhada por TODAS as páginas.
-//  A sidebar não muda de página para página (as opções são sempre as mesmas),
-//  então fica definida UMA vez aqui em vez de duplicada em cada .html.
+// sidebar.js — Sidebar única e compartilhada por TODAS as páginas.
+// A sidebar não muda de página para página (as opções são sempre as mesmas),
+// então fica definida UMA vez aqui em vez de duplicada em cada .html.
 //
-//  Uso na página: colocar <script src="js/sidebar.js"></script> logo após <body>.
-//  O componente injeta o markup, marca o item ativo pela URL atual e liga
-//  o comportamento de abrir/fechar (desktop e mobile). Nada mais é necessário.
-// ─────────────────────────────────────────────
+// Uso na página: colocar <script src="js/sidebar.js"></script> logo após <body>.
+// O componente injeta o markup, marca o item ativo pela URL atual e liga
+// o comportamento de abrir/fechar (desktop e mobile). Nada mais é necessário.
 
 // Escapa texto vindo de dado externo (nome de cliente, título de produto etc.) antes de
 // interpolar em innerHTML — evita XSS armazenado a partir de pedido/produto malicioso.
@@ -107,20 +105,20 @@ window.initCollapsibleNotice = initCollapsibleNotice;
 </nav>
 <button id="sidebarOpen" class="sidebar-open-btn" title="Abrir menu"><i class="bi bi-layout-sidebar"></i></button>`;
 
-  // CSS do componente sidebar — vive AQUI (fonte única), não duplicado em cada .html.
-  // As páginas só cuidam do próprio layout (.main/.topbar/.content). Usa as variáveis
-  // de tema (--side-*, --border2, etc.) definidas no :root de cada página. As páginas de
-  // Geografia sobrescrevem só o z-index (`body .sidebar{z-index:3000}`, maior especificidade)
-  // por causa das camadas do Leaflet. Ver CLAUDE.md (backlog "CSS da sidebar duplicado").
-  // Colapsada, a sidebar não some mais da tela (era transform:translateX(-100%), some por
-  // completo, e um botão flutuante fora dela — .sidebar-open-btn — reaparecia por cima do
-  // conteúdo da página pra reabrir; ficava em cima dos seletores de país em campanhas.html,
-  // reportado pelo Luan 19/08/2026). Agora colapsa pra uma faixa fina só de ícones (width
-  // 180px→64px, padrão pedido pelo Luan a partir de uma referência visual) — o botão de
-  // abrir/fechar continua dentro da própria sidebar nos dois estados, nunca mais um elemento
-  // solto flutuando por cima da página. Os 64px aqui precisam bater com o `margin-left` de
-  // `body.sidebar-hidden .main` em cada página (ver CLAUDE.md) — as duas precisam concordar,
-  // senão o conteúdo da página desliza por baixo da faixa de ícones (ou sobra um vão vazio).
+  // CSS do componente sidebar — vive AQUI (fonte única), não duplicado em cada .html. As
+  // páginas só cuidam do próprio layout (.main/.topbar/.content). Usa as variáveis de tema
+  // (--side-*, --border2, etc.) definidas no :root de cada página. As páginas de Geografia
+  // sobrescrevem só o z-index (`body .sidebar{z-index:3000}`, maior especificidade) por causa
+  // das camadas do Leaflet. Ver CLAUDE.md (backlog "CSS da sidebar duplicado"). Colapsada, a
+  // sidebar não some mais da tela (era transform:translateX(-100%), some por completo, e um
+  // botão flutuante fora dela — .sidebar-open-btn — reaparecia por cima do conteúdo da página
+  // pra reabrir; ficava em cima dos seletores de país em campanhas.html, reportado em
+  // produção). Agora colapsa pra uma faixa fina só de ícones (width 180px→64px, padrão pedido a
+  // partir de uma referência visual) — o botão de abrir/fechar continua dentro da própria
+  // sidebar nos dois estados, nunca mais um elemento solto flutuando por cima da página. Os
+  // 64px aqui precisam bater com o `margin-left` de `body.sidebar-hidden .main` em cada página
+  // (ver CLAUDE.md) — as duas precisam concordar, senão o conteúdo da página desliza por baixo
+  // da faixa de ícones (ou sobra um vão vazio).
   const baseCss = `
 .sidebar{width:180px;min-height:100vh;background:var(--side-bg);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;z-index:200;transition:width .25s cubic-bezier(.4,0,.2,1)}
 /* Cabeçalho (logo+texto) no mesmo tamanho/layout da sidebar de dashboard-social-media

@@ -1,20 +1,17 @@
-// ─────────────────────────────────────────────
-//  br-states.js — normalização de estado do Brasil
+// br-states.js — normalização de estado do Brasil
 //
-//  O campo `state` de um pedido nem sempre chega como o código UF de 2 letras —
-//  alguns canais gravam o nome por extenso, com grafias diferentes ("São Paulo",
-//  "SAO PAULO", "sao paulo"...). Sem normalizar, cada variante vira uma chave
-//  distinta em `byState`/`productGeo` (metrics.js), duplicando o mesmo estado no
-//  ranking de Geografia BR e no card "Onde os produtos vendem" (Segmentos) — ex.:
-//  "SP" e "SÃO PAULO" aparecendo como duas linhas separadas pro mesmo estado
-//  (reportado pelo Luan, 07/08/2026). Mesmo princípio já usado pros EUA, ver
-//  us-states.js — só que lá a Amazon é a fonte da inconsistência; aqui pode vir
-//  de qualquer canal que grave o nome por extenso em vez do código.
+// O campo `state` de um pedido nem sempre chega como o código UF de 2 letras — alguns canais
+// gravam o nome por extenso, com grafias diferentes ("São Paulo", "SAO PAULO", "sao paulo"...).
+// Sem normalizar, cada variante vira uma chave distinta em `byState`/`productGeo` (metrics.js),
+// duplicando o mesmo estado no ranking de Geografia BR e no card "Onde os produtos vendem"
+// (Segmentos) — ex.: "SP" e "SÃO PAULO" aparecendo como duas linhas separadas pro mesmo estado
+// (reportado em produção). Mesmo princípio já usado pros EUA, ver us-states.js — só que lá a
+// Amazon é a fonte da inconsistência; aqui pode vir de qualquer canal que grave o nome por
+// extenso em vez do código.
 //
-//  normalizeBrState() reduz qualquer variante ao código de 2 letras (uppercase).
-//  O que não for reconhecível volta só com acentos removidos e espaços
-//  colapsados — não some, só não vira código.
-// ─────────────────────────────────────────────
+// normalizeBrState() reduz qualquer variante ao código de 2 letras (uppercase). O que não for
+// reconhecível volta só com acentos removidos e espaços colapsados — não some, só não vira
+// código.
 
 const CODES = new Set([
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',

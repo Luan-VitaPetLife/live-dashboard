@@ -1,17 +1,15 @@
-// ─────────────────────────────────────────────
-//  googleads.js — Google Ads API (campanhas de busca/display)
-//  Usa OAuth 2.0 (authorization_code) e renova o access_token
-//  automaticamente via refresh_token (não expira).
+// googleads.js — Google Ads API (campanhas de busca/display)
+// Usa OAuth 2.0 (authorization_code) e renova o access_token
+// automaticamente via refresh_token (não expira).
 //
-//  Escopo atual: só conta EUA ("Coco and Luna", Customer ID 134-411-4329)
-//  roda campanhas nos EUA — ver CLAUDE.md.
+// Escopo atual: só conta EUA ("Coco and Luna", Customer ID 134-411-4329)
+// roda campanhas nos EUA — ver CLAUDE.md.
 //
-//  Passos (uma vez):
-//   1. Acesse GET /googleads/connect → redireciona para o Google autorizar.
-//   2. Após autorizar, o Google chama /googleads/callback?code=...
-//      e o código é trocado por access_token + refresh_token (salvos no store).
-//   Depois disso, fetchCampaigns() funciona e o token se renova sozinho.
-// ─────────────────────────────────────────────
+// Passos (uma vez):
+//  1. Acesse GET /googleads/connect → redireciona para o Google autorizar.
+//  2. Após autorizar, o Google chama /googleads/callback?code=...
+//     e o código é trocado por access_token + refresh_token (salvos no store).
+//  Depois disso, fetchCampaigns() funciona e o token se renova sozinho.
 import 'dotenv/config';
 import { getGoogleAdsTokens, setGoogleAdsTokens } from './store.js';
 
@@ -33,9 +31,9 @@ export function isConfigured() {
   return Boolean(CLIENT_ID && CLIENT_SECRET && DEVELOPER_TOKEN && CUSTOMER_ID);
 }
 
-// URL para o Luan autorizar o app (só precisa ser feito uma vez).
-// `state` (opcional) é usado pela proteção CSRF (double-submit cookie, ver server.js) — OAuth2
-// padrão do Google, o parâmetro é suportado e devolvido de volta no callback.
+// URL para autorizar o app (só precisa ser feito uma vez). `state` (opcional) é usado pela
+// proteção CSRF (double-submit cookie, ver server.js) — OAuth2 padrão do Google, o parâmetro é
+// suportado e devolvido de volta no callback.
 export function buildAuthUrl(state) {
   if (!CLIENT_ID || !REDIRECT) throw new Error('Google Ads não configurado (.env: GOOGLE_ADS_CLIENT_ID / GOOGLE_ADS_REDIRECT_URL).');
   const params = new URLSearchParams({

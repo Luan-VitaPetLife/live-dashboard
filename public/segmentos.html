@@ -17,6 +17,7 @@
      --cat/--dog/--other usadas pelo CSS logo abaixo, então precisa chegar antes da primeira
      pintura, senão as barras/acentos dos cards nascem sem cor por um instante. -->
 <script src="js/colors.js"></script>
+<script src="js/periodo.js"></script>
 <script src="js/geo.js"></script>
 <style>
   :root{ color-scheme:light;
@@ -548,10 +549,7 @@ function fmtMoney(v) {
   if (market === 'us') return '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   return v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 }
-function rangeLabel(s, u) {
-  const fmt = d => { const [y,m,dd]=d.split('-'); return `${dd}/${m}`; };
-  return s===u ? fmt(s) : `${fmt(s)} – ${fmt(u)}`;
-}
+function rangeLabel(s, u) { return CocoPeriodo.rotulo(s, u, { hoje: todayISO }); }
 
 // ── Live indicator ──
 function setLive(state, msg) {
@@ -563,8 +561,7 @@ function setLive(state, msg) {
 // ── Chart ──
 const EC_FONT_FAMILY = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
 const echartsInst = {};
-// ResizeObserver único cobre todos os gráficos — troca o auto-resize que o Chart.js fazia sozinho
-// (responsive:true).
+// ResizeObserver único cobre todos os gráficos: o ECharts não se redimensiona sozinho.
 const echartsRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => {
   for (const entry of entries) {
     const inst = echartsInst[entry.target.id];
@@ -678,8 +675,8 @@ function toggleSegExpand(key) {
 }
 
 // Separa os "top produtos" de um card em Areia x Suplementos (classifyTypeGroup no backend, ver
-// metrics.js) — pedido do Luan: mais organizado que uma lista só misturando os dois. `cardKey` é
-// 'cat' | 'dog' | 'other'.
+// metrics.js) — decisão de produto: mais organizado que uma lista só misturando os dois.
+// `cardKey` é 'cat' | 'dog' | 'other'.
 function prodByTypeGroupHtml(products, cardKey) {
   if (!products || !products.length) return '<div class="seg-empty">Sem produtos no período</div>';
   const buckets = {};
@@ -848,10 +845,10 @@ let geoLayoutMode = localStorage.getItem('coco_seg_geolayout') || 'rows';       
 let geoSearchQuery = '';                                                        // filtro por título, client-side (não persiste entre sessões)
 function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// "Unificar" deixou de ser uma opção local desta tela (16/07 → 05/08/2026): agora é global,
-// gerenciado na tela Unificador (dentro de Configurações) e já aplicado pelo backend em
-// `productGeo` quando ligado — ver metrics.js applyProductGroups. Aqui só exibimos o resultado
-// (badge 🔗 nas linhas já agrupadas, ver geoProdRowHtml), sem toggle nem criação de grupo.
+// "Unificar" deixou de ser uma opção local desta tela: agora é global, gerenciado na tela
+// Unificador (dentro de Configurações) e já aplicado pelo backend em `productGeo` quando ligado
+// — ver metrics.js applyProductGroups. Aqui só exibimos o resultado (badge 🔗 nas linhas já
+// agrupadas, ver geoProdRowHtml), sem toggle nem criação de grupo.
 const GEO_CHART_MAX = 12; // nº de estados no modo Gráfico (o resto continua em Ranking/Tabela)
 
 function destroyGeoMap() {

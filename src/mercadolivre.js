@@ -1,14 +1,12 @@
-// ─────────────────────────────────────────────
-//  mercadolivre.js — integração com a API do Mercado Livre
-//  Usa OAuth 2.0 (authorization_code) e renova o access_token
-//  automaticamente (vence a cada 6h).
+// mercadolivre.js — integração com a API do Mercado Livre
+// Usa OAuth 2.0 (authorization_code) e renova o access_token
+// automaticamente (vence a cada 6h).
 //
-//  Passos (uma vez):
-//   1. Acesse GET /mercadolivre/connect  → redireciona para o ML autorizar.
-//   2. Após autorizar, o ML chama /mercadolivre/callback?code=...
-//      e o código é trocado por access_token + refresh_token (salvos no store).
-//   Depois disso, fetchOrders() funciona e o token se renova sozinho.
-// ─────────────────────────────────────────────
+// Passos (uma vez):
+//  1. Acesse GET /mercadolivre/connect  → redireciona para o ML autorizar.
+//  2. Após autorizar, o ML chama /mercadolivre/callback?code=...
+//     e o código é trocado por access_token + refresh_token (salvos no store).
+//  Depois disso, fetchOrders() funciona e o token se renova sozinho.
 import 'dotenv/config';
 import { getMlTokens, setMlTokens } from './store.js';
 
@@ -125,11 +123,10 @@ export async function fetchOrders(sinceISO, untilISO) {
 
     const results = data.results || [];
     for (const o of results) {
-      // Decisão (28/07/2026): só pedido com pagamento de verdade conta como venda.
-      // 'confirmed' (inicial, ainda sem pagamento), 'payment_required' e
-      // 'payment_in_process' (pagamento existe mas não aprovado) somam-se a
-      // cancelled/invalid. 'paid' e 'partially_paid' (teve pagamento real, mesmo que
-      // insuficiente) continuam contando.
+      // Decisão: só pedido com pagamento de verdade conta como venda. 'confirmed' (inicial,
+      // ainda sem pagamento), 'payment_required' e 'payment_in_process' (pagamento existe mas
+      // não aprovado) somam-se a cancelled/invalid. 'paid' e 'partially_paid' (teve pagamento
+      // real, mesmo que insuficiente) continuam contando.
       const cancelled = ['cancelled', 'invalid', 'confirmed', 'payment_required', 'payment_in_process'].includes(o.status);
       out.push({
         id:          'mercadolivre:' + o.id,

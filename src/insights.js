@@ -1,19 +1,17 @@
-// ─────────────────────────────────────────────
-//  insights.js — "Insights" da Visão geral
+// insights.js — "Insights" da Visão geral
 //
-//  Gera frases curtas explicando O QUE mudou no período em relação ao período anterior
-//  comparável. Regras determinísticas, SEM IA: o número exibido é sempre o número calculado
-//  (modelo de linguagem erra conta e inventa com convicção), não custa por acesso, não manda
-//  dado de faturamento pra fora, e o mesmo dado gera sempre a mesma frase — dá pra testar.
-//  Decidido com o Luan em 24/08/2026, a partir do card de Insights do Shopify.
+// Gera frases curtas explicando O QUE mudou no período em relação ao período anterior
+// comparável. Regras determinísticas, SEM IA: o número exibido é sempre o número calculado
+// (modelo de linguagem erra conta e inventa com convicção), não custa por acesso, não manda
+// dado de faturamento pra fora, e o mesmo dado gera sempre a mesma frase — dá pra testar.
+// Decisão de produto, a partir do card de Insights do Shopify.
 //
-//  A faixa de Indicadores no topo já responde "receita subiu 53%". Este card responde
-//  "por causa de quê": qual canal/produto/estado/etapa do funil puxou o número.
+// A faixa de Indicadores no topo já responde "receita subiu 53%". Este card responde "por causa
+// de quê": qual canal/produto/estado/etapa do funil puxou o número.
 //
-//  Módulo PURO de propósito: recebe dois retratos já calculados (atual e anterior) e devolve
-//  a lista. Não lê store, não faz I/O, não importa metrics.js (evita import circular — os
-//  rótulos de canal chegam por parâmetro). É o que permite testar as regras sem banco.
-// ─────────────────────────────────────────────
+// Módulo PURO de propósito: recebe dois retratos já calculados (atual e anterior) e devolve a
+// lista. Não lê store, não faz I/O, não importa metrics.js (evita import circular — os rótulos
+// de canal chegam por parâmetro). É o que permite testar as regras sem banco.
 
 // ── Pisos anti-ruído ──
 // O volume diário do BR gira em torno de algumas dezenas de pedidos. Nesse tamanho, variação
@@ -25,10 +23,10 @@ const MIN_PCT = 15;          // variação relativa mínima (%)
 const MIN_SHARE = 0.08;      // a variação precisa valer ao menos 8% do total do período maior
 const MIN_ORDERS = 8;        // piso de pedidos pra falar de ticket médio
 const MIN_SESSIONS = 100;    // piso de sessões pra falar de conversão/funil
-// Teto da lista. Subiu de 6 pra 10 quando a tira virou horizontal com carrossel (24/08/2026): o
-// que limitava antes era altura de card, e agora não limita mais. Os pisos anti-ruído abaixo é
-// que decidem de verdade quantos aparecem — este número é só o teto, e na prática quase nunca é
-// atingido, porque insight sem relevância nem chega aqui.
+// Teto da lista. Subiu de 6 pra 10 quando a tira virou horizontal com carrossel: o que limitava
+// antes era altura de card, e agora não limita mais. Os pisos anti-ruído abaixo é que decidem
+// de verdade quantos aparecem — este número é só o teto, e na prática quase nunca é atingido,
+// porque insight sem relevância nem chega aqui.
 const MAX_INSIGHTS = 10;
 const MAX_POR_DIMENSAO = 2;  // evita lista inteira falando só de canal (ou só de produto)
 // Piso ABSOLUTO em dinheiro, além do piso relativo (MIN_SHARE). Os dois são necessários: num

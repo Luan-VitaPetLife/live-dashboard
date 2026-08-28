@@ -543,6 +543,7 @@
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
+<script src="js/periodo.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -943,9 +944,9 @@ function isAmazonProductRev() { return localStorage.getItem('coco_amazon_rev_mod
 function isChanDetail() { return localStorage.getItem('coco_chan_detail') !== '0'; }
 
 // ── Tendência: "Geral" (uma linha só) × "Por canal" (uma linha por canal, sem preenchimento de
-// área nem linha de Custo ads — com vários canais ao mesmo tempo isso vira poluição visual, ver
-// conversa com o Luan 19/08/2026) — só faz sentido com canal="todos" selecionado (um canal
-// específico já filtrado não tem o que quebrar em mais linhas); o toggle some sozinho nesse caso.
+// área nem linha de Custo ads — com vários canais ao mesmo tempo isso vira poluição visual) — só
+// faz sentido com canal="todos" selecionado (um canal específico já filtrado não tem o que
+// quebrar em mais linhas); o toggle some sozinho nesse caso.
 let trendView = localStorage.getItem('coco_trend_view') || 'geral';
 function setTrendView(v) {
   trendView = v;
@@ -955,9 +956,9 @@ function setTrendView(v) {
 }
 document.querySelectorAll('#trendViewToggle .chart-type-btn').forEach(b => b.classList.toggle('active', b.dataset.view === trendView));
 
-// ── Expandir o card de Tendência (dobra a altura do gráfico e ocupa a largura toda) — pedido do
-// Luan 19/08/2026. Preferência persiste; o resize do ECharts acontece sozinho via echartsRO (o
-// ResizeObserver já observa #trendChart, então só precisa trocar largura/altura via CSS).
+// ── Expandir o card de Tendência (dobra a altura do gráfico e ocupa a largura toda).
+// Preferência persiste; o resize do ECharts acontece sozinho via echartsRO (o ResizeObserver já
+// observa #trendChart, então só precisa trocar largura/altura via CSS).
 let trendExpanded = localStorage.getItem('coco_trend_expanded') === '1';
 function applyTrendExpanded() {
   const card = document.querySelector('.edit-card[data-card-id="trend"]');
@@ -988,11 +989,11 @@ document.getElementById('trendExpandBtn')?.addEventListener('click', () => {
 });
 applyTrendExpanded();
 
-// ── Tráfego & conversão: mesmo padrão "Geral × Por canal" + expandir do card de Tendência
-// (pedido do Luan, 19/08/2026), só que aqui "canal" é sempre Coco and Luna × Yucaloo (as duas
-// únicas marcas com dado de sessão — Shopee/ML/Amazon não têm) em vez da lista de canais de
-// venda. Backend já manda os dois baldes separados (traffic.seriesCoco/seriesYucaloo, ver
-// aggregateSessions em metrics.js), sem precisar recalcular nada no front.
+// ── Tráfego & conversão: mesmo padrão "Geral × Por canal" + expandir do card de Tendência, só
+// que aqui "canal" é sempre Coco and Luna × Yucaloo (as duas únicas marcas com dado de sessão —
+// Shopee/ML/Amazon não têm) em vez da lista de canais de venda. Backend já manda os dois baldes
+// separados (traffic.seriesCoco/seriesYucaloo, ver aggregateSessions em metrics.js), sem
+// precisar recalcular nada no front.
 let trafficView = localStorage.getItem('coco_traffic_view') || 'geral';
 function setTrafficView(v) {
   trafficView = v;
@@ -1047,9 +1048,9 @@ function showTrendDrilldown(label, val, byChannel, money, metric) {
   </div>${rows}`;
   el.style.display='block';
   // No mobile os cards empilham em largura total — clicar no gráfico lá em cima e o resultado
-  // aparecer só depois de rolar a tela pra baixo parecia quebrado (reportado pelo Luan,
-  // 19/08/2026: "eu clico no gráfico lá em cima, e o card aparece lá embaixo"). `block:'nearest'`
-  // não mexe em nada se já estiver visível (desktop já vê sem rolar).
+  // aparecer só depois de rolar a tela pra baixo parecia quebrado (reportado em produção: "eu
+  // clico no gráfico lá em cima, e o card aparece lá embaixo"). `block:'nearest'` não mexe em
+  // nada se já estiver visível (desktop já vê sem rolar).
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -1063,9 +1064,9 @@ let lastData = null;
 let topProductsExpanded = false;
 function toggleTopProducts() { topProductsExpanded = !topProductsExpanded; if (lastData) render(lastData); }
 
-// ResizeObserver único cobre todos os gráficos — troca o auto-resize que o Chart.js fazia sozinho
-// (responsive:true). Reage tanto a resize de janela quanto ao recolher/expandir a sidebar (que muda
-// a largura do card sem disparar resize da janela).
+// ResizeObserver único cobre todos os gráficos: o ECharts não se redimensiona sozinho. Reage tanto
+// a resize de janela quanto ao recolher/expandir a sidebar (que muda a largura do card sem
+// disparar resize da janela).
 const echartsRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => {
   for (const entry of entries) {
     const inst = echartsInst[entry.target.id];
@@ -1088,7 +1089,6 @@ function setEChart(id, option) {
 function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
 function parseISO(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d) }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x }
-function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }
 
 const todayISO = isoLocal(new Date());
 let sinceDate = localStorage.getItem('coco_since') || todayISO;
@@ -1100,11 +1100,7 @@ let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
 if (channel !== 'todos' && !CocoColors.ch[channel]) channel = 'todos';
 if (!METRIC_LABEL[metric]) metric = 'receita';
 
-function rangeLabel(s, u) {
-  if (s === u && s === todayISO) return 'Hoje';
-  if (s === u) return fmtDM(parseISO(s));
-  return fmtDM(parseISO(s)) + ' – ' + fmtDM(parseISO(u));
-}
+function rangeLabel(s, u) { return CocoPeriodo.rotulo(s, u, { hoje: todayISO }); }
 function presetRange(p) {
   const n = new Date();
   if (p === 'today') return [todayISO, todayISO];
@@ -1160,16 +1156,36 @@ function insFmtVal(v, fmt) {
   return fmtInt(v);
 }
 
-function renderInsights(list) {
+// Texto do card de Insights quando não há nenhum destaque. `contexto` vem do payload:
+// { pedidos, historyStart, since, until }.
+function insEmptyHTML(contexto) {
+  const c = contexto || {};
+  const semPedido = Number(c.pedidos || 0) === 0;
+  if (semPedido && c.historyStart && c.until && c.until < c.historyStart) {
+    const inicio = CocoPeriodo.data(c.historyStart, { mercado: market });
+    return `<div class="ins-empty">Este período é anterior ao histórico disponível.<br>`
+      + `O primeiro pedido registrado neste mercado é de ${escapeHtmlAttr(inicio)}.</div>`;
+  }
+  if (semPedido) {
+    return `<div class="ins-empty">Nenhum pedido neste período.<br>`
+      + `Sem venda registrada não há o que comparar com o período anterior.</div>`;
+  }
+  return `<div class="ins-empty">Nada fora do normal neste período.<br>`
+    + `Períodos maiores (7 ou 30 dias) costumam revelar mais que um dia isolado.</div>`;
+}
+
+function renderInsights(list, contexto) {
   _insights = Array.isArray(list) ? list : [];
   const body = document.getElementById('insightsBody');
   const count = document.getElementById('insightsCount');
   if (!body) return;
   if (!_insights.length) {
     count.textContent = '';
-    // Sem insight não é erro: é período estável, ou volume baixo demais pra afirmar qualquer
-    // coisa sem virar ruído (ver os pisos em src/insights.js).
-    body.innerHTML = `<div class="ins-empty">Nada fora do normal neste período.<br>Períodos maiores (7 ou 30 dias) costumam revelar mais que um dia isolado.</div>`;
+    // Duas ausências bem diferentes, que davam a mesma frase antes: um período estável (ou com
+    // volume baixo demais pra afirmar algo sem virar ruído, ver os pisos em src/insights.js) e
+    // um período em que simplesmente não existe pedido nenhum. Dizer "nada fora do normal" no
+    // segundo caso é enganoso: não é que nada mudou, é que não há o que comparar.
+    body.innerHTML = insEmptyHTML(contexto);
     return;
   }
   if (_insightSel >= _insights.length) _insightSel = 0;
@@ -1251,11 +1267,11 @@ function insScroll(dir) {
   }, 250);
 }
 
-// Arrastar a tira com o ponteiro pra passar de insight, sem depender das setas (pedido do Luan,
-// 27/08/2026). Só liga pra mouse/caneta: no toque o navegador já rola a tira sozinho por causa do
-// `overflow-x:auto`, com inércia e sem brigar com o gesto de rolar a página, e reimplementar isso
-// à mão só pioraria. Por isso também não existe `touch-action:none` aqui (ao contrário do drag do
-// jobs-widget, onde o arraste é a única forma de mover o card e a rolagem nativa é que atrapalha).
+// Arrastar a tira com o ponteiro pra passar de insight, sem depender das setas. Só liga pra
+// mouse/caneta: no toque o navegador já rola a tira sozinho por causa do `overflow-x:auto`, com
+// inércia e sem brigar com o gesto de rolar a página, e reimplementar isso à mão só pioraria. Por
+// isso também não existe `touch-action:none` aqui (ao contrário do drag do jobs-widget, onde o
+// arraste é a única forma de mover o card e a rolagem nativa é que atrapalha).
 function insEnableDrag(tira) {
   let ativo = false, xInicial = 0, scrollInicial = 0, distancia = 0;
   tira.addEventListener('pointerdown', e => {
@@ -1394,16 +1410,11 @@ function renderLegend(containerId, items) {
 
 function drawDonut(id, data, colors, labels) {
   const total = data.reduce((a,b) => a+(Number(b)||0), 0);
-  // borderRadius arredonda a ponta de cada fatia, padAngle abre um respiro entre elas — o
-  // acabamento "pill" que gráficos de anel mais modernos usam. emphasis.scaleSize é o equivalente
-  // ECharts do hoverOffset do Chart.js (a fatia cresce ao passar o mouse); o raio externo precisa
-  // de folga dentro do canvas pro "grow" do hover, senão a fatia em destaque é cortada no limite
-  // do canvas (mesmo bug do Chart.js, 18/08/2026). Fix original fixava 92% — folga de ~8% do raio,
-  // suficiente nos anéis grandes (Canais/Marketing, 160px) mas não nos pequenos do card "Orgânico x
-  // Campanha" (88px em grade, 150px quando só 1 canal): 8% de um raio de 44px é ~3,5px, menor que
-  // os 6px que o hover cresce — a fatia hover estourava o canvas e cortava nas laterais/embaixo do
-  // anel (reportado pelo Luan, 20/08/2026). Calcula a folga em px a partir do tamanho REAL do
-  // container em vez de uma % fixa, então qualquer tamanho de donut fica protegido.
+  // emphasis.scaleSize cresce a fatia sob o mouse, então o raio externo precisa de folga dentro do
+  // canvas: sem ela a fatia em destaque é cortada na borda. A folga sai do tamanho REAL do
+  // container, em px, e não de uma porcentagem fixa. Uma % não serve porque os anéis têm tamanhos
+  // muito diferentes: 8% do raio dá folga de sobra nos grandes (Canais/Marketing, 160px) e só
+  // ~3,5px nos pequenos do card "Orgânico x Campanha" (88px), menos que os 6px que o hover cresce.
   const scaleSize = 6;
   const dom = document.getElementById(id);
   const half = dom ? Math.min(dom.clientWidth, dom.clientHeight) / 2 : 80;
@@ -1462,15 +1473,15 @@ function render(d) {
       (ch === 'amazon' || ch === 'amazon_us') ? 'Receita orgânica da Amazon · Ads ainda não integrado' :
       k.adCost > 0          ? 'Meta Ads conectado · outros canais de Ads ficam na tela de Campanhas' : 'Meta Ads ainda sem dados · sincronize para atualizar';
   }
-  // ROAS/ACOS — mostra só o que faz sentido pro canal selecionado (antes sempre misturava
-  // Meta+ML, mesmo com Shopee/Amazon escolhido, o que não tinha relação nenhuma com o canal).
-  // "Todos": soma tudo que existe no mercado (Meta Ads sempre; Mercado Ads também sempre, no
-  // BR — deixou de ser opcional a pedido do Luan, "não deve ser uma escolha, é obrigatório").
-  // Shopify/Shopify US: só Meta Ads (é quem leva tráfego pra lá). Mercado Livre: só Mercado
-  // Ads dele mesmo (Meta não direciona venda pro ML). Shopee/Amazon: sem rastreamento de Ads ainda.
-  // d.mlBreakdown.adCost (metrics.js) soma kv.mlAdCostsDaily dentro do período selecionado — não
-  // é mais um valor único preso na janela fixa do sync (bug corrigido 19/08/2026, mesmo princípio
-  // do metaSpendDaily do Meta Ads logo acima).
+  // ROAS/ACOS — mostra só o que faz sentido pro canal selecionado (antes sempre misturava Meta+ML,
+  // mesmo com Shopee/Amazon escolhido, o que não tinha relação nenhuma com o canal). "Todos": soma
+  // tudo que existe no mercado (Meta Ads sempre; Mercado Ads também sempre, no BR — deixou de ser
+  // opcional por decisão de produto, "não deve ser uma escolha, é obrigatório"). Shopify/Shopify
+  // US: só Meta Ads (é quem leva tráfego pra lá). Mercado Livre: só Mercado Ads dele mesmo (Meta
+  // não direciona venda pro ML). Shopee/Amazon: sem rastreamento de Ads ainda. d.mlBreakdown.adCost
+  // (metrics.js) soma kv.mlAdCostsDaily dentro do período selecionado — não é mais um valor único
+  // preso na janela fixa do sync (bug corrigido, mesmo princípio do metaSpendDaily do Meta Ads logo
+  // acima).
   const ml = d.mlBreakdown || {};
   let roasVal = 0, roasAvail = false, roasLabel = '';
   if (d.channel === 'mercadolivre') {
@@ -1505,7 +1516,7 @@ function render(d) {
   // Mesma regra já usada pelo card "Marketing por origem" (cardMarketing: isTodos || isShopify).
   const showAdsLine = d.metric === 'receita' && (d.channel === 'todos' || d.channel === 'shopify' || d.channel === 'shopify_us');
   // "Por canal" só faz sentido com canal="todos" — um canal específico já filtrado não tem o que
-  // quebrar em mais linhas. O toggle some sozinho nesse caso (pedido do Luan, 19/08/2026).
+  // quebrar em mais linhas. O toggle some sozinho nesse caso.
   const canChanView = d.channel === 'todos';
   const toggleEl = document.getElementById('trendViewToggle');
   if (toggleEl) toggleEl.style.display = canChanView ? '' : 'none';
@@ -1547,10 +1558,9 @@ function render(d) {
   // próprio canal, o drilldown seria redundante. Usa getZr() (canvas bruto) + convertFromPixel em
   // vez do 'click' de série do ECharts: esse último só dispara em cima do traço/ponto exatos, e a
   // área preenchida acima da linha (bem comum num dia de valor baixo, sobra bastante espaço em
-  // branco no card) não conta como "em cima da série" — ficava parecendo quebrado, clique só
-  // funcionava se acertasse o pixel certo. O Chart.js antigo (getElementsAtEventForMode 'index')
-  // reagia a clique em qualquer lugar da coluna; convertFromPixel reproduz isso. Bug relatado
-  // pelo Luan, 19/08/2026, depois da migração pra ECharts.
+  // branco no card) não conta como "em cima da série". Com ele, o clique só funcionava se
+  // acertasse o pixel certo, e a tela parecia quebrada. convertFromPixel faz a coluna inteira
+  // do dia responder ao clique.
   document.getElementById('trendDrilldown').style.display = 'none';
   trendInst?.getZr().off('click');
   trendInst?.getZr().on('click', params => {
@@ -1634,8 +1644,7 @@ function render(d) {
   });
 
   // Traffic — Yucaloo tem loja Shopify própria (ver aggregateSessions em metrics.js), então
-  // entra no mesmo card com logo própria pra deixar claro de qual loja é o dado. Pedido do
-  // Luan, 18/08/2026.
+  // entra no mesmo card com logo própria pra deixar claro de qual loja é o dado.
   const tf = d.traffic;
   const hasTraffic =
     (d.market === 'br' && (d.channel === 'todos' || d.channel === 'shopify' || d.channel === 'yucaloo_br')) ||
@@ -1644,7 +1653,7 @@ function render(d) {
   const mktLabel = d.market === 'us' ? 'EUA' : 'BR';
   const brandLogo = b => `<img class="ct-sub-logo" src="img/integracoes/${b === 'coco' ? 'cocoandluna.webp' : 'Yucaloo1.png'}" alt="">`;
   // A logo já entrega qual marca é — repetir "Coco and Luna"/"Yucaloo" no texto ao lado é
-  // redundante (pedido do Luan, 18/08/2026), o texto fica só com Shopify + mercado + período.
+  // redundante, o texto fica só com Shopify + mercado + período.
   if (d.channel === 'shopify' || d.channel === 'shopify_us') {
     trafficSubEl.innerHTML = brandLogo('coco') + `Shopify - ${mktLabel} · período selecionado`;
   } else if (d.channel === 'yucaloo_br' || d.channel === 'yucaloo_us') {
@@ -1721,7 +1730,10 @@ function render(d) {
     return `<div class="fl-row"><div class="fl-row-top"><span class="fl-label">${l}</span><span class="fl-val">${fmtInt(v)}</span></div><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><div class="fl-meta">${ofTotal}${drop ? ' '+drop : ''}</div></div>`;
   }).join('');
 
-  renderInsights(d.insights || []);
+  renderInsights(d.insights || [], {
+    pedidos: d.kpis?.orders, historyStart: d.historyStart,
+    since: d.period?.since, until: d.period?.until,
+  });
 
   // Top products
   const isAllCh = d.channel === 'todos';
@@ -1928,8 +1940,7 @@ function updateCardVisibility() {
   const marketingVisible    = show('cardMarketing',    isTodos || isShopify);
   show('cardSalesSplit',   true);
   // Yucaloo tem loja Shopify própria (ver aggregateSessions em metrics.js) — mesma dados de
-  // sessão que Coco and Luna, então os dois cards que dependem disso acompanham. Pedido do
-  // Luan, 18/08/2026.
+  // sessão que Coco and Luna, então os dois cards que dependem disso acompanham.
   show('cardTraffic',      isTodos || isShopify || isYucaloo);
   show('cardFunnel',       isTodos || isShopify || isYucaloo);
   show('cardMlBreakdown',  channel === 'mercadolivre');
@@ -1940,11 +1951,11 @@ function updateCardVisibility() {
 
   // Quando o card vizinho (Canais/Marketing) fica escondido pelo canal selecionado, Tendência e
   // Top produtos passam a ocupar a linha inteira em vez de deixar metade em branco do lado
-  // (mesmo espaço branco "sobrando" reportado pelo Luan, pente-fino de 30/07/2026).
-  // Escopado em editGrid (não document) — uma prévia do card no banco de cards (ver
-  // capturePreview/renderCardBank) é um clone com o mesmo data-card-id, só que vive dentro de
-  // #cardBank, que aparece ANTES de #editGrid no DOM; um document.querySelector pegaria essa
-  // cópia inerte em vez do card de verdade sempre que o card estivesse oculto (21/08/2026).
+  // (mesmo espaço branco "sobrando" reportado em produção). Escopado em editGrid (não document)
+  // — uma prévia do card no banco de cards (ver capturePreview/renderCardBank) é um clone com o
+  // mesmo data-card-id, só que vive dentro de #cardBank, que aparece ANTES de #editGrid no DOM;
+  // um document.querySelector pegaria essa cópia inerte em vez do card de verdade sempre que o
+  // card estivesse oculto.
   const trendWrap = editGrid.querySelector('.edit-card[data-card-id="trend"]');
   // trendExpanded (botão de expandir do card, ver applyTrendExpanded) força span 12 mesmo com o
   // card de Canais visível — senão essa função (chamada de novo em todo refresh) desfazia o
@@ -2014,13 +2025,13 @@ function resetLayout() {
   updateCardVisibility();
 }
 
-// Prévia de cada card no banco: clone real do elemento (com qualquer <canvas> de gráfico
-// virado <img> via toDataURL, já que cloneNode não copia o bitmap desenhado) capturado no
-// instante em que o card é ocultado — reflete o último estado renderizado de verdade, sem
-// precisar recriar em miniatura na mão. Card que já veio oculto de uma sessão anterior (nunca
-// esteve visível nesta carga de página) não tem captura disponível: cai no ícone genérico
-// (CB_ICON_BY_ID/CB_ICON_KPI) até ser mostrado e ocultado de novo uma vez. Pedido do Luan,
-// 21/08/2026: o banco só mostrava o nome, sem dar nenhuma pista visual do que era cada card.
+// Prévia de cada card no banco: clone real do elemento (com qualquer <canvas> de gráfico virado
+// <img> via toDataURL, já que cloneNode não copia o bitmap desenhado) capturado no instante em
+// que o card é ocultado — reflete o último estado renderizado de verdade, sem precisar recriar
+// em miniatura na mão. Card que já veio oculto de uma sessão anterior (nunca esteve visível
+// nesta carga de página) não tem captura disponível: cai no ícone genérico
+// (CB_ICON_BY_ID/CB_ICON_KPI) até ser mostrado e ocultado de novo uma vez. Decisão de produto:
+// o banco só mostrava o nome, sem dar nenhuma pista visual do que era cada card.
 const CB_PREVIEW_W = 190;
 const CB_ICON_BY_ID = {
   insights: 'bi-lightbulb',
@@ -2127,11 +2138,11 @@ kpiStripGrid.addEventListener('click', e => {
 // Drag-and-drop genérico (reutilizado pro grid principal e pra faixa interna de KPIs) — arraste
 // customizado por ponteiro, não a Drag and Drop API nativa do HTML5 (deixava o elemento de
 // origem no DOM, o navegador tirava dele uma "imagem fantasma" fora do nosso controle, e o
-// espaço vago dinâmico esperado não acontecia — reportado pelo Luan, 21/08/2026). Mesmo
-// mecanismo já validado em produtos.html/estoque.html: o item real some do grid assim que o
-// arraste começa (só sobra o placeholder tracejado indicando onde ele vai cair) e um clone dele,
-// em position:fixed, segue o cursor de verdade a cada mousemove. excludeSelector impede que o
-// card fixo "Indicadores" seja arrastado ou usado como referência de posição.
+// espaço vago dinâmico esperado não acontecia — reportado em produção). Mesmo mecanismo já
+// validado em produtos.html/estoque.html: o item real some do grid assim que o arraste começa
+// (só sobra o placeholder tracejado indicando onde ele vai cair) e um clone dele, em
+// position:fixed, segue o cursor de verdade a cada mousemove. excludeSelector impede que o card
+// fixo "Indicadores" seja arrastado ou usado como referência de posição.
 const EC_DRAG_THRESHOLD = 4;
 let ecDragItem = null, ecDragGhost = null, ecDragClone = null, ecDragContainer = null;
 let ecDragItemClass = null, ecDragExclude = null;

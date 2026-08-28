@@ -1,36 +1,34 @@
-// ─────────────────────────────────────────────
-//  bling.js — integração exploratória com o Bling ERP (API v3)
+// bling.js — integração exploratória com o Bling ERP (API v3)
 //
-//  Diferente das demais integrações deste arquivo, o Bling NÃO é um canal de
-//  venda — é o ERP que já recebe (via importação própria) os pedidos de todos
-//  os canais (Shopify, Shopee, Mercado Livre, Amazon). Por isso, por enquanto,
-//  isso aqui é só uma sonda de leitura (probeOrders) para ver o formato real do
-//  dado — nunca usado para montar receita/pedido no dashboard, pra não contar
-//  a mesma venda duas vezes (uma via canal, outra via Bling).
+// Diferente das demais integrações deste arquivo, o Bling NÃO é um canal de
+// venda — é o ERP que já recebe (via importação própria) os pedidos de todos
+// os canais (Shopify, Shopee, Mercado Livre, Amazon). Por isso, por enquanto,
+// isso aqui é só uma sonda de leitura (probeOrders) para ver o formato real do
+// dado — nunca usado para montar receita/pedido no dashboard, pra não contar
+// a mesma venda duas vezes (uma via canal, outra via Bling).
 //
-//  OAuth 2.0 (authorization_code), confirmado via documentação/implementações
-//  de referência do Bling (developer.bling.com.br não expõe a URL completa em
-//  texto simples, por isso confirmado contra código de terceiros que já
-//  funciona em produção):
-//   - Autorizar:      GET  https://www.bling.com.br/Api/v3/oauth/authorize
-//   - Trocar token:   POST https://www.bling.com.br/Api/v3/oauth/token
-//     (Basic auth no header: base64(client_id:client_secret); body
-//     application/x-www-form-urlencoded)
-//   - Chamadas de recurso: https://api.bling.com.br/Api/v3/...
+// OAuth 2.0 (authorization_code), confirmado via documentação/implementações
+// de referência do Bling (developer.bling.com.br não expõe a URL completa em
+// texto simples, por isso confirmado contra código de terceiros que já
+// funciona em produção):
+//  - Autorizar:      GET  https://www.bling.com.br/Api/v3/oauth/authorize
+//  - Trocar token:   POST https://www.bling.com.br/Api/v3/oauth/token
+//    (Basic auth no header: base64(client_id:client_secret); body
+//    application/x-www-form-urlencoded)
+//  - Chamadas de recurso: https://api.bling.com.br/Api/v3/...
 //
-//  Passos (uma vez, feito pelo próprio usuário no painel do Bling — precisa
-//  cadastrar o app lá, isso não dá pra automatizar):
-//   1. developer.bling.com.br → cadastrar aplicativo, marcar escopo de
-//      leitura de "Pedidos de Venda" (e "Contatos"/"Produtos" se quiser
-//      explorar depois), configurar Redirect URI = BLING_REDIRECT_URL.
-//   2. Preencher BLING_CLIENT_ID/BLING_CLIENT_SECRET/BLING_REDIRECT_URL no
-//      .env (ou nas env vars do Railway em produção).
-//   3. Acessar GET /bling/connect → autoriza → troca o code por token
-//      automaticamente (salvo no store, mesmo padrão do Mercado Livre).
-//   Depois disso, fetchOrdersList/fetchOrderDetail/probeOrders funcionam e o
-//   token se renova sozinho (refresh_token, válido por 30 dias segundo a
-//   documentação — se ficar 30 dias sem nenhuma chamada, precisa reconectar).
-// ─────────────────────────────────────────────
+// Passos (uma vez, feito pelo próprio usuário no painel do Bling — precisa
+// cadastrar o app lá, isso não dá pra automatizar):
+//  1. developer.bling.com.br → cadastrar aplicativo, marcar escopo de
+//     leitura de "Pedidos de Venda" (e "Contatos"/"Produtos" se quiser
+//     explorar depois), configurar Redirect URI = BLING_REDIRECT_URL.
+//  2. Preencher BLING_CLIENT_ID/BLING_CLIENT_SECRET/BLING_REDIRECT_URL no
+//     .env (ou nas env vars do Railway em produção).
+//  3. Acessar GET /bling/connect → autoriza → troca o code por token
+//     automaticamente (salvo no store, mesmo padrão do Mercado Livre).
+//  Depois disso, fetchOrdersList/fetchOrderDetail/probeOrders funcionam e o
+//  token se renova sozinho (refresh_token, válido por 30 dias segundo a
+//  documentação — se ficar 30 dias sem nenhuma chamada, precisa reconectar).
 import 'dotenv/config';
 import { getBlingTokens, setBlingTokens } from './store.js';
 
@@ -177,13 +175,12 @@ export async function fetchSalesChannels() {
 }
 
 // ── Canais de venda conhecidos (BR) ───────────────────────────────────────
-// Mapeia loja.id (Bling) → nosso channel/market. Hardcoded de propósito, NÃO
-// descoberto em runtime via /canais-venda: a conta Bling tem canais que não
-// são pedido Coco and Luna — PETLOVE (205506010, descontinuado), Yucaloo
-// (206156145, segunda marca da Vita Pet Life, integração ainda não decidida)
-// e TikTok Shop (206171502, em configuração, sem pedidos ainda) — e nenhum
-// deles pode entrar na reconciliação de geografia por engano. Confirmado ao
-// vivo via GET /canais-venda em 28/07/2026 (ver CLAUDE.md, seção Bling).
+// Mapeia loja.id (Bling) → nosso channel/market. Hardcoded de propósito, NÃO descoberto em
+// runtime via /canais-venda: a conta Bling tem canais que não são pedido Coco and Luna —
+// PETLOVE (205506010, descontinuado), Yucaloo (206156145, segunda marca da Vita Pet Life,
+// integração ainda não decidida) e TikTok Shop (206171502, em configuração, sem pedidos ainda)
+// — e nenhum deles pode entrar na reconciliação de geografia por engano. Confirmado ao vivo via
+// GET /canais-venda (ver CLAUDE.md, seção Bling).
 export const KNOWN_CHANNELS = {
   205761639: { channel: 'shopify',      market: 'br' }, // Coco and Luna - Brasil
   205370623: { channel: 'shopee',       market: 'br' },

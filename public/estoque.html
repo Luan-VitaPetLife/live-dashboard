@@ -222,6 +222,7 @@
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
+<script src="js/periodo.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -356,7 +357,7 @@ let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
 // Antes a tela usava sempre uma janela fixa de 30 dias no backend (sem seletor); agora o período é
 // escolhido aqui, igual às outras telas — mas o catálogo continua mesclando produto sem venda no
 // período (qty zerada), então nenhum produto some da lista só por não ter vendido, como já
-// combinado antes (pedido do Luan, 17/08/2026).
+// combinado antes.
 function rangeForPreset(p) {
   const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
   if (p === 'today') return { since: iso(today), until: iso(today), label: 'Hoje' };
@@ -366,12 +367,12 @@ function rangeForPreset(p) {
 }
 let state = rangeForPreset('30d');
 
-// "Unificar" deixou de ser uma opção local desta tela (06/07 → 05/08/2026): o grupo manual agora é
-// global (tela Unificador, dentro de Configurações) e o backend já devolve `agg.products` agrupado
-// por ele (com prioridade sobre a família automática Lysine/Daily, ver metrics.js computeStock) —
-// aqui só exibimos o resultado (badge 🔗 na linha já agrupada, ver aggRowHTML), sem toggle nem
-// criação de grupo. Os 3 campos de ordem (Projetada/Nova/Andamento) continuam editáveis por linha,
-// como sempre — o nome do grupo funciona como família própria pra eles (ver groupOrders no backend).
+// "Unificar" deixou de ser uma opção local desta tela: o grupo manual agora é global (tela
+// Unificador, dentro de Configurações) e o backend já devolve `agg.products` agrupado por ele (com
+// prioridade sobre a família automática Lysine/Daily, ver metrics.js computeStock) — aqui só
+// exibimos o resultado (badge 🔗 na linha já agrupada, ver aggRowHTML), sem toggle nem criação de
+// grupo. Os 3 campos de ordem (Projetada/Nova/Andamento) continuam editáveis por linha, como sempre
+// — o nome do grupo funciona como família própria pra eles (ver groupOrders no backend).
 let refreshTimer = null;
 function applyRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -596,7 +597,7 @@ function applyRange() {
   if (!from || !to) { err.textContent = 'Preencha as duas datas'; return; }
   if (from > to) { err.textContent = 'A data inicial deve ser anterior à final'; return; }
   err.textContent = '';
-  state = { since: from, until: to, label: `${from.slice(8)}.${from.slice(5,7)} – ${to.slice(8)}.${to.slice(5,7)}` };
+  state = { since: from, until: to, label: CocoPeriodo.rotulo(from, to) };
   document.getElementById('periodValue').textContent = state.label;
   document.getElementById('periodPop').classList.remove('open');
   document.getElementById('periodPill').classList.remove('open');
@@ -751,11 +752,7 @@ async function onStockEdit(e) {
   }
 }
 
-function rangeLabelShort(since, until) {
-  if (!since || !until) return '';
-  const f = iso => `${iso.slice(8,10)}/${iso.slice(5,7)}`;
-  return `${f(since)}–${f(until)}`;
-}
+function rangeLabelShort(since, until) { return CocoPeriodo.rotulo(since, until); }
 
 // ── Card agregado "Estoque" (por família de produto, somando todos os canais) ──
 let aggCollapsed = JSON.parse(localStorage.getItem('coco_estoque_agg_collapsed') || 'false');
@@ -896,8 +893,8 @@ function renderAggCard() {
 function render() {
   const d = current; if (!d) return;
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
-  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html;
-  // aqui ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho (pedido do Luan, 19/08/2026).
+  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html; aqui
+  // ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho.
   const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
   setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
   setText('pageSub', `Vita Pet Life · ${state.label} (${rangeLabelShort(d.since, d.until)}) · vendas reais do período`);

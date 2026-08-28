@@ -1,22 +1,19 @@
-// ─────────────────────────────────────────────
-//  amazon.js — Amazon Selling Partner API (EUA + BR)
-//  Autenticação: LWA (Login with Amazon) + AWS SigV4 via IAM AssumeRole
+// amazon.js — Amazon Selling Partner API (EUA + BR)
+// Autenticação: LWA (Login with Amazon) + AWS SigV4 via IAM AssumeRole
 //
-//  US:  AMAZON_CLIENT_ID, AMAZON_CLIENT_SECRET, AMAZON_REFRESH_TOKEN
-//       → autorizar em sellercentral.amazon.com (North America Seller Central)
-//  BR:  AMAZON_BR_REFRESH_TOKEN + (opcional) AMAZON_BR_CLIENT_ID/AMAZON_BR_CLIENT_SECRET
-//       → autorizar na conta CocoandLuna (Brazil Seller Central). Se o token BR vier de um
-//         APP PRÓPRIO do BR, setar também o client id/secret dele (o refresh token só
-//         funciona com o client que o emitiu). Sem eles, cai no CLIENT_ID/SECRET do US.
-//  Compartilhado: AMAZON_ROLE_ARN, AMAZON_AWS_ACCESS_KEY, AMAZON_AWS_SECRET_KEY
+// US:  AMAZON_CLIENT_ID, AMAZON_CLIENT_SECRET, AMAZON_REFRESH_TOKEN
+//      → autorizar em sellercentral.amazon.com (North America Seller Central)
+// BR:  AMAZON_BR_REFRESH_TOKEN + (opcional) AMAZON_BR_CLIENT_ID/AMAZON_BR_CLIENT_SECRET
+//      → autorizar na conta CocoandLuna (Brazil Seller Central). Se o token BR vier de um
+//        APP PRÓPRIO do BR, setar também o client id/secret dele (o refresh token só
+//        funciona com o client que o emitiu). Sem eles, cai no CLIENT_ID/SECRET do US.
+// Compartilhado: AMAZON_ROLE_ARN, AMAZON_AWS_ACCESS_KEY, AMAZON_AWS_SECRET_KEY
 //
-//  Estado atual (ver CLAUDE.md 4.7): a US ainda NÃO foi autorizada com token próprio —
-//  AMAZON_REFRESH_TOKEN e AMAZON_BR_REFRESH_TOKEN são o MESMO token (mesma conta/mesma
-//  cota real). Enquanto isso for verdade, fetchOrders() faz UMA chamada combinada
-//  (metade das requisições reais) em vez de duas contra o mesmo balde de rate limit.
-//  Quando a US virar um token de verdade diferente do BR, o código detecta sozinho
-//  (SAME_TOKEN vira false) e volta a fazer duas chamadas com backoff independente.
-// ─────────────────────────────────────────────
+// Cada mercado tem app e refresh token próprios, e é assim que precisa ficar: com o mesmo
+// token nos dois, um dos mercados para de receber pedido em silêncio. SAME_TOKEN detecta
+// esse caso em tempo de execução e cai numa chamada combinada, para não bater duas vezes
+// no mesmo balde de rate limit; com tokens diferentes, são duas chamadas com backoff
+// independente. Diagnóstico quando um mercado zera: GET /api/amazon/whoami.
 import 'dotenv/config';
 import crypto from 'crypto';
 import zlib from 'zlib';
@@ -456,20 +453,14 @@ export async function fetchOrders(sinceISO, untilISO) {
   return results;
 }
 
-export async function fetchOrdersBR() {
-  return []; // BR já vem incluído em fetchOrders
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  Reports API — backfill histórico
+// Reports API — backfill histórico
 //
-//  Paginar /orders/v0/orders para trás é inviável: 100 pedidos por página a 1 req/min.
-//  A Reports API monta um arquivo com TUDO de uma vez — 3 ou 4 requisições cobrem meses.
-//  Bônus: o relatório traz uma linha POR ITEM, com o nome do produto, que a API de
-//  pedidos não devolve (ver backlog "itens do pedido não são buscados").
+// Paginar /orders/v0/orders para trás é inviável: 100 pedidos por página a 1 req/min.
+// A Reports API monta um arquivo com TUDO de uma vez — 3 ou 4 requisições cobrem meses.
+// Bônus: o relatório traz uma linha POR ITEM, com o nome do produto, que a API de
+// pedidos não devolve (ver backlog "itens do pedido não são buscados").
 //
-//  Fluxo: createReport → poll até DONE → getReportDocument → baixa (gzip) → parse TSV.
-// ═══════════════════════════════════════════════════════════════════════════════
+// Fluxo: createReport → poll até DONE → getReportDocument → baixa (gzip) → parse TSV.
 
 const REPORT_TYPE      = 'GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL';
 const REPORT_CHUNK_DAYS = 30;        // a Amazon limita o intervalo por relatório
@@ -838,15 +829,13 @@ export async function probeOrder(orderId, market = 'br') {
   return out;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  Catalog Items API — imagem de produto por ASIN
+// Catalog Items API — imagem de produto por ASIN
 //
-//  Nem a Orders API nem o relatório de backfill trazem imagem — só o Catalog Items
-//  API, um lookup por ASIN. Balde de cota PRÓPRIO (não compete com /orders nem
-//  /reports). Mesmo assim, dado o histórico de 429 desta conta (ver CLAUDE.md
-//  4.7.2/4.7.4), o throttle abaixo é deliberadamente conservador em vez de tentar
-//  espremer o limite documentado da Amazon para esse endpoint.
-// ═══════════════════════════════════════════════════════════════════════════════
+// Nem a Orders API nem o relatório de backfill trazem imagem — só o Catalog Items
+// API, um lookup por ASIN. Balde de cota PRÓPRIO (não compete com /orders nem
+// /reports). Mesmo assim, dado o histórico de 429 desta conta (ver CLAUDE.md
+// 4.7.2/4.7.4), o throttle abaixo é deliberadamente conservador em vez de tentar
+// espremer o limite documentado da Amazon para esse endpoint.
 const CATALOG_THROTTLE_MS = 600;
 const CATALOG_MAX_TRIES   = 3;
 

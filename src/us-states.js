@@ -1,17 +1,15 @@
-// ─────────────────────────────────────────────
-//  us-states.js — normalização de estado dos EUA
+// us-states.js — normalização de estado dos EUA
 //
-//  O `ship-state` da Amazon (Reports API e Orders API) vem em grafias
-//  inconsistentes para o mesmo estado: "California", "CALIFORNIA", "CA", "CA.",
-//  "N.Y.", "N C", "PUERTO RICO", "P.R. 00623"... Sem normalizar, cada variante
-//  vira uma chave distinta em `byState` (metrics.js), poluindo o ranking de
-//  Geografia US e fazendo o mapa subcontar (ele só casa códigos de 2 letras).
-//  Ver CLAUDE.md 4.7.5 / 4.10.
+// O `ship-state` da Amazon (Reports API e Orders API) vem em grafias
+// inconsistentes para o mesmo estado: "California", "CALIFORNIA", "CA", "CA.",
+// "N.Y.", "N C", "PUERTO RICO", "P.R. 00623"... Sem normalizar, cada variante
+// vira uma chave distinta em `byState` (metrics.js), poluindo o ranking de
+// Geografia US e fazendo o mapa subcontar (ele só casa códigos de 2 letras).
+// Ver CLAUDE.md 4.7.5 / 4.10.
 //
-//  normalizeUsState() reduz qualquer variante ao código de 2 letras (uppercase).
-//  O que não for reconhecível (ex: província canadense, typo) volta só com pontos
-//  removidos e espaços colapsados — não some, só não vira código.
-// ─────────────────────────────────────────────
+// normalizeUsState() reduz qualquer variante ao código de 2 letras (uppercase).
+// O que não for reconhecível (ex: província canadense, typo) volta só com pontos
+// removidos e espaços colapsados — não some, só não vira código.
 
 // Códigos válidos: 50 estados + DC + territórios + endereços militares (APO/FPO).
 const CODES = new Set([

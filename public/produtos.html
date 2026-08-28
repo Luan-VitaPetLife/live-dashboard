@@ -213,6 +213,7 @@
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
+<script src="js/periodo.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -584,7 +585,7 @@ function applyRange() {
   if (!from || !to) { err.textContent = 'Preencha as duas datas'; return; }
   if (from > to) { err.textContent = 'A data inicial deve ser anterior à final'; return; }
   err.textContent = '';
-  state = { since: from, until: to, label: `${from.slice(8)}.${from.slice(5,7)} – ${to.slice(8)}.${to.slice(5,7)}` };
+  state = { since: from, until: to, label: CocoPeriodo.rotulo(from, to) };
   document.getElementById('periodValue').textContent = state.label;
   document.getElementById('periodPop').classList.remove('open');
   document.getElementById('periodPill').classList.remove('open');
@@ -691,8 +692,8 @@ function rowHTML(p, ch) {
   // nova. Mas o input FICA editável: como o grupo é sempre dentro do mesmo canal (ver
   // mergeProductRows), aplicar o mesmo valor a todos os membros é uma leitura razoável, e evita o
   // beco sem saída de antes ("edite no produto individual" sem nenhum jeito de chegar nele, já que
-  // o título individual não aparece mais em lugar nenhum uma vez agrupado — reportado pelo Luan,
-  // 17/08/2026). data-grouped/data-members fazem onFinanceEdit gravar o valor em cada membro.
+  // o título individual não aparece mais em lugar nenhum uma vez agrupado — reportado em
+  // produção). data-grouped/data-members fazem onFinanceEdit gravar o valor em cada membro.
   const groupAttrs = p._grouped ? ` data-grouped="1" data-members="${escAttr(JSON.stringify(p._members))}"` : '';
   const groupHint = p._grouped ? ` Aplica a todos os ${p._members.length} produtos do grupo, dentro deste canal.` : '';
   const financeCells = `<td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p._grouped ? '' : (p.cog ?? '')}" ${dataAttrs}${groupAttrs} data-field="cog" title="Custo do produto (COG), por unidade.${groupHint} Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
@@ -822,8 +823,8 @@ async function onFinanceEdit(e) {
 function render() {
   const d = current; if (!d) return;
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
-  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html;
-  // aqui ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho (pedido do Luan, 19/08/2026).
+  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html; aqui
+  // ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho.
   const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
   setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
   setText('pageSub', 'Vita Pet Life · ' + state.label);

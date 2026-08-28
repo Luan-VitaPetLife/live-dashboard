@@ -210,6 +210,7 @@
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
+<script src="js/periodo.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -360,8 +361,8 @@ let market = localStorage.getItem('coco_market') || 'br';
 let current = null;            // último payload da API
 const miniCharts = {};
 const EC_FONT_FAMILY = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
-// ResizeObserver único cobre todos os mini-gráficos — troca o auto-resize que o Chart.js fazia
-// sozinho (responsive:true). Reage tanto a resize de janela quanto a mudanças de layout do card.
+// ResizeObserver único cobre todos os mini-gráficos: o ECharts não se redimensiona sozinho.
+// Reage tanto a resize de janela quanto a mudanças de layout do card.
 const echartsRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => {
   for (const entry of entries) {
     const inst = miniCharts[entry.target.id];
@@ -454,7 +455,7 @@ function applyRange() {
   if (!from || !to) { err.textContent = 'Preencha as duas datas'; return; }
   if (from > to) { err.textContent = 'A data inicial deve ser anterior à final'; return; }
   err.textContent = '';
-  state = { since: from, until: to, label: `${from.slice(8)}.${from.slice(5,7)} – ${to.slice(8)}.${to.slice(5,7)}` };
+  state = { since: from, until: to, label: CocoPeriodo.rotulo(from, to) };
   document.getElementById('periodValue').textContent = state.label;
   document.getElementById('periodPop').classList.remove('open');
   document.getElementById('periodPill').classList.remove('open');
@@ -555,8 +556,8 @@ async function render() {
   const k = d.kpis || {}, ml = d.mlBreakdown || {}, cs = d.channelSplit || {};
   const labels = d.trend?.labels || [], tb = d.trend?.byChannel || [];
   const updated = d.updatedAt ? new Date(d.updatedAt).toLocaleString('pt-BR') : '—';
-  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html;
-  // aqui ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho (pedido do Luan, 19/08/2026).
+  // "Ao vivo · HH:MM" — mesmo padrão amigável já usado em index.html/geografia*/segmentos.html; aqui
+  // ainda era "sync: DD/MM/AAAA, HH:MM:SS", cru demais pro cabeçalho.
   const updatedDate = d.updatedAt ? new Date(d.updatedAt) : null;
   setText('lastUpdate', updatedDate ? `Ao vivo · ${String(updatedDate.getHours()).padStart(2,'0')}:${String(updatedDate.getMinutes()).padStart(2,'0')}` : 'Sem sincronização ainda');
   setText('pageSub', 'Vita Pet Life · ' + state.label);
@@ -755,7 +756,7 @@ function drawMini(key, labels, data, color, headerTxt, legendTxt) {
       extraCssText:'border-radius:8px;box-shadow:0 8px 20px rgba(30,28,24,.14);', appendToBody:true, confine:true,
       textStyle:{ fontFamily:EC_FONT_FAMILY, fontSize:11 },
       // key===valor monetário em todo card de canal (Gasto Meta, Receita ML/Amazon) — sempre com
-      // R$/US$ no tooltip, nunca número cru (pedido do Luan, 18/08/2026).
+      // R$/US$ no tooltip, nunca número cru.
       formatter: params => params.length ? `${params[0].axisValueLabel}<br>${params[0].marker} ${fmtMoney(params[0].value)}` : '' },
     series: [miniSeries(data, color)],
   });

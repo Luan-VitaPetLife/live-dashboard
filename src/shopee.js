@@ -1,14 +1,12 @@
-// ─────────────────────────────────────────────
-//  shopee.js — integração com a Shopee Open Platform (API v2)
-//  Cuida da assinatura HMAC-SHA256, do fluxo OAuth e da
-//  renovação automática do access_token (vence ~4h).
+// shopee.js — integração com a Shopee Open Platform (API v2)
+// Cuida da assinatura HMAC-SHA256, do fluxo OAuth e da
+// renovação automática do access_token (vence ~4h).
 //
-//  Passos (uma vez):
-//   1. Acesse GET /shopee/connect  -> redireciona para a Shopee autorizar.
-//   2. Após autorizar, a Shopee chama /shopee/callback?code=...&shop_id=...
-//      e o código é trocado por access_token + refresh_token (salvos no store).
-//   Depois disso, fetchOrders() funciona e o token se renova sozinho.
-// ─────────────────────────────────────────────
+// Passos (uma vez):
+//  1. Acesse GET /shopee/connect  -> redireciona para a Shopee autorizar.
+//  2. Após autorizar, a Shopee chama /shopee/callback?code=...&shop_id=...
+//     e o código é trocado por access_token + refresh_token (salvos no store).
+//  Depois disso, fetchOrders() funciona e o token se renova sozinho.
 import 'dotenv/config';
 import crypto from 'crypto';
 import { getShopeeTokens, setShopeeTokens } from './store.js';

@@ -1,8 +1,6 @@
-// ─────────────────────────────────────────────
-//  meta.js — Meta Marketing API (Facebook/Instagram Ads)
-//  Busca gasto, impressões e cliques por dia da conta de anúncios.
-//  Usa um System User Token permanente (não expira).
-// ─────────────────────────────────────────────
+// meta.js — Meta Marketing API (Facebook/Instagram Ads)
+// Busca gasto, impressões e cliques por dia da conta de anúncios.
+// Usa um System User Token permanente (não expira).
 import 'dotenv/config';
 
 const ACCESS_TOKEN     = process.env.META_ACCESS_TOKEN;

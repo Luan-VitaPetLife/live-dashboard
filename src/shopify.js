@@ -1,8 +1,6 @@
-// ─────────────────────────────────────────────
-//  shopify.js — Shopify Admin GraphQL API
-//  fetchOrders e fetchSessionsDaily aceitam cfg opcional
-//  para suportar múltiplas lojas (BR + US).
-// ─────────────────────────────────────────────
+// shopify.js — Shopify Admin GraphQL API
+// fetchOrders e fetchSessionsDaily aceitam cfg opcional
+// para suportar múltiplas lojas (BR + US).
 import 'dotenv/config';
 
 const STORE   = process.env.SHOPIFY_STORE;
@@ -21,12 +19,12 @@ async function gqlFetch(store, token, version, query, variables = {}) {
   return json.data;
 }
 
-// Decisão (28/07/2026, CLAUDE.md 4.1 — "decisão em aberto" resolvida): só pedido com
-// pagamento de verdade recebido conta como venda. EXPIRED/VOIDED já eram excluídos
-// (pagamento nunca aconteceu). Adicionado PENDING (aguardando, pode falhar — Pix/boleto)
-// e AUTHORIZED (cartão autorizado mas NÃO capturado, dinheiro ainda não foi cobrado).
-// PAID/PARTIALLY_PAID/PARTIALLY_REFUNDED/REFUNDED continuam contando — teve pagamento
-// real (REFUNDED já zera sozinho via ajuste de devolução, ver 4.15).
+// Decisão (CLAUDE.md 4.1 — "decisão em aberto" resolvida): só pedido com pagamento de verdade
+// recebido conta como venda. EXPIRED/VOIDED já eram excluídos (pagamento nunca aconteceu).
+// Adicionado PENDING (aguardando, pode falhar — Pix/boleto) e AUTHORIZED (cartão autorizado mas
+// NÃO capturado, dinheiro ainda não foi cobrado).
+// PAID/PARTIALLY_PAID/PARTIALLY_REFUNDED/REFUNDED continuam contando — teve pagamento real
+// (REFUNDED já zera sozinho via ajuste de devolução, ver 4.15).
 const CANCELLED = new Set(['EXPIRED', 'VOIDED', 'CANCELLED', 'PENDING', 'AUTHORIZED']);
 
 // cfg: { store, token, version, market, channel, tz }

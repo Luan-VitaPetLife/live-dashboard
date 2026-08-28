@@ -1,13 +1,10 @@
-// ─────────────────────────────────────────────
-//  geo.js — tabelas e utilitários de mapa compartilhados (Coco and Luna)
-//  IIFE incluído via <script src="js/geo.js">, mesmo padrão de colors.js/sidebar.js.
-//  Expõe window.CocoGeo.
+// geo.js — tabelas e utilitários de mapa compartilhados (Coco and Luna) IIFE incluído via
+// <script src="js/geo.js">, mesmo padrão de colors.js/sidebar.js. Expõe window.CocoGeo.
 //
-//  Existe porque Geografia e Segmentos desenham o mesmo tipo de mapa e mantinham cópias
-//  IGUAIS destas oito tabelas, do carregador de GeoJSON, do fundo do mapa e das rampas de
-//  cor — cerca de 150 linhas repetidas em cada arquivo. Corrigir um lado nunca chegava no
-//  outro, e a troca do provedor de tile em 27/08/2026 quase passou batido numa das telas.
-// ─────────────────────────────────────────────
+// Existe porque Geografia e Segmentos desenham o mesmo tipo de mapa e mantinham cópias IGUAIS
+// destas oito tabelas, do carregador de GeoJSON, do fundo do mapa e das rampas de cor — cerca
+// de 150 linhas repetidas em cada arquivo. Corrigir um lado nunca chegava no outro, e a troca
+// do provedor de tile quase passou batido numa das telas.
 (function () {
   // ── Brasil ──
   // O GeoJSON do IBGE identifica a unidade federativa pelo código numérico (properties.codarea),
@@ -156,10 +153,10 @@
   const SUB_REGIONS = porMercado(SUB_REGIONS_BR, SUB_REGIONS_US);
 
   // ── Fundo do mapa ──
-  // Esri "Light Gray Canvas", sem chave de API. A CartoDB, usada até 27/08/2026, passou a
-  // exigir chave e devolvia o tile com "API KEY REQUIRED" carimbado por cima do mapa: HTTP
-  // 200, imagem válida, nada falhando no código, só a marca d'água na tela do usuário.
-  // São duas camadas porque a base do Esri não traz nome de cidade nenhum.
+  // Esri "Light Gray Canvas", sem chave de API. A CartoDB, usada até então, passou a exigir
+  // chave e devolvia o tile com "API KEY REQUIRED" carimbado por cima do mapa: HTTP 200, imagem
+  // válida, nada falhando no código, só a marca d'água na tela do usuário. São duas camadas
+  // porque a base do Esri não traz nome de cidade nenhum.
   const TILE_URL = camada =>
     `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_${camada}/MapServer/tile/{z}/{y}/{x}`;
   const TILE_ATTR = 'Tiles &copy; Esri, DeLorme, NAVTEQ';

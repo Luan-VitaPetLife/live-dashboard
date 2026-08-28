@@ -1,28 +1,26 @@
-// ─────────────────────────────────────────────
-//  shopifyYucaloo.js — OAuth para a Yucaloo (2ª marca da Vita Pet Life).
+// shopifyYucaloo.js — OAuth para a Yucaloo (2ª marca da Vita Pet Life).
 //
-//  App criado pela Shopify Dev Dashboard (fluxo novo, diferente do app
-//  customizado clássico usado pela Coco and Luna em shopify.js, que dá um
-//  token estático direto na hora). Aqui é a própria Shopify que inicia o
-//  fluxo: sempre que alguém abre/instala o app, ela chama a "URL do app"
-//  configurada na Dev Dashboard com hmac/host/shop/timestamp assinados — não
-//  um "code" de OAuth pronto. Cabe a nós validar essa assinatura e
-//  redirecionar pro /admin/oauth/authorize da loja, pra só então receber o
-//  "code" no callback e trocar por um access_token permanente (offline, não
-//  expira — mesmo tipo de token que o app customizado clássico já dava).
-//  Ver CLAUDE.md.
+// App criado pela Shopify Dev Dashboard (fluxo novo, diferente do app
+// customizado clássico usado pela Coco and Luna em shopify.js, que dá um
+// token estático direto na hora). Aqui é a própria Shopify que inicia o
+// fluxo: sempre que alguém abre/instala o app, ela chama a "URL do app"
+// configurada na Dev Dashboard com hmac/host/shop/timestamp assinados — não
+// um "code" de OAuth pronto. Cabe a nós validar essa assinatura e
+// redirecionar pro /admin/oauth/authorize da loja, pra só então receber o
+// "code" no callback e trocar por um access_token permanente (offline, não
+// expira — mesmo tipo de token que o app customizado clássico já dava).
+// Ver CLAUDE.md.
 //
-//  Um app por mercado (mesmo padrão da Amazon BR/US) — 'br' e (futuramente)
-//  'us' têm client_id/secret/redirect próprios.
-// ─────────────────────────────────────────────
+// Um app por mercado (mesmo padrão da Amazon BR/US) — 'br' e (futuramente)
+// 'us' têm client_id/secret/redirect próprios.
 import 'dotenv/config';
 import crypto from 'crypto';
 import { getYucalooTokens, setYucalooTokens } from './store.js';
 import { fetchOrders as fetchShopifyOrders, fetchProductCatalog as fetchShopifyProductCatalog, fetchSessionsDaily as fetchShopifySessionsDaily } from './shopify.js';
 
 // read_all_orders exige read_orders junto (a Shopify recusa o OAuth com
-// "missing_read_orders_scope" se só o primeiro vier) — confirmado ao vivo
-// tentando instalar sem ele, 06/08/2026.
+// "missing_read_orders_scope" se só o primeiro vier) — confirmado ao vivo tentando instalar sem
+// ele.
 const SCOPE = 'read_orders,read_all_orders,read_analytics,read_customers,read_products,read_reports';
 
 function creds(mkt) {
@@ -96,17 +94,15 @@ export async function exchangeCode(mkt, shop, code) {
   return tokens[mkt];
 }
 
-// Pedidos da Yucaloo — reaproveita fetchOrders de shopify.js (já aceita
-// store/token por chamada, mesmo mecanismo usado pro Shopify US).
+// Pedidos da Yucaloo — reaproveita fetchOrders de shopify.js (já aceita store/token por
+// chamada, mesmo mecanismo usado pro Shopify US).
 //
-// Decisão do Luan (06/08/2026): market = mkt ('br'/'us'), igual à Coco and
-// Luna — NÃO um valor à parte. No Brasil a Yucaloo é vendida junto com os
-// mesmos marketplaces da Coco and Luna, e ele quer ver tudo junto ao
-// escolher só "Brasil"/"EUA", sem precisar escolher marca e depois país
-// (isso fica pra quando houver mais marcas — ver CLAUDE.md 4.20). O
-// `channel` continua próprio ("yucaloo_br"/"yucaloo_us") — é o que permite
-// saber, quando precisar, quais pedidos vieram da loja Shopify da Yucaloo
-// (badge, filtro futuro) sem misturar com o canal "shopify" da Coco and
+// Decisão de produto: market = mkt ('br'/'us'), igual à Coco and Luna — NÃO um valor à parte.
+// No Brasil a Yucaloo é vendida junto com os mesmos marketplaces da Coco and Luna, e ele quer
+// ver tudo junto ao escolher só "Brasil"/"EUA", sem precisar escolher marca e depois país (isso
+// fica pra quando houver mais marcas — ver CLAUDE.md 4.20). O `channel` continua próprio
+// ("yucaloo_br"/"yucaloo_us") — é o que permite saber, quando precisar, quais pedidos vieram da
+// loja Shopify da Yucaloo (badge, filtro futuro) sem misturar com o canal "shopify" da Coco and
 // Luna, mesmo os dois estando agora no mesmo balde de `market`.
 export async function fetchOrders(sinceISO, untilISO, mkt) {
   const t = getYucalooTokens()[mkt];

@@ -1,13 +1,10 @@
-// ─────────────────────────────────────────────
-//  alerts.js — avisa no Telegram quando um canal fica travado sem sincronizar.
-//  Sem SDK (mesma regra do resto do projeto): API do Telegram é só POST/GET
-//  HTTP simples, chamada direto via fetch — igual o B2/SigV4 da Amazon.
+// alerts.js — avisa no Telegram quando um canal fica travado sem sincronizar. Sem SDK (mesma
+// regra do resto do projeto): API do Telegram é só POST/GET HTTP simples, chamada direto via
+// fetch — igual o B2/SigV4 da Amazon.
 //
-//  Motivo: hoje um erro de sync só aparece no log do Railway
-//  (console.error('Sync falhou:', ...) em server.js) — ninguém é avisado
-//  ativamente. Um canal parado por dias pode passar despercebido até
-//  alguém notar dado desatualizado na dashboard. Pedido do Luan, 19/08/2026.
-// ─────────────────────────────────────────────
+// Motivo: hoje um erro de sync só aparece no log do Railway (console.error('Sync falhou:', ...)
+// em server.js) — ninguém é avisado ativamente. Um canal parado por dias pode passar
+// despercebido até alguém notar dado desatualizado na dashboard.
 import 'dotenv/config';
 import { getChannelHealth, setChannelHealth } from './store.js';
 

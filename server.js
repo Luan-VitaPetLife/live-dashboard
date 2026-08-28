@@ -1,6 +1,4 @@
-// ─────────────────────────────────────────────
-//  server.js — serve a interface e a API da dashboard.
-// ─────────────────────────────────────────────
+// server.js — serve a interface e a API da dashboard.
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
@@ -485,11 +483,11 @@ app.delete('/api/product-types', (req, res) => {
   res.json({ types });
 });
 
-// Produtos ocultos (controlado no Unificador — "essa função deve estar no unificador, que é onde
-// iremos controlar tudo", pedido do Luan 06/08/2026) — palavras-chave buscadas só nas tags de cada
-// item (ver metrics.js isHiddenItem); produto que bater sai dos cards normais (Gato/Cachorro/Outros) de
-// Segmentos e vai pro card "Ocultos" lá. Admin-only, mesmo padrão de /api/product-groups (única tela
-// que chama esses endpoints é unificador.html — segmentos.html só exibe o resultado já calculado).
+// Produtos ocultos (controlado no Unificador — "essa função deve estar no unificador, que é onde iremos
+// controlar tudo") — palavras-chave buscadas só nas tags de cada item (ver metrics.js isHiddenItem);
+// produto que bater sai dos cards normais (Gato/Cachorro/Outros) de Segmentos e vai pro card "Ocultos"
+// lá. Admin-only, mesmo padrão de /api/product-groups (única tela que chama esses endpoints é
+// unificador.html — segmentos.html só exibe o resultado já calculado).
 app.get('/api/product-hidden-tags', requireAdmin, (req, res) => {
   try {
     const { market = 'br' } = req.query;
@@ -648,11 +646,11 @@ app.post('/api/amazon-br/force-sync', async (_req, res) => {
   res.json(report);
 });
 
-// Cancelamento cooperativo dos jobs em segundo plano (botão × no widget flutuante,
-// pedido do Luan 19/08/2026). Só os três jobs com loop em etapas (backfill/imagens/itens
-// da Amazon) têm ponto seguro pra checar a flag no meio do caminho — backup e geografia
-// via Bling terminam em segundos e não valem o risco de interromper no meio de um upload/
-// gravação, então não entram em CANCELABLE_JOB_IDS (o botão nem aparece pra eles).
+// Cancelamento cooperativo dos jobs em segundo plano (botão × no widget flutuante). Só os três
+// jobs com loop em etapas (backfill/imagens/itens da Amazon) têm ponto seguro pra checar a flag
+// no meio do caminho — backup e geografia via Bling terminam em segundos e não valem o risco de
+// interromper no meio de um upload/gravação, então não entram em CANCELABLE_JOB_IDS (o botão
+// nem aparece pra eles).
 class JobCancelledError extends Error {}
 const CANCELABLE_JOB_IDS = new Set(['amazon-backfill', 'amazon-images', 'amazon-items']);
 const cancelFlags = {};
@@ -660,14 +658,14 @@ function checkCancelled(jobId) {
   if (cancelFlags[jobId]) { cancelFlags[jobId] = false; throw new JobCancelledError('Cancelado pelo usuário'); }
 }
 
-// Um "running" persistido sobrevive a um reinício do servidor no meio do processo (deploy no
-// meio de um backfill, por exemplo — ver CLAUDE.md 4.7.3) porque a flag *Running em memória zera
+// Um "running" persistido sobrevive a um reinício do servidor no meio do processo (deploy no meio
+// de um backfill, por exemplo — ver CLAUDE.md 4.7.3) porque a flag *Running em memória zera
 // sozinha ao reiniciar, mas ninguém nunca escreve por cima do status salvo em kv. Usado tanto por
 // GET /api/status quanto por GET /api/jobs — precisavam concordar: antes só /api/jobs (o widget)
 // detectava isso, então o painel de Integrações (que lê /api/status pra saber se pode reativar o
 // botão "Aplicar") ficava com o botão travado pra sempre olhando pro mesmo job fantasma que o
-// widget já mostrava como erro (relatado pelo Luan, 19/08/2026 — via CLAUDE.md "Campanhas": os
-// dois lugares que mostram o mesmo dado nunca podem discordar).
+// widget já mostrava como erro (reportado em produção — via CLAUDE.md "Campanhas": os dois
+// lugares que mostram o mesmo dado nunca podem discordar).
 const STALE_AFTER_MS = { 'amazon-backfill': 45 * 60 * 1000, 'amazon-images': 20 * 60 * 1000, 'amazon-items': 20 * 60 * 1000, 'bling-geo': 10 * 60 * 1000, 'backup': 10 * 60 * 1000 };
 function destaleJob(jobId, raw) {
   if (!raw || raw.status !== 'running' || !raw.startedAt) return raw;
@@ -933,12 +931,11 @@ app.post('/api/alerts/test', requireAdmin, async (req, res) => {
   }
 });
 
-// Correção pontual (28/07/2026): só pedido com pagamento de verdade conta como venda
-// (CLAUDE.md 4.1) — pedido já gravado com status "sem pagamento" (Pending/
-// PendingAvailability na Amazon, PENDING/AUTHORIZED no Shopify, confirmed/
-// payment_required/payment_in_process no ML) ficou marcado cancelled:false por engano.
-// Corrige o flag local de quem já está no banco, sem chamar nenhuma API de novo — ver
-// UNPAID_STATUS_BY_CHANNEL em store.js.
+// Correção pontual: só pedido com pagamento de verdade conta como venda (CLAUDE.md 4.1) —
+// pedido já gravado com status "sem pagamento" (Pending/PendingAvailability na Amazon,
+// PENDING/AUTHORIZED no Shopify, confirmed/payment_required/payment_in_process no ML) ficou
+// marcado cancelled:false por engano. Corrige o flag local de quem já está no banco, sem chamar
+// nenhuma API de novo — ver UNPAID_STATUS_BY_CHANNEL em store.js.
 app.post('/api/orders/fix-unpaid', (req, res) => {
   try {
     const fixed = fixUnpaidOrders();
@@ -1291,8 +1288,8 @@ app.get('/api/status', (_req, res) => {
       hasRoleArn:  has('AMAZON_ROLE_ARN'),
       // Se true, US e BR estão usando o MESMO token/conta (chamada combinada, cursor
       // 'combined') — se false, são duas contas de verdade com cursores 'us'/'br'
-      // independentes. Ver CLAUDE.md 4.7.1 — eram pra ser diferentes desde 09/07/2026;
-      // exposto aqui pra confirmar de fora sem adivinhar.
+      // independentes. Ver CLAUDE.md 4.7.1 — eram pra ser diferentes desde o início; exposto aqui
+      // pra confirmar de fora sem adivinhar.
       sameToken:   amazon.isSameToken(),
       cursors: {
         us:       getAmazonCursor('us'),
@@ -1311,9 +1308,8 @@ app.get('/api/status', (_req, res) => {
       hasLwa:      has('AMAZON_BR_REFRESH_TOKEN') || (has('AMAZON_REFRESH_TOKEN') && amazon.isSameToken()),
       hasAwsCreds: has('AMAZON_AWS_ACCESS_KEY') && has('AMAZON_AWS_SECRET_KEY'),
       sharedWithUs:  amazon.isSameToken(),
-      // Bug corrigido (28/07/2026): mostrava o backoff da US (backoffActive/backoffUntil)
-      // em vez do da BR — backoffBRActive/backoffBRUntil já eram calculados acima mas
-      // nunca usados aqui.
+      // Bug corrigido: mostrava o backoff da US (backoffActive/backoffUntil) em vez do da BR —
+      // backoffBRActive/backoffBRUntil já eram calculados acima mas nunca usados aqui.
       backoffActive: backoffBRActive,
       backoffUntil:  backoffBRActive ? new Date(backoffBRUntil).toISOString() : null,
       nextSyncIn:    backoffBRActive ? `${Math.ceil((backoffBRUntil - Date.now()) / 60000)} min` : 'agora',
@@ -1351,11 +1347,11 @@ app.get('/api/status', (_req, res) => {
 // Lista normalizada dos processos em segundo plano (backfill/imagens/itens da Amazon, geografia
 // via Bling, backup) — alimenta o widget flutuante (jobs-widget.js, compartilhado em toda
 // página) em vez de cada página ter que saber os detalhes de cada job específico. Cada job já
-// carrega quem disparou (startedBy, capturado no POST que iniciou), pedido do Luan 18/08/2026.
-// Job concluído/erro/cancelado some da lista sozinho depois de um tempo (destaleJob acima só
-// cuida do "running" fantasma) — pra uma execução de teste de semanas atrás não continuar
-// aparecendo em toda página pra sempre (relatado pelo Luan, 19/08/2026, como "fica criando
-// tarefa nova sem eu pedir": na real eram jobs antigos nunca esquecidos).
+// carrega quem disparou (startedBy, capturado no POST que iniciou). Job
+// concluído/erro/cancelado some da lista sozinho depois de um tempo (destaleJob acima só cuida
+// do "running" fantasma) — pra uma execução de teste de semanas atrás não continuar aparecendo
+// em toda página pra sempre (reportado em produção, como "fica criando tarefa nova sem eu
+// pedir": na real eram jobs antigos nunca esquecidos).
 const FORGET_FINISHED_AFTER_MS = 15 * 60 * 1000;
 function normalizeJob(id, label, rawIn) {
   const raw = destaleJob(id, rawIn);
