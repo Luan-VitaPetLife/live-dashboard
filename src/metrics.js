@@ -1,7 +1,7 @@
 // metrics.js — calcula o payload da dashboard a
 // partir dos pedidos e sessões guardados no store.
 // Receita SEMPRE exclui pedidos cancelados.
-import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductGroupTypes, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductGroupTypes, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, getOldestOrderDate, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode, US_STATE_NAMES } from './us-states.js';
 import { normalizeBrState, BR_STATE_NAMES } from './br-states.js';
 import { buildInsights } from './insights.js';
@@ -930,6 +930,10 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 
   return {
     period: { since, until, span, grain },
+    // Onde o histórico deste mercado começa. O sync guarda uma janela móvel, não a loja
+    // inteira, então um período anterior a isso vem legitimamente zerado — e a tela precisa
+    // desse dado pra explicar o zero em vez de deixar parecendo defeito.
+    historyStart: getOldestOrderDate(market),
     channel, metric, market,
     insights,
     kpis: {

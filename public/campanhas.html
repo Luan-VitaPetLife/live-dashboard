@@ -210,6 +210,7 @@
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
+<script src="js/periodo.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -454,7 +455,7 @@ function applyRange() {
   if (!from || !to) { err.textContent = 'Preencha as duas datas'; return; }
   if (from > to) { err.textContent = 'A data inicial deve ser anterior à final'; return; }
   err.textContent = '';
-  state = { since: from, until: to, label: `${from.slice(8)}.${from.slice(5,7)} – ${to.slice(8)}.${to.slice(5,7)}` };
+  state = { since: from, until: to, label: CocoPeriodo.rotulo(from, to) };
   document.getElementById('periodValue').textContent = state.label;
   document.getElementById('periodPop').classList.remove('open');
   document.getElementById('periodPill').classList.remove('open');

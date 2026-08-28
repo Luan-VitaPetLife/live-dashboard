@@ -21,6 +21,13 @@ export function criarTeste(nome) {
       if (!cond) falhas++;
       return !!cond;
     },
+    // Igualdade: mostra o que veio quando falha, senão "FALHOU" não diz o que investigar.
+    eq(recebido, esperado, msg) {
+      const bate = recebido === esperado;
+      console.log(`   ${bate ? 'ok  ' : 'FALHOU'} ${msg}${bate ? '' : `\n        esperava ${JSON.stringify(esperado)}, veio ${JSON.stringify(recebido)}`}`);
+      if (!bate) falhas++;
+      return bate;
+    },
     info: msg => console.log(`   ·    ${msg}`),
     // Pular é diferente de passar: um teste que depende de rede não pode virar falha
     // quando a máquina está sem internet, mas também não pode se declarar aprovado.

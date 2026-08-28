@@ -543,6 +543,7 @@
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
+<script src="js/periodo.js"></script>
 
 <div class="main">
   <div class="topbar">
@@ -1088,7 +1089,6 @@ function setEChart(id, option) {
 function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
 function parseISO(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d) }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x }
-function fmtDM(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0') }
 
 const todayISO = isoLocal(new Date());
 let sinceDate = localStorage.getItem('coco_since') || todayISO;
@@ -1100,11 +1100,7 @@ let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
 if (channel !== 'todos' && !CocoColors.ch[channel]) channel = 'todos';
 if (!METRIC_LABEL[metric]) metric = 'receita';
 
-function rangeLabel(s, u) {
-  if (s === u && s === todayISO) return 'Hoje';
-  if (s === u) return fmtDM(parseISO(s));
-  return fmtDM(parseISO(s)) + ' – ' + fmtDM(parseISO(u));
-}
+function rangeLabel(s, u) { return CocoPeriodo.rotulo(s, u, { hoje: todayISO }); }
 function presetRange(p) {
   const n = new Date();
   if (p === 'today') return [todayISO, todayISO];
@@ -1160,16 +1156,36 @@ function insFmtVal(v, fmt) {
   return fmtInt(v);
 }
 
-function renderInsights(list) {
+// Texto do card de Insights quando não há nenhum destaque. `contexto` vem do payload:
+// { pedidos, historyStart, since, until }.
+function insEmptyHTML(contexto) {
+  const c = contexto || {};
+  const semPedido = Number(c.pedidos || 0) === 0;
+  if (semPedido && c.historyStart && c.until && c.until < c.historyStart) {
+    const inicio = CocoPeriodo.data(c.historyStart, { mercado: market });
+    return `<div class="ins-empty">Este período é anterior ao histórico disponível.<br>`
+      + `O primeiro pedido registrado neste mercado é de ${escapeHtmlAttr(inicio)}.</div>`;
+  }
+  if (semPedido) {
+    return `<div class="ins-empty">Nenhum pedido neste período.<br>`
+      + `Sem venda registrada não há o que comparar com o período anterior.</div>`;
+  }
+  return `<div class="ins-empty">Nada fora do normal neste período.<br>`
+    + `Períodos maiores (7 ou 30 dias) costumam revelar mais que um dia isolado.</div>`;
+}
+
+function renderInsights(list, contexto) {
   _insights = Array.isArray(list) ? list : [];
   const body = document.getElementById('insightsBody');
   const count = document.getElementById('insightsCount');
   if (!body) return;
   if (!_insights.length) {
     count.textContent = '';
-    // Sem insight não é erro: é período estável, ou volume baixo demais pra afirmar qualquer
-    // coisa sem virar ruído (ver os pisos em src/insights.js).
-    body.innerHTML = `<div class="ins-empty">Nada fora do normal neste período.<br>Períodos maiores (7 ou 30 dias) costumam revelar mais que um dia isolado.</div>`;
+    // Duas ausências bem diferentes, que davam a mesma frase antes: um período estável (ou com
+    // volume baixo demais pra afirmar algo sem virar ruído, ver os pisos em src/insights.js) e
+    // um período em que simplesmente não existe pedido nenhum. Dizer "nada fora do normal" no
+    // segundo caso é enganoso: não é que nada mudou, é que não há o que comparar.
+    body.innerHTML = insEmptyHTML(contexto);
     return;
   }
   if (_insightSel >= _insights.length) _insightSel = 0;
@@ -1714,7 +1730,10 @@ function render(d) {
     return `<div class="fl-row"><div class="fl-row-top"><span class="fl-label">${l}</span><span class="fl-val">${fmtInt(v)}</span></div><div class="fl-track"><div class="fl-fill" style="width:${w}%;background:${c}"></div></div><div class="fl-meta">${ofTotal}${drop ? ' '+drop : ''}</div></div>`;
   }).join('');
 
-  renderInsights(d.insights || []);
+  renderInsights(d.insights || [], {
+    pedidos: d.kpis?.orders, historyStart: d.historyStart,
+    since: d.period?.since, until: d.period?.until,
+  });
 
   // Top products
   const isAllCh = d.channel === 'todos';

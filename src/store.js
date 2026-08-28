@@ -572,6 +572,18 @@ export function getOrders({ channel = 'todos', since = null, until = null, marke
   return out;
 }
 
+// Data do pedido mais antigo de um mercado ('AAAA-MM-DD'), ou null se não houver nenhum.
+// O índice por mercado já vem ordenado por timestamp, então é só olhar a primeira posição.
+// Serve pra tela dizer "o histórico começa em tal dia" quando o período escolhido é anterior
+// a tudo que existe, em vez de mostrar zero sem explicação.
+export function getOldestOrderDate(market) {
+  load();
+  if (indexDirty) rebuildOrdersIndex();
+  const lista = ordersByMarket[market];
+  if (!lista || !lista.length) return null;
+  return String(lista[0].createdAt).slice(0, 10);
+}
+
 // ── Sessões diárias ───────────────────────────
 export function upsertSessionsDaily(rows, market = 'br') {
   const db = load();

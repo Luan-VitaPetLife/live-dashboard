@@ -238,6 +238,7 @@
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 <script src="js/colors.js"></script>
+<script src="js/periodo.js"></script>
 <script src="js/geo.js"></script>
 
 <div class="main">
@@ -598,11 +599,6 @@ function modalChanHTML(byChannel) {
 function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') }
 function parseISO(s) { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d) }
 function addDays(d,n) { const x=new Date(d); x.setDate(x.getDate()+n); return x }
-function fmtDM(d) {
-  return market === 'us'
-    ? String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')
-    : String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
-}
 
 // ── Rampas de cor (interpolação em js/geo.js) ──
 const heatGradientColor = t =>
@@ -663,10 +659,7 @@ let channel      = loadChannel(market);
 let choroConfig  = loadChoroConfig(market);
 let heatConfig   = loadHeatConfig(market);
 
-function rangeLabel(s,u) {
-  if(s===u&&s===todayISO)return'Hoje'; if(s===u)return fmtDM(parseISO(s));
-  return fmtDM(parseISO(s))+' – '+fmtDM(parseISO(u));
-}
+function rangeLabel(s,u) { return CocoPeriodo.rotulo(s, u, { hoje: todayISO, mercado: market }); }
 function presetRange(p) {
   const n=new Date();
   if(p==='today')return[todayISO,todayISO]; if(p==='7d')return[isoLocal(addDays(n,-6)),todayISO];

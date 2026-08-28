@@ -94,6 +94,7 @@ public/js/sidebar.js       Sidebar compartilhada (IIFE, injeta markup + CSS + co
 public/js/colors.js        Sistema de cores compartilhado (IIFE) + color picker
 public/js/jobs-widget.js   Card flutuante de processos em segundo plano (IIFE), toda página
 public/js/confirm-modal.js Pop-up de confirmação (substitui confirm() nativo, IIFE), toda página
+public/js/periodo.js       Rótulo do período selecionado (IIFE), fonte única das 6 telas com seletor
 public/css/switch.css      Toggle .ios-switch, padrão único do app
 ```
 
@@ -107,7 +108,8 @@ public/
   *.html                 as 11 páginas (raiz obrigatória)
   favicon.png            convenção de raiz, fica onde está
   css/                   switch.css anim.css
-  js/                    sidebar.js colors.js geo.js pill-switch.js confirm-modal.js jobs-widget.js
+  js/                    sidebar.js colors.js geo.js periodo.js pill-switch.js confirm-modal.js
+                         jobs-widget.js
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
   img/canais/            logo_* usados nos cards de canal (Campanhas/Produtos/Estoque)
@@ -737,6 +739,39 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   o teste varre todas as regras `.x.open{display:` do app e falha se alguma ficou de fora, e
   falha de novo se ela não tiver estado de entrada declarado (sairia suave e entraria seca).
 
+### Rótulo de período (`public/js/periodo.js`, `CocoPeriodo`)
+- **Fonte única do texto que aparece na pill de período**, nas 6 telas que têm seletor (Visão
+  geral, Geografia, Segmentos, Produtos, Campanhas, Estoque). Eram sete implementações
+  independentes, com formatos diferentes entre si (umas com `–`, outras com `.`) e **nenhuma
+  mostrava o ano**.
+- **O ano só aparece quando o período NÃO é do ano corrente.** No uso normal a pill continua
+  curta ("01/08 – 28/08"); num período de outro ano ela vira "01/08 – 28/08/2025". Numa virada
+  de ano cada ponta leva o seu ("20/12/2025 – 05/01/2026"), senão "20/12 – 05/01" não diz qual
+  dezembro. Esconder o ano sempre é o que fez um período de agosto/2025 abrir a dashboard
+  inteira zerada com o cabeçalho parecendo o mês corrente (28/08/2026).
+- `rotulo(since, until, { hoje, mercado })` monta a pill; `data(iso, { mercado })` formata UMA
+  data **sempre com o ano**, pra frase que fala de limite de histórico (onde esconder o ano
+  seria esconder justamente o que importa). `mercado:'us'` inverte pra MM/DD, comportamento que
+  a Geografia já tinha e foi preservado.
+- `scripts/test/periodo.test.mjs` executa o módulo de verdade (em `node:vm`) e falha se uma
+  tela voltar a montar o rótulo na mão ou deixar de carregar o script. Foi ele que achou uma
+  sétima cópia escondida no seletor de período do Estoque, que a busca manual tinha deixado passar.
+
+### Período sem dado nenhum (card de Insights)
+- `computeDashboard` devolve `historyStart`: a data do pedido mais antigo daquele mercado
+  (`getOldestOrderDate` em store.js, O(1) em cima do índice por mercado que já existia).
+- O card de Insights tinha UMA frase pra duas ausências bem diferentes: período estável e
+  período sem pedido nenhum. Dizer "Nada fora do normal neste período" quando não existe pedido
+  é enganoso, porque não é que nada mudou, é que não há o que comparar. Agora são três textos:
+  período anterior ao histórico (diz qual é a data do primeiro pedido registrado), período sem
+  pedido, e período de fato estável.
+- **O histórico começa quando o sync começou, não na primeira venda da empresa.** Cada ciclo
+  busca uma janela móvel de 60 dias (`defaultWindow()` em sync.js) e faz upsert, então nada
+  anterior à primeira sincronização jamais entrou no banco. Em 28/08/2026 o mercado BR começa
+  em 17/04/2026 (Amazon BR, que é a única com backfill via Reports API), e as lojas Shopify/ML/
+  Shopee só a partir do fim de abril. Recuperar 2025 exigiria um backfill por canal, que só a
+  Amazon tem hoje.
+
 ### Seletor de opção (`public/js/pill-switch.js`, `.pill-switch`)
 - **Padrão único de todo seletor de duas ou mais opções mutuamente exclusivas**: moldura discreta
   e um pill claro que DESLIZA até a opção ativa. Pedido do Luan (27/08/2026) a partir do
@@ -1101,8 +1136,9 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - Cobre hoje o que **falha em silêncio**, que é onde este projeto machuca: `csp` (todo host
   externo de `public/` autorizado na CSP), `mapa` (nenhuma página volta pra provedor de tile com
   chave, e as duas telas usam o mesmo), `geojson` (o arquivo dos EUA é local, servido e no formato
-  certo), `paginas` (sintaxe dos `<script>` inline), `assets` (caminho de arquivo local existe) e
-  `insights` (as regras do card, incluindo os pisos anti-ruído).
+  certo), `paginas` (sintaxe dos `<script>` inline), `assets` (caminho de arquivo local existe),
+  `insights` (as regras do card, incluindo os pisos anti-ruído) e `periodo` (o ano aparece no
+  rótulo quando o período é de outro ano, e nenhuma tela remonta esse texto por conta própria).
 - **Nenhum teste sobe o `server.js` nem toca no banco.** `geojson.test.mjs` levanta só um
   `express.static` sobre `public/`. Isso é regra, não detalhe: subir o servidor de verdade dispara
   o sync, e a cota da Amazon é por CONTA, não por processo — teste local competindo com o sync de
