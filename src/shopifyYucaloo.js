@@ -1,20 +1,18 @@
-// ─────────────────────────────────────────────
-//  shopifyYucaloo.js — OAuth para a Yucaloo (2ª marca da Vita Pet Life).
+// shopifyYucaloo.js — OAuth para a Yucaloo (2ª marca da Vita Pet Life).
 //
-//  App criado pela Shopify Dev Dashboard (fluxo novo, diferente do app
-//  customizado clássico usado pela Coco and Luna em shopify.js, que dá um
-//  token estático direto na hora). Aqui é a própria Shopify que inicia o
-//  fluxo: sempre que alguém abre/instala o app, ela chama a "URL do app"
-//  configurada na Dev Dashboard com hmac/host/shop/timestamp assinados — não
-//  um "code" de OAuth pronto. Cabe a nós validar essa assinatura e
-//  redirecionar pro /admin/oauth/authorize da loja, pra só então receber o
-//  "code" no callback e trocar por um access_token permanente (offline, não
-//  expira — mesmo tipo de token que o app customizado clássico já dava).
-//  Ver CLAUDE.md.
+// App criado pela Shopify Dev Dashboard (fluxo novo, diferente do app
+// customizado clássico usado pela Coco and Luna em shopify.js, que dá um
+// token estático direto na hora). Aqui é a própria Shopify que inicia o
+// fluxo: sempre que alguém abre/instala o app, ela chama a "URL do app"
+// configurada na Dev Dashboard com hmac/host/shop/timestamp assinados — não
+// um "code" de OAuth pronto. Cabe a nós validar essa assinatura e
+// redirecionar pro /admin/oauth/authorize da loja, pra só então receber o
+// "code" no callback e trocar por um access_token permanente (offline, não
+// expira — mesmo tipo de token que o app customizado clássico já dava).
+// Ver CLAUDE.md.
 //
-//  Um app por mercado (mesmo padrão da Amazon BR/US) — 'br' e (futuramente)
-//  'us' têm client_id/secret/redirect próprios.
-// ─────────────────────────────────────────────
+// Um app por mercado (mesmo padrão da Amazon BR/US) — 'br' e (futuramente)
+// 'us' têm client_id/secret/redirect próprios.
 import 'dotenv/config';
 import crypto from 'crypto';
 import { getYucalooTokens, setYucalooTokens } from './store.js';

@@ -1063,9 +1063,9 @@ let lastData = null;
 let topProductsExpanded = false;
 function toggleTopProducts() { topProductsExpanded = !topProductsExpanded; if (lastData) render(lastData); }
 
-// ResizeObserver único cobre todos os gráficos — troca o auto-resize que o Chart.js fazia sozinho
-// (responsive:true). Reage tanto a resize de janela quanto ao recolher/expandir a sidebar (que muda
-// a largura do card sem disparar resize da janela).
+// ResizeObserver único cobre todos os gráficos: o ECharts não se redimensiona sozinho. Reage tanto
+// a resize de janela quanto ao recolher/expandir a sidebar (que muda a largura do card sem
+// disparar resize da janela).
 const echartsRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => {
   for (const entry of entries) {
     const inst = echartsInst[entry.target.id];
@@ -1394,16 +1394,11 @@ function renderLegend(containerId, items) {
 
 function drawDonut(id, data, colors, labels) {
   const total = data.reduce((a,b) => a+(Number(b)||0), 0);
-  // borderRadius arredonda a ponta de cada fatia, padAngle abre um respiro entre elas — o
-  // acabamento "pill" que gráficos de anel mais modernos usam. emphasis.scaleSize é o equivalente
-  // ECharts do hoverOffset do Chart.js (a fatia cresce ao passar o mouse); o raio externo precisa
-  // de folga dentro do canvas pro "grow" do hover, senão a fatia em destaque é cortada no limite
-  // do canvas (mesmo bug do Chart.js, 18/08/2026). Fix original fixava 92% — folga de ~8% do raio,
-  // suficiente nos anéis grandes (Canais/Marketing, 160px) mas não nos pequenos do card "Orgânico x
-  // Campanha" (88px em grade, 150px quando só 1 canal): 8% de um raio de 44px é ~3,5px, menor que
-  // os 6px que o hover cresce — a fatia hover estourava o canvas e cortava nas laterais/embaixo do
-  // anel (reportado pelo Luan, 20/08/2026). Calcula a folga em px a partir do tamanho REAL do
-  // container em vez de uma % fixa, então qualquer tamanho de donut fica protegido.
+  // emphasis.scaleSize cresce a fatia sob o mouse, então o raio externo precisa de folga dentro do
+  // canvas: sem ela a fatia em destaque é cortada na borda. A folga sai do tamanho REAL do
+  // container, em px, e não de uma porcentagem fixa. Uma % não serve porque os anéis têm tamanhos
+  // muito diferentes: 8% do raio dá folga de sobra nos grandes (Canais/Marketing, 160px) e só
+  // ~3,5px nos pequenos do card "Orgânico x Campanha" (88px), menos que os 6px que o hover cresce.
   const scaleSize = 6;
   const dom = document.getElementById(id);
   const half = dom ? Math.min(dom.clientWidth, dom.clientHeight) / 2 : 80;
@@ -1547,10 +1542,9 @@ function render(d) {
   // próprio canal, o drilldown seria redundante. Usa getZr() (canvas bruto) + convertFromPixel em
   // vez do 'click' de série do ECharts: esse último só dispara em cima do traço/ponto exatos, e a
   // área preenchida acima da linha (bem comum num dia de valor baixo, sobra bastante espaço em
-  // branco no card) não conta como "em cima da série" — ficava parecendo quebrado, clique só
-  // funcionava se acertasse o pixel certo. O Chart.js antigo (getElementsAtEventForMode 'index')
-  // reagia a clique em qualquer lugar da coluna; convertFromPixel reproduz isso. Bug relatado
-  // pelo Luan, 19/08/2026, depois da migração pra ECharts.
+  // branco no card) não conta como "em cima da série". Com ele, o clique só funcionava se
+  // acertasse o pixel certo, e a tela parecia quebrada. convertFromPixel faz a coluna inteira
+  // do dia responder ao clique.
   document.getElementById('trendDrilldown').style.display = 'none';
   trendInst?.getZr().off('click');
   trendInst?.getZr().on('click', params => {

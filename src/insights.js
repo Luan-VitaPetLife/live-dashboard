@@ -1,19 +1,17 @@
-// ─────────────────────────────────────────────
-//  insights.js — "Insights" da Visão geral
+// insights.js — "Insights" da Visão geral
 //
-//  Gera frases curtas explicando O QUE mudou no período em relação ao período anterior
-//  comparável. Regras determinísticas, SEM IA: o número exibido é sempre o número calculado
-//  (modelo de linguagem erra conta e inventa com convicção), não custa por acesso, não manda
-//  dado de faturamento pra fora, e o mesmo dado gera sempre a mesma frase — dá pra testar.
-//  Decidido com o Luan em 24/08/2026, a partir do card de Insights do Shopify.
+// Gera frases curtas explicando O QUE mudou no período em relação ao período anterior
+// comparável. Regras determinísticas, SEM IA: o número exibido é sempre o número calculado
+// (modelo de linguagem erra conta e inventa com convicção), não custa por acesso, não manda
+// dado de faturamento pra fora, e o mesmo dado gera sempre a mesma frase — dá pra testar.
+// Decidido com o Luan em 24/08/2026, a partir do card de Insights do Shopify.
 //
-//  A faixa de Indicadores no topo já responde "receita subiu 53%". Este card responde
-//  "por causa de quê": qual canal/produto/estado/etapa do funil puxou o número.
+// A faixa de Indicadores no topo já responde "receita subiu 53%". Este card responde
+// "por causa de quê": qual canal/produto/estado/etapa do funil puxou o número.
 //
-//  Módulo PURO de propósito: recebe dois retratos já calculados (atual e anterior) e devolve
-//  a lista. Não lê store, não faz I/O, não importa metrics.js (evita import circular — os
-//  rótulos de canal chegam por parâmetro). É o que permite testar as regras sem banco.
-// ─────────────────────────────────────────────
+// Módulo PURO de propósito: recebe dois retratos já calculados (atual e anterior) e devolve
+// a lista. Não lê store, não faz I/O, não importa metrics.js (evita import circular — os
+// rótulos de canal chegam por parâmetro). É o que permite testar as regras sem banco.
 
 // ── Pisos anti-ruído ──
 // O volume diário do BR gira em torno de algumas dezenas de pedidos. Nesse tamanho, variação

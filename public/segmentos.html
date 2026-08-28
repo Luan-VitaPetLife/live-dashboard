@@ -563,8 +563,7 @@ function setLive(state, msg) {
 // ── Chart ──
 const EC_FONT_FAMILY = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
 const echartsInst = {};
-// ResizeObserver único cobre todos os gráficos — troca o auto-resize que o Chart.js fazia sozinho
-// (responsive:true).
+// ResizeObserver único cobre todos os gráficos: o ECharts não se redimensiona sozinho.
 const echartsRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => {
   for (const entry of entries) {
     const inst = echartsInst[entry.target.id];

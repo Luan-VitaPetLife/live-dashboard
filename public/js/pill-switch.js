@@ -1,28 +1,26 @@
-// ─────────────────────────────────────────────
-//  pill-switch.js — seletor de opção com pill deslizante (Coco and Luna)
-//  IIFE incluído via <script src="js/pill-switch.js">, mesmo padrão de sidebar.js/colors.js.
+// pill-switch.js — seletor de opção com pill deslizante (Coco and Luna)
+// IIFE incluído via <script src="js/pill-switch.js">, mesmo padrão de sidebar.js/colors.js.
 //
-//  Padrão visual único de TODO seletor de duas ou mais opções mutuamente exclusivas do app:
-//  moldura discreta, opção ativa marcada por um pill claro que DESLIZA até ela. Antes cada
-//  tela tinha o seu: .view-switch (Colunas/Linhas), .mkt-btn (Brasil/EUA), .chart-type-btn
-//  (barra/linha), .mode-btn (Coropleto/Calor) — quatro aparências diferentes pra mesma
-//  decisão de interface, três delas marcando o ativo com fundo escuro.
+// Padrão visual único de TODO seletor de duas ou mais opções mutuamente exclusivas do app:
+// moldura discreta, opção ativa marcada por um pill claro que DESLIZA até ela. Antes cada
+// tela tinha o seu: .view-switch (Colunas/Linhas), .mkt-btn (Brasil/EUA), .chart-type-btn
+// (barra/linha), .mode-btn (Coropleto/Calor) — quatro aparências diferentes pra mesma
+// decisão de interface, três delas marcando o ativo com fundo escuro.
 //
-//  Este arquivo é PURA APRESENTAÇÃO: não trata clique, não muda estado, não decide nada.
-//  Ele observa qual botão tem a classe `active` e leva o pill até lá. É de propósito — assim
-//  as telas mantiveram os próprios handlers, que continuam sendo a única fonte da verdade
-//  sobre o que está selecionado. Se um clique for recusado pela lógica da página, o pill
-//  simplesmente não anda, em vez de mentir e se corrigir depois.
+// Este arquivo é PURA APRESENTAÇÃO: não trata clique, não muda estado, não decide nada.
+// Ele observa qual botão tem a classe `active` e leva o pill até lá. É de propósito — assim
+// as telas mantiveram os próprios handlers, que continuam sendo a única fonte da verdade
+// sobre o que está selecionado. Se um clique for recusado pela lógica da página, o pill
+// simplesmente não anda, em vez de mentir e se corrigir depois.
 //
-//  Markup:
-//    <div class="pill-switch" id="algumId">
-//      <span class="ps-pill" aria-hidden="true"></span>
-//      <button class="ps-opt active" ...>Colunas</button>
-//      <button class="ps-opt" ...>Linhas</button>
-//    </div>
-//  A variante `pill-switch--sm` é pro seletor só de ícone que vive no cabeçalho de um card, onde não
-//  cabe a altura do padrão.
-// ─────────────────────────────────────────────
+// Markup:
+//   <div class="pill-switch" id="algumId">
+//     <span class="ps-pill" aria-hidden="true"></span>
+//     <button class="ps-opt active" ...>Colunas</button>
+//     <button class="ps-opt" ...>Linhas</button>
+//   </div>
+// A variante `pill-switch--sm` é pro seletor só de ícone que vive no cabeçalho de um card, onde não
+// cabe a altura do padrão.
 (function () {
   const CSS = `
   .pill-switch{position:relative;display:inline-flex;align-items:center;gap:3px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:3px;flex-shrink:0}

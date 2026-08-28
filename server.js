@@ -1,6 +1,4 @@
-// ─────────────────────────────────────────────
-//  server.js — serve a interface e a API da dashboard.
-// ─────────────────────────────────────────────
+// server.js — serve a interface e a API da dashboard.
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';

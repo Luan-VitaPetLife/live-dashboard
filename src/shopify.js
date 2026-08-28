@@ -1,8 +1,6 @@
-// ─────────────────────────────────────────────
-//  shopify.js — Shopify Admin GraphQL API
-//  fetchOrders e fetchSessionsDaily aceitam cfg opcional
-//  para suportar múltiplas lojas (BR + US).
-// ─────────────────────────────────────────────
+// shopify.js — Shopify Admin GraphQL API
+// fetchOrders e fetchSessionsDaily aceitam cfg opcional
+// para suportar múltiplas lojas (BR + US).
 import 'dotenv/config';
 
 const STORE   = process.env.SHOPIFY_STORE;

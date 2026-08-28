@@ -1,12 +1,10 @@
-// ─────────────────────────────────────────────
-//  sidebar.js — Sidebar única e compartilhada por TODAS as páginas.
-//  A sidebar não muda de página para página (as opções são sempre as mesmas),
-//  então fica definida UMA vez aqui em vez de duplicada em cada .html.
+// sidebar.js — Sidebar única e compartilhada por TODAS as páginas.
+// A sidebar não muda de página para página (as opções são sempre as mesmas),
+// então fica definida UMA vez aqui em vez de duplicada em cada .html.
 //
-//  Uso na página: colocar <script src="js/sidebar.js"></script> logo após <body>.
-//  O componente injeta o markup, marca o item ativo pela URL atual e liga
-//  o comportamento de abrir/fechar (desktop e mobile). Nada mais é necessário.
-// ─────────────────────────────────────────────
+// Uso na página: colocar <script src="js/sidebar.js"></script> logo após <body>.
+// O componente injeta o markup, marca o item ativo pela URL atual e liga
+// o comportamento de abrir/fechar (desktop e mobile). Nada mais é necessário.
 
 // Escapa texto vindo de dado externo (nome de cliente, título de produto etc.) antes de
 // interpolar em innerHTML — evita XSS armazenado a partir de pedido/produto malicioso.

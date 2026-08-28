@@ -1,21 +1,19 @@
-// ─────────────────────────────────────────────
-//  jobs-widget.js — indicador flutuante de processos em segundo plano
-//  (backfill/imagens/itens da Amazon, geografia via Bling, backup),
-//  compartilhado por TODAS as páginas — mesmo padrão do sidebar.js.
+// jobs-widget.js — indicador flutuante de processos em segundo plano
+// (backfill/imagens/itens da Amazon, geografia via Bling, backup),
+// compartilhado por TODAS as páginas — mesmo padrão do sidebar.js.
 //
-//  Uso: <script src="js/jobs-widget.js"></script> logo depois de sidebar.js.
-//  Sozinho: puxa GET /api/jobs a cada poucos segundos, mostra um card
-//  flutuante e arrastável quando há algo rodando, some sozinho um tempo
-//  depois de tudo terminar. Continua visível ao navegar pra outra página
-//  (cada página carrega o script de novo, mas a posição/tamanho ficam em
-//  localStorage — pedido do Luan, 18/08/2026: "quando sair dessa página,
-//  a barra de progresso continua na tela"). Redimensionável pelas bordas;
-//  cada job em andamento tem um × pra cancelar (com confirmação) e cada
-//  job já terminado tem um × pra fechar (sem confirmação — só some da
-//  lista); o cabeçalho também tem um × pra fechar o widget inteiro. Fechar
-//  (job avulso ou o widget inteiro) sobrevive a trocar de página dentro da
-//  mesma aba (sessionStorage) — pedido do Luan, 19/08/2026.
-// ─────────────────────────────────────────────
+// Uso: <script src="js/jobs-widget.js"></script> logo depois de sidebar.js.
+// Sozinho: puxa GET /api/jobs a cada poucos segundos, mostra um card
+// flutuante e arrastável quando há algo rodando, some sozinho um tempo
+// depois de tudo terminar. Continua visível ao navegar pra outra página
+// (cada página carrega o script de novo, mas a posição/tamanho ficam em
+// localStorage — pedido do Luan, 18/08/2026: "quando sair dessa página,
+// a barra de progresso continua na tela"). Redimensionável pelas bordas;
+// cada job em andamento tem um × pra cancelar (com confirmação) e cada
+// job já terminado tem um × pra fechar (sem confirmação — só some da
+// lista); o cabeçalho também tem um × pra fechar o widget inteiro. Fechar
+// (job avulso ou o widget inteiro) sobrevive a trocar de página dentro da
+// mesma aba (sessionStorage) — pedido do Luan, 19/08/2026.
 (function () {
   const POS_KEY = 'coco_jobs_widget_pos';
   const SIZE_KEY = 'coco_jobs_widget_size';

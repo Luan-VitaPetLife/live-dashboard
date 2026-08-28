@@ -1,8 +1,6 @@
-// ─────────────────────────────────────────────
-//  metrics.js — calcula o payload da dashboard a
-//  partir dos pedidos e sessões guardados no store.
-//  Receita SEMPRE exclui pedidos cancelados.
-// ─────────────────────────────────────────────
+// metrics.js — calcula o payload da dashboard a
+// partir dos pedidos e sessões guardados no store.
+// Receita SEMPRE exclui pedidos cancelados.
 import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductGroupTypes, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode, US_STATE_NAMES } from './us-states.js';
 import { normalizeBrState, BR_STATE_NAMES } from './br-states.js';

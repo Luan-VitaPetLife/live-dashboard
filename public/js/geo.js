@@ -1,13 +1,11 @@
-// ─────────────────────────────────────────────
-//  geo.js — tabelas e utilitários de mapa compartilhados (Coco and Luna)
-//  IIFE incluído via <script src="js/geo.js">, mesmo padrão de colors.js/sidebar.js.
-//  Expõe window.CocoGeo.
+// geo.js — tabelas e utilitários de mapa compartilhados (Coco and Luna)
+// IIFE incluído via <script src="js/geo.js">, mesmo padrão de colors.js/sidebar.js.
+// Expõe window.CocoGeo.
 //
-//  Existe porque Geografia e Segmentos desenham o mesmo tipo de mapa e mantinham cópias
-//  IGUAIS destas oito tabelas, do carregador de GeoJSON, do fundo do mapa e das rampas de
-//  cor — cerca de 150 linhas repetidas em cada arquivo. Corrigir um lado nunca chegava no
-//  outro, e a troca do provedor de tile em 27/08/2026 quase passou batido numa das telas.
-// ─────────────────────────────────────────────
+// Existe porque Geografia e Segmentos desenham o mesmo tipo de mapa e mantinham cópias
+// IGUAIS destas oito tabelas, do carregador de GeoJSON, do fundo do mapa e das rampas de
+// cor — cerca de 150 linhas repetidas em cada arquivo. Corrigir um lado nunca chegava no
+// outro, e a troca do provedor de tile em 27/08/2026 quase passou batido numa das telas.
 (function () {
   // ── Brasil ──
   // O GeoJSON do IBGE identifica a unidade federativa pelo código numérico (properties.codarea),

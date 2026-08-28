@@ -360,8 +360,8 @@ let market = localStorage.getItem('coco_market') || 'br';
 let current = null;            // último payload da API
 const miniCharts = {};
 const EC_FONT_FAMILY = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
-// ResizeObserver único cobre todos os mini-gráficos — troca o auto-resize que o Chart.js fazia
-// sozinho (responsive:true). Reage tanto a resize de janela quanto a mudanças de layout do card.
+// ResizeObserver único cobre todos os mini-gráficos: o ECharts não se redimensiona sozinho.
+// Reage tanto a resize de janela quanto a mudanças de layout do card.
 const echartsRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => {
   for (const entry of entries) {
     const inst = miniCharts[entry.target.id];

@@ -1,17 +1,15 @@
-// ─────────────────────────────────────────────
-//  colors.js — catálogo de canais e sistema de cores (Coco and Luna)
-//  IIFE incluído via <script src="js/colors.js"> em qualquer página, mesmo
-//  padrão de sidebar.js. Expõe window.CocoColors com:
-//   - o catálogo de canais (DEFAULT_CH): nome, cor, logo e mercado de cada
-//     canal, fonte única de todas as telas — ver o comentário sobre ele
-//   - channelsFor(market) e chLabel(chave) pra montar seletor de canal
-//   - defaults (DEFAULT_CH/DEFAULT_MKT) + objetos vivos (.ch/.mkt)
-//   - persistência em localStorage('coco_colors') (mesma chave de sempre)
-//   - o novo seletor de cor (paleta de swatches curados + hex), substituindo
-//     o <input type="color"> nativo do navegador (lento/feio/inconsistente
-//     entre SOs) em qualquer lugar do app — painel de cores de canal/
-//     marketing (index.html) e configurações de mapa (geografia*.html).
-// ─────────────────────────────────────────────
+// colors.js — catálogo de canais e sistema de cores (Coco and Luna)
+// IIFE incluído via <script src="js/colors.js"> em qualquer página, mesmo
+// padrão de sidebar.js. Expõe window.CocoColors com:
+//  - o catálogo de canais (DEFAULT_CH): nome, cor, logo e mercado de cada
+//    canal, fonte única de todas as telas — ver o comentário sobre ele
+//  - channelsFor(market) e chLabel(chave) pra montar seletor de canal
+//  - defaults (DEFAULT_CH/DEFAULT_MKT) + objetos vivos (.ch/.mkt)
+//  - persistência em localStorage('coco_colors') (mesma chave de sempre)
+//  - o novo seletor de cor (paleta de swatches curados + hex), substituindo
+//    o <input type="color"> nativo do navegador (lento/feio/inconsistente
+//    entre SOs) em qualquer lugar do app — painel de cores de canal/
+//    marketing (index.html) e configurações de mapa (geografia*.html).
 (function () {
   const STORAGE_KEY = 'coco_colors';
 

@@ -1,17 +1,15 @@
-// ─────────────────────────────────────────────
-//  googleads.js — Google Ads API (campanhas de busca/display)
-//  Usa OAuth 2.0 (authorization_code) e renova o access_token
-//  automaticamente via refresh_token (não expira).
+// googleads.js — Google Ads API (campanhas de busca/display)
+// Usa OAuth 2.0 (authorization_code) e renova o access_token
+// automaticamente via refresh_token (não expira).
 //
-//  Escopo atual: só conta EUA ("Coco and Luna", Customer ID 134-411-4329)
-//  roda campanhas nos EUA — ver CLAUDE.md.
+// Escopo atual: só conta EUA ("Coco and Luna", Customer ID 134-411-4329)
+// roda campanhas nos EUA — ver CLAUDE.md.
 //
-//  Passos (uma vez):
-//   1. Acesse GET /googleads/connect → redireciona para o Google autorizar.
-//   2. Após autorizar, o Google chama /googleads/callback?code=...
-//      e o código é trocado por access_token + refresh_token (salvos no store).
-//   Depois disso, fetchCampaigns() funciona e o token se renova sozinho.
-// ─────────────────────────────────────────────
+// Passos (uma vez):
+//  1. Acesse GET /googleads/connect → redireciona para o Google autorizar.
+//  2. Após autorizar, o Google chama /googleads/callback?code=...
+//     e o código é trocado por access_token + refresh_token (salvos no store).
+//  Depois disso, fetchCampaigns() funciona e o token se renova sozinho.
 import 'dotenv/config';
 import { getGoogleAdsTokens, setGoogleAdsTokens } from './store.js';
 

@@ -1,14 +1,12 @@
-// ─────────────────────────────────────────────
-//  mercadolivre.js — integração com a API do Mercado Livre
-//  Usa OAuth 2.0 (authorization_code) e renova o access_token
-//  automaticamente (vence a cada 6h).
+// mercadolivre.js — integração com a API do Mercado Livre
+// Usa OAuth 2.0 (authorization_code) e renova o access_token
+// automaticamente (vence a cada 6h).
 //
-//  Passos (uma vez):
-//   1. Acesse GET /mercadolivre/connect  → redireciona para o ML autorizar.
-//   2. Após autorizar, o ML chama /mercadolivre/callback?code=...
-//      e o código é trocado por access_token + refresh_token (salvos no store).
-//   Depois disso, fetchOrders() funciona e o token se renova sozinho.
-// ─────────────────────────────────────────────
+// Passos (uma vez):
+//  1. Acesse GET /mercadolivre/connect  → redireciona para o ML autorizar.
+//  2. Após autorizar, o ML chama /mercadolivre/callback?code=...
+//     e o código é trocado por access_token + refresh_token (salvos no store).
+//  Depois disso, fetchOrders() funciona e o token se renova sozinho.
 import 'dotenv/config';
 import { getMlTokens, setMlTokens } from './store.js';
 

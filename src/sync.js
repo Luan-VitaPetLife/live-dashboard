@@ -1,8 +1,6 @@
-// ─────────────────────────────────────────────
-//  sync.js — busca dados dos canais e grava no store.
-//  Pode rodar via "npm run sync" (uma vez) ou pelo
-//  agendador do server.js (a cada N minutos).
-// ─────────────────────────────────────────────
+// sync.js — busca dados dos canais e grava no store.
+// Pode rodar via "npm run sync" (uma vez) ou pelo
+// agendador do server.js (a cada N minutos).
 
 import 'dotenv/config';
 import * as shopify from './shopify.js';

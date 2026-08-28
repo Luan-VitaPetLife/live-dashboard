@@ -1,12 +1,10 @@
-// ─────────────────────────────────────────────
-//  store.js — persistência híbrida
-//  Com DATABASE_URL → Postgres (Railway/produção).
-//  Sem DATABASE_URL → JSON local (desenvolvimento).
+// store.js — persistência híbrida
+// Com DATABASE_URL → Postgres (Railway/produção).
+// Sem DATABASE_URL → JSON local (desenvolvimento).
 //
-//  Interface pública permanece síncrona: cache em memória
-//  é carregado no startup via initStore(), e escritas
-//  disparam upserts async no Postgres em background.
-// ─────────────────────────────────────────────
+// Interface pública permanece síncrona: cache em memória
+// é carregado no startup via initStore(), e escritas
+// disparam upserts async no Postgres em background.
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

@@ -1,13 +1,11 @@
-// ─────────────────────────────────────────────
-//  confirm-modal.js — substitui o confirm() nativo do navegador (a barra cinza
-//  "site diz", sem cara nenhuma de app) por um pop-up no estilo da própria
-//  dashboard — pedido do Luan, 19/08/2026: "não poderia acontecer".
+// confirm-modal.js — substitui o confirm() nativo do navegador (a barra cinza
+// "site diz", sem cara nenhuma de app) por um pop-up no estilo da própria
+// dashboard — pedido do Luan, 19/08/2026: "não poderia acontecer".
 //
-//  Uso: <script src="js/confirm-modal.js"></script> logo depois de sidebar.js.
-//  API: await cocoConfirm('Mensagem', { title, confirmText, cancelText, danger })
-//  → Promise<boolean> (true = confirmou, false = cancelou/Esc/clique fora).
-//  Mesmo padrão de componente injetado via IIFE do sidebar.js/jobs-widget.js.
-// ─────────────────────────────────────────────
+// Uso: <script src="js/confirm-modal.js"></script> logo depois de sidebar.js.
+// API: await cocoConfirm('Mensagem', { title, confirmText, cancelText, danger })
+// → Promise<boolean> (true = confirmou, false = cancelou/Esc/clique fora).
+// Mesmo padrão de componente injetado via IIFE do sidebar.js/jobs-widget.js.
 (function () {
   const css = ''
     + '.cc-overlay{position:fixed;inset:0;background:rgba(20,18,15,.5);z-index:2000;'

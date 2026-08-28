@@ -1,19 +1,17 @@
-// ─────────────────────────────────────────────
-//  scripts/restore-backup.mjs — restaura o banco a partir de um
-//  backup gravado no Backblaze B2 (ver src/backup.js).
+// scripts/restore-backup.mjs — restaura o banco a partir de um
+// backup gravado no Backblaze B2 (ver src/backup.js).
 //
-//  Uso:
-//    node scripts/restore-backup.mjs              # restaura o mais recente
-//    node scripts/restore-backup.mjs <fileName>    # restaura um específico
-//    node scripts/restore-backup.mjs --list        # só lista os disponíveis, não restaura
+// Uso:
+//   node scripts/restore-backup.mjs              # restaura o mais recente
+//   node scripts/restore-backup.mjs <fileName>    # restaura um específico
+//   node scripts/restore-backup.mjs --list        # só lista os disponíveis, não restaura
 //
-//  Roda contra o DATABASE_URL do ambiente atual (Postgres) ou, se ausente,
-//  contra o data/db.json local — mesma regra de sempre do store.js. Pra
-//  restaurar produção, rode isso com o DATABASE_URL de produção no ambiente
-//  (ex.: `DATABASE_URL=... node scripts/restore-backup.mjs`), nunca apontando
-//  pro banco de produção sem ter certeza — a operação é destrutiva (substitui
-//  TUDO que está no banco de destino pelo conteúdo do backup).
-// ─────────────────────────────────────────────
+// Roda contra o DATABASE_URL do ambiente atual (Postgres) ou, se ausente,
+// contra o data/db.json local — mesma regra de sempre do store.js. Pra
+// restaurar produção, rode isso com o DATABASE_URL de produção no ambiente
+// (ex.: `DATABASE_URL=... node scripts/restore-backup.mjs`), nunca apontando
+// pro banco de produção sem ter certeza — a operação é destrutiva (substitui
+// TUDO que está no banco de destino pelo conteúdo do backup).
 import 'dotenv/config';
 import zlib from 'zlib';
 import readline from 'readline';
