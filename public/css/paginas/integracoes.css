@@ -80,6 +80,23 @@
   .backup-file-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;font-size:11px;color:var(--sub);background:var(--surface2);border-radius:var(--radius-sm)}
   .backup-file-row+.backup-file-row{margin-top:4px}
   .backup-file-name{font-weight:600;color:var(--text)}
+  /* A lista cresce um arquivo por dia (retenção de 30 dias). Recolhida, mostra três linhas
+     inteiras e a quarta se apagando — é o que diz "tem mais embaixo" sem precisar de texto.
+     A altura vem do JS, medida do DOM: um valor fixo aqui cortaria no meio de uma linha assim
+     que a fonte mudasse a altura dela. */
+  /* min-height:0 é obrigatório: item de coluna flex nasce com min-height:auto, que vale mais
+     que o max-height e anularia o recolhimento inteiro sem dar erro nenhum. É a mesma armadilha
+     do .main documentada no CLAUDE.md. */
+  #backupFilesList{overflow:hidden;min-height:0;transition:max-height .32s cubic-bezier(.32,.72,0,1)}
+  #backupFilesList.recolhida .backup-file-row:nth-child(4){
+    opacity:.4;
+    -webkit-mask-image:linear-gradient(to bottom,#000 10%,transparent 95%);
+    mask-image:linear-gradient(to bottom,#000 10%,transparent 95%);
+  }
+  /* Sem a máscara (navegador antigo), a opacidade sozinha já entrega o recado. */
+  .backup-toggle{align-self:flex-start;font-size:11px;font-weight:600;color:var(--sub);background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;transition:color .12s}
+  .backup-toggle:hover{color:var(--text)}
+  @media (prefers-reduced-motion: reduce){ #backupFilesList{transition:none} }
 
   /* ── País — espaçamento próprio acima/abaixo de cada bloco + divisor entre os países ── */
   .country-block{display:flex;flex-direction:column;gap:16px;padding:22px 0}

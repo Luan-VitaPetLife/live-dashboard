@@ -852,6 +852,21 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Layout: `.ret-row-label` CRESCE (`flex:1;min-width:0`) em vez de ocupar uma coluna fixa de
   170px. Com a largura travada sobravam pouco mais de 130px pro texto, que quebrava em quatro ou
   cinco linhas e esticava a linha inteira, enquanto o resto da largura ficava vazio.
+- **Lista de backups: três linhas, a quarta se apagando, e um botão pra abrir.** Ela cresce um
+  arquivo por dia (retenção de 30 dias), então mostrar tudo deixava o painel enorme. A quarta
+  linha apagada é o que diz "tem mais embaixo" sem precisar de texto.
+  - A altura recolhida é MEDIDA do DOM (`espia.offsetTop + espia.offsetHeight`), não calculada a
+    partir de uma altura de linha fixa no CSS: a fonte pode chegar depois do primeiro desenho e
+    mudar a altura da linha, e um número fixo cortaria no meio de uma linha ou deixaria um vão.
+  - **`#backupFilesList` precisa de `min-height:0`.** É item de uma coluna flex (`.ret-panel`),
+    e `min-height:auto` vale mais que `max-height` — sem isso o recolhimento simplesmente não
+    acontece, e sem erro nenhum. Mesma armadilha do `.main` documentada acima.
+  - Com quatro backups ou menos NÃO recolhe e o botão some: apagar a quarta linha quando não há
+    uma quinta sugeriria um backup que não existe. `scripts/test/integracoes.test.mjs` executa as
+    funções de verdade contra um DOM falso e guarda os dois erros (recolher à toa e não recolher
+    quando precisa), porque nenhum dos dois dá erro — só mente na tela.
+  - A renderização não corta mais a lista (`slice(0, 10)`): quem limita é o recolhimento. Cortar
+    escondia backup sem dizer que existia mais.
 - O seletor de visualização (Cards/Colunas/Linhas/Compacto) vive junto da lista que ele controla,
   logo acima de `#listArea`, e não no cabeçalho da página. Compacto de propósito: é ajuste de
   exibição, não o controle principal da tela. A variante `pill-switch--full` saiu do componente
@@ -1240,6 +1255,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   todo `js|css/paginas/` apontado pelo HTML existe em disco), `assets` (caminho de arquivo local
   existe),
   `imagens` (nenhuma imagem depende de CSS injetado por script pra ter tamanho),
+  `integracoes` (quando a lista de backups recolhe e quando não pode recolher),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
   em blocos, sem buraco nem dia repetido, mais a ligação com servidor e tela) e `periodo` (o ano aparece no
   rótulo quando o período é de outro ano, e nenhuma tela remonta esse texto por conta própria).

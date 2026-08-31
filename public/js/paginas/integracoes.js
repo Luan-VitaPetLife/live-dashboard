@@ -555,15 +555,53 @@ async function loadBackupStatus(){
       : last.status === 'done' ? `Último backup: ${new Date(last.finishedAt).toLocaleString('pt-BR')} · ${fmtBytes(last.sizeBytes)}${last.pruned ? ` · ${last.pruned} antigo(s) removido(s)` : ''}`
       : `Última tentativa falhou (${new Date(last.finishedAt).toLocaleString('pt-BR')}): ${last.message}`;
     $('backupFilesDivider').style.display = d.files.length ? '' : 'none';
-    $('backupFilesList').innerHTML = d.files.slice(0, 10).map(f => `
+    // Renderiza TODOS: quem limita a altura é o recolhimento abaixo, não um corte na lista.
+    // Cortar em 10 escondia backup sem dizer que existia mais.
+    $('backupFilesList').innerHTML = d.files.map(f => `
       <div class="backup-file-row">
         <span class="backup-file-name">${escapeHtml(f.fileName.replace('db-backup/',''))}</span>
         <span>${fmtBytes(Number(f.sizeBytes))} · ${new Date(f.uploadedAt).toLocaleDateString('pt-BR')}</span>
       </div>`).join('');
+    ajustarListaDeBackups(d.files.length);
   }catch(e){
     $('backupPanelSub').textContent = 'Não foi possível carregar o status do backup.';
   }
 }
+// A lista de backup cresce um arquivo por dia e a retenção é de 30 dias, então mostrar tudo
+// deixava o painel enorme. Recolhida, ela mostra três linhas inteiras e deixa a quarta se
+// apagando: é o que diz "tem mais embaixo" sem precisar de texto.
+//
+// A altura é medida do DOM, não calculada a partir da altura de linha: a fonte pode chegar
+// depois do primeiro desenho e mudar a altura da linha, e um número fixo no CSS cortaria no
+// meio da terceira ou sobraria um vão.
+const BACKUPS_VISIVEIS = 3;
+let backupsAbertos = false;
+
+function ajustarListaDeBackups(total){
+  const lista = $('backupFilesList');
+  const btn = $('backupToggle');
+  const linhas = lista.querySelectorAll('.backup-file-row');
+  const cabemTodas = linhas.length <= BACKUPS_VISIVEIS + 1;
+
+  btn.style.display = cabemTodas ? 'none' : '';
+  lista.classList.toggle('recolhida', !cabemTodas && !backupsAbertos);
+
+  if (cabemTodas) { lista.style.maxHeight = 'none'; return; }
+  if (backupsAbertos) {
+    lista.style.maxHeight = lista.scrollHeight + 'px';
+    btn.textContent = 'Ver menos';
+  } else {
+    const espia = linhas[BACKUPS_VISIVEIS];
+    lista.style.maxHeight = (espia.offsetTop + espia.offsetHeight) + 'px';
+    btn.textContent = `Ver todos os ${total} backups`;
+  }
+}
+
+function alternarBackups(){
+  backupsAbertos = !backupsAbertos;
+  ajustarListaDeBackups($('backupFilesList').querySelectorAll('.backup-file-row').length);
+}
+
 async function runBackupNow(){
   const btn = $('backupRunBtn');
   btn.disabled = true;
