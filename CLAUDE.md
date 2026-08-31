@@ -828,6 +828,20 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (chave separada do `amazonBackfill` de propósito: os dois podem rodar ao mesmo tempo, APIs e
   cotas diferentes, e um não pode sobrescrever o progresso do outro).
 
+### Imagem precisa declarar o próprio tamanho
+- **`<img>` dimensionado só por CSS que um script injeta aparece no tamanho do ARQUIVO até o
+  script rodar.** A bandeira dos EUA do seletor Brasil/EUA piscava ocupando a tela inteira a cada
+  troca de página: `.mkt-flag-img` é dimensionada dentro do `pill-switch.js`, e
+  `bandeira_eua.svg` declara 1235x650. A do Brasil tem o mesmo defeito e nunca apareceu, porque
+  é um `.webp` pequeno — o que faz a diferença é o tamanho natural do arquivo, não a página.
+- Corrigido com `width`/`height` como ATRIBUTO nas 14 tags: atributo vale já na análise do HTML,
+  antes de qualquer CSS ou JS. A regra do `pill-switch.js` continua valendo depois e diz o mesmo,
+  então nada muda visualmente. Vale como regra pra qualquer imagem nova cujo tamanho venha de um
+  componente IIFE.
+- Folha de estilo de verdade no `<head>` não tem esse problema (ela bloqueia o desenho); só o
+  CSS injetado por script tem. `scripts/test/imagens.test.mjs` cruza as duas listas e falha se
+  uma imagem cair nesse caso sem declarar o próprio tamanho.
+
 ### Seletor de opção (`public/js/pill-switch.js`, `.pill-switch`)
 - **Padrão único de todo seletor de duas ou mais opções mutuamente exclusivas**: moldura discreta
   e um pill claro que DESLIZA até a opção ativa. Pedido do Luan (27/08/2026) a partir do
@@ -1195,6 +1209,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   certo), `paginas` (sintaxe de cada `js/paginas/*.js`, mais os blocos inline que sobrem ou voltem, e se
   todo `js|css/paginas/` apontado pelo HTML existe em disco), `assets` (caminho de arquivo local
   existe),
+  `imagens` (nenhuma imagem depende de CSS injetado por script pra ter tamanho),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
   em blocos, sem buraco nem dia repetido, mais a ligação com servidor e tela) e `periodo` (o ano aparece no
   rótulo quando o período é de outro ano, e nenhuma tela remonta esse texto por conta própria).
