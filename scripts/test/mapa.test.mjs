@@ -7,7 +7,7 @@
 // página monta o próprio fundo) e uma que precisa de rede (os tiles configurados respondem).
 import fs from 'node:fs';
 import path from 'node:path';
-import { criarTeste, PUB, paginas, buscar } from './_lib.mjs';
+import { criarTeste, PUB, paginas, buscar, fontePagina } from './_lib.mjs';
 
 const t = criarTeste('Fundo do mapa');
 
@@ -30,7 +30,7 @@ for (const [host, marca] of EXIGEM_CHAVE)
 // poder divergir da outra — foi assim que a troca de provedor quase pegou só uma das telas.
 const comMapa = [];
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   if (!s.includes('L.map(')) continue;
   comMapa.push(nome);
   t.ok(!s.includes('L.tileLayer'), `${nome} não monta o próprio fundo, usa CocoGeo.addBasemap`);

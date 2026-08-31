@@ -1,0 +1,334 @@
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--tan:#c4b49a;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  /* --cat/--dog/--other NÃO ficam aqui: vêm de colors.js (CocoColors.seg), a mesma fonte que o
+     gráfico de rosca lê em JS. Antes o hex vivia nos dois lugares e podiam divergir. */
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
+
+  /* ── Main ── */
+  /* min-width:0 evita rolagem horizontal da página — ver CLAUDE.md "Padrões de UI
+     compartilhados" (mesma regra repetida em todas as páginas, não centralizado). */
+  .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  .ldot.loading{background:var(--amber)} .ldot.error{background:var(--red);animation:none}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Market toggle ── */
+  /* Seletor Brasil/EUA: a aparência vem do componente compartilhado (.seg/.ps-opt em
+     js/pill-switch.js). Aqui fica só o que é posicionamento desta página. */
+
+  /* ── Filter pill / dropdown ── */
+  .filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none;position:relative}
+  .filter-pill:hover,.filter-pill.open{border-color:var(--ink);color:var(--text)}
+  .filter-pill .lbl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .filter-pill .val{font-weight:600;color:var(--text)}
+  .filter-pill .arr{color:var(--muted);font-size:9px;transition:transform .15s}
+  .filter-pill.open .arr{transform:rotate(180deg)}
+  .fp-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:140px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+  .filter-pill.open .fp-pop{display:flex}
+  .fp-opt{padding:9px 14px;font-size:12px;color:var(--sub);cursor:pointer;display:flex;align-items:center;gap:8px}
+  .fp-opt:hover{background:var(--surface2);color:var(--text)}
+  .fp-opt.active{color:var(--text);font-weight:600}
+  .fp-opt.active::before{content:'✓';font-size:11px;font-weight:700}
+  .fp-opt:not(.active)::before{content:'';display:inline-block;width:11px}
+
+  /* ── Period picker ── */
+  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+  .period-pop.open{display:flex}
+  .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
+  .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  /* Seletor de canal */
+  .chan-pop{position:absolute;top:calc(100% + 6px);left:0;min-width:170px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:6px;z-index:500;display:none;flex-direction:column;gap:2px}
+  .chan-pop.open{display:flex}
+  .chan-pop button{text-align:left;font-size:12px;font-weight:600;padding:8px 12px;border:0;background:none;color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .chan-pop button:hover{background:var(--surface2);color:var(--text)}
+  .chan-pop button.active{background:var(--ink);color:var(--side-text)}
+  /* Ver mais / ver menos nos top produtos */
+  .seg-more{display:block;width:100%;text-align:center;margin-top:6px;padding:6px;border:0;background:none;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.3px;cursor:pointer;border-radius:var(--radius-sm);transition:all .12s}
+  .seg-more:hover{background:var(--surface2);color:var(--text)}
+  .pp-divider{height:1px;background:var(--border)}
+  .pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .pp-dates{display:flex;flex-direction:column;gap:8px}
+  .pp-field{display:flex;align-items:center;gap:10px}
+  .pp-field label{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+  .pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);appearance:none;outline:none;transition:border-color .12s}
+  .pp-field input[type=date]:focus{border-color:var(--ink)}
+  .pp-err{font-size:10px;color:var(--red);min-height:12px}
+  .pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer}
+  .pp-apply:hover{opacity:.85}
+  .period-pill-active{background:var(--ink)!important;border-color:var(--ink)!important}
+  .period-pill-active .lbl{color:rgba(240,235,224,.5)!important}
+  .period-pill-active .val{color:var(--side-text)!important}
+  .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
+
+  /* ── Sidebar: comportamento de recolher afeta o .main (layout da página) ── */
+  body.sidebar-hidden .main{margin-left:64px}
+  @media(max-width:768px){.main{margin-left:0}}
+
+  /* ── Content ── */
+  .content{flex:1;padding:28px}
+  .page-header{margin-bottom:24px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .page-title{font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.3px}
+  .page-sub{font-size:12px;color:var(--sub);margin-top:3px}
+
+  /* ── Segment overview ── */
+  .seg-overview{display:grid;grid-template-columns:300px 1fr;gap:20px;margin-bottom:20px;align-items:start}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;display:flex;flex-direction:column;align-items:center;gap:16px}
+  .chart-card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);align-self:flex-start}
+  .donut-wrap{position:relative;width:200px;height:200px}
+  .donut-canvas{position:absolute;inset:0}
+  .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .donut-center-val{font-size:22px;font-weight:700;color:var(--ink)}
+  .donut-center-sub{font-size:10px;color:var(--sub);font-weight:500}
+  .seg-legend{display:flex;flex-direction:column;gap:10px;width:100%}
+  .seg-legend-item{display:flex;align-items:center;gap:10px}
+  .leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .leg-name{font-size:12px;font-weight:600;color:var(--text);flex:1}
+  .leg-pct{font-size:12px;font-weight:700;color:var(--ink)}
+  .leg-units{font-size:11px;color:var(--sub)}
+
+  /* ── Segment cards ── */
+  .seg-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .seg-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .seg-card-header{padding:16px 20px 12px;border-bottom:1px solid var(--border)}
+  .seg-card-accent{height:4px;margin:-16px -20px 12px;border-radius:4px 4px 0 0}
+  .seg-card-accent.cat{background:var(--cat)}
+  .seg-card-accent.dog{background:var(--dog)}
+  .seg-card-accent.other{background:var(--other)}
+  .seg-card-name{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  /* Mascote da marca no cabeçalho do card (Luna = gata, Coco = cachorro). Altura fixa e
+     width:auto porque os dois SVG têm proporções diferentes — travar os dois no mesmo
+     quadrado achataria um deles. */
+  .seg-card-mascote{height:26px;width:auto;flex-shrink:0;display:block}
+  .seg-kpis{display:flex;gap:20px}
+  .seg-kpi{display:flex;flex-direction:column}
+  .seg-kpi-val{font-size:18px;font-weight:700;color:var(--ink)}
+  .seg-kpi-lbl{font-size:10px;color:var(--sub);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+  .seg-pct-bar{height:4px;background:var(--border2);border-radius:2px;margin-top:10px}
+  .seg-pct-fill{height:4px;border-radius:2px;transition:width .4s}
+  .seg-pct-fill.cat{background:var(--cat)}
+  .seg-pct-fill.dog{background:var(--dog)}
+  .seg-pct-fill.other{background:var(--other)}
+  .seg-products-area{padding:16px 20px}
+  .seg-prod-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:10px}
+  .seg-prod-list{display:flex;flex-direction:column;gap:8px}
+  .seg-prod-item{display:flex;align-items:center;gap:10px}
+  .seg-prod-rank{font-size:11px;font-weight:700;color:var(--muted);width:14px;flex-shrink:0;text-align:right}
+  .seg-prod-main{flex:1;min-width:0}
+  .seg-prod-name{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seg-prod-combo{font-size:9px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seg-prod-qty{font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0}
+  .seg-prod-rev{font-size:10px;color:var(--sub);flex-shrink:0;min-width:64px;text-align:right}
+  .seg-empty{font-size:12px;color:var(--muted);font-style:italic;padding:8px 0}
+
+  /* ── Top produtos separado por tipo (Areia x Suplementos) — abre/fecha por grupo ── */
+  .seg-type-group{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+  .seg-type-toggle{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:var(--surface2);color:var(--text);cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
+  .seg-type-toggle:hover{background:var(--border2)}
+  .seg-type-group.open .seg-type-toggle{border-bottom:1px solid var(--border)}
+  .seg-type-toggle-name{font-size:12px;font-weight:700}
+  .seg-type-toggle-stat{font-size:10px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .seg-type-toggle-chevron{color:var(--muted);font-size:11px;flex-shrink:0}
+  .seg-type-group .seg-prod-list{padding:12px}
+
+  /* ── Tipos de produto ── */
+  .seg-types-area{padding:0 20px 16px;border-top:1px solid var(--border)}
+  .seg-types-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin:12px 0 8px}
+  .seg-types-list{display:flex;flex-wrap:wrap;gap:6px}
+  .seg-type-pill{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px}
+  .seg-type-name{color:var(--sub);font-weight:500}
+  .seg-type-qty{color:var(--ink);font-weight:700}
+
+  /* ── Outros (não classificados) ── */
+  .other-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-top:16px}
+  .other-card-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .other-note{font-size:11px;color:var(--muted)}
+  .other-card-collapse{margin-left:auto;display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:var(--surface2);border:1px solid var(--border2);color:var(--sub);cursor:pointer;border-radius:50%;font-size:12px;line-height:1;transition:all .15s}
+  .other-card-collapse:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+
+  /* ── Onde os produtos vendem (mapa + ranking por estado) ── */
+  .geo-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px 14px;margin-top:16px}
+  .geo-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .geo-card-title{font-size:15px;font-weight:700;color:var(--ink)}
+  .geo-card-sub{font-size:11px;color:var(--sub);margin-top:2px;margin-bottom:14px}
+  .geo-card-tools{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  /* Mesmo estilo do campo de busca de Pedidos Recentes (index.html #ordersSearch) — filtra
+     `lastProductGeo` no cliente (já carregado, sem endpoint novo). */
+  .geo-search{display:flex;align-items:center;gap:6px;height:32px;padding:0 11px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);transition:border-color .15s}
+  .geo-search:focus-within{border-color:var(--ink)}
+  .geo-search i{font-size:12px;color:var(--muted)}
+  .geo-search input{border:none;background:transparent;outline:none;font-family:inherit;font-size:12px;color:var(--text);width:170px;max-width:40vw}
+  .geo-search input::placeholder{color:var(--muted)}
+  .geo-layout-toggle{display:flex;border:1px solid var(--border2);border-radius:20px;overflow:hidden;flex-shrink:0}
+  .geo-layout-toggle button{font-size:13px;padding:6px 11px;border:0;background:var(--surface);color:var(--sub);cursor:pointer;transition:all .12s}
+  .geo-layout-toggle button+button{border-left:1px solid var(--border2)}
+  .geo-layout-toggle button:hover{color:var(--text)}
+  .geo-layout-toggle button.active{background:var(--ink);color:var(--side-text)}
+  .geo-seg-block{margin-bottom:14px}
+  .geo-seg-head{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin-bottom:8px}
+  .geo-seg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+  /* Lista de produtos — modo linhas (padrão) ou colunas (grid responsivo) */
+  .geo-prod-list{display:flex;flex-direction:column}
+  .geo-prod-list.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px;align-items:start}
+  .geo-prod-list.cols .geo-prod-card{margin-bottom:0}
+  .geo-prod-list.cols .geo-prod-card.open{grid-column:1/-1}
+
+  /* Card por produto — delimita visualmente cada um (pedido do Luan: ficavam todos misturados) */
+  .geo-prod-card{border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden;background:var(--surface)}
+  .geo-prod-card.open{border-color:var(--border2);box-shadow:0 2px 10px rgba(30,28,24,.07)}
+  .geo-prod-row{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;transition:background .12s}
+  .geo-prod-row:hover{background:var(--surface2)}
+  .geo-prod-card.open .geo-prod-row{background:var(--surface2);border-bottom:1px solid var(--border)}
+  .geo-prod-rank{font-size:11px;font-weight:700;color:var(--muted);width:14px;text-align:right;flex-shrink:0}
+  .geo-prod-thumb{width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--surface2);border:1px solid var(--border)}
+  .geo-prod-thumb-ph{width:28px;height:28px;border-radius:6px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
+  .geo-prod-name{flex:1;min-width:0;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .geo-prod-qty{font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0}
+  .geo-prod-rev{font-size:10px;color:var(--sub);min-width:64px;text-align:right;flex-shrink:0}
+  .geo-prod-chevron{font-size:10px;color:var(--muted);transition:transform .15s;flex-shrink:0}
+  .geo-prod-row.open .geo-prod-chevron{transform:rotate(90deg)}
+
+  /* Painel expandido */
+  .geo-detail{padding:14px 14px 16px}
+  .geo-detail-stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .geo-stat{display:flex;flex-direction:column;gap:4px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px;min-width:150px;flex:1 1 150px;box-shadow:0 1px 3px rgba(30,28,24,.05)}
+  .geo-stat-lbl{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+  .geo-stat-val{font-size:13px;font-weight:700;color:var(--ink)}
+
+  .geo-detail-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .geo-view-toggle{display:flex;border:1px solid var(--border2);border-radius:20px;overflow:hidden}
+  .geo-view-toggle button{font-size:10px;font-weight:600;padding:6px 12px;border:0;background:var(--surface);color:var(--sub);cursor:pointer;transition:all .12s}
+  .geo-view-toggle button+button{border-left:1px solid var(--border2)}
+  .geo-view-toggle button:hover{color:var(--text)}
+  .geo-view-toggle button.active{background:var(--ink);color:var(--side-text)}
+  .geo-map-toggle{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:600;color:var(--sub);background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:6px 12px;cursor:pointer;transition:all .12s}
+  .geo-map-toggle:hover{border-color:var(--ink);color:var(--text)}
+  .geo-map-toggle.active{background:var(--ink);color:var(--side-text);border-color:var(--ink)}
+
+  .geo-detail-body{display:grid;grid-template-columns:220px 1fr;gap:16px}
+  .geo-detail-body.no-map{grid-template-columns:1fr}
+  .geo-map{position:relative;height:220px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border2);background:var(--surface2)}
+  .geo-map-expand{position:absolute;top:6px;right:6px;z-index:450;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:rgba(250,248,244,.92);border:1px solid var(--border2);border-radius:6px;color:var(--sub);cursor:pointer;font-size:12px;transition:all .12s}
+  .geo-map-expand:hover{color:var(--text);border-color:var(--ink)}
+  .geo-rank-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .geo-rank-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub)}
+  /* Grid responsivo em vez de coluna única — evita o espaçamento gigante entre nome e valor
+     quando o painel fica largo (mapa oculto ou tela grande): cada estado ganha uma célula compacta
+     (~200px) e o nome/qty/% ficam colados, mais estados por linha em vez de um vão enorme no meio. */
+  .geo-rank-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 20px;max-height:320px;overflow-y:auto}
+  .geo-rank-item{display:flex;align-items:center;gap:8px;font-size:11px;min-width:0}
+  .geo-rank-uf{font-weight:700;color:var(--ink);width:26px;flex-shrink:0}
+  .geo-rank-name{flex:1;min-width:0;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .geo-rank-qty{font-weight:700;color:var(--text);flex-shrink:0}
+  .geo-rank-pct{color:var(--muted);width:40px;text-align:right;flex-shrink:0}
+
+  /* Tabela */
+  /* table-layout:fixed + colgroup — sem isso o navegador distribui a largura sobrando entre as
+     colunas de forma imprevisível (o vão gigante entre cabeçalho à esquerda e dado à direita, ver
+     bug reportado); com largura fixa por coluna cabeçalho e dado sempre caem no mesmo lugar. */
+  .geo-table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+  .geo-table th{text-align:left;font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border2)}
+  .geo-table th.num{text-align:right}
+  .geo-table td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .geo-table td.num{text-align:right;font-weight:600}
+  .geo-table tr:last-child td{border-bottom:0}
+
+  /* Gráfico */
+  .geo-chart-wrap{position:relative;width:100%}
+
+  .geo-chans{display:flex;flex-wrap:wrap;gap:6px}
+  .geo-chan-pill{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);font-size:10px}
+  .geo-chan-name{color:var(--sub);font-weight:500}
+  .geo-chan-qty{color:var(--ink);font-weight:700}
+  .geo-empty{font-size:11px;color:var(--muted);font-style:italic;padding:8px 4px}
+  .leaflet-container{font-family:inherit}
+  .geo-state-tooltip{background:rgba(28,26,22,.88)!important;border:none!important;border-radius:5px!important;color:#f0ebe0!important;font-size:10px!important;font-weight:600!important;padding:4px 7px!important;white-space:nowrap!important;box-shadow:0 2px 8px rgba(0,0,0,.25)!important;pointer-events:none!important}
+  .geo-state-tooltip::before{display:none!important}
+
+  /* ── Modal "Tipos de produto" (Segmentos → classifyTypeGroup) ── */
+  .tr-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4200;display:none;backdrop-filter:blur(2px)}
+  .tr-modal-overlay.open{display:block}
+  .tr-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:460px;max-width:94vw;max-height:82vh;background:var(--surface,#faf8f4);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4201;display:none;flex-direction:column;overflow:hidden}
+  .tr-modal.open{display:flex}
+  .tr-modal-head{flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .tr-modal-title{font-size:14px;font-weight:700;color:var(--ink)}
+  .tr-modal-sub{font-size:11px;color:var(--sub);margin-top:3px;line-height:1.5}
+  .tr-modal-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;flex-shrink:0}
+  .tr-modal-close:hover{background:var(--surface2);color:var(--text)}
+  .tr-modal-body{overflow-y:auto;padding:14px 20px}
+  .tr-empty{font-size:11px;color:var(--muted);font-style:italic;padding:6px 0 14px}
+  .tr-type-row{border-bottom:1px solid var(--border)}
+  .tr-type-row:last-child{border-bottom:none}
+  .tr-type-head{display:flex;align-items:center;gap:8px;padding:10px 0;background:none;border:none;width:100%;cursor:pointer;font-family:inherit;text-align:left}
+  .tr-type-name{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text)}
+  .tr-type-count{font-size:10px;font-weight:600;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .tr-type-chevron{color:var(--muted);font-size:11px;flex-shrink:0}
+  .tr-type-del{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:3px 6px;border-radius:4px;flex-shrink:0}
+  .tr-type-del:hover{background:var(--border2);color:var(--red,#9b3a3a)}
+  .tr-type-body{padding:0 0 12px}
+  .tr-kw-list{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 7px}
+  .tr-kw-chip{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px 4px 3px 9px}
+  .tr-kw-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:2px 4px;border-radius:50%;line-height:1}
+  .tr-kw-chip button:hover{background:var(--border2);color:var(--red,#9b3a3a)}
+  .tr-kw-add{display:flex;gap:6px}
+  .tr-kw-add input{flex:1;font-family:inherit;font-size:11px;padding:6px 9px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);color:var(--text);outline:none}
+  .tr-kw-add input:focus{border-color:var(--ink)}
+  .tr-kw-add button{font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;font-family:inherit;white-space:nowrap}
+  .tr-kw-add button:hover{border-color:var(--ink);color:var(--text)}
+  .tr-new-form{margin-top:6px;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+  .tr-new-form-title{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--sub)}
+  .tr-new-form input{font-family:inherit;font-size:12px;padding:8px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none}
+  .tr-new-form input:focus{border-color:var(--ink)}
+  .tr-new-form-row{display:flex;gap:8px}
+  .tr-new-form-row input{flex:1;min-width:0}
+  .tr-new-form-err{font-size:10px;color:var(--red,#9b3a3a);min-height:13px}
+  .tr-new-form button{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text,#f0ebe0);border:none;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit}
+  .tr-new-form button:hover{opacity:.88}
+
+  /* ── Grupos manuais do Unificador (Configurações) — só exibição, gestão fica em /unificador ── */
+  .geo-unify-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
+  .geo-unified-members{padding:10px 12px;margin-bottom:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)}
+  .geo-unified-list{display:flex;flex-direction:column;gap:5px;margin:8px 0}
+  .geo-unified-item{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--text)}
+  .geo-unified-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .geo-unified-manage{float:right;font-size:10px;font-weight:600;color:var(--sub);text-decoration:none}
+  .geo-unified-manage:hover{color:var(--text);text-decoration:underline}
+
+  /* Modal do mapa ampliado */
+  .geo-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:4000;display:none;backdrop-filter:blur(2px)}
+  .geo-modal-overlay.open{display:block}
+  /* altura FIXA (não max-height) — com display:flex + flex-direction:column, um filho com flex:1 e sem
+     altura definida no pai colapsa pra ~0 (o pai vira "hug content"); o mapa Leaflet então inicializa
+     num container de altura zero e fica em branco. Head com altura própria + mapa com height fixo em vh
+     somam uma altura previsível, sem depender de flex-grow. */
+  .geo-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:900px;max-width:94vw;height:min(640px,88vh);background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 16px 48px rgba(30,28,24,.25);z-index:4001;display:none;flex-direction:column;overflow:hidden}
+  .geo-modal.open{display:flex}
+  .geo-modal-head{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .geo-modal-title{font-size:14px;font-weight:700;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .geo-modal-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .geo-modal-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s}
+  .geo-modal-close:hover{background:var(--surface2);color:var(--text)}
+  .geo-modal-map{flex:1 1 auto;min-height:0;background:var(--surface2)}
+
+  /* ── Footer ── */
+  .footer{font-size:10px;color:var(--muted);padding:12px 28px;border-top:1px solid var(--border);background:var(--surface)}
+
+  @media(max-width:768px){
+    .seg-overview{grid-template-columns:1fr}
+    .seg-cards{grid-template-columns:1fr}
+    .geo-detail-body{grid-template-columns:1fr}
+    .geo-prod-list.cols{grid-template-columns:1fr}
+    .geo-modal{height:min(560px,82vh)}
+  }

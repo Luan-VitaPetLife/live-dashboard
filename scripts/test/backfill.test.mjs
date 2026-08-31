@@ -6,7 +6,7 @@
 //
 // Não faz rede e não toca no banco: só a aritmética de data e a ligação com o servidor.
 import path from 'node:path';
-import { criarTeste, ler, ROOT } from './_lib.mjs';
+import { criarTeste, ler, ROOT, fontePagina } from './_lib.mjs';
 
 const t = criarTeste('backfill histórico das lojas Shopify');
 
@@ -63,7 +63,7 @@ t.eq((jobShopify.match(/checkCancelled\('shopify-backfill'\)/g) || []).length, 2
 t.ok(/onChunk:[\s\S]*upsertOrders\(/.test(jobShopify), 'grava bloco a bloco, dentro do onChunk');
 
 // ── Ligação com a tela ──
-const tela = ler('public/integracoes.html');
+const tela = fontePagina('integracoes.html').tudo;
 t.ok(tela.includes('/api/shopify/backfill'), 'a tela de Integrações dispara o backfill');
 t.ok(tela.includes('/api/shopify/history'), 'a tela lê onde o histórico começa hoje');
 t.ok(tela.includes('js/periodo.js'), 'a tela carrega periodo.js, que formata a data mostrada');

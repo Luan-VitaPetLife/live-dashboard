@@ -1,0 +1,22 @@
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--ink:#2d2a26;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
+  /* min-width:0 evita rolagem horizontal da página — ver CLAUDE.md "Padrões de UI
+     compartilhados" (mesma regra repetida em todas as páginas, não centralizado). */
+  .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+  body.sidebar-hidden .main{margin-left:64px}
+
+  .err-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 20px;gap:6px}
+  .err-illustration{width:240px;max-width:70vw;margin-bottom:18px}
+  .err-code{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+  .err-title{font-size:22px;font-weight:300;letter-spacing:-.5px;color:var(--text);margin-top:2px}
+  .err-sub{font-size:13px;color:var(--sub);max-width:340px;margin-top:6px}
+  .err-btn{margin-top:22px;display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 20px;border-radius:20px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:13px;font-weight:600;text-decoration:none;transition:all .15s}
+  .err-btn:hover{border-color:var(--ink);background:var(--surface2)}
+
+  @media(max-width:768px){ .main{margin-left:0} }

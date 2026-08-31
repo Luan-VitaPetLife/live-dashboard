@@ -1,7 +1,7 @@
 // Domínio que falta na CSP é bloqueado SEM erro visível: a página abre, só falta o recurso.
 // Foi assim que a fonte Inter ficou fora do ar sem ninguém notar. Este teste percorre todo
 // host externo citado em public/ e confere se a diretiva certa da CSP o autoriza.
-import { criarTeste, ler, paginas, PUB } from './_lib.mjs';
+import { criarTeste, ler, paginas, PUB, fontePagina } from './_lib.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -26,7 +26,7 @@ const achados = new Map();
 const add = (tipo, host, onde) => { if (!achados.has(`${tipo}|${host}`)) achados.set(`${tipo}|${host}`, { tipo, host, onde }); };
 
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   s.split(/\r?\n/).forEach((l, i) => {
     const onde = `${nome}:${i + 1}`;
     for (const m of l.matchAll(/https:\/\/([a-z0-9.-]+)/gi)) {

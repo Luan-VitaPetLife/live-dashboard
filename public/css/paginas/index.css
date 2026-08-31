@@ -1,0 +1,521 @@
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--tan:#c4b49a;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--line1:#2d2a26;--line2:#b0a898;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
+
+  /* ── Main ── */
+  /* min-width:0 evita rolagem horizontal da página — ver CLAUDE.md "Padrões de UI
+     compartilhados" (mesma regra repetida em todas as páginas, não centralizado). */
+  .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;justify-content:flex-end;gap:8px;position:sticky;top:0;z-index:100}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-right:4px}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  .ldot.loading{background:var(--amber)} .ldot.error{background:var(--red);animation:none}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Filter pills ── */
+  .filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none}
+  .filter-pill:hover{border-color:var(--ink);color:var(--text)}
+  .filter-pill .lbl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .filter-pill .val{font-weight:600;color:var(--text)}
+  .filter-pill .arr{color:var(--muted);font-size:9px;margin-left:1px;transition:transform .15s}
+
+  /* ── Custom dropdown ── */
+  .csel{position:relative}
+  .csel.open .arr{transform:rotate(180deg)}
+  .csel.open{border-color:var(--ink)}
+  .csel-pop{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:6px;z-index:500;display:none;flex-direction:column;gap:2px}
+  .csel.open .csel-pop{display:flex}
+  .csel-opt{padding:8px 12px;font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;border-radius:var(--radius-sm);transition:all .12s}
+  .csel-opt:hover{background:var(--surface2);color:var(--text)}
+  .csel-opt.active{background:var(--ink);color:var(--side-text)}
+
+  /* ── Buttons ── */
+  .sync-btn,.settings-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s}
+  .sync-btn:hover,.settings-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+  .settings-btn{padding:0 12px;font-size:14px;line-height:1}
+
+  /* ── Period pill (highlighted) ── */
+  .period-pill-active{background:var(--ink)!important;border-color:var(--ink)!important}
+  .period-pill-active .lbl{color:rgba(240,235,224,.5)!important}
+  .period-pill-active .val{color:var(--side-text)!important}
+  .period-pill-active .arr{color:rgba(240,235,224,.4)!important}
+
+  /* ── Market toggle buttons ── */
+  /* Seletor Brasil/EUA: a aparência vem do componente compartilhado (.seg/.ps-opt em
+     js/pill-switch.js). Aqui fica só o que é posicionamento desta página. */
+  .mkt-toggle-wrap{margin-right:auto}
+
+  /* ── Period picker popup ── */
+  .period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+  .period-pop.open{display:flex}
+  .pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .pp-presets button:hover{border-color:var(--ink);color:var(--text)}
+  .pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .pp-divider{height:1px;background:var(--border)}
+  .pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .pp-dates{display:flex;flex-direction:column;gap:8px}
+  .pp-field{display:flex;align-items:center;gap:10px}
+  .pp-field label{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+  .pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);appearance:none;-webkit-appearance:none;outline:none;transition:border-color .12s}
+  .pp-field input[type=date]:focus{border-color:var(--ink)}
+  .pp-err{font-size:10px;color:var(--red);min-height:12px}
+  .pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer;transition:opacity .12s}
+  .pp-apply:hover{opacity:.85}
+
+  /* ── Settings panel ── */
+  .sp-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:600;display:none;backdrop-filter:blur(2px)}
+  .sp-overlay.open{display:block}
+  .sp-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:640px;max-width:94vw;max-height:85vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.3);z-index:700;display:none;flex-direction:column;overflow:hidden}
+  .sp-panel.open{display:flex}
+  .sp-head{display:flex;align-items:center;justify-content:space-between;padding:20px 20px 16px;border-bottom:1px solid var(--border)}
+  .sp-head-title{font-size:14px;font-weight:600;letter-spacing:-.2px}
+  .sp-close{background:none;border:none;font-size:16px;color:var(--muted);cursor:pointer;padding:4px;line-height:1;transition:color .12s}
+  .sp-close:hover{color:var(--text)}
+  /* Corpo em 2 colunas — deixa o pop-up mais quadrado em vez de uma coluna única bem alta */
+  .sp-body{flex:1;overflow-y:auto;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:22px 28px;align-content:start}
+  .sp-section{margin-bottom:0;min-width:0}
+  .sp-section-title{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  @media(max-width:680px){ .sp-body{grid-template-columns:1fr} }
+  .sp-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)}
+  .sp-row:last-child{border-bottom:none}
+  .sp-row-label{font-size:12px;color:var(--sub)}
+  .sp-foot{padding:16px 20px;border-top:1px solid var(--border)}
+  .sp-reset{width:100%;padding:10px;font-size:12px;font-weight:600;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s}
+  .sp-reset:hover{border-color:var(--ink);color:var(--text)}
+
+  /* ── Content ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:24px;flex:1}
+  .period-wrap{position:relative}
+  .page-head{display:flex;align-items:flex-start;gap:12px}
+  .page-head::before{content:'';width:4px;align-self:stretch;min-height:34px;background:linear-gradient(180deg,var(--rust),var(--sage));border-radius:2px;flex-shrink:0}
+  .page-title{font-size:24px;font-weight:300;letter-spacing:-.5px;line-height:1.15}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  /* ── KPIs ── */
+  .kc-label{font-size:10px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .kc-value{font-size:20px;font-weight:300;letter-spacing:-.5px;margin-bottom:5px}
+  .kc-value.zero{color:var(--muted)}
+  .kc-delta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
+  .delta-val{font-size:10px;font-weight:600;padding:1px 6px;border-radius:20px}
+  .delta-val.up{background:rgba(61,122,82,.1);color:var(--green)} .delta-val.down{background:rgba(155,58,58,.09);color:var(--red)} .delta-val.flat{background:rgba(30,28,24,.06);color:var(--muted)}
+
+  /* ── Cards ── */
+  /* Sombra em duas camadas (contato + ambiente) — dá profundidade real aos cards, que antes
+     eram totalmente planos (só borda de 1px). Esse é o "acessório" visual desta rodada: um
+     único sistema de elevação aplicado em todo lugar, em vez de vários ajustes espalhados. */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative;box-shadow:0 1px 2px rgba(30,28,24,.04),0 6px 20px -6px rgba(30,28,24,.10)}
+  /* Coluna flex ocupando os 100% de altura herdados do .edit-card>.card acima: sem isso, o
+     height:100% do .card não tem efeito nenhum no conteúdo (um filho normal em fluxo de bloco só
+     cresce até caber o próprio conteúdo) — é o que permite ch220/ch180/donut-center-wrap/
+     funnel-list/#topProducts abaixo crescerem de verdade até preencher a altura esticada, em vez
+     de só esticar o fundo/borda do card e deixar a sobra em branco por dentro. Cards sozinhos na
+     própria linha (span 12, sem vizinho) não têm sobra nenhuma pra distribuir — vira o mesmo
+     layout de sempre. */
+  .card-pad{padding:16px 24px;display:flex;flex-direction:column;height:100%}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+  .ct-title{font-size:12px;font-weight:600} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
+  .ct-sub-logo{height:16px;width:auto;vertical-align:-3.5px;margin-right:5px;opacity:.9}
+  .ct-top-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  /* Toggle Geral/Por canal — mesmo visual do seletor de tipo de gráfico do campanhas.html, só
+     menor pra caber ao lado do valor no cabeçalho do card. */
+  /* Geral x Por canal, no cabeçalho dos cards: mesma aparência dos outros seletores, na
+     variante compacta (js/pill-switch.js). */
+  .ct-expand{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;display:flex;align-items:center}
+  .ct-expand:hover{color:var(--text)}
+  /* Mesma lógica de crescimento do ch220/ch180 abaixo, aplicada ao anel (Canais/Marketing por
+     origem): o donut fica maior pra preencher a sobra em vez de deixar vão em branco. Base ZERO
+     pelo mesmo motivo explicado lá (é canvas de ECharts aqui também — com base `auto` o anel
+     entrava no mesmo laço infinito de crescimento). */
+  .donut-center-wrap{position:relative;flex:1 1 0;min-height:160px;margin-bottom:14px}
+  /* ECharts precisa de um container com tamanho explícito (ao contrário do <canvas>, que tinha um
+     tamanho intrínseco padrão) — os anéis (Canais, Marketing, Orgânico x Campanha) agora montam
+     num <div> que precisa herdar 100% do wrap posicionado. */
+  .donut-canvas{width:100%;height:100%;position:relative}
+  .donut-center-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+  .dcl-val{font-size:18px;font-weight:300;letter-spacing:-.5px;line-height:1} .dcl-sub{font-size:9px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px}
+  .donut-rows{display:flex;flex-direction:column}
+  .dr-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-top:1px solid var(--border);font-size:12px}
+  .dr-left{display:flex;align-items:center;gap:8px;color:var(--sub)} .dr-swatch{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+  .dr-right{display:flex;align-items:center;gap:8px} .dr-pct{color:var(--muted);font-size:11px} .dr-val{font-weight:500}
+  .card-note{margin-top:10px;font-size:10px;color:var(--muted)}
+  .ss-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:14px}
+  .ss-cell{display:flex;flex-direction:column;align-items:center;text-align:center}
+  .ss-cell-title{font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px}
+  .ss-pie-wrap{position:relative;width:88px;height:88px}
+  .ss-cell-legend{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:10px;color:var(--sub)}
+  .ss-leg-item{display:flex;align-items:center;gap:5px;justify-content:center}
+  .ss-leg-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+  .ss-cell-total{font-size:11px;font-weight:500;color:var(--muted);margin-top:4px}
+  /* Um canal só selecionado = 1 célula: em vez de deixar essa pizza pequena flutuando perdida
+     num card de largura inteira, ela cresce e ganha uma faixa de KPIs ao lado (mais informação
+     útil no mesmo espaço, não só decoração) — ver pente-fino de 30/07/2026. */
+  .ss-grid.single{grid-template-columns:none;display:flex;align-items:center;justify-content:center;gap:40px;padding:8px 0}
+  .ss-grid.single .ss-cell-title{display:none}
+  .ss-grid.single .ss-pie-wrap{width:150px;height:150px}
+  .ss-grid.single .ss-cell-legend{margin-top:12px;font-size:12px;gap:5px}
+  .ss-grid.single .ss-cell-total{font-size:15px;font-weight:700;color:var(--ink);margin-top:6px}
+  .ss-single-kpis{display:flex;flex-direction:column;gap:14px}
+  .ss-single-kpi{min-width:120px}
+  .ss-single-kpi-lbl{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  .ss-single-kpi-val{font-size:20px;font-weight:700;color:var(--ink);margin-top:2px}
+  .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  .metric-cell{padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)}
+  .mc-type{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .mc-val{font-size:18px;font-weight:300;letter-spacing:-.5px;margin-bottom:3px} .mc-meta{font-size:10px;color:var(--muted)}
+  .mc-val.pos{color:var(--green)}
+  /* flex:1 + space-between: quando o card (esticado por um vizinho mais alto na mesma linha, ver
+     .edit-grid acima) sobra altura, os passos do funil se espalham em vez de ficar um bloco
+     compacto no topo com vão em branco embaixo. Pedido do Luan, 24/08/2026. */
+  .funnel-list{display:flex;flex-direction:column;flex:1;justify-content:space-between}
+  .fl-row{padding:13px 0;border-bottom:1px solid var(--border)} .fl-row:last-child{border-bottom:none}
+  .fl-row-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .fl-label{font-size:12.5px;color:var(--sub);font-weight:500}
+  .fl-val{font-size:16px;font-weight:600;color:var(--text)}
+  .fl-track{height:7px;background:var(--border);border-radius:4px;overflow:hidden}
+  .fl-fill{height:100%;border-radius:4px;transition:width .4s}
+  .fl-meta{font-size:11px;color:var(--muted);margin-top:7px}
+  .tbl-wrap{overflow-x:auto}
+  .tbl{width:100%;border-collapse:collapse}
+  .tbl th{font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:0 16px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+  .tbl td{padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .tbl tr:last-child td{border-bottom:none} .tbl tbody tr:hover td{background:var(--surface2)}
+  .tbl .mono{font-family:'SF Mono','Fira Code',monospace;font-size:10px;color:var(--muted)} .tbl .dim{color:var(--sub)} .tbl .bold{font-weight:600}
+  .st-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
+  .st-tag.ok{background:rgba(61,122,82,.08);color:var(--green)} .st-tag.pend{background:rgba(155,122,42,.08);color:var(--amber)} .st-tag.canc{background:rgba(155,58,58,.08);color:var(--red)}
+  .legend-row{display:flex;align-items:center;gap:16px;margin-top:10px}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+  .legend-line{width:20px;height:1.5px;border-radius:1px} .legend-sq{width:10px;height:10px;border-radius:2px}
+  /* ch220/ch180 crescem (dentro do .card-pad em coluna) até preencher a sobra de altura quando o
+     card é esticado por um vizinho mais alto na mesma linha (Tendência x Canais, Tráfego x Funil)
+     — o ResizeObserver único (echartsRO) já reage a isso sozinho e redesenha o gráfico maior, sem
+     precisar de nenhum código de gráfico novo. min-height preserva o tamanho de sempre quando não
+     há sobra nenhuma. ch380 (expandir manual) fica fixo — nesse estado o card já ocupa a linha
+     inteira sozinho, não tem vizinho pra "sobrar" altura.
+     `flex:1 1 0` (base ZERO), nunca `flex:1 1 auto`: com base `auto` o tamanho base do item passa
+     a ser a altura do próprio conteúdo, e como o conteúdo aqui é um canvas que o ECharts desenha
+     no tamanho do container, vira um laço infinito — canvas cresce -> conteúdo cresce -> item
+     cresce -> ResizeObserver dispara -> ECharts redesenha maior -> repete, o gráfico "não para de
+     crescer" (bug real que eu mesmo introduzi e o Luan pegou, 24/08/2026). Com base 0 a altura sai
+     só da divisão do espaço livre do container, o conteúdo não realimenta nada. Vale pra qualquer
+     container de gráfico flexível daqui pra frente. */
+  .ch220{position:relative;flex:1 1 0;min-height:220px} .ch180{position:relative;flex:1 1 0;min-height:180px} .ch380{position:relative;height:380px}
+  .muted-state{color:var(--muted);font-size:12px;padding:8px 0}
+  .orders-pager{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 16px 2px;flex-wrap:wrap}
+  .orders-pager:empty{display:none}
+  .ro-pg-info{font-size:11px;color:var(--muted)}
+  .ro-pg-btn{font-size:12px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px 12px;cursor:pointer;transition:background .15s}
+  .ro-pg-btn:hover:not(:disabled){background:var(--surface2)}
+  .ro-pg-btn:disabled{opacity:.4;cursor:default}
+  .ro-head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .ro-search{display:flex;align-items:center;gap:6px;height:32px;padding:0 11px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);transition:border-color .15s}
+  .ro-search:focus-within{border-color:var(--ink)}
+  .ro-search i{font-size:12px;color:var(--muted)}
+  .ro-search input{border:none;background:transparent;outline:none;font-family:inherit;font-size:12px;color:var(--text);width:190px;max-width:46vw}
+  .ro-search input::placeholder{color:var(--muted)}
+  .ro-export-btn{height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;font-family:inherit}
+  .ro-export-btn:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+  .ro-export-go{height:34px;padding:0 18px;border-radius:8px;border:none;background:var(--ink);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s;font-family:inherit}
+  .ro-export-go:hover{opacity:.88}
+  /* ── Modal "Exportar pedidos" — colunas dinâmicas + pré-visualização ── */
+  .exp-modal-overlay{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:800;display:none;backdrop-filter:blur(2px)}
+  .exp-modal-overlay.open{display:block}
+  .exp-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:760px;max-width:94vw;max-height:86vh;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.3);z-index:801;display:none;flex-direction:column;overflow:hidden}
+  .exp-modal.open{display:flex}
+  .exp-modal-head{flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+  .exp-modal-title{font-size:15px;font-weight:700;color:var(--ink)}
+  .exp-modal-sub{font-size:11px;color:var(--sub);margin-top:4px;line-height:1.5}
+  .exp-modal-close{background:none;border:none;font-size:17px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;flex-shrink:0}
+  .exp-modal-close:hover{background:var(--surface2);color:var(--text)}
+  .exp-modal-body{overflow-y:auto;padding:16px 22px;flex:1}
+  .exp-section-title{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--sub);margin:18px 0 8px}
+  .exp-section-title:first-child{margin-top:0}
+  .exp-status-row{display:flex;gap:6px;flex-wrap:wrap}
+  .exp-status-opt{padding:7px 12px;font-size:11px;font-weight:600;border-radius:16px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;font-family:inherit}
+  .exp-status-opt.active{background:var(--ink);border-color:var(--ink);color:#fff}
+  /* Mesmos botões de status do modal de exportar (.exp-status-row/.exp-status-opt), reaproveitados
+     aqui pra filtrar o card "Pedidos recentes" em si — pedido do Luan, 21/08/2026. */
+  .ro-status-row{margin-bottom:14px}
+  .exp-cols-list{display:flex;flex-direction:column;gap:4px}
+  .exp-col-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--surface2)}
+  .exp-col-row.off{opacity:.5}
+  .exp-col-row label{display:flex;align-items:center;gap:8px;flex:1;font-size:12px;color:var(--text);cursor:pointer;user-select:none}
+  .exp-col-drag-handle{background:none;border:none;color:var(--muted);cursor:grab;padding:2px 5px;font-size:13px;border-radius:4px;flex-shrink:0;touch-action:none}
+  .exp-col-drag-handle:hover{background:var(--border2);color:var(--text)}
+  .exp-col-ghost{border:2px dashed var(--sage);border-radius:8px;background:rgba(106,140,110,.08)}
+  .exp-col-row-floating{position:fixed;z-index:900;pointer-events:none;box-shadow:0 10px 26px rgba(30,28,24,.22);opacity:.96}
+  body.exp-col-dragging-active{cursor:grabbing}
+  body.exp-col-dragging-active *{cursor:grabbing!important}
+  .exp-preview-wrap{overflow-x:auto;border:1px solid var(--border2);border-radius:8px}
+  .exp-preview-tbl{width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap}
+  .exp-preview-tbl th{background:var(--surface2);text-align:left;padding:7px 10px;font-weight:700;color:var(--sub);border-bottom:1px solid var(--border2)}
+  .exp-preview-tbl td{padding:7px 10px;color:var(--text);border-bottom:1px solid var(--border)}
+  .exp-preview-tbl tr:last-child td{border-bottom:none}
+  .exp-modal-actions{flex-shrink:0;display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border)}
+  .exp-btn-secondary{height:34px;padding:0 16px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+  .exp-btn-secondary:hover{border-color:var(--ink);color:var(--text)}
+  .ro-summary-row{background:var(--surface2)}
+  .ro-summary-label{padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  .ro-summary-val{padding:10px 16px;font-weight:600;font-size:13px}
+  footer{padding:12px 28px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)}
+
+  /* ── Insights (card da Visão geral) ──
+     Layout do card do Shopify que o Luan trouxe de referência (24/08/2026): lista de assuntos à
+     esquerda, detalhe do selecionado à direita. Em tela estreita vira uma coluna só (a lista
+     rola na horizontal como abas), porque duas colunas de 300px não cabem no celular. */
+  /* Tira de seleção HORIZONTAL no topo, detalhe embaixo (pedido do Luan, 24/08/2026: a coluna
+     vertical à esquerda esticava o card e limitava quantos insights cabiam). Cada aba divide a
+     largura por igual (flex:1 1 0), então a tira preenche a linha inteira em vez de deixar sobra
+     à direita, e caber mais insight só torna as abas mais estreitas em vez de alongar o card. */
+  .ins-body{display:flex;flex-direction:column;gap:16px;flex:1;min-height:0}
+  /* Tira + setas do carrossel. As setas ficam FORA da área que rola (não sobrepostas ao conteúdo)
+     pra nunca cobrirem o texto de uma aba. */
+  .ins-strip{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding-bottom:14px;min-width:0}
+  /* Sem `scroll-behavior:smooth` no CSS de propósito: ele se aplica TAMBÉM à atribuição direta de
+     scrollLeft, e a restauração de posição feita depois de remontar a tira (ver renderInsights)
+     precisa ser instantânea, não animada. O deslize suave dos botões vem do `behavior:'smooth'`
+     passado no próprio scrollBy, onde a intenção é explícita. */
+  /* `overscroll-behavior-x:contain`: chegando no fim da tira, o gesto morre aqui em vez de vazar
+     pro navegador e virar "voltar pagina" (gesto horizontal de trackpad/celular). */
+  .ins-list{display:flex;gap:8px;min-width:0;flex:1;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none}
+  .ins-list::-webkit-scrollbar{display:none}
+  /* Arraste com o mouse (ver insEnableDrag). A mãozinha só aparece quando a tira REALMENTE rola:
+     `ins-dragavel` é ligada/desligada por insSyncNav, a mesma checagem que mostra as setas. Sem
+     isso o cursor prometeria um arraste que não acontece quando os insights cabem todos na linha. */
+  .ins-list.ins-dragavel{cursor:grab}
+  .ins-list.ins-arrastando{cursor:grabbing;user-select:none}
+  .ins-list.ins-arrastando .ins-item{cursor:grabbing}
+  /* `flex:1 1 200px` + `min-width:200px`: com poucas abas elas crescem e preenchem a linha toda
+     (sem sobra à direita); passando do que cabe, param de encolher em 200px e a tira rola. É o
+     que faz o carrossel aparecer sozinho só "quando tem muito", sem contar itens no JS. */
+  .ins-item{flex:1 1 200px;min-width:200px;display:flex;flex-direction:column;gap:6px;padding:10px 11px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);font-family:inherit;text-align:left;cursor:pointer;transition:background .12s,border-color .12s,box-shadow .12s}
+  /* Setas: navegação FINITA de propósito (pedido do Luan, 24/08/2026 — sem carrossel infinito,
+     que faz o mesmo insight reaparecer e confunde). Nos extremos elas desabilitam em vez de dar
+     a volta, então dá pra saber que chegou ao fim da lista. */
+  .ins-nav{flex-shrink:0;width:28px;height:28px;border-radius:50%;border:1px solid var(--border2);background:var(--surface);color:var(--sub);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;padding:0;transition:all .12s}
+  .ins-nav:hover:not(:disabled){border-color:var(--ink);color:var(--text)}
+  .ins-nav:disabled{opacity:.3;cursor:default}
+  .ins-nav[hidden]{display:none}
+  .ins-item:hover{border-color:var(--border2)}
+  /* Selecionada: borda escura + leve elevação. Não uso fundo escuro porque a aba carrega o selo
+     de variação colorido dentro dela, que perderia contraste. */
+  .ins-item.active{background:var(--surface);border-color:var(--ink);box-shadow:0 1px 3px rgba(30,28,24,.10)}
+  .ins-item-top{display:flex;align-items:flex-start;gap:7px;min-width:0}
+  .ins-item-ico{flex-shrink:0;font-size:12px;line-height:1.3;margin-top:.5px}
+  .ins-item-txt{min-width:0;font-size:11.5px;line-height:1.3;color:var(--sub);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .ins-item.active .ins-item-txt{color:var(--text);font-weight:600}
+  /* Selo dentro da aba: dá o número junto do assunto, então a tira sozinha já informa sem
+     precisar clicar em cada uma. */
+  .ins-item-delta{font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+  /* Semáforo de três cores (pedido do Luan, 24/08/2026): bom em verde, meio termo em amarelo,
+     ruim em vermelho. Quem classifica é o servidor, pelo campo `kind` (ver src/insights.js) —
+     o sinal do número não serve pra isso, porque ACOS caindo é bom e custo subindo é ruim. */
+  .ins-ico-bom{color:var(--green)} .ins-ico-medio{color:var(--amber)} .ins-ico-ruim{color:var(--red)}
+  /* Coluna das barras generosa (não uma faixa fina encostada na direita): o card é span 12, e com
+     as barras estreitas sobrava um vão morto de uns 500px entre o fim da frase e o começo do
+     gráfico. Aqui as duas colunas dividem o espaço de forma parecida e não sobra buraco. */
+  .ins-detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,44%);gap:26px;align-items:center;min-width:0}
+  .ins-detail-main{min-width:0}
+  .ins-eyebrow{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+  .ins-title{font-size:14px;font-weight:600;line-height:1.35;display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+  .ins-title-ico{flex-shrink:0;margin-top:1px}
+  .ins-text{font-size:12px;color:var(--sub);line-height:1.5}
+  /* Duas barras comparativas. Largura proporcional ao maior valor do par, com um piso de 2% pra
+     uma barra de valor zero ainda aparecer como traço (senão "0" some e parece dado faltando). */
+  .ins-bars{display:flex;flex-direction:column;gap:10px;min-width:0}
+  .ins-bar-row{display:flex;align-items:center;gap:9px;font-size:11px}
+  .ins-bar-track{flex:1;min-width:0;height:22px;border-radius:5px;background:var(--surface2);overflow:hidden}
+  .ins-bar-fill{height:100%;border-radius:5px;transition:width .35s ease}
+  .ins-bar-val{flex-shrink:0;font-weight:600;font-size:11px;white-space:nowrap}
+  .ins-bar-lbl{font-size:9.5px;color:var(--muted);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ins-bar-cell{min-width:0;flex:1}
+  .ins-empty{display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:12px;padding:26px 10px;line-height:1.6}
+  /* No celular a tira rola com o dedo, então as setas só ocupariam espaço — ficam escondidas e a
+     aba encolhe um pouco pra caber mais de uma na tela. O detalhe empilha. */
+  @media(max-width:900px){
+    .ins-nav{display:none}
+    .ins-item{flex:1 1 170px;min-width:170px}
+    .ins-detail{grid-template-columns:1fr;gap:16px}
+  }
+
+  /* ── Top produtos (lista construída via JS) ── */
+  /* flex:1 1 auto: as linhas de produto dividem entre si a sobra de altura quando o card é
+     esticado pelo vizinho mais alto ("Marketing por origem"), ficando mais espaçadas em vez de
+     amontoadas em cima com um bloco em branco entre a última linha e o total (foi o que aconteceu
+     quando o total sozinho absorvia a sobra via margin-top:auto — reportado pelo Luan, 24/08/2026:
+     "não podemos deixar esse espaço em branco desse jeito"). `auto` aqui é seguro (é texto, não
+     canvas: não tem o laço de realimentação descrito em .ch220). align-items:center já centraliza
+     o conteúdo na linha crescida. De propósito SEM max-height pra limitar o crescimento: a linha
+     não tem overflow:hidden, então um nome comprido que quebre em duas linhas (com os badges de
+     canal quebrando junto, comum no celular) transbordaria por cima da borda da linha seguinte em
+     vez de ser cortado. Linha espaçosa demais num período com 1 produto só é bem menos ruim que
+     texto vazando. */
+  .tp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;flex:1 1 auto}
+  .tp-info{min-width:0}
+  .tp-name-row{color:var(--sub);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .tp-qty{font-size:10px;color:var(--muted);margin-top:2px}
+  .tp-val{font-weight:500;white-space:nowrap}
+  .tp-group-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;flex-shrink:0}
+  /* margin-top:auto ancora o total no fim do card. Hoje quem absorve a sobra de altura são as
+     próprias linhas de produto (ver .tp-row acima), então na visão normal isso quase não tem o que
+     fazer — continua valendo pro modo "Ver todos", onde as linhas ficam dentro do
+     .tp-list-scroll (altura travada em 420px, não cresce) e a sobra precisa ir pra algum lugar. */
+  .tp-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px;margin-top:auto}
+  .tp-summary-label{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  .tp-summary-val{font-weight:600}
+  .tp-toggle-wrap{text-align:center;padding-top:8px}
+  .tp-toggle-btn{background:none;border:none;color:var(--sub);font-size:11px;cursor:pointer;text-decoration:underline;padding:2px}
+  .tp-list-scroll{max-height:420px;overflow-y:auto}
+  /* flex:1 dentro do .card-pad em coluna: cresce até a sobra de altura do vizinho mais alto
+     ("Marketing por origem"), e sendo coluna também, deixa o .tp-summary (margin-top:auto acima)
+     empurrado pro fim em vez de colado no último produto. */
+  #topProducts{display:flex;flex-direction:column;flex:1;min-height:0}
+
+  /* ── Sidebar: comportamento de recolher afeta o .main (layout da página) ── */
+  body.sidebar-hidden .main{margin-left:64px}
+
+  /* ── Responsivo ── */
+  @media(max-width:768px){
+    .main{margin-left:0}
+    .content{padding:16px}
+    .topbar{padding:8px 14px;gap:6px;height:auto;min-height:54px;flex-wrap:wrap;row-gap:8px}
+    .edit-grid>.edit-card{grid-column:1/-1!important}
+    .metric-row{grid-template-columns:1fr 1fr}
+    .tbl th:nth-child(3),.tbl td:nth-child(3),
+    .tbl th:nth-child(4),.tbl td:nth-child(4){display:none}
+    /* A faixa de indicadores vira 2 colunas nesse tamanho (ver .kpi-strip-grid abaixo) — o texto
+       "vs. período anterior" ao lado do selo verde/vermelho não cabia mais numa linha só e
+       quebrava no meio, com o selo flutuando meio solto ao lado de um parágrafo de 2 linhas
+       (reportado pelo Luan, 19/08/2026, "pills verdes estranhos"). Empilhado, cada um fica legível. */
+    .kc-delta{flex-direction:column;align-items:flex-start;gap:2px}
+  }
+  @media(max-width:520px){
+    .filter-pill .lbl{display:none}
+    .mkt-btn span{display:none}
+    .topbar{gap:4px}
+  }
+  @media(max-width:480px){
+    .kpi-mini{padding:12px 14px}
+    .kc-value{font-size:17px}
+  }
+  /* ── Trend drilldown ── */
+  .trend-drilldown{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-top:8px}
+  .drill-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .drill-period{font-size:11px;color:var(--sub);flex:1}
+  .drill-total{font-size:13px;font-weight:600}
+  .drill-close{margin-left:4px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;transition:color .12s}
+  .drill-close:hover{color:var(--text)}
+  .drill-row{display:flex;align-items:center;gap:6px;padding:3px 0}
+  .drill-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .drill-name{width:100px;font-size:11px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+  .drill-bar{flex:1;height:4px;border-radius:2px;background:rgba(30,28,24,.1);overflow:hidden}
+  .drill-fill{height:100%;border-radius:2px}
+  .drill-val{font-size:11px;color:var(--sub);width:72px;text-align:right;flex-shrink:0}
+  .drill-pct{font-size:10px;color:var(--muted);width:30px;text-align:right;flex-shrink:0}
+  /* ── Settings toggle switch ── */
+  .sp-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--sub)}
+  .sp-toggle-row:last-child{border-bottom:none}
+
+  /* ── "Receita da Amazon" (Total cobrado × Vendas de produto) — o switch em si vem de
+       switch.css (.ios-switch), aqui só o layout da linha ── */
+  .arev-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); }
+  .arev-row:last-child{ border-bottom:none; }
+  .arev-labels{ font-size:12px; color:var(--sub); }
+  .arev-labels b{ color:var(--text); }
+  .arev-caption{ font-size:11px; color:var(--muted); line-height:1.5; padding-top:6px; }
+
+  /* ── Modo de edição / grid reordenável ── */
+  .edit-toolbar{display:none;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--sub)}
+  body.edit-mode .edit-toolbar{display:flex}
+  .et-label{flex:1;display:flex;align-items:center;gap:6px}
+  .et-btn{height:28px;padding:0 12px;border-radius:16px;border:1px solid var(--border2);background:var(--surface);font-size:11px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .12s}
+  .et-btn:hover{border-color:var(--ink);color:var(--text)}
+  .et-done{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .card-bank{display:none;background:var(--surface2);border:1px dashed var(--border2);border-radius:var(--radius);padding:12px 16px}
+  body.edit-mode .card-bank.open{display:block}
+  .card-bank-title{font-size:11px;font-weight:600;color:var(--sub);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .cb-hint{font-weight:400;color:var(--muted);font-size:10px}
+  .card-bank-list{display:flex;flex-wrap:wrap;gap:10px}
+  /* Card do banco: nome no topo, prévia do conteúdo real do card embaixo (ver capturePreview/
+     renderCardBank) — antes era só uma pill com o nome, não dava pra saber o que era sem
+     lembrar de cor (pedido do Luan, 21/08/2026). */
+  /* overflow:hidden aqui (mesmo width já sendo fixo) evita que o conteúdo real, muito mais largo
+     que 210px, force esse item de flexbox a crescer além do declarado — flex item sem overflow
+     controlado ainda respeita seu min-content intrínseco por baixo do width (mesmo bug que fazia
+     "Tendência"/"Pedidos recentes" vazarem pro lado, 21/08/2026). */
+  .cb-item{display:flex;flex-direction:column;gap:8px;width:210px;flex:0 0 210px;overflow:hidden;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);cursor:pointer;transition:all .12s;font-family:inherit;text-align:left}
+  .cb-item:hover{border-color:var(--green)}
+  .cb-item:hover .cb-item-head{color:var(--green)}
+  .cb-item-head{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .12s}
+  /* contain:paint garante que nada do clone pinta fora dessa caixa não importa o motivo (Tendência
+     e Pedidos recentes vazavam pro lado, mostrando o card real em tamanho quase total em vez da
+     miniatura — relatado pelo Luan, 21/08/2026). */
+  .cb-item-preview{width:100%;height:92px;overflow:hidden;border-radius:8px;background:var(--bg);border:1px solid var(--border2);position:relative;contain:paint}
+  /* Clone real do card (com canvas de gráfico virado <img>, ver capturePreview) encolhido via
+     transform:scale — barato e sempre fiel ao último estado renderizado, sem precisar recriar o
+     card em miniatura na mão. De propósito SEM position:absolute: um bloco normal, no fluxo,
+     cabe no canto superior esquerdo sozinho (é o único filho) e ainda assim é cortado pelo
+     overflow:hidden do pai — position:absolute era complexidade extra sem necessidade real, e
+     era a suspeita mais provável do vazamento (um elemento posicionado escapando do contexto de
+     conteção do ancestral em algum caso de borda do motor de renderização). */
+  .cb-preview-stage{transform-origin:top left;overflow:hidden;pointer-events:none}
+  .cb-preview-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:24px}
+  .cb-empty{font-size:11px;color:var(--muted)}
+  /* align-items:stretch (não "start"): quando dois cards dividem a mesma linha com alturas de
+     conteúdo diferentes (ex.: "Top produtos" com poucas linhas x "Marketing por origem" com o
+     donut+lista), "start" deixava o mais curto flutuando no topo e o fundo do grid (cor de
+     página) aparecendo como uma lacuna em branco antes da próxima linha começar — reportado pelo
+     Luan, 24/08/2026. Com stretch o .edit-card (e o .card dentro dele, via height:100% abaixo)
+     estica até a altura do vizinho mais alto da mesma linha, então a lacuna vira fundo/borda do
+     próprio card mais curto em vez de vão vazio. Não afeta o mobile (ali cada card já é
+     grid-column:1/-1!important, uma linha por card, sem vizinho pra comparar altura). */
+  .edit-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:stretch}
+  .edit-card{position:relative;min-width:0}
+  .edit-card>.card{height:100%}
+  .edit-card.drop-bounce{animation:ecDropBounce .32s cubic-bezier(.34,1.56,.64,1)}
+  .edit-card-tools{position:absolute;top:8px;right:8px;display:none;gap:4px;z-index:20}
+  body.edit-mode .edit-card-tools{display:flex}
+  body.edit-mode .edit-card>.card{outline:1.5px dashed var(--border2);outline-offset:2px}
+  .ec-handle,.ec-remove{width:26px;height:26px;border-radius:6px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;transition:all .12s;padding:0}
+  .ec-handle{cursor:grab}
+  .ec-handle:active{cursor:grabbing}
+  .ec-handle:hover,.ec-remove:hover{border-color:var(--ink);color:var(--text)}
+  .ec-remove:hover{color:var(--red);border-color:var(--red)}
+  .edit-card-ghost{border:2px dashed var(--sage);border-radius:var(--radius);background:rgba(106,140,110,.08);min-height:80px;animation:ecGhostPulse 1.1s ease-in-out infinite}
+  .sync-btn.period-pill-active{color:var(--side-text)!important}
+  body.edit-mode .edit-card[data-card-id="kpiStrip"]>.card{outline:none}
+  @keyframes ecDropBounce{0%{transform:scale(1.035)}60%{transform:scale(.985)}100%{transform:scale(1)}}
+  @keyframes ecGhostPulse{0%,100%{opacity:.5;background:rgba(106,140,110,.06)}50%{opacity:.95;background:rgba(106,140,110,.14)}}
+  /* Clone que segue o cursor durante o arraste (ver makeDragController) — o item real some do
+     grid enquanto isso (só o placeholder tracejado acima fica no lugar), mesmo padrão já
+     validado em produtos.html/estoque.html: a Drag and Drop API nativa do HTML5 deixava o
+     elemento de origem no DOM e o navegador tirava dele uma "imagem fantasma" fora do nosso
+     controle, dando a sensação de duas cópias do card ao mesmo tempo (relatado pelo Luan,
+     21/08/2026 — o espaço vago/dinâmico esperado não acontecia). */
+  .ec-drag-floating{position:fixed!important;top:0;left:0;margin:0;pointer-events:none;z-index:9999;max-height:70vh;overflow:hidden;box-shadow:0 22px 40px rgba(0,0,0,.28),0 0 0 3px var(--sage);transform:rotate(-1.1deg) scale(1.02);opacity:.97;transition:none}
+  body.dragging-active{cursor:grabbing!important;user-select:none}
+  body.dragging-active *{cursor:grabbing!important}
+
+  /* ── Faixa de indicadores (card fixo, blocos internos editáveis) ── */
+  .kpi-strip-pad{padding:0}
+  .kpi-strip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  .kpi-mini{position:relative;padding:16px 20px;border-right:1px solid var(--border)}
+  .kpi-mini:last-child{border-right:none}
+  .kpi-mini.drop-bounce{animation:ecDropBounce .32s cubic-bezier(.34,1.56,.64,1)}
+  .kpi-mini-tools{position:absolute;top:6px;right:6px;display:none;gap:4px;z-index:20}
+  body.edit-mode .kpi-mini-tools{display:flex}
+  body.edit-mode .kpi-mini{outline:1.5px dashed var(--border2);outline-offset:-3px}
+  .kpi-mini-ghost{border:2px dashed var(--sage);border-radius:var(--radius-sm);background:rgba(106,140,110,.08);min-height:60px;animation:ecGhostPulse 1.1s ease-in-out infinite}
+  @media(max-width:768px){
+    .kpi-strip-grid{grid-template-columns:1fr 1fr}
+    .kpi-mini{border-bottom:1px solid var(--border)}
+    .kpi-mini:nth-child(even){border-right:none}
+  }

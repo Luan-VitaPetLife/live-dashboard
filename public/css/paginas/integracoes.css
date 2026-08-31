@@ -1,0 +1,192 @@
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
+  body.sidebar-hidden .main{margin-left:64px}
+  @media(max-width:768px){ .main{margin-left:0} .content{padding:16px} }
+
+  /* ── Main ── */
+  /* min-width:0 evita rolagem horizontal da página — ver CLAUDE.md "Padrões de UI
+     compartilhados" (mesma regra repetida em todas as páginas, não centralizado). */
+  .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+  .topbar-title{font-size:12px;font-weight:600;color:var(--sub);letter-spacing:.2px}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Content — sem teto de largura: a tela inteira é aproveitada (ver pedido do Luan,
+       05/08/2026). Antes tinha max-width:1600px sem margin:auto, então em telas largas o
+       conteúdo ficava colado à esquerda com uma faixa de fundo vazia à direita. ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;width:100%}
+  .page-headrow{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+  .back-link{font-size:11px;color:var(--sub);text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+  .back-link:hover{color:var(--text)}
+
+  /* ── Seletor de modo de visualização ── */
+  /* Cards/Colunas/Linhas/Compacto: aparência no componente compartilhado (js/pill-switch.js).
+     Foi este seletor que virou o padrão de todos os outros do app. */
+
+  /* ── Retenção de histórico da Amazon (admin) ── */
+  .ret-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+  .ret-panel-title{font-size:13px;font-weight:600}
+  .ret-panel-sub{font-size:11px;color:var(--sub);margin-top:2px;line-height:1.5;max-width:640px}
+  .ret-rows{display:flex;flex-direction:column;gap:8px}
+  .ret-row{padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm)}
+  .ret-row-main{display:flex;align-items:center;gap:14px}
+  /* Altura fixa + largura livre, não caixa quadrada — mesmo motivo do .fam-head-logo acima:
+     Amazon_logo.png é uma faixa larga (ícone+nome, ~3.5:1), não um ícone quadrado; forçar
+     20x20 deixava a logo minúscula com vão vazio ao redor (reportado pelo Luan, 19/08/2026). */
+  .ret-row-logo{height:24px;width:auto;flex-shrink:0}
+  .ret-row-label{font-size:12px;font-weight:600;width:170px;flex-shrink:0;display:flex;align-items:center;gap:10px}
+  .ret-row-label-text{display:flex;flex-direction:column;gap:1px}
+  .ret-row-sub{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:2px}
+  .ret-row-status{font-size:10px;color:var(--sub);margin-top:6px;min-height:12px}
+  .ret-row-input{display:flex;align-items:center;gap:6px;margin-left:auto}
+  .ret-row-input input[type=number]{width:64px;font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);outline:none;transition:border-color .12s}
+  .ret-row-input input[type=number]:focus{border-color:var(--ink)}
+  .ret-row-input span{font-size:11px;color:var(--sub)}
+  .ret-btn{font-size:11px;font-weight:600;padding:8px 14px;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer;transition:opacity .12s;white-space:nowrap;font-family:inherit}
+  .ret-btn:hover{opacity:.85}
+  .ret-btn:disabled{opacity:.5;cursor:default}
+  .ret-divider{height:1px;background:var(--border2)}
+  .ret-backfill-status{font-size:11px;color:var(--sub);margin-top:8px;min-height:14px}
+  .backup-file-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;font-size:11px;color:var(--sub);background:var(--surface2);border-radius:var(--radius-sm)}
+  .backup-file-row+.backup-file-row{margin-top:4px}
+  .backup-file-name{font-weight:600;color:var(--text)}
+
+  /* ── País — espaçamento próprio acima/abaixo de cada bloco + divisor entre os países ── */
+  .country-block{display:flex;flex-direction:column;gap:16px;padding:22px 0}
+  .country-block+.country-block{border-top:1px solid var(--border2)}
+  .country-block:first-of-type{padding-top:4px}
+  .country-head{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border2)}
+  .country-flag{width:22px;height:auto;border-radius:3px}
+  .country-name{font-size:15px;font-weight:600}
+
+  /* ── Logo genérico (canal solto ou cabeçalho de família) ── */
+  .integ-logo,.fam-logo,.fam-head-logo,.compact-logo{border-radius:8px;border:1px solid var(--border2);background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+  .integ-logo{width:44px;height:44px}
+  .integ-logo img{max-width:40px;max-height:40px;object-fit:contain}
+  .integ-logo i{font-size:18px;color:var(--muted)}
+  .fam-logo{width:32px;height:32px;border-radius:7px}
+  .fam-logo img{max-width:22px;max-height:22px;object-fit:contain}
+  .fam-logo i{font-size:14px;color:var(--muted)}
+
+  .integ-name{font-size:13px;font-weight:600;color:var(--text)}
+  .integ-note{font-size:11px;color:var(--sub);margin-top:2px;line-height:1.4}
+  .integ-badge{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:20px;display:inline-block;width:fit-content}
+  .badge-connected{background:rgba(61,122,82,.1);color:var(--green)}
+  .badge-pending_auth{background:rgba(155,122,42,.1);color:var(--amber)}
+  .badge-not_configured{background:var(--surface2);border:1px solid var(--border2);color:var(--muted)}
+  .badge-paused{background:rgba(155,122,42,.1);color:var(--amber)}
+  .badge-disabled{background:rgba(30,28,24,.08);color:var(--sub)}
+  .badge-planned{background:var(--surface2);border:1px solid var(--border2);color:var(--muted)}
+
+  /* ── Toggle switch: vem de switch.css (.ios-switch), padrão único do app ── */
+
+  /* ── Bloco de família — a logo da PLATAFORMA (ex.: Shopify) fica DENTRO do card, no
+       cabeçalho, ao lado da contagem de conectadas — sem repetir o nome em texto (os cards dos
+       membros já dizem quem são: "Shopify - Coco and Luna BR", "Yucaloo BR"). Só é usado quando
+       2+ integrações compartilham a mesma plataforma — uma integração sozinha aparece como card
+       avulso, sem nenhum disso.
+       Altura fixa + largura livre (não mais uma caixa quadrada): os logos de plataforma
+       (Shopify_logo.png, Logotipo_MercadoLivre.png, Amazon_logo.png) são faixas bem largas
+       (ícone + nome lado a lado, ~3.5:1), não ícones quadrados — numa caixa quadrada com
+       object-fit:contain a imagem cabia pela LARGURA e sobrava um vão vazio enorme em cima e
+       embaixo (reportado pelo Luan, print mostrando o espaço vazio). Deixando só a altura fixa
+       e a largura seguir a proporção real de cada logo, o vão some sozinho — sem editar as
+       imagens. ── */
+  .fam-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
+  .fam-head{display:flex;align-items:center;gap:14px}
+  .fam-head-logo{height:44px;width:auto;border-radius:0;border:none;background:none;flex-shrink:0}
+  .fam-head-logo img{height:100%;width:auto;display:block}
+  .fam-head-logo i{font-size:22px;color:var(--muted)}
+  .fam-count{font-size:10px;color:var(--muted);white-space:nowrap;margin-left:auto}
+  .fam-cards{display:flex;flex-wrap:wrap;gap:12px}
+  .fam-cards>.integ-card{background:var(--surface2);flex:1 1 240px}
+
+  /* ── Card individual (canal avulso OU membro de uma família) ── */
+  .integ-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px}
+  .integ-card.is-planned{opacity:.6}
+  .integ-top{display:flex;align-items:center;gap:12px}
+  .integ-info{min-width:0;flex:1}
+  .integ-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}
+
+  /* ── Modo Cards: family blocks ocupam a linha inteira, cards avulsos fluem lado a lado ── */
+  .integ-flow{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+  .integ-flow>.integ-card{flex:1 1 260px}
+  .integ-flow>.fam-block{flex:1 1 100%}
+
+  /* ── Modo Colunas: grid de verdade (não masonry via CSS columns) — cada linha alinha pela
+       altura do bloco mais alto dela. O masonry anterior (column-width) balanceava só a altura
+       TOTAL de cada coluna, então cards avulsos sem relação nenhuma entre si (Shopee, Meta Ads)
+       acabavam empilhados juntos numa coluna só pra fechar conta, ficando com um visual torto e
+       sem alinhamento — reportado pelo Luan, 21/08/2026, com print. */
+  .integ-columns{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;align-items:stretch}
+  /* .fam-block já é flex-column (regra geral acima) — só falta o miolo (.fam-cards) crescer pra
+     absorver a altura extra do stretch, puxando os cards-membro junto (align-items:stretch
+     também vale dentro de .fam-cards, por padrão) em vez de sobrar vão em branco embaixo. */
+  .integ-columns>.fam-block>.fam-cards{flex:1}
+
+  /* ── Modo Linhas: lista compacta, um card por linha, tipo configurações ── */
+  .integ-rows-wrap{display:flex;flex-direction:column;gap:12px}
+  .integ-rows{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+  .rows-famhead{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
+  .rows-famhead .fam-logo{width:20px;height:20px;border-radius:5px}
+  .rows-famhead .fam-logo img{max-width:14px;max-height:14px}
+  .rows-famhead-name{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--sub)}
+  .integ-row{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .integ-rows>.integ-row:last-child{border-bottom:none}
+  .integ-row.is-planned{opacity:.55}
+  .integ-row .integ-logo{width:30px;height:30px;border-radius:6px}
+  .integ-row .integ-logo img{max-width:26px;max-height:26px}
+  .integ-row-name{font-size:12.5px;font-weight:600;flex-shrink:0;width:210px}
+  .integ-row-note{font-size:11px;color:var(--sub);flex:1;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .integ-row-sw{flex-shrink:0;margin-left:auto}
+
+  /* ── Modo Compacto: grade densa de ícones — visão geral rápida, clique na bolinha de status
+       liga/desliga direto (sem abrir o card inteiro) ── */
+  .integ-compact-wrap{display:flex;flex-direction:column;gap:16px}
+  .compact-famhead{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+  .compact-famhead .fam-logo{width:18px;height:18px;border-radius:4px}
+  .compact-famhead .fam-logo img{max-width:12px;max-height:12px}
+  .compact-famhead-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .compact-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+  .compact-tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 6px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;position:relative}
+  .compact-tile.is-planned{opacity:.5}
+  .compact-logo{width:34px;height:34px;border-radius:8px}
+  .compact-logo img{max-width:30px;max-height:30px;object-fit:contain}
+  .compact-logo i{font-size:15px;color:var(--muted)}
+  .compact-name{font-size:10px;font-weight:600;line-height:1.25;max-height:2.6em;overflow:hidden;color:var(--text)}
+  .compact-dot{width:9px;height:9px;border-radius:50%;position:absolute;top:7px;right:7px;border:1.5px solid var(--surface)}
+  .compact-dot.clickable{cursor:pointer}
+  .dot-connected{background:var(--green)}
+  .dot-pending_auth{background:var(--amber)}
+  .dot-not_configured{background:var(--muted)}
+  .dot-paused{background:var(--amber)}
+  .dot-disabled{background:var(--border2)}
+  .dot-planned{background:var(--border2)}
+
+  .empty{font-size:12px;color:var(--muted);padding:24px;text-align:center}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--side-text);font-size:12px;font-weight:600;padding:11px 20px;border-radius:20px;box-shadow:0 8px 28px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:all .25s;z-index:500}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red)}
+
+  @media(max-width:768px){
+    .integ-row-name{width:auto}
+    .integ-columns{grid-template-columns:1fr}
+  }
+  @media(max-width:560px){
+    .content{padding:20px 16px}
+    .integ-flow>.integ-card,.fam-cards>.integ-card{flex-basis:100%}
+    .compact-grid{grid-template-columns:repeat(auto-fill,minmax(78px,1fr))}
+  }

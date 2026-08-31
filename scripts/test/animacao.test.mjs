@@ -7,7 +7,7 @@
 // isso vira falha.
 import fs from 'node:fs';
 import path from 'node:path';
-import { criarTeste, PUB, paginas } from './_lib.mjs';
+import { criarTeste, PUB, paginas, fontePagina } from './_lib.mjs';
 
 const t = criarTeste('Animação de abrir e fechar');
 
@@ -36,14 +36,16 @@ const EXCECOES = new Set([
 ]);
 
 const aAnimar = new Map();
-const arquivos = [...paginas().map(f => path.join(PUB, f)),
-                  ...fs.readdirSync(path.join(PUB, 'js')).map(f => path.join(PUB, 'js', f))];
-for (const arq of arquivos) {
-  const s = fs.readFileSync(arq, 'utf8');
+// Cada página entra como um texto só (markup + o css e o js que saíram dela); os componentes
+// compartilhados de js/ entram como arquivo, porque não pertencem a nenhuma página.
+const fontes = [...paginas().map(nome => ({ rotulo: nome, texto: fontePagina(nome).tudo })),
+                ...fs.readdirSync(path.join(PUB, 'js')).filter(f => f.endsWith('.js'))
+                  .map(f => ({ rotulo: f, texto: fs.readFileSync(path.join(PUB, 'js', f), 'utf8') }))];
+for (const { rotulo, texto: s } of fontes) {
   // `.alguma-coisa.open{display:...}` e `.pai.open .filha{display:...}`
   for (const m of s.matchAll(/\.([a-z][\w-]*)\.open(?:\s+\.([a-z][\w-]*))?\s*\{display:/g)) {
     const classe = m[2] || m[1];
-    if (!aAnimar.has(classe)) aAnimar.set(classe, path.basename(arq));
+    if (!aAnimar.has(classe)) aAnimar.set(classe, rotulo);
   }
 }
 
@@ -77,7 +79,7 @@ t.ok(escalaSemTranslate.length === 0,
 
 // ── Toda página carrega o arquivo ──
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   t.ok(/<link rel="stylesheet" href="css\/anim\.css">/.test(s), `${nome} carrega css/anim.css`);
 }
 
@@ -85,7 +87,7 @@ for (const nome of paginas()) {
 // A largura vem de grid-column, que o CSS não anima; quem cobre isso é a View Transition
 // disparada no clique. Ela precisa continuar valendo só no clique: no carregamento não existe
 // estado anterior pra interpolar.
-const index = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
+const index = fontePagina('index.html').tudo;
 t.ok(index.includes('document.startViewTransition'), 'o card que expande usa View Transition');
 t.ok(/comAnimacao\(applyTrendExpanded\)/.test(index) && /comAnimacao\(applyTrafficExpanded\)/.test(index),
   'os dois cards que expandem passam pela animação');

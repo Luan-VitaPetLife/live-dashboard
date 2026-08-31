@@ -10,6 +10,24 @@ export const PUB = path.join(ROOT, 'public');
 export const ler = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 export const paginas = () => fs.readdirSync(PUB).filter(f => f.endsWith('.html'));
 
+// A lógica e o estilo de cada tela moram em arquivos próprios (js/paginas/, css/paginas/), mas
+// continuam sendo a MESMA página pra quem lê o código. Um teste que só olhasse o .html deixaria de
+// enxergar tudo o que saiu de dentro dele, e passaria a aprovar em silêncio — que é justamente o
+// modo de falhar que esta suíte existe pra evitar. Por isso todo teste que inspeciona lógica ou
+// estilo lê `tudo`; só quem confere estrutura de markup usa `html`.
+export function fontePagina(nome) {
+  const base = nome.replace(/\.html$/, '');
+  const html = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const parte = (pasta, ext) => {
+    const p = path.join(PUB, pasta, base + ext);
+    return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+  };
+  const js = parte('js/paginas', '.js');
+  const css = parte('css/paginas', '.css');
+  return { nome, html, js, css, tudo: html + '\n' + css + '\n' + js };
+}
+
+
 // Um teste é um arquivo que chama criarTeste(), faz suas asserções e termina com fim().
 // O código de saída é o que o runner lê: 0 passou, 1 falhou, 2 pulou.
 export function criarTeste(nome) {

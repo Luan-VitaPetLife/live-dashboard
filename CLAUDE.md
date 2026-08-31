@@ -108,9 +108,11 @@ imagens estavam soltas no meio dos HTML e não dava pra ver o que era página e 
 public/
   *.html                 as 11 páginas (raiz obrigatória)
   favicon.png            convenção de raiz, fica onde está
-  css/                   switch.css anim.css
+  css/                   switch.css anim.css        (estilo compartilhado)
+  css/paginas/           um .css por página, extraído do <style> dela
   js/                    sidebar.js colors.js geo.js periodo.js pill-switch.js confirm-modal.js
-                         jobs-widget.js
+                         jobs-widget.js             (componentes compartilhados)
+  js/paginas/            um .js por página, extraído do <script> dela
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
   img/canais/            logo_* usados nos cards de canal (Campanhas/Produtos/Estoque)
@@ -119,6 +121,30 @@ public/
   img/ilustracoes/       404.png
   geo/                   us-states.json (contorno dos estados dos EUA, ver Geografia)
 ```
+
+### O código das telas não mora mais dentro do HTML
+- Cada página tem UM `public/js/paginas/<pagina>.js` e UM `public/css/paginas/<pagina>.css`.
+  Eram 7.172 linhas de JS e 2.323 de CSS dentro dos `.html`; o markup caiu de 11.231 para 1.757
+  linhas. `index.html` sozinho tinha 2.638 linhas e hoje tem 368.
+- **A extração foi um movimento puro**: nenhum caractere mudou de lugar dentro do bloco. O script
+  que fez isso remontava cada página a partir dos arquivos gerados e comparava byte a byte com o
+  original, abortando sem gravar nada se sobrasse qualquer diferença.
+- **O script continua clássico, não módulo.** É o que preserva o comportamento: `function foo(){}`
+  num `<script src>` clássico continua virando global, então os `onclick="foo()"` do markup
+  continuam achando a função. Trocar por `type="module"` quebraria todos eles de uma vez, em
+  silêncio. Pela mesma razão não leva `defer` nem `async`: a tag está na mesma posição do bloco
+  antigo (fim do `<body>`), e script clássico sem esses atributos executa exatamente na ordem em
+  que aparece, igual ao inline.
+- **Isso NÃO liberou a CSP.** Tirar `'unsafe-inline'` de `script-src` ainda esbarra em 66
+  atributos de evento (`onclick=` e afins, contando o markup que os próprios scripts geram em
+  tempo de execução), e de `style-src` em 55 atributos `style=`. Enquanto existir um só deles,
+  tirar `'unsafe-inline'` quebra a página sem erro visível. Fechar de verdade é trocar cada
+  atributo por `addEventListener` e por classe de CSS, que é outro trabalho.
+- **Teste que lê tela precisa usar `fontePagina(nome).tudo`** (`scripts/test/_lib.mjs`), que
+  devolve o markup junto com o `.js` e o `.css` daquela página. Um teste que lesse só o `.html`
+  continuaria passando e não estaria mais checando nada — foi o que aconteceu com quatro deles no
+  instante seguinte à extração, antes de serem religados. Só quem confere estrutura de markup usa
+  `.html` puro.
 
 Duas armadilhas ao mexer nisso:
 - **Caminho relativo dentro de um `.js` resolve pela PÁGINA, não pelo arquivo do script.**
@@ -455,9 +481,10 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   diretiva certa: script → `script-src`, folha → `style-src`, fonte → `font-src`, `fetch` →
   `connect-src`. Uma folha do Google Fonts precisa de DOIS domínios, um em cada diretiva.
   `preconnect` não conta, ele não carrega nada.
-- `'unsafe-inline'` em `script-src`/`style-src` é exigido porque a lógica de cada página vive em
-  `<script>`/`<style>` dentro do próprio HTML. Fechar isso depende de tirar o JS de dentro do
-  HTML, não de ajustar a regra.
+- `'unsafe-inline'` em `script-src`/`style-src` continua exigido, mas não mais pelo motivo
+  antigo: a lógica e o estilo já saíram do HTML. O que ainda o exige são os ATRIBUTOS —
+  `onclick=` e afins (inclusive no markup gerado em tempo de execução pelos scripts) e `style=`
+  direto na tag. Fechar isso é trocar cada um por `addEventListener` e por classe de CSS.
 - **Todo recurso de CDN carrega com `integrity` + `crossorigin="anonymous"`** (SRI): ECharts,
   Leaflet e Bootstrap Icons. Sem isso, um pacote adulterado na origem roda dentro da dashboard
   já logada. Os dois atributos são indivisíveis — sem `crossorigin` o navegador não consegue
@@ -1165,7 +1192,9 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - Cobre hoje o que **falha em silêncio**, que é onde este projeto machuca: `csp` (todo host
   externo de `public/` autorizado na CSP), `mapa` (nenhuma página volta pra provedor de tile com
   chave, e as duas telas usam o mesmo), `geojson` (o arquivo dos EUA é local, servido e no formato
-  certo), `paginas` (sintaxe dos `<script>` inline), `assets` (caminho de arquivo local existe),
+  certo), `paginas` (sintaxe de cada `js/paginas/*.js`, mais os blocos inline que sobrem ou voltem, e se
+  todo `js|css/paginas/` apontado pelo HTML existe em disco), `assets` (caminho de arquivo local
+  existe),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
   em blocos, sem buraco nem dia repetido, mais a ligação com servidor e tela) e `periodo` (o ano aparece no
   rótulo quando o período é de outro ano, e nenhuma tela remonta esse texto por conta própria).
