@@ -939,6 +939,16 @@ export function setAmazonBackfill(state) {
 }
 export function getAmazonBackfill() { return load().amazonBackfill || null; }
 
+// ── Estado do backfill histórico das lojas Shopify (src/backfill.js) ──
+// Mesmo formato e mesmo papel do amazonBackfill acima: roda em background e o widget de
+// processos lê o progresso daqui. Chave separada de propósito, porque os dois podem rodar
+// ao mesmo tempo (APIs e cotas diferentes) e um não pode sobrescrever o estado do outro.
+export function setShopifyBackfill(state) {
+  const db = load(); db.shopifyBackfill = state; saveJson();
+  if (USE_PG) pgKv('shopifyBackfill', state);
+}
+export function getShopifyBackfill() { return load().shopifyBackfill || null; }
+
 // ── Cache de imagem de produto Amazon por ASIN (Catalog Items API) ──
 // Preenchido pelo job de POST /api/amazon/images — a Orders API e o relatório de
 // backfill não trazem imagem, só o Catalog Items API por ASIN. Ver amazon.js.

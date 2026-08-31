@@ -210,6 +210,7 @@
 
 <script src="js/sidebar.js"></script>
 <script src="js/pill-switch.js"></script>
+<script src="js/periodo.js"></script>
 <script src="js/confirm-modal.js"></script>
 <script src="js/jobs-widget.js"></script>
 
@@ -241,6 +242,14 @@
         <div class="ret-panel-sub" id="retPanelSub">Carregando…</div>
       </div>
       <div class="ret-rows" id="retRows"></div>
+    </div>
+
+    <div class="ret-panel" id="shopHistPanel">
+      <div>
+        <div class="ret-panel-title">Shopify — Buscar histórico antigo</div>
+        <div class="ret-panel-sub" id="shopHistSub">Carregando…</div>
+      </div>
+      <div class="ret-rows" id="shopHistRows"></div>
     </div>
 
     <div class="ret-panel" id="backupPanel">
@@ -727,6 +736,83 @@ function pollHistoryBackfill(cap){
   retBackfillPolling = setInterval(tick, 4000);
 }
 
+// ── Histórico das lojas Shopify (BR/EUA) ────
+// Só soma: busca pedido antigo que nunca entrou no banco porque o sync guarda uma janela móvel
+// de 60 dias. Diferente do painel da Amazon acima, aqui não existe poda, então também não existe
+// confirmação — nada é apagado em hipótese nenhuma.
+let shopHistPolling = null;
+function shopHistCoberturaText(info){
+  if (!info.oldestOrderDate) return 'nenhum pedido ainda';
+  return 'começa em ' + CocoPeriodo.data(info.oldestOrderDate) + ' (' + info.oldestOrderDays.toLocaleString('pt-BR') + ' dias)';
+}
+async function loadShopHistory(){
+  try{
+    const r = await fetch('/api/shopify/history', { credentials:'same-origin' });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const d = await r.json();
+    $('shopHistSub').textContent = 'Digite quantos dias para trás você quer buscar nas lojas Shopify. Nada é apagado: pedido que já existe é só atualizado, e o que faltava entra. Pode demorar alguns minutos.';
+    $('shopHistRows').innerHTML = ['br','us'].map(mkt => {
+      const info = d[mkt] || { oldestOrderDate:null, oldestOrderDays:null, lojas:[] };
+      const cap = mkt === 'us' ? 'Us' : 'Br';
+      const lojas = info.lojas.length ? info.lojas.join(' · ') : 'nenhuma loja ligada';
+      return '<div class="ret-row">' +
+        '<div class="ret-row-main">' +
+          '<div class="ret-row-label"><img class="ret-row-logo" src="img/integracoes/Shopify_logo.png" alt=""><span class="ret-row-label-text">' + RET_MARKET_LABEL[mkt] +
+          '<span class="ret-row-sub">' + shopHistCoberturaText(info) + ' · ' + lojas + '</span></span></div>' +
+          '<div class="ret-row-input"><input type="number" id="shopDays' + cap + '" min="1" max="1825" value="365"><span>dias</span></div>' +
+          '<button class="ret-btn" id="shopApply' + cap + '" onclick="applyShopHistory(\'' + mkt + '\')"' + (info.lojas.length ? '' : ' disabled') + '>Buscar</button>' +
+        '</div>' +
+        '<div class="ret-row-status" id="shopStatus' + cap + '"></div>' +
+      '</div>';
+    }).join('');
+  }catch(e){
+    $('shopHistSub').textContent = 'Não foi possível carregar o histórico das lojas Shopify.';
+  }
+}
+async function applyShopHistory(market){
+  const cap = market === 'us' ? 'Us' : 'Br';
+  const btn = $('shopApply' + cap), statusEl = $('shopStatus' + cap);
+  const days = Number($('shopDays' + cap).value);
+  if (!(days >= 1)){ toast('Dias precisa ser um número maior que zero.', true); return; }
+  btn.disabled = true;
+  try{
+    const r = await fetch('/api/shopify/backfill?market=' + market + '&days=' + days, { method:'POST', credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
+    statusEl.textContent = 'Buscando…';
+    toast('Buscando ' + days + ' dias de histórico Shopify ' + RET_MARKET_LABEL[market] + '.');
+    pollShopHistory(cap);
+  }catch(e){
+    toast('Erro: ' + (e.message || 'falha de rede'), true);
+    btn.disabled = false;
+  }
+}
+function pollShopHistory(cap){
+  if (shopHistPolling) clearInterval(shopHistPolling);
+  const tick = async () => {
+    try{
+      const r = await fetch('/api/jobs', { credentials:'same-origin' });
+      const d = await r.json();
+      const j = (d.jobs || []).find(x => x.id === 'shopify-backfill');
+      const statusEl = $('shopStatus' + cap);
+      if (!j || !statusEl) return;
+      statusEl.textContent = j.status === 'running' ? 'Buscando… ' + (j.message || '')
+        : j.status === 'done' ? 'Concluído: ' + (j.message || '')
+        : j.status === 'cancelled' ? 'Cancelado: ' + (j.message || '')
+        : j.status === 'error' ? 'Erro: ' + (j.message || '')
+        : '';
+      if (j.status !== 'running'){
+        clearInterval(shopHistPolling);
+        shopHistPolling = null;
+        $('shopApply' + cap).disabled = false;
+        if (j.status === 'done') loadShopHistory();
+      }
+    }catch(e){}
+  };
+  tick();
+  shopHistPolling = setInterval(tick, 4000);
+}
+
 // ── Backup do banco (Backblaze B2) — ver src/backup.js ────
 function fmtBytes(n){
   if (!n) return '0 KB';
@@ -814,6 +900,7 @@ async function testAlertNow(){
   await loadMe();
   await load();
   await loadHistory();
+  await loadShopHistory();
   // Retoma o acompanhamento se uma busca de histórico já estava rodando antes de recarregar a
   // página (ex.: deu F5 no meio de um backfill).
   try{
@@ -822,6 +909,15 @@ async function testAlertNow(){
       const cap = s.amazon.backfill.market === 'us' ? 'Us' : 'Br';
       $('retApply' + cap).disabled = true;
       pollHistoryBackfill(cap);
+    }
+  }catch(e){}
+  try{
+    const d = await fetch('/api/jobs', { credentials:'same-origin' }).then(r => r.json());
+    const j = (d.jobs || []).find(x => x.id === 'shopify-backfill' && x.status === 'running');
+    if (j){
+      const cap = /EUA/.test(j.label) ? 'Us' : 'Br';
+      $('shopApply' + cap).disabled = true;
+      pollShopHistory(cap);
     }
   }catch(e){}
   loadBackupStatus();
