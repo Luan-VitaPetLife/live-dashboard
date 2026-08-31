@@ -124,6 +124,14 @@
     document.querySelectorAll('.pill-switch').forEach(ligar);
   }
 
+  // O estilo entra AGORA, e não no DOMContentLoaded: o seletor aparece bem no topo da página, e
+  // esperar o documento inteiro carregar deixa uma janela em que ele já está desenhado e ainda
+  // sem regra nenhuma. Era o que fazia a bandeira do seletor Brasil/EUA piscar no tamanho do
+  // arquivo. É seguro chamar aqui porque a tag deste script vem depois do </head>, então o
+  // document.head já existe, e injetarCss se protege contra rodar duas vezes.
+  injetarCss();
+
+  // Ligar os controles continua esperando o documento: aí sim os elementos precisam existir.
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ligarTodos);
   else ligarTodos();
 
