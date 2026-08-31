@@ -828,6 +828,36 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (chave separada do `amazonBackfill` de propósito: os dois podem rodar ao mesmo tempo, APIs e
   cotas diferentes, e um não pode sobrescrever o progresso do outro).
 
+### Os dois painéis de histórico em Integrações são um só desenho
+- Amazon e Shopify mostram o MESMO tipo de informação, então mostram a MESMA frase, montada por
+  `retResumo`/`retLinha` (integracoes.js): `N pedidos · desde DD/MM/AAAA (N dias)`. Antes cada
+  painel tinha o seu formato — um dizia "336 pedidos · cobre 136 dias hoje", o outro "começa em
+  17/04/2026 (137 dias) · Shopify Coco and Luna BR · Shopify Yucaloo BR" — e a tela parecia dois
+  painéis sem relação. O markup da linha existe num lugar só; o teste falha se um painel voltar
+  a montar linha por conta própria.
+- Os dois endpoints devolvem os mesmos campos (`totalOrders`, `oldestOrderDate`,
+  `oldestOrderDays`), medidos pelo mesmo `historicoDosCanais(canais, market)` em server.js. TODO
+  retorno de `planAmazonHistory` precisa levar os três: um return incompleto deixa a linha da
+  Amazon com meia frase justamente nos casos de borda (sem limite, poda, backfill).
+- **Medir por CANAL, nunca por mercado.** O painel da Shopify usava `getOldestOrderDate(market)`,
+  que devolve o pedido mais antigo de QUALQUER canal — na prática mostrava a data da Amazon BR
+  como se fosse o começo do histórico das lojas Shopify. `historicoDosCanais` recebe uma lista
+  de canais porque a Amazon tem um por mercado e a Shopify tem duas lojas (Coco and Luna e
+  Yucaloo).
+- O que continua diferente entre os dois é só o que a ação FAZ, e isso não pode ser padronizado:
+  o botão da Amazon é "Aplicar" (o campo é retenção, pode podar e pede confirmação) e o da
+  Shopify é "Buscar" (só soma, nunca apaga, e por isso não pede confirmação nenhuma).
+- As lojas que o backfill alcança viraram `title` do rótulo, em vez de texto na frase: a
+  informação continua acessível e a linha continua igual às outras.
+- Layout: `.ret-row-label` CRESCE (`flex:1;min-width:0`) em vez de ocupar uma coluna fixa de
+  170px. Com a largura travada sobravam pouco mais de 130px pro texto, que quebrava em quatro ou
+  cinco linhas e esticava a linha inteira, enquanto o resto da largura ficava vazio.
+- O seletor de visualização (Cards/Colunas/Linhas/Compacto) vive junto da lista que ele controla,
+  logo acima de `#listArea`, e não no cabeçalho da página. Compacto de propósito: é ajuste de
+  exibição, não o controle principal da tela. A variante `pill-switch--full` saiu do componente
+  junto — ninguém mais a usava, e o teste de seletores acusa regra apontando pra classe que não
+  existe no markup.
+
 ### Imagem precisa declarar o próprio tamanho
 - **`<img>` dimensionado só por CSS que um script injeta aparece no tamanho do ARQUIVO até o
   script rodar.** A bandeira dos EUA do seletor Brasil/EUA piscava ocupando a tela inteira a cada
@@ -858,8 +888,8 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   atrás e, vindo depois, cobriria o texto) + um `<button class="ps-opt">` por opção. As classes
   antigas (`mkt-btn`, `vs-btn`, `chart-type-btn`, `mode-btn`) seguem nos botões de propósito:
   são o gancho dos handlers de cada página, não têm mais CSS de aparência.
-- Variantes: `pill-switch--sm` (só ícone, pro cabeçalho de card) e `pill-switch--full` (ocupa a
-  linha toda, usado no celular em Integrações).
+- Variante: `pill-switch--sm` (só ícone, pro cabeçalho de card). Ocupar a linha toda no celular
+  ficou por conta da página que precisa disso, não do componente.
 - **A opção padrão precisa nascer com `active` no HTML.** Quatro seletores marcavam o ativo só
   via JS, e antes do script rodar o controle aparecia sem nada selecionado.
 - Nome NÃO é `seg`: nesse projeto `seg` já quer dizer segmento de público (gato/cachorro), em

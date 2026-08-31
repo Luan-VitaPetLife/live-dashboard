@@ -352,30 +352,48 @@ $('viewSwitch').addEventListener('click', e => {
 // só essa ação apaga pedido de verdade); se for mais, busca automaticamente o que falta
 // (backfill, não precisa de confirmação — só soma). Nunca os dois separados, evita confundir
 // "isso soma com aquilo?" (pergunta real de quem usa a tela). Ver server.js /api/amazon/history.
-const RET_MARKET_LABEL = { br: 'BR', us: 'EUA' };
+const RET_MARKET_LABEL = { br: 'Brasil', us: 'Estados Unidos' };
 let retBackfillPolling = null;
-function retCoverageText(info){
-  if (info.oldestOrderDays === null) return 'nenhum pedido ainda';
-  return `cobre ${info.oldestOrderDays.toLocaleString('pt-BR')} dias hoje`;
+
+// Os dois painéis de histórico (Amazon e Shopify) mostram o MESMO tipo de informação, então
+// mostram a mesma frase, montada aqui. Antes cada um tinha a sua: um dizia "336 pedidos · cobre
+// 136 dias hoje" e o outro "começa em 17/04/2026 (137 dias) · Shopify Coco and Luna BR · ...".
+// Eram dois formatos para o mesmo dado, e o painel parecia dois painéis sem relação.
+function retResumo(info){
+  const pedidos = Number(info.totalOrders || 0);
+  if (!pedidos || !info.oldestOrderDate) return 'nenhum pedido guardado ainda';
+  const desde = CocoPeriodo.data(info.oldestOrderDate);
+  const dias = Number(info.oldestOrderDays || 0).toLocaleString('pt-BR');
+  return `${pedidos.toLocaleString('pt-BR')} pedidos · desde ${desde} (${dias} dias)`;
+}
+
+// O markup das quatro linhas também é um só. `extra` vira o title do rótulo: é onde a linha da
+// Shopify diz quais lojas ela alcança, sem que isso desmonte a frase padrão.
+function retLinha({ mkt, id, logo, info, botao, extra }){
+  const cap = mkt === 'us' ? 'Us' : 'Br';
+  const titulo = extra ? ` title="${extra}"` : '';
+  return `<div class="ret-row">
+    <div class="ret-row-main">
+      <div class="ret-row-label"${titulo}>
+        <img class="ret-row-logo" src="${logo}" alt="">
+        <span class="ret-row-label-text">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${retResumo(info)}</span></span>
+      </div>
+      <div class="ret-row-input"><input type="number" id="${id}Days${cap}" min="${id === 'ret' ? 0 : 1}"${id === 'ret' ? '' : ' max="1825"'} value="${info.campo}"><span>dias</span></div>
+      <button class="ret-btn" id="${id}Apply${cap}" onclick="${id === 'ret' ? 'applyHistory' : 'applyShopHistory'}('${mkt}')"${info.desabilitado ? ' disabled' : ''}>${botao}</button>
+    </div>
+    <div class="ret-row-status" id="${id}Status${cap}"></div>
+  </div>`;
 }
 async function loadHistory(){
   try{
     const r = await fetch('/api/amazon/history', { credentials:'same-origin' });
     if (!r.ok) throw new Error('http ' + r.status);
     const d = await r.json();
-    $('retPanelSub').textContent = 'Digite quantos dias de pedidos você quer manter guardados. Um número menor apaga o excesso (pede confirmação); um número maior busca na Amazon o que estiver faltando.';
-    $('retRows').innerHTML = ['us','br'].map(mkt => {
-      const info = d[mkt] || { days: 0, totalOrders: 0, oldestOrderDays: null };
-      const cap = mkt === 'us' ? 'Us' : 'Br';
-      return `<div class="ret-row">
-        <div class="ret-row-main">
-          <div class="ret-row-label"><img class="ret-row-logo" src="img/integracoes/Amazon_logo.png" alt=""><span class="ret-row-label-text">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${info.totalOrders.toLocaleString('pt-BR')} pedidos · ${retCoverageText(info)}</span></span></div>
-          <div class="ret-row-input"><input type="number" id="retDays${cap}" min="0" value="${info.days}"><span>dias (0 = sem limite)</span></div>
-          <button class="ret-btn" id="retApply${cap}" onclick="applyHistory('${mkt}')">Aplicar</button>
-        </div>
-        <div class="ret-row-status" id="retStatus${cap}"></div>
-      </div>`;
-    }).join('');
+    $('retPanelSub').textContent = 'Quantos dias de pedidos manter guardados em cada mercado. Um número menor apaga o excesso e pede confirmação antes; um número maior busca na Amazon o que estiver faltando. Zero significa sem limite.';
+    $('retRows').innerHTML = ['br','us'].map(mkt => retLinha({
+      mkt, id: 'ret', logo: 'img/integracoes/Amazon_logo.png', botao: 'Aplicar',
+      info: { ...(d[mkt] || { days: 0, totalOrders: 0, oldestOrderDate: null, oldestOrderDays: null }), campo: (d[mkt] || {}).days ?? 0 },
+    })).join('');
   }catch(e){
     $('retPanelSub').textContent = 'Não foi possível carregar o histórico da Amazon.';
   }
@@ -454,29 +472,19 @@ function pollHistoryBackfill(cap){
 // de 60 dias. Diferente do painel da Amazon acima, aqui não existe poda, então também não existe
 // confirmação — nada é apagado em hipótese nenhuma.
 let shopHistPolling = null;
-function shopHistCoberturaText(info){
-  if (!info.oldestOrderDate) return 'nenhum pedido ainda';
-  return 'começa em ' + CocoPeriodo.data(info.oldestOrderDate) + ' (' + info.oldestOrderDays.toLocaleString('pt-BR') + ' dias)';
-}
 async function loadShopHistory(){
   try{
     const r = await fetch('/api/shopify/history', { credentials:'same-origin' });
     if (!r.ok) throw new Error('http ' + r.status);
     const d = await r.json();
-    $('shopHistSub').textContent = 'Digite quantos dias para trás você quer buscar nas lojas Shopify. Nada é apagado: pedido que já existe é só atualizado, e o que faltava entra. Pode demorar alguns minutos.';
+    $('shopHistSub').textContent = 'Quantos dias de pedidos buscar nas lojas Shopify de cada mercado. Nada é apagado: o pedido que já existe é só atualizado e o que faltava entra. Pode demorar alguns minutos.';
     $('shopHistRows').innerHTML = ['br','us'].map(mkt => {
-      const info = d[mkt] || { oldestOrderDate:null, oldestOrderDays:null, lojas:[] };
-      const cap = mkt === 'us' ? 'Us' : 'Br';
-      const lojas = info.lojas.length ? info.lojas.join(' · ') : 'nenhuma loja ligada';
-      return '<div class="ret-row">' +
-        '<div class="ret-row-main">' +
-          '<div class="ret-row-label"><img class="ret-row-logo" src="img/integracoes/Shopify_logo.png" alt=""><span class="ret-row-label-text">' + RET_MARKET_LABEL[mkt] +
-          '<span class="ret-row-sub">' + shopHistCoberturaText(info) + ' · ' + lojas + '</span></span></div>' +
-          '<div class="ret-row-input"><input type="number" id="shopDays' + cap + '" min="1" max="1825" value="365"><span>dias</span></div>' +
-          '<button class="ret-btn" id="shopApply' + cap + '" onclick="applyShopHistory(\'' + mkt + '\')"' + (info.lojas.length ? '' : ' disabled') + '>Buscar</button>' +
-        '</div>' +
-        '<div class="ret-row-status" id="shopStatus' + cap + '"></div>' +
-      '</div>';
+      const info = d[mkt] || { totalOrders: 0, oldestOrderDate: null, oldestOrderDays: null, lojas: [] };
+      return retLinha({
+        mkt, id: 'shop', logo: 'img/integracoes/Shopify_logo.png', botao: 'Buscar',
+        info: { ...info, campo: 365, desabilitado: !info.lojas.length },
+        extra: info.lojas.length ? info.lojas.join(' · ') : 'nenhuma loja ligada neste mercado',
+      });
     }).join('');
   }catch(e){
     $('shopHistSub').textContent = 'Não foi possível carregar o histórico das lojas Shopify.';

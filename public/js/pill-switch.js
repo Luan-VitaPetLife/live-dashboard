@@ -47,10 +47,6 @@
   .pill-switch--sm .ps-opt{width:24px;height:22px;padding:0;border-radius:6px}
   .pill-switch--sm .ps-opt i{font-size:11px}
 
-  /* Ocupa a linha toda no celular (a tela de Integrações já fazia isso com o seletor antigo). */
-  .pill-switch--full{display:flex;width:100%}
-  .pill-switch--full .ps-opt{flex:1}
-
   @media (prefers-reduced-motion: reduce){
     .ps-pill{transition:none}
   }`;

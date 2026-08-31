@@ -34,13 +34,6 @@
         <div class="page-title" style="margin-top:8px">Integrações</div>
         <div class="page-sub">Vita Pet Life · status e controle de cada canal conectado</div>
       </div>
-      <div class="pill-switch pill-switch--full" id="viewSwitch">
-        <span class="ps-pill" aria-hidden="true"></span>
-        <button type="button" class="ps-opt vs-btn active" data-mode="cards"><i class="bi bi-grid-3x3-gap"></i> Cards</button>
-        <button type="button" class="ps-opt vs-btn" data-mode="colunas"><i class="bi bi-layout-three-columns"></i> Colunas</button>
-        <button type="button" class="ps-opt vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
-        <button type="button" class="ps-opt vs-btn" data-mode="compacto"><i class="bi bi-grid-1x2"></i> Compacto</button>
-      </div>
     </div>
 
     <div class="ret-panel" id="retPanel">
@@ -81,6 +74,16 @@
         <button class="ret-btn" id="alertsTestBtn" onclick="testAlertNow()">Enviar teste</button>
       </div>
       <div class="ret-backfill-status" id="alertsStatusMsg"></div>
+    </div>
+
+    <div class="view-row">
+      <div class="pill-switch" id="viewSwitch">
+        <span class="ps-pill" aria-hidden="true"></span>
+        <button type="button" class="ps-opt vs-btn active" data-mode="cards"><i class="bi bi-grid-3x3-gap"></i> Cards</button>
+        <button type="button" class="ps-opt vs-btn" data-mode="colunas"><i class="bi bi-layout-three-columns"></i> Colunas</button>
+        <button type="button" class="ps-opt vs-btn" data-mode="linhas"><i class="bi bi-list-ul"></i> Linhas</button>
+        <button type="button" class="ps-opt vs-btn" data-mode="compacto"><i class="bi bi-grid-1x2"></i> Compacto</button>
+      </div>
     </div>
 
     <div id="listArea">

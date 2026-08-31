@@ -27,6 +27,17 @@
        conteúdo ficava colado à esquerda com uma faixa de fundo vazia à direita. ── */
   .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;width:100%}
   .page-headrow{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  /* O seletor de visualização controla só a lista de integrações, então vive junto dela, e não
+     no cabeçalho da página. Compacto de propósito: é um ajuste de exibição, não o controle
+     principal da tela, e ocupando a largura toda no topo parecia o contrário. */
+  .view-row{display:flex;justify-content:flex-end;margin-top:4px}
+  #viewSwitch .ps-opt{padding:5px 10px;font-size:10px;gap:5px}
+  #viewSwitch .ps-opt i{font-size:11px}
+  @media(max-width:768px){
+    .view-row{justify-content:stretch}
+    #viewSwitch{width:100%}
+    #viewSwitch .ps-opt{flex:1}
+  }
   .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
   .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
   .back-link{font-size:11px;color:var(--sub);text-decoration:none;display:inline-flex;align-items:center;gap:5px}
@@ -41,17 +52,23 @@
   .ret-panel-title{font-size:13px;font-weight:600}
   .ret-panel-sub{font-size:11px;color:var(--sub);margin-top:2px;line-height:1.5;max-width:640px}
   .ret-rows{display:flex;flex-direction:column;gap:8px}
-  .ret-row{padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm)}
-  .ret-row-main{display:flex;align-items:center;gap:14px}
+  .ret-row{padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)}
+  .ret-row-main{display:flex;align-items:center;gap:12px}
   /* Altura fixa + largura livre, não caixa quadrada — mesmo motivo do .fam-head-logo acima:
      Amazon_logo.png é uma faixa larga (ícone+nome, ~3.5:1), não um ícone quadrado; forçar
      20x20 deixava a logo minúscula com vão vazio ao redor (reportado pelo Luan, 19/08/2026). */
   .ret-row-logo{height:24px;width:auto;flex-shrink:0}
-  .ret-row-label{font-size:12px;font-weight:600;width:170px;flex-shrink:0;display:flex;align-items:center;gap:10px}
-  .ret-row-label-text{display:flex;flex-direction:column;gap:1px}
+  /* O rótulo CRESCE em vez de ocupar uma coluna fixa. Com 170px travados sobravam pouco mais de
+     130px para o texto, que quebrava em quatro ou cinco linhas e esticava a linha inteira — e o
+     resto da largura ficava vazio. min-width:0 é o que permite encolher dentro do flex. */
+  .ret-row-label{font-size:12px;font-weight:600;flex:1;min-width:0;display:flex;align-items:center;gap:10px}
+  .ret-row-label-text{display:flex;flex-direction:column;gap:1px;min-width:0}
   .ret-row-sub{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:2px}
   .ret-row-status{font-size:10px;color:var(--sub);margin-top:6px;min-height:12px}
-  .ret-row-input{display:flex;align-items:center;gap:6px;margin-left:auto}
+  /* Sem margin-left:auto: quem empurra agora é o rótulo, que cresce. flex-shrink:0 impede que o
+     campo e o botão encolham quando o texto ficar longo. */
+  .ret-row-input{display:flex;align-items:center;gap:6px;flex-shrink:0}
+  .ret-row-main > .ret-btn{flex-shrink:0}
   .ret-row-input input[type=number]{width:64px;font-size:12px;font-family:inherit;color:var(--text);padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);outline:none;transition:border-color .12s}
   .ret-row-input input[type=number]:focus{border-color:var(--ink)}
   .ret-row-input span{font-size:11px;color:var(--sub)}
