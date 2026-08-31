@@ -20,11 +20,25 @@ const fim = src.indexOf('async function runBackupNow');
 t.ok(ini >= 0 && fim > ini, 'achou o bloco do recolhimento da lista');
 
 const ALTURA = 29, GAP = 4;
+
+// O painel de backup fica lá embaixo na página, e é isso que o DOM falso precisa reproduzir:
+// a primeira versão media com offsetTop, que é relativo ao ancestral POSICIONADO mais próximo —
+// e nem a lista nem as linhas têm position. Na tela real o número saía grande demais, o
+// max-height não recortava nada, e a quarta linha aparecia apagada com a lista inteira embaixo.
+// O teste passava porque o DOM falso repetia a mesma suposição errada.
+//
+// Por isso as linhas aqui NÃO expõem offsetTop nem offsetHeight: quem voltar a usá-los quebra o
+// teste em vez de quebrar só a tela.
+const TOPO_DA_LISTA = 900;
 function cenario(n) {
-  const linhas = Array.from({ length: n }, (_, i) => ({ offsetTop: i * (ALTURA + GAP), offsetHeight: ALTURA }));
+  const linhas = Array.from({ length: n }, (_, i) => {
+    const top = TOPO_DA_LISTA + i * (ALTURA + GAP);
+    return { getBoundingClientRect: () => ({ top, bottom: top + ALTURA, height: ALTURA }) };
+  });
   const lista = {
     _classes: new Set(), style: {},
     scrollHeight: n ? (n - 1) * (ALTURA + GAP) + ALTURA : 0,
+    getBoundingClientRect: () => ({ top: TOPO_DA_LISTA }),
     classList: { toggle(c, on) { on ? lista._classes.add(c) : lista._classes.delete(c); } },
     querySelectorAll: () => linhas,
   };
@@ -43,6 +57,10 @@ t.ok(muitos.visivel(), '10 backups: o botão aparece');
 t.eq(muitos.btn.textContent, 'Ver todos os 10 backups', 'o botão diz quantos existem');
 // 3 linhas inteiras + a quarta: é a quarta apagada que diz "tem mais embaixo".
 t.eq(muitos.lista.style.maxHeight, `${3 * (ALTURA + GAP) + ALTURA}px`, 'a altura recolhida cabe exatamente quatro linhas');
+// A medida é a distância DENTRO da lista, não a posição dela na página: se voltar a sair de
+// offsetTop, este número vira a distância até o topo do documento e nada é recortado.
+t.ok(parseInt(muitos.lista.style.maxHeight, 10) < TOPO_DA_LISTA,
+  'a altura é medida dentro da lista, não a partir do topo da página');
 
 muitos.ctx.alternarBackups();
 t.ok(!muitos.recolhida(), 'clicando, abre');

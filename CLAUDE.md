@@ -855,9 +855,20 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - **Lista de backups: três linhas, a quarta se apagando, e um botão pra abrir.** Ela cresce um
   arquivo por dia (retenção de 30 dias), então mostrar tudo deixava o painel enorme. A quarta
   linha apagada é o que diz "tem mais embaixo" sem precisar de texto.
-  - A altura recolhida é MEDIDA do DOM (`espia.offsetTop + espia.offsetHeight`), não calculada a
-    partir de uma altura de linha fixa no CSS: a fonte pode chegar depois do primeiro desenho e
-    mudar a altura da linha, e um número fixo cortaria no meio de uma linha ou deixaria um vão.
+  - A altura recolhida é MEDIDA do DOM, não calculada a partir de uma altura de linha fixa no
+    CSS: a fonte pode chegar depois do primeiro desenho e mudar a altura da linha, e um número
+    fixo cortaria no meio de uma linha ou deixaria um vão.
+  - **A medida sai de `getBoundingClientRect`, NUNCA de `offsetTop`.** `offsetTop` é relativo ao
+    ancestral POSICIONADO mais próximo, e nem a lista nem as linhas têm `position` — na tela real
+    ele devolvia a distância até um ancestral lá em cima da página, o `max-height` saía grande
+    demais e não recortava nada: a quarta linha aparecia apagada com a lista inteira embaixo dela.
+    Os dois rects são relativos à janela, então a subtração dá a distância real dentro da lista,
+    com `position` ou sem. Vale como regra pra qualquer medida de posição relativa neste app.
+  - O primeiro teste desse recolhimento passou COM esse defeito, porque o DOM falso repetia a
+    mesma suposição errada sobre `offsetTop`. Agora as linhas falsas não expõem `offsetTop` nem
+    `offsetHeight`, e a lista falsa fica a 900px do topo: quem voltar a medir por offset quebra o
+    teste em vez de quebrar só a tela. Fingir DOM só protege se o fingimento seguir a semântica
+    de verdade da propriedade.
   - **`#backupFilesList` precisa de `min-height:0`.** É item de uma coluna flex (`.ret-panel`),
     e `min-height:auto` vale mais que `max-height` — sem isso o recolhimento simplesmente não
     acontece, e sem erro nenhum. Mesma armadilha do `.main` documentada acima.
