@@ -34,10 +34,6 @@ function toast(msg, isErr){
   setTimeout(()=>{ t.className = 'toast' + (isErr ? ' err' : ''); }, 2600);
 }
 
-function escapeHtml(s){
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
 
 async function loadMe(){
   try{

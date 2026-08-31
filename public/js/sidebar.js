@@ -9,10 +9,6 @@
 // Escapa texto vindo de dado externo (nome de cliente, título de produto etc.) antes de
 // interpolar em innerHTML — evita XSS armazenado a partir de pedido/produto malicioso.
 // Compartilhado globalmente porque sidebar.js é a única coisa carregada por todas as páginas.
-function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-}
-window.escapeHtml = escapeHtml;
 
 // pageLoaderHtml() — anel colorido animado (4 círculos), substitui texto estático tipo
 // "carregando..." em qualquer lugar que espera uma resposta de verdade (ex: campanhas.html

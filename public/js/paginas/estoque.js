@@ -298,7 +298,6 @@ function comboBits(p) {
   return `${p.avulsoQty || 0} avulso, ${parts.join(', ')}`;
 }
 
-const escAttr = s => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
 function monthsCellClass(v) {
   if (v == null) return 'prod-muted';
@@ -322,7 +321,7 @@ function rowHTML(p, ch) {
     ? `<img class="prod-thumb" src="${p.image}" alt="" loading="lazy" draggable="false" onerror="this.outerHTML='<div class=&quot;prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
     : `<div class="prod-thumb-ph"><i class="bi bi-image"></i></div>`;
   const typeTag = p.type ? `<span class="prod-type-tag">${p.type}</span>` : '';
-  const dataAttrs = `data-channel="${escAttr(ch)}" data-title="${escAttr(p.title)}"`;
+  const dataAttrs = `data-channel="${escapeHtml(ch)}" data-title="${escapeHtml(p.title)}"`;
   return `<tr>
     <td>
       <div class="prod-name-wrap">
@@ -434,7 +433,7 @@ function aggRowHTML(p) {
     ? `<img class="prod-thumb" src="${p.image}" alt="" loading="lazy" draggable="false" onerror="this.outerHTML='<div class=&quot;prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
     : `<div class="prod-thumb-ph"><i class="bi bi-image"></i></div>`;
   const typeTag = p.type ? `<span class="prod-type-tag">${p.type}</span>` : '';
-  const dataAttrs = `data-title="${escAttr(p.title)}"`;
+  const dataAttrs = `data-title="${escapeHtml(p.title)}"`;
   const badge = p._grouped
     ? `<span class="stk-unify-badge" title="${escapeHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>`
     : '';
@@ -447,7 +446,7 @@ function aggRowHTML(p) {
   const orderCells = `<td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.projected ?? ''}" ${dataAttrs} data-field="projected" title="${escapeHtml(projTitle)}"></td>
     <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderNew ?? ''}" ${dataAttrs} data-field="orderNew" title="${escapeHtml(newTitle)}"></td>
     <td class="prod-num"><input class="prod-input" type="number" step="1" placeholder="0" value="${p.orderInProgress ?? ''}" ${dataAttrs} data-field="orderInProgress" title="${escapeHtml(progressTitle)}"></td>`;
-  return `<tr data-title="${escAttr(p.title)}">
+  return `<tr data-title="${escapeHtml(p.title)}">
     <td>
       <div class="prod-name-wrap">
         ${thumb}
