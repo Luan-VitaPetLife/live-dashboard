@@ -1,5 +1,4 @@
 const $ = id => document.getElementById(id);
-function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
 function fmtMoney(n){ return (market==='us'?'US$ ':'R$ ') + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function toast(msg, isErr){

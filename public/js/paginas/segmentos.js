@@ -319,7 +319,6 @@ let geoViewMode = localStorage.getItem('coco_seg_geoview') || 'ranking';        
 let geoMapHidden = localStorage.getItem('coco_seg_geohide') === '1';
 let geoLayoutMode = localStorage.getItem('coco_seg_geolayout') || 'rows';       // 'rows' | 'columns'
 let geoSearchQuery = '';                                                        // filtro por título, client-side (não persiste entre sessões)
-function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // "Unificar" deixou de ser uma opção local desta tela: agora é global, gerenciado na tela
 // Unificador (dentro de Configurações) e já aplicado pelo backend em `productGeo` quando ligado
@@ -428,7 +427,7 @@ function geoDetailHtml(p) {
       <div class="geo-rank-title">Produtos unificados <a href="/unificador" class="geo-unified-manage">gerenciar</a></div>
       <div class="geo-unified-list">
         ${p._members.map(t => `
-          <div class="geo-unified-item"><span title="${escHtml(t)}">${escHtml(t)}</span></div>`).join('')}
+          <div class="geo-unified-item"><span title="${escapeHtml(t)}">${escapeHtml(t)}</span></div>`).join('')}
       </div>
     </div>` : '';
   return `
@@ -609,7 +608,7 @@ function geoProdRowHtml(p, i) {
     ? `<img class="geo-prod-thumb" src="${p.image}" alt="" loading="lazy" draggable="false" onerror="this.outerHTML='<div class=&quot;geo-prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
     : `<div class="geo-prod-thumb-ph"><i class="bi bi-image"></i></div>`;
   const badge = p._grouped
-    ? `<span class="geo-unify-badge" title="${escHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>`
+    ? `<span class="geo-unify-badge" title="${escapeHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>`
     : '';
   return `
     <div class="geo-prod-card${isOpen ? ' open' : ''}">
@@ -638,7 +637,7 @@ function renderGeoBlocks() {
   const segsPresent = ['cat','dog','other'].filter(k => source.some(p => p.seg === k));
   if (!segsPresent.length) {
     container.innerHTML = q
-      ? `<div class="geo-empty">Nenhum produto encontrado para "${escHtml(geoSearchQuery.trim())}"</div>`
+      ? `<div class="geo-empty">Nenhum produto encontrado para "${escapeHtml(geoSearchQuery.trim())}"</div>`
       : '<div class="geo-empty">Sem dados de produto/estado no período</div>';
     return;
   }
@@ -875,19 +874,19 @@ function renderTrTypes() {
   wrap.innerHTML = names.map(name => {
     const kws = trTypes[name] || [];
     const open = trOpen.has(name);
-    const chips = kws.map(k => `<span class="tr-kw-chip">${escHtml(k)}<button data-remove-kw="${escHtml(name)}|${escHtml(k)}" title="Remover palavra-chave"><i class="bi bi-x"></i></button></span>`).join('');
+    const chips = kws.map(k => `<span class="tr-kw-chip">${escapeHtml(k)}<button data-remove-kw="${escapeHtml(name)}|${escapeHtml(k)}" title="Remover palavra-chave"><i class="bi bi-x"></i></button></span>`).join('');
     const body = open ? `<div class="tr-type-body">
         <div class="tr-kw-list">${chips || '<span class="tr-empty" style="padding:0">Sem palavra-chave — nunca vai bater em nenhum produto.</span>'}</div>
         <div class="tr-kw-add">
-          <input type="text" placeholder="Adicionar palavra-chave..." data-kw-input="${escHtml(name)}">
-          <button data-add-kw="${escHtml(name)}">Adicionar</button>
+          <input type="text" placeholder="Adicionar palavra-chave..." data-kw-input="${escapeHtml(name)}">
+          <button data-add-kw="${escapeHtml(name)}">Adicionar</button>
         </div>
       </div>` : '';
-    return `<div class="tr-type-row" data-type-row="${escHtml(name)}">
-      <div class="tr-type-head" data-toggle-type="${escHtml(name)}">
-        <div class="tr-type-name"><i class="bi bi-tag"></i> ${escHtml(name)}</div>
+    return `<div class="tr-type-row" data-type-row="${escapeHtml(name)}">
+      <div class="tr-type-head" data-toggle-type="${escapeHtml(name)}">
+        <div class="tr-type-name"><i class="bi bi-tag"></i> ${escapeHtml(name)}</div>
         <span class="tr-type-count">${kws.length} palavra${kws.length===1?'':'s'}-chave</span>
-        <button class="tr-type-del" data-delete-type="${escHtml(name)}" title="Excluir tipo"><i class="bi bi-trash"></i></button>
+        <button class="tr-type-del" data-delete-type="${escapeHtml(name)}" title="Excluir tipo"><i class="bi bi-trash"></i></button>
         <span class="tr-type-chevron"><i class="bi bi-chevron-${open?'up':'down'}"></i></span>
       </div>
       ${body}

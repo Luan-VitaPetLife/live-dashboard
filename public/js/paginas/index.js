@@ -235,7 +235,6 @@ function fmtMoneyShort(v) {
 }
 function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
 function pctStr(n, dec=1) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:dec,minimumFractionDigits:dec})+'%' }
-function escapeHtmlAttr(s) { return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ── Insights ──────────────────────────────────────────────────────────────────
 // As frases e os números vêm PRONTOS do servidor (src/insights.js) — aqui só se desenha.
@@ -276,7 +275,7 @@ function insEmptyHTML(contexto) {
   if (semPedido && c.historyStart && c.until && c.until < c.historyStart) {
     const inicio = CocoPeriodo.data(c.historyStart, { mercado: market });
     return `<div class="ins-empty">Este período é anterior ao histórico disponível.<br>`
-      + `O primeiro pedido registrado neste mercado é de ${escapeHtmlAttr(inicio)}.</div>`;
+      + `O primeiro pedido registrado neste mercado é de ${escapeHtml(inicio)}.</div>`;
   }
   if (semPedido) {
     return `<div class="ins-empty">Nenhum pedido neste período.<br>`
@@ -317,10 +316,10 @@ function renderInsights(list, contexto) {
   // caso alguma regra nova esqueça de mandar o label. O title vai no `title=` pra quem passar o
   // mouse ler o texto completo sem precisar clicar.
   document.getElementById('insList').innerHTML = _insights.map((i, n) => `
-    <button class="ins-item${n === _insightSel ? ' active' : ''}" data-n="${n}" title="${escapeHtmlAttr(i.title)}">
+    <button class="ins-item${n === _insightSel ? ' active' : ''}" data-n="${n}" title="${escapeHtml(i.title)}">
       <span class="ins-item-top">
         <i class="bi ${INS_ICO[i.kind] || INS_ICO[INS_KIND_FALLBACK]} ins-item-ico ins-ico-${i.kind}"></i>
-        <span class="ins-item-txt">${escapeHtmlAttr(i.label || i.title)}</span>
+        <span class="ins-item-txt">${escapeHtml(i.label || i.title)}</span>
       </span>
       ${insDeltaHTML(i, 'ins-item-delta')}
     </button>`).join('');
@@ -451,7 +450,7 @@ function renderInsightDetail() {
     // A primeira linha é sempre o período/valor atual: ganha a cor do tipo, a segunda fica neutra.
     const cor = n === 0 ? (INS_BAR_COLOR[i.kind] || INS_BAR_COLOR[INS_KIND_FALLBACK]) : 'var(--border2)';
     return `<div class="ins-bar-cell">
-      <div class="ins-bar-lbl">${escapeHtmlAttr(r.label)}</div>
+      <div class="ins-bar-lbl">${escapeHtml(r.label)}</div>
       <div class="ins-bar-row">
         <div class="ins-bar-track"><div class="ins-bar-fill" style="width:${w}%;background:${cor}"></div></div>
         <span class="ins-bar-val">${insFmtVal(v, i.chart.fmt)}</span>
@@ -460,9 +459,9 @@ function renderInsightDetail() {
   }).join('');
   el.innerHTML = `
     <div class="ins-detail-main">
-      <div class="ins-eyebrow">${escapeHtmlAttr(i.dimension)}</div>
-      <div class="ins-title"><i class="bi ${INS_ICO[i.kind] || INS_ICO[INS_KIND_FALLBACK]} ins-title-ico ins-ico-${i.kind}"></i><span>${escapeHtmlAttr(i.title)}</span></div>
-      <div class="ins-text">${escapeHtmlAttr(i.detail)}</div>
+      <div class="ins-eyebrow">${escapeHtml(i.dimension)}</div>
+      <div class="ins-title"><i class="bi ${INS_ICO[i.kind] || INS_ICO[INS_KIND_FALLBACK]} ins-title-ico ins-ico-${i.kind}"></i><span>${escapeHtml(i.title)}</span></div>
+      <div class="ins-text">${escapeHtml(i.detail)}</div>
     </div>
     <div class="ins-bars">${bars}</div>`;
 }
@@ -857,7 +856,7 @@ function render(d) {
       // Linha unificada pelo Unificador (Configurações): pode juntar o mesmo produto vendido em
       // canais diferentes — mostra um badge por canal presente, em vez de um único canal.
       const badge = isAllCh ? ' '+(p.channels||[p.channel]).map(c=>CocoColors.chBadgeHTML(c)).join(' ') : '';
-      const groupBadge = p._grouped ? ` <span class="tp-group-badge" title="${escapeHtmlAttr(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>` : '';
+      const groupBadge = p._grouped ? ` <span class="tp-group-badge" title="${escapeHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>` : '';
       const comboParts = Object.entries(comboBySize||{})
         .sort((a,b)=>Number(a[0])-Number(b[0]))
         .map(([size,n])=>`${fmtInt(n)} combo de ${size}`);

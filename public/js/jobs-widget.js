@@ -28,9 +28,7 @@
   const HIDE_AFTER_DONE_MS = 8000;
   const MIN_W = 240, MIN_H = 130;
 
-  const esc = window.escapeHtml || function (s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  };
+  const esc = window.escapeHtml;
 
   const css = ''
     + '.jw-widget{position:fixed;right:20px;bottom:20px;width:280px;max-height:400px;background:var(--surface);'

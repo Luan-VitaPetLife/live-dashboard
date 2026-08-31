@@ -345,10 +345,6 @@ async function saveUser(){
   }
 }
 
-function escapeHtml(s){
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
 
 /* ── Mostrar/ocultar senha (mesmo padrão de login.html) ── */
 function setPasswordVisible(visible){

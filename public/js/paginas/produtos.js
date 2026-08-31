@@ -351,7 +351,6 @@ function comboBits(p) {
   return `${p.avulsoQty || 0} avulso, ${parts.join(', ')}`;
 }
 
-const escAttr = s => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 const fmtPct = v => (v * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
 
 function rowHTML(p, ch) {
@@ -360,7 +359,7 @@ function rowHTML(p, ch) {
     ? `<img class="prod-thumb" src="${p.image}" alt="" loading="lazy" draggable="false" onerror="this.outerHTML='<div class=&quot;prod-thumb-ph&quot;><i class=&quot;bi bi-image&quot;></i></div>'">`
     : `<div class="prod-thumb-ph"><i class="bi bi-image"></i></div>`;
   const typeTag = p.type ? `<span class="prod-type-tag">${p.type}</span>` : '';
-  const dataAttrs = `data-channel="${escAttr(ch)}" data-title="${escAttr(p.title)}"`;
+  const dataAttrs = `data-channel="${escapeHtml(ch)}" data-title="${escapeHtml(p.title)}"`;
   const profitCells = p.profit != null
     ? `<td class="prod-num ${p.profit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg'}">${fmtMoney(p.profit)}</td>
        <td class="prod-num ${p.profit >= 0 ? 'prod-profit-pos' : 'prod-profit-neg'}">${fmtPct(p.profitPct)}</td>`
@@ -373,7 +372,7 @@ function rowHTML(p, ch) {
   // beco sem saída de antes ("edite no produto individual" sem nenhum jeito de chegar nele, já que
   // o título individual não aparece mais em lugar nenhum uma vez agrupado — reportado em
   // produção). data-grouped/data-members fazem onFinanceEdit gravar o valor em cada membro.
-  const groupAttrs = p._grouped ? ` data-grouped="1" data-members="${escAttr(JSON.stringify(p._members))}"` : '';
+  const groupAttrs = p._grouped ? ` data-grouped="1" data-members="${escapeHtml(JSON.stringify(p._members))}"` : '';
   const groupHint = p._grouped ? ` Aplica a todos os ${p._members.length} produtos do grupo, dentro deste canal.` : '';
   const financeCells = `<td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p._grouped ? '' : (p.cog ?? '')}" ${dataAttrs}${groupAttrs} data-field="cog" title="Custo do produto (COG), por unidade.${groupHint} Vazio = usa o padrão; 0 é um valor válido e fica salvo."></td>
     <td class="prod-num"><input class="prod-input" type="number" step="0.01" placeholder="—" value="${p._grouped ? '' : (p.shipping ?? '')}" ${dataAttrs}${groupAttrs} data-field="shipping" title="Custo de frete, por unidade.${groupHint} Vazio = considera 0; 0 é um valor válido e fica salvo."></td>

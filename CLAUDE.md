@@ -96,7 +96,9 @@ public/js/colors.js        Sistema de cores compartilhado (IIFE) + color picker
 public/js/jobs-widget.js   Card flutuante de processos em segundo plano (IIFE), toda página
 public/js/confirm-modal.js Pop-up de confirmação (substitui confirm() nativo, IIFE), toda página
 public/js/periodo.js       Rótulo do período selecionado (IIFE), fonte única das 6 telas com seletor
+public/js/escape.js        Escapa texto de fora pra HTML (IIFE) — a única implementação do app
 public/css/switch.css      Toggle .ios-switch, padrão único do app
+public/css/catalogo.css    O que Produtos e Estoque desenham igual
 ```
 
 ### Organização de `public/` (25/08/2026)
@@ -108,10 +110,10 @@ imagens estavam soltas no meio dos HTML e não dava pra ver o que era página e 
 public/
   *.html                 as 11 páginas (raiz obrigatória)
   favicon.png            convenção de raiz, fica onde está
-  css/                   switch.css anim.css        (estilo compartilhado)
+  css/                   switch.css anim.css catalogo.css   (estilo compartilhado)
   css/paginas/           um .css por página, extraído do <style> dela
   js/                    sidebar.js colors.js geo.js periodo.js pill-switch.js confirm-modal.js
-                         jobs-widget.js             (componentes compartilhados)
+                         jobs-widget.js escape.js   (componentes compartilhados)
   js/paginas/            um .js por página, extraído do <script> dela
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
@@ -155,7 +157,8 @@ Duas armadilhas ao mexer nisso:
   Logo começando com `/` escapa do `LOGO_BASE` e é caminho absoluto (`/img/marca/Logo2.png`).
 
 Removidos por não serem referenciados em lugar nenhum: `Feno_no_deserto.svg` (substituída pela
-`404.png` em 18/08/2026), `Logo1.svg`, `logo_shopify.png`, `logos-integracao/TikTok_logo.png`.
+`404.png` em 18/08/2026), `Logo1.svg`, `logo_shopify.png`, `logos-integracao/TikTok_logo.png`,
+`img/integracoes/meta_logo_horizontal.png` (a que a tela usa é `logo-meta.png`).
 
 Fluxo: `sync.js` busca pedidos/sessões → grava no `store` → `metrics.js` calcula → `/api/*`
 devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shopee/ML/Amazon direto.
@@ -898,6 +901,48 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   CSS injetado por script tem. `scripts/test/imagens.test.mjs` cruza as duas listas e falha se
   uma imagem cair nesse caso sem declarar o próprio tamanho.
 
+### Escapar texto (`public/js/escape.js`, `window.escapeHtml`)
+- **Uma implementação só, e ela vale pra texto de elemento E pra valor de atributo.** Eram OITO
+  cópias: cinco idênticas (sidebar, Configurações, Integrações, Unificador e Segmentos, essa com
+  o nome `escHtml`), uma só pra atributo na Visão geral (`escapeHtmlAttr`) e **duas pela metade** —
+  o `escAttr` de Produtos e Estoque tratava só `&` e `"`, deixando `<` passar.
+- As duas pela metade não eram bug ainda, porque só apareciam dentro de atributo entre aspas. O
+  problema é o próximo que reaproveitasse a função pra montar texto de elemento: abriria um
+  buraco sem que nada acusasse. Escapar é o tipo de coisa em que nenhuma cópia pode ser "quase
+  igual".
+- Trata os cinco caracteres que importam (`& < > " '`). O `&` precisa vir junto, senão um texto
+  que já contenha `&lt;` seria decodificado de volta pra `<` pelo navegador.
+- Serve pros dois contextos porque o navegador decodifica a entidade ao ler de volta: `dataset.x`
+  e `JSON.parse` continuam recebendo o valor original (é o caso do `data-members` em Produtos,
+  que carrega JSON).
+- **O script carrega ANTES do `sidebar.js` em toda página que tem sidebar**, e não tem plano B em
+  lugar nenhum: quem esquecer o `<script>` quebra o teste, em vez de cair numa cópia local que
+  volta a divergir. O `sidebar.js` deixou de exportar o global e o `jobs-widget.js` perdeu a
+  cópia de emergência que tinha. `login.html` fica de fora porque não usa.
+- `scripts/test/escape.test.mjs` executa a função de verdade (entidades, `null`, ida e volta em
+  atributo), falha se alguém escrever outra implementação em `public/`, e confere a ordem de
+  carregamento.
+
+### CSS compartilhado entre Produtos e Estoque (`public/css/catalogo.css`)
+- As duas telas são a mesma tela com colunas diferentes, e o Estoque nasceu de uma cópia do
+  Produtos: **135 regras estavam escritas nos dois arquivos, idênticas**. Corrigir uma nunca
+  chegava na outra. Hoje `produtos.css` tem 10 regras próprias e `estoque.css`, 12.
+- **O risco de mexer aqui é a CASCATA, não o arquivo.** `catalogo.css` carrega antes da folha da
+  página; se um seletor voltar a existir nos dois lugares, quem vence um empate de especificidade
+  passa a ser decidido pela ordem dos arquivos. A extração só foi feita depois de conferir que
+  nenhum seletor movido continuava na folha da página, e `scripts/test/catalogo.test.mjs` mantém
+  isso.
+- A casca das telas (`:root`, `body`, `.topbar`, `.content`) NÃO foi centralizada, e é
+  deliberado: medindo as 11 folhas, só 5 regras são idênticas em 8+ páginas — as outras
+  divergiram ao longo do tempo. Unificar exigiria escolher qual versão vence, o que é mudança de
+  aparência, não faxina. O par Produtos/Estoque é a exceção justamente por ser cópia direta.
+- Ao extrair, comentário anda junto com a regra que ele documenta, e quando as duas folhas
+  documentavam a mesma regra com palavras diferentes ficou a explicação mais completa. Uma
+  primeira tentativa contava `{`/`}` dentro de comentário e partiu ao meio um que cita
+  `body{display:flex}` — as regras nunca correram risco, mas o texto que as explica é justamente
+  o que este projeto não pode perder. Qualquer varredura de CSS por chave precisa pular
+  comentário.
+
 ### Seletor de opção (`public/js/pill-switch.js`, `.pill-switch`)
 - **Padrão único de todo seletor de duas ou mais opções mutuamente exclusivas**: moldura discreta
   e um pill claro que DESLIZA até a opção ativa. Pedido do Luan (27/08/2026) a partir do
@@ -1266,6 +1311,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   todo `js|css/paginas/` apontado pelo HTML existe em disco), `assets` (caminho de arquivo local
   existe),
   `imagens` (nenhuma imagem depende de CSS injetado por script pra ter tamanho),
+  `escape` (uma função de escape só, correta, e carregada antes de quem usa),
+  `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
   em blocos, sem buraco nem dia repetido, mais a ligação com servidor e tela) e `periodo` (o ano aparece no
