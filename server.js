@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill, getOldestOrderDate } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -783,15 +783,21 @@ function startShopifyBackfillJob(market, days, startedBy) {
 // Onde o histórico de cada mercado começa hoje, e quais lojas Shopify o backfill alcançaria.
 // É o que o painel de Integrações mostra antes de você escolher quantos dias buscar: sem isso a
 // tela pediria um número sem dizer contra o que ele está sendo comparado.
+// As lojas Shopify de cada mercado, e quanto histórico elas já têm. Os campos são os mesmos que
+// /api/amazon/history devolve, de propósito: a tela mostra a mesma frase nas quatro linhas, e
+// duas frases diferentes pro mesmo tipo de informação era o que fazia o painel parecer dois
+// painéis sem relação.
 app.get('/api/shopify/history', requireAdmin, (_req, res) => {
-  const hoje = Date.now();
   const porMercado = {};
   for (const market of ['br', 'us']) {
-    const inicio = getOldestOrderDate(market);
+    const lojas = lojasDoMercado(market);
+    const canais = market === 'br' ? ['shopify', 'yucaloo_br'] : ['shopify_us', 'yucaloo_us'];
+    const h = historicoDosCanais(canais, market);
     porMercado[market] = {
-      oldestOrderDate: inicio,
-      oldestOrderDays: inicio ? Math.round((hoje - Date.parse(inicio + 'T00:00:00Z')) / 86400000) : null,
-      lojas: lojasDoMercado(market).map(l => l.nome),
+      totalOrders: h.orders,
+      oldestOrderDate: h.oldestDate,
+      oldestOrderDays: h.oldestDays,
+      lojas: lojas.map(l => l.nome),
     };
   }
   res.json(porMercado);
@@ -901,25 +907,40 @@ app.post('/api/amazon/cleanup-market-leak', (req, res) => {
 // A config salva (kv.amazonRetentionConfig) também é o que sync.js usa pra poda automática do
 // dia-a-dia — um valor só, uma fonte de verdade.
 const AMAZON_RETENTION_CHANNEL = { br: 'amazon', us: 'amazon_us' };
+// Quanto histórico existe hoje para um conjunto de canais dentro de um mercado.
+// Serve aos dois painéis de histórico (Amazon e Shopify), e é por isso que recebe uma LISTA de
+// canais: a Amazon tem um canal por mercado, a Shopify tem duas lojas (Coco and Luna e Yucaloo).
+// Medir por canal e não por mercado é o que importa aqui — getOldestOrderDate(market) devolveria
+// o pedido mais antigo de QUALQUER canal, e o painel da Shopify chegou a mostrar a data da
+// Amazon BR como se fosse o começo do histórico das lojas Shopify.
+function historicoDosCanais(canais, market) {
+  let orders = 0, oldest = null;
+  for (const channel of canais) {
+    const lista = getOrders({ channel, market });
+    orders += lista.length;
+    for (const o of lista) if (oldest === null || o.createdAt < oldest) oldest = o.createdAt;
+  }
+  return {
+    orders,
+    oldestDate: oldest ? String(oldest).slice(0, 10) : null,
+    oldestDays: oldest ? Math.floor((Date.now() - new Date(oldest).getTime()) / 864e5) : null,
+  };
+}
 function oldestOrderAgeDays(channel, market) {
-  const orders = getOrders({ channel, market });
-  if (!orders.length) return null;
-  let oldest = orders[0].createdAt;
-  for (const o of orders) if (o.createdAt < oldest) oldest = o.createdAt;
-  return Math.floor((Date.now() - new Date(oldest).getTime()) / 864e5);
+  return historicoDosCanais([channel], market).oldestDays;
 }
 function planAmazonHistory(market, days) {
   const channel = AMAZON_RETENTION_CHANNEL[market];
-  const totalOrders = getOrders({ channel, market }).length;
-  const oldestOrderDays = oldestOrderAgeDays(channel, market);
-  if (days === 0) return { action: 'unlimited', totalOrders, oldestOrderDays };
-  if (oldestOrderDays === null) return { action: 'backfill', missingDays: days, totalOrders, oldestOrderDays };
+  const { orders: totalOrders, oldestDate: oldestOrderDate, oldestDays: oldestOrderDays } =
+    historicoDosCanais([channel], market);
+  if (days === 0) return { action: 'unlimited', totalOrders, oldestOrderDate, oldestOrderDays };
+  if (oldestOrderDays === null) return { action: 'backfill', missingDays: days, totalOrders, oldestOrderDate, oldestOrderDays };
   if (oldestOrderDays > days) {
     const cutoff = new Date(Date.now() - days * 864e5).toISOString();
-    return { action: 'prune', wouldDelete: countOrdersOlderThan({ channel, olderThanIso: cutoff }), totalOrders, oldestOrderDays };
+    return { action: 'prune', wouldDelete: countOrdersOlderThan({ channel, olderThanIso: cutoff }), totalOrders, oldestOrderDate, oldestOrderDays };
   }
-  if (oldestOrderDays < days) return { action: 'backfill', missingDays: days - oldestOrderDays, totalOrders, oldestOrderDays };
-  return { action: 'noop', totalOrders, oldestOrderDays };
+  if (oldestOrderDays < days) return { action: 'backfill', missingDays: days - oldestOrderDays, totalOrders, oldestOrderDate, oldestOrderDays };
+  return { action: 'noop', totalOrders, oldestOrderDate, oldestOrderDays };
 }
 
 app.get('/api/amazon/history', requireAdmin, (_req, res) => {
