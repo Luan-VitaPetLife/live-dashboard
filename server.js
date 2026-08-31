@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill, getOldestOrderDate } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -17,6 +17,7 @@ import * as shopifyYucaloo from './src/shopifyYucaloo.js';
 import * as auth from './src/auth.js';
 import { runBackup, runBackupIfDue, isConfigured as isBackupConfigured, listBackups } from './src/backup.js';
 import { checkSyncHealth, isConfigured as isAlertsConfigured, sendTelegramMessage } from './src/alerts.js';
+import { backfillShopify, lojasDoMercado } from './src/backfill.js';
 import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -652,7 +653,7 @@ app.post('/api/amazon-br/force-sync', async (_req, res) => {
 // interromper no meio de um upload/gravação, então não entram em CANCELABLE_JOB_IDS (o botão
 // nem aparece pra eles).
 class JobCancelledError extends Error {}
-const CANCELABLE_JOB_IDS = new Set(['amazon-backfill', 'amazon-images', 'amazon-items']);
+const CANCELABLE_JOB_IDS = new Set(['amazon-backfill', 'amazon-images', 'amazon-items', 'shopify-backfill']);
 const cancelFlags = {};
 function checkCancelled(jobId) {
   if (cancelFlags[jobId]) { cancelFlags[jobId] = false; throw new JobCancelledError('Cancelado pelo usuário'); }
@@ -666,7 +667,7 @@ function checkCancelled(jobId) {
 // botão "Aplicar") ficava com o botão travado pra sempre olhando pro mesmo job fantasma que o
 // widget já mostrava como erro (reportado em produção — via CLAUDE.md "Campanhas": os dois
 // lugares que mostram o mesmo dado nunca podem discordar).
-const STALE_AFTER_MS = { 'amazon-backfill': 45 * 60 * 1000, 'amazon-images': 20 * 60 * 1000, 'amazon-items': 20 * 60 * 1000, 'bling-geo': 10 * 60 * 1000, 'backup': 10 * 60 * 1000 };
+const STALE_AFTER_MS = { 'amazon-backfill': 45 * 60 * 1000, 'shopify-backfill': 45 * 60 * 1000, 'amazon-images': 20 * 60 * 1000, 'amazon-items': 20 * 60 * 1000, 'bling-geo': 10 * 60 * 1000, 'backup': 10 * 60 * 1000 };
 function destaleJob(jobId, raw) {
   if (!raw || raw.status !== 'running' || !raw.startedAt) return raw;
   const age = Date.now() - Date.parse(raw.startedAt);
@@ -730,6 +731,77 @@ app.post('/api/amazon/backfill', (req, res) => {
   startBackfillJob(market, days, req.authUser?.name || req.authUser?.username || null);
 
   res.json({ ok: true, message: `Backfill de ${days} dias (${market.toUpperCase()}) iniciado. Acompanhe em GET /api/status.` });
+});
+
+// Backfill histórico das lojas Shopify (Coco and Luna + Yucaloo). Mesmo papel do backfill da
+// Amazon acima, e por isso a mesma forma: roda em background, grava bloco a bloco e responde na
+// hora. Chave de estado própria (shopifyBackfill) porque os dois podem rodar ao mesmo tempo —
+// APIs e cotas diferentes — e um não pode sobrescrever o progresso do outro.
+let shopifyBackfillRunning = false;
+function startShopifyBackfillJob(market, days, startedBy) {
+  shopifyBackfillRunning = true;
+  const base = { market, days, startedBy };
+  setShopifyBackfill({ ...base, status: 'running', orders: 0, progressPct: 0, message: 'iniciando', startedAt: new Date().toISOString() });
+
+  (async () => {
+    let orders = 0;
+    const startedAt = new Date().toISOString();
+    const pct = p => (p && p.total ? Math.round(Math.min(p.feitos, p.total) / p.total * 100) : 0);
+    try {
+      const r = await backfillShopify({
+        market, days,
+        onProgress: (message, p) => {
+          checkCancelled('shopify-backfill');
+          setShopifyBackfill({ ...base, status: 'running', orders, progressPct: pct(p), message, startedAt });
+        },
+        onChunk: lote => {
+          checkCancelled('shopify-backfill');
+          upsertOrders(lote);          // grava bloco a bloco: uma falha adiante não perde o que já veio
+          orders += lote.length;
+        },
+      });
+      const aviso = r.falhas?.length ? ` (${r.falhas.length} janela(s) falharam)` : '';
+      setShopifyBackfill({ ...base, status: 'done', orders, progressPct: 100, message: `concluído — ${orders} pedidos${aviso}`, falhas: r.falhas || [], porLoja: r.porLoja || {}, finishedAt: new Date().toISOString() });
+      if (r.falhas?.length) console.error('Backfill Shopify terminou com falhas:', r.falhas.join(' | '));
+    } catch (e) {
+      if (e instanceof JobCancelledError) {
+        setShopifyBackfill({ ...base, status: 'cancelled', orders, message: `cancelado — ${orders} pedidos já gravados até aqui`, finishedAt: new Date().toISOString() });
+      } else {
+        setShopifyBackfill({ ...base, status: 'error', orders, message: e.message, finishedAt: new Date().toISOString() });
+        console.error('Backfill Shopify falhou:', e.message);
+      }
+    } finally {
+      shopifyBackfillRunning = false;
+    }
+  })();
+}
+
+// Onde o histórico de cada mercado começa hoje, e quais lojas Shopify o backfill alcançaria.
+// É o que o painel de Integrações mostra antes de você escolher quantos dias buscar: sem isso a
+// tela pediria um número sem dizer contra o que ele está sendo comparado.
+app.get('/api/shopify/history', requireAdmin, (_req, res) => {
+  const hoje = Date.now();
+  const porMercado = {};
+  for (const market of ['br', 'us']) {
+    const inicio = getOldestOrderDate(market);
+    porMercado[market] = {
+      oldestOrderDate: inicio,
+      oldestOrderDays: inicio ? Math.round((hoje - Date.parse(inicio + 'T00:00:00Z')) / 86400000) : null,
+      lojas: lojasDoMercado(market).map(l => l.nome),
+    };
+  }
+  res.json(porMercado);
+});
+
+app.post('/api/shopify/backfill', requireAdmin, (req, res) => {
+  if (shopifyBackfillRunning) return res.status(409).json({ error: 'Já existe uma busca de histórico Shopify em andamento.' });
+
+  const days   = Math.min(Math.max(Number(req.query.days || 365), 1), 1825);
+  const market = req.query.market === 'us' ? 'us' : 'br';
+
+  startShopifyBackfillJob(market, days, req.authUser?.name || req.authUser?.username || null);
+
+  res.json({ ok: true, message: `Busca de ${days} dias de histórico Shopify (${market.toUpperCase()}) iniciada. Acompanhe em GET /api/jobs.` });
 });
 
 // Preenche o cache de imagem de produto Amazon (Catalog Items API por ASIN — nem a
@@ -1370,10 +1442,12 @@ function normalizeJob(id, label, rawIn) {
 }
 app.get('/api/jobs', (_req, res) => {
   const backfill = getAmazonBackfill();
+  const shopifyBf = getShopifyBackfill();
   const images = getAmazonImagesJob();
   const backupSt = getBackupStatus();
   const jobs = [
     normalizeJob('amazon-backfill', `Buscar histórico Amazon ${backfill?.market === 'us' ? 'EUA' : 'BR'}`, backfill),
+    normalizeJob('shopify-backfill', `Buscar histórico Shopify ${shopifyBf?.market === 'us' ? 'EUA' : 'BR'}`, shopifyBf),
     normalizeJob('amazon-images', `Buscar imagens Amazon ${images?.market === 'us' ? 'EUA' : 'BR'}`, images),
     normalizeJob('amazon-items', `Reconciliar itens Amazon ${itemsStatus?.market === 'us' ? 'EUA' : 'BR'}`, itemsStatus),
     normalizeJob('bling-geo', 'Geografia via Bling', geoStatus),

@@ -76,6 +76,7 @@ src/insights.js          Regras do card "Insights" (sem IA) — puro, testável 
 src/us-states.js         normalizeUsState(): reduz grafias de estado dos EUA a 2 letras
 src/auth.js              Login: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página
 src/sync.js              Orquestra a busca de todos os canais e grava no store
+src/backfill.js          Recupera pedido antigo das lojas Shopify (o que a janela móvel não pegou)
 src/backup.js            Backup diário do banco pra Backblaze B2 (API nativa, sem SDK)
 src/alerts.js            Alerta no Telegram quando um canal fica travado sem sincronizar
 scripts/restore-backup.mjs  Restaura o banco a partir de um backup do B2 (destrutivo, pede confirmação)
@@ -769,8 +770,36 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   busca uma janela móvel de 60 dias (`defaultWindow()` em sync.js) e faz upsert, então nada
   anterior à primeira sincronização jamais entrou no banco. Em 28/08/2026 o mercado BR começa
   em 17/04/2026 (Amazon BR, que é a única com backfill via Reports API), e as lojas Shopify/ML/
-  Shopee só a partir do fim de abril. Recuperar 2025 exigiria um backfill por canal, que só a
-  Amazon tem hoje.
+  Shopee só a partir do fim de abril.
+- Recuperar o que ficou pra trás depende de um backfill POR CANAL, porque cada API tem o seu
+  jeito. Amazon (Reports API) e as lojas Shopify (Admin API, ver abaixo) já têm. Mercado Livre e
+  Shopee ainda não.
+
+### Backfill histórico das lojas Shopify (`src/backfill.js`)
+- Recupera pedido anterior à primeira sincronização, nas quatro lojas Shopify (Coco and Luna
+  BR/EUA + Yucaloo BR/EUA). A Admin API serve o histórico inteiro; o que faltava era alguém pedir
+  fora da janela móvel de 60 dias.
+- **Só soma, nunca apaga.** É a diferença central pro painel "Amazon — Histórico", que é um campo
+  de retenção e por isso poda quando o número diminui. Aqui não existe poda, então também não
+  existe confirmação: um aviso de "isso não tem volta" seria mentira. Painel próprio em
+  Integrações → "Shopify — Buscar histórico antigo", com um campo de dias por mercado.
+- Percorre a janela em blocos de 30 dias (`CHUNK_DAYS`), do mais antigo pro mais novo, e grava
+  bloco a bloco (`onChunk` → `upsertOrders`) em vez de tudo no fim — uma interrupção no meio
+  preserva o que já veio, e como o upsert é por id, repetir um bloco não duplica. Mesmo princípio
+  do backfill da Amazon.
+- Uma janela que falha NÃO derruba o backfill inteiro: as outras continuam, e as falhas voltam em
+  `falhas[]` e vão pro log. Elas precisam aparecer — um buraco silencioso no histórico passa por
+  "não teve venda nesse período", que é exatamente a confusão que este backfill existe pra
+  desfazer.
+- `lojasDoMercado(market)` respeita `isIntegrationEnabled`, e a Yucaloo devolve `[]` sozinha
+  quando a loja ainda não foi conectada (mesmo comportamento do sync normal).
+- Endpoints: `POST /api/shopify/backfill?market=br|us&days=N` (admin, máx. 1825 dias) e
+  `GET /api/shopify/history` (admin) — este último é só leitura: diz onde o histórico de cada
+  mercado começa hoje e quais lojas o backfill alcançaria, pra tela não pedir um número sem dizer
+  contra o que ele está sendo comparado.
+- Job `shopify-backfill` no widget de processos, cancelável, com estado em `kv.shopifyBackfill`
+  (chave separada do `amazonBackfill` de propósito: os dois podem rodar ao mesmo tempo, APIs e
+  cotas diferentes, e um não pode sobrescrever o progresso do outro).
 
 ### Seletor de opção (`public/js/pill-switch.js`, `.pill-switch`)
 - **Padrão único de todo seletor de duas ou mais opções mutuamente exclusivas**: moldura discreta
@@ -1137,7 +1166,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   externo de `public/` autorizado na CSP), `mapa` (nenhuma página volta pra provedor de tile com
   chave, e as duas telas usam o mesmo), `geojson` (o arquivo dos EUA é local, servido e no formato
   certo), `paginas` (sintaxe dos `<script>` inline), `assets` (caminho de arquivo local existe),
-  `insights` (as regras do card, incluindo os pisos anti-ruído) e `periodo` (o ano aparece no
+  `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
+  em blocos, sem buraco nem dia repetido, mais a ligação com servidor e tela) e `periodo` (o ano aparece no
   rótulo quando o período é de outro ano, e nenhuma tela remonta esse texto por conta própria).
 - **Nenhum teste sobe o `server.js` nem toca no banco.** `geojson.test.mjs` levanta só um
   `express.static` sobre `public/`. Isso é regra, não detalhe: subir o servidor de verdade dispara
@@ -1157,6 +1187,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   plano, alimenta o widget flutuante (`jobs-widget.js`)
 - `POST /api/jobs/:id/cancel` — cancela um job em segundo plano (só os cancelable, ver acima)
 - `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
+- `POST /api/shopify/backfill?market=&days=` (admin) · `GET /api/shopify/history` (admin) —
+  recupera histórico antigo das lojas Shopify, ver tela Integrações
 - `GET/POST /api/amazon/history` (admin) · `GET /api/amazon/history/preview` — histórico por
   mercado (poda OU busca, decide sozinho), ver tela Integrações
 - `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
