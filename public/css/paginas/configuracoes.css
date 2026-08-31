@@ -1,0 +1,124 @@
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
+  body.sidebar-hidden .main{margin-left:64px}
+  @media(max-width:768px){ .main{margin-left:0} .content{padding:16px} }
+
+  /* ── Main ── */
+  /* min-width:0 evita rolagem horizontal da página — ver CLAUDE.md "Padrões de UI
+     compartilhados" (mesma regra repetida em todas as páginas, não centralizado). */
+  .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+
+  /* ── Topbar ── */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+  .topbar-title{font-size:12px;font-weight:600;color:var(--sub);letter-spacing:.2px}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* ── Content — sem teto de largura, a tela inteira é usada (mesmo ajuste já feito em
+       integracoes.html) ── */
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;width:100%}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  /* ── Grade de seções curtas (Geral/Integrações/Unificador/Login) lado a lado — quantas
+       colunas couberem, com piso de 320px por card. Usuários fica fora da grade, sempre
+       largura total, por ter uma lista que precisa de mais espaço horizontal. ── */
+  .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+  .section{display:flex;flex-direction:column;gap:10px}
+
+  /* ── Section label + card ── */
+  .section-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;flex:1;display:flex;flex-direction:column}
+  .card h2{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+  .card p.desc{font-size:12px;color:var(--sub);line-height:1.6}
+  .card p.desc + p.desc{margin-top:8px}
+  .hint{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6}
+  .hint i{color:var(--sub)}
+
+  /* ── Toggle switch: vem de switch.css (.ios-switch), padrão único do app ── */
+  .switch-row{display:flex;align-items:center;gap:14px;margin:14px 0 6px}
+  .switch-status{font-size:13px;font-weight:600;color:var(--text)}
+  .switch-status.off{color:var(--muted)}
+
+  /* ── Buttons ── */
+  .btn{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12px;font-weight:600;padding:9px 14px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s}
+  .btn:hover{border-color:var(--ink);color:var(--text)}
+  .btn-primary{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .btn-primary:hover{opacity:.88;color:var(--side-text)}
+  .btn-danger{color:var(--red);border-color:rgba(155,58,58,.3)}
+  .btn-danger:hover{background:rgba(155,58,58,.08);border-color:var(--red);color:var(--red)}
+  .btn-icon{padding:7px 9px}
+  .btn-sm{font-size:11px;padding:6px 10px}
+
+  /* ── Users list ── */
+  .users-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .users-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+  /* Seletor de modo de visualização (mesmo padrão de integracoes.html) */
+  /* Colunas/Linhas: aparência no componente compartilhado (js/pill-switch.js). Foi este
+     seletor que virou o padrão de todos os outros do app. */
+
+  .avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;letter-spacing:.5px}
+  .user-name{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .user-pages{font-size:11px;color:var(--sub);margin-top:3px}
+  .tag{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:3px 8px;border-radius:20px}
+  .tag-admin{background:var(--rust);color:#fff}
+  .tag-padrao{background:var(--surface);border:1px solid var(--border2);color:var(--sub)}
+  .empty{font-size:12px;color:var(--muted);padding:18px;text-align:center}
+
+  /* Modo Linhas: uma linha por usuário, largura total */
+  .user-list{display:flex;flex-direction:column;gap:10px}
+  .user-row{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
+  .user-row .user-info{flex:1;min-width:0}
+  .user-row .user-actions{display:flex;gap:6px;flex-shrink:0}
+
+  /* Modo Colunas: grade de cards, quantos couberem por linha */
+  .user-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+  .user-card{display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
+  .user-card-top{display:flex;align-items:flex-start;gap:12px}
+  .user-card .user-info{flex:1;min-width:0}
+  .user-card .user-actions{display:flex;gap:6px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:10px}
+
+  /* ── Modal / form ── */
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,18,15,.5);z-index:400;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.28);width:100%;max-width:460px;padding:24px}
+  .modal h3{font-size:16px;font-weight:600;margin-bottom:16px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .field input:not([type=checkbox]):not([type=radio]),.field select{width:100%;font-family:inherit;font-size:13px;color:var(--text);padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none;transition:border-color .12s;appearance:none}
+  .field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%239c9790' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:30px}
+  .field input:focus,.field select:focus{border-color:var(--ink)}
+  /* Campo de senha com botão de mostrar/ocultar (mesmo padrão de login.html) */
+  .pw-wrap{position:relative}
+  .pw-wrap input{padding-right:38px}
+  .pw-toggle{position:absolute;top:0;right:0;height:100%;width:36px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;transition:color .15s}
+  .pw-toggle:hover{color:var(--sub)}
+  .field .field-hint{font-size:10px;color:var(--muted);margin-top:4px}
+  .pages-box{border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);padding:10px;max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+  .page-check{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:background .12s}
+  .page-check:hover{background:var(--surface)}
+  .page-check input{width:16px;height:16px;accent-color:var(--sage);cursor:pointer}
+  .page-check span{font-size:12px;color:var(--text)}
+  .modal-err{font-size:11px;color:var(--red);min-height:14px;margin-bottom:10px}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+
+  .banner{background:rgba(155,122,42,.1);border:1px solid rgba(155,122,42,.3);color:var(--amber);font-size:12px;font-weight:500;padding:12px 16px;border-radius:var(--radius-sm);display:none;align-items:center;gap:8px}
+  .banner.show{display:flex}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--side-text);font-size:12px;font-weight:600;padding:11px 20px;border-radius:20px;box-shadow:0 8px 28px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:all .25s;z-index:500}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red)}
+
+  @media(max-width:560px){
+    .content{padding:20px 16px}
+    .user-row{flex-wrap:wrap}
+    .user-actions{width:100%;justify-content:flex-end}
+  }

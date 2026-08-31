@@ -5,7 +5,7 @@
 // a declarar a sua própria tabela.
 import fs from 'node:fs';
 import path from 'node:path';
-import { criarTeste, PUB, paginas } from './_lib.mjs';
+import { criarTeste, PUB, paginas, fontePagina } from './_lib.mjs';
 
 const t = criarTeste('Catálogo de canais');
 
@@ -53,7 +53,7 @@ for (const m of ['br', 'us'])
 // Estes são os nomes exatos das cinco tabelas que existiam antes desta unificação.
 const TABELAS_ANTIGAS = ['CH_META', 'CHAN_COLORS_MAP', 'CHAN_LABELS_MAP', 'MARKET_CHANNELS', 'CH_BY_MARKET', 'CHANNELS_BR', 'CHANNELS_US', 'CHAN_BR', 'CHAN_US'];
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   for (const tabela of TABELAS_ANTIGAS)
     t.ok(!new RegExp(`(const|let|var)\\s+${tabela}\\s*=`).test(s), `${nome} não redeclara ${tabela}`);
 }
@@ -62,7 +62,7 @@ for (const nome of paginas()) {
 // Procuro pelas cores do catálogo aparecendo soltas fora do colors.js.
 const cores = new Set(Object.values(canais).map(c => (c.bg || '').toUpperCase()));
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   const soltas = [];
   s.split(/\r?\n/).forEach((l, i) => {
     // O tema da própria página (:root) tem hex de sobra que não é cor de canal.

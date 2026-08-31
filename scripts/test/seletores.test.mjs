@@ -7,13 +7,13 @@
 // script não carregado, nenhuma opção ativa — e é isso que este teste cobre.
 import fs from 'node:fs';
 import path from 'node:path';
-import { criarTeste, PUB, paginas } from './_lib.mjs';
+import { criarTeste, PUB, paginas, fontePagina } from './_lib.mjs';
 
 const t = criarTeste('Seletores de opção');
 
 const comSwitch = [];
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   // Cada <div class="pill-switch ..."> com o conteúdo até o </div> que o fecha no mesmo nível.
   const blocos = [...s.matchAll(/<div class="pill-switch(?:\s[^"]*)?"[^>]*>([\s\S]*?)<\/div>/g)];
   if (!blocos.length) continue;
@@ -55,7 +55,7 @@ const REGRAS_ANTIGAS = [
   ['.view-switch{', 'moldura do Colunas/Linhas'],
 ];
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   const voltaram = REGRAS_ANTIGAS.filter(([r]) => s.includes(r)).map(([, d]) => d);
   t.ok(voltaram.length === 0, `${nome} não redefine a aparência antiga${voltaram.length ? ' (' + voltaram.join(', ') + ')' : ''}`);
 }
@@ -77,7 +77,7 @@ t.ok(!/addEventListener\(\s*['"]click/.test(js), 'o componente não trata clique
 const cssDoComponente = js.slice(js.indexOf('const CSS = `'), js.indexOf('`;', js.indexOf('const CSS = `')));
 const usadas = new Set();
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   for (const m of s.matchAll(/class="([^"]+)"/g)) m[1].split(/\s+/).forEach(c => usadas.add(c));
 }
 // Classes que o próprio JS adiciona em tempo de execução, então não aparecem no HTML.

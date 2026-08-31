@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { criarTeste, PUB, paginas } from './_lib.mjs';
+import { criarTeste, PUB, paginas, fontePagina } from './_lib.mjs';
 
 const t = criarTeste('Rótulo de período');
 
@@ -43,7 +43,7 @@ t.eq(P.data('2026-04-17', { mercado: 'us' }), '04/17/2026', 'data() respeita o m
 // Se uma tela voltar a formatar o período na mão, ela volta a esconder o ano sozinha.
 const TELAS = ['index.html', 'geografia.html', 'segmentos.html', 'produtos.html', 'campanhas.html', 'estoque.html'];
 for (const nome of TELAS) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   t.ok(s.includes('<script src="js/periodo.js"></script>'), `${nome} carrega js/periodo.js`);
   t.ok(/CocoPeriodo\.(rotulo|data)\(/.test(s), `${nome} usa CocoPeriodo pro rótulo de período`);
 }
@@ -51,12 +51,12 @@ for (const nome of TELAS) {
 // Nenhuma tela pode ter voltado a montar "dd/mm – dd/mm" por conta própria.
 const CASEIRO = /slice\(8,\s*10\)\}\/\$\{[^}]*slice\(5,\s*7\)|slice\(8\)\}\.\$\{/;
 for (const nome of paginas()) {
-  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  const s = fontePagina(nome).tudo;
   t.ok(!CASEIRO.test(s), `${nome} não remonta o rótulo de período na mão`);
 }
 
 // ── O card de Insights precisa saber diferenciar vazio de estável ──
-const index = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
+const index = fontePagina('index.html').tudo;
 t.ok(index.includes('function insEmptyHTML'), 'existe um texto de vazio próprio pro Insights');
 t.ok(index.includes('anterior ao histórico disponível'),
   'período anterior ao histórico é explicado, não vira "nada fora do normal"');

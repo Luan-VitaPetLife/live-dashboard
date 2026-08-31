@@ -38,10 +38,14 @@ const isHttps = req => req.secure || req.headers['x-forwarded-proto'] === 'https
 // do HTML estava certo, faltava liberar o domínio aqui, e a dashboard inteira rodou na fonte
 // do sistema sem ninguém entender por quê. Uma folha do Google Fonts precisa de DOIS
 // domínios: googleapis em style-src e gstatic em font-src.
-// 'unsafe-inline' em script-src/style-src é exigido porque a lógica de cada página vive em
-// <script>/<style> dentro do próprio HTML. Isso ainda barra script de domínio externo (o
-// vetor mais comum de roubo de cookie via XSS refletido), mas não barra XSS inline. Fechar
-// de vez depende de tirar o JS de dentro do HTML, não de ajustar esta regra.
+// 'unsafe-inline' em script-src/style-src continua exigido, e não é mais pelo motivo antigo:
+// a lógica e o estilo das páginas já saíram do HTML (public/js/paginas/, public/css/paginas/).
+// O que ainda o exige são os ATRIBUTOS: onclick= e afins no markup (inclusive no markup que os
+// próprios scripts geram em tempo de execução) e style= direto na tag. Enquanto existir um só
+// deles, tirar 'unsafe-inline' quebra a página em silêncio. A regra atual ainda barra script de
+// domínio externo, que é o vetor mais comum de roubo de cookie via XSS refletido; o que ela não
+// barra é XSS inline. Fechar de vez depende de trocar cada atributo por addEventListener e por
+// classe de CSS — não de ajustar esta regra.
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",

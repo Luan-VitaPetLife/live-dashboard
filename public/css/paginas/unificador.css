@@ -1,0 +1,178 @@
+  :root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+
+  /* Sidebar: CSS do componente vive em sidebar.js (injetado). Aqui só o layout da página. */
+  body.sidebar-hidden .main{margin-left:64px}
+  @media(max-width:768px){ .main{margin-left:0} .content{padding:16px} }
+
+  /* min-width:0 evita rolagem horizontal da página — ver CLAUDE.md "Padrões de UI
+     compartilhados" (mesma regra repetida em todas as páginas, não centralizado). */
+  .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  .back-link{font-size:11px;font-weight:600;color:var(--sub);text-decoration:none;display:flex;align-items:center;gap:5px}
+  .back-link:hover{color:var(--text)}
+
+  /* Seletor Brasil/EUA: a aparência vem do componente compartilhado (.seg/.ps-opt em
+     js/pill-switch.js). Aqui fica só o que é posicionamento desta página. */
+
+  .content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1;max-width:1280px;width:100%}
+  .page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+  .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  .banner{background:rgba(155,122,42,.1);border:1px solid rgba(155,122,42,.3);color:var(--amber);font-size:12px;font-weight:500;padding:12px 16px;border-radius:var(--radius-sm);display:none;align-items:center;gap:8px}
+  .banner.show{display:flex}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+  .section-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:6px 0 -6px 2px}
+
+  /* ── Toggle switch: vem de switch.css (.ios-switch), padrão único do app ── */
+  .switch-row{display:flex;align-items:center;gap:14px;margin:6px 0}
+  .switch-status{font-size:13px;font-weight:600;color:var(--text)}
+  .switch-status.off{color:var(--muted)}
+
+  .btn{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12px;font-weight:600;padding:9px 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap}
+  .btn:hover:not(:disabled){border-color:var(--ink);color:var(--text)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn-primary{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .btn-primary:hover:not(:disabled){opacity:.88;color:var(--side-text)}
+  .btn-danger{color:var(--red);border-color:rgba(155,58,58,.3)}
+  .btn-danger:hover:not(:disabled){background:rgba(155,58,58,.08);border-color:var(--red);color:var(--red)}
+  .btn-sm{font-size:11px;padding:6px 11px}
+
+  /* ── Busca ── */
+  .search-wrap{position:relative;flex:1;max-width:340px}
+  .search-wrap i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px}
+  .search-wrap input{width:100%;font-family:inherit;font-size:12px;padding:9px 12px 9px 32px;border:1px solid var(--border2);border-radius:20px;background:var(--surface2);color:var(--text);outline:none}
+  .search-wrap input:focus{border-color:var(--ink)}
+
+  /* ── Toolbar ── */
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .select-bar{display:none;align-items:center;gap:10px;margin-left:auto;font-size:11px;color:var(--sub)}
+  .select-bar.open{display:flex}
+
+  /* ── Duas colunas: sem grupo (esquerda) x com grupo (direita) ── */
+  .uni-columns{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+  @media(max-width:900px){ .uni-columns{grid-template-columns:1fr} }
+  .uni-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .uni-col-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .uni-col-title{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px}
+  .uni-col-count{font-size:11px;font-weight:600;color:var(--muted);margin-left:4px}
+  .view-toggle{display:flex;align-items:center;gap:2px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:3px;margin-left:auto;flex-shrink:0}
+  .view-toggle button{display:flex;align-items:center;justify-content:center;width:28px;height:24px;border-radius:14px;border:none;background:transparent;color:var(--sub);cursor:pointer;font-size:12px;transition:all .15s;font-family:inherit}
+  .view-toggle button:hover{color:var(--text)}
+  .view-toggle button.active{background:var(--ink);color:var(--side-text)}
+
+  /* ── Produtos sem grupo: modo Grade ── */
+  .plain-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
+  .plain-card{position:relative;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);padding:9px;display:flex;flex-direction:column;gap:6px}
+  .plain-card .row-thumb,.plain-card .row-thumb-ph{width:100%;height:74px;border-radius:6px;font-size:20px}
+  .plain-card .card-title{font-size:11px;color:var(--text);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.7em}
+  .plain-card .card-stat{font-size:10px;color:var(--muted)}
+  .plain-card .card-badges{display:flex;flex-wrap:wrap;gap:3px}
+  .plain-card .card-check{position:absolute;top:7px;left:7px;z-index:2;background:var(--surface);border-radius:4px;padding:1px}
+
+  /* ── Produtos sem grupo: modo Compacta ── */
+  .plain-compact{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .plain-compact-row{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);font-size:11px}
+  .plain-compact-row:last-child{border-bottom:none}
+  .plain-compact-row:nth-child(odd){background:var(--surface2)}
+  .plain-compact-row .row-title{font-size:11px}
+  .plain-compact-row .row-stat{font-size:10px}
+
+  /* ── Grupos: modo Grade (chips) e Compacta ── */
+  .group-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .group-chip{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);padding:10px;cursor:pointer;transition:border-color .12s;text-align:left;font-family:inherit}
+  .group-chip:hover{border-color:var(--ink)}
+  .group-chip.expanded{border-color:var(--ink);background:var(--surface2)}
+  .group-chip .chip-name{font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .group-chip .chip-stat{font-size:10px;color:var(--muted);margin-top:3px}
+  .group-chip .chip-count{font-size:9px;font-weight:700;color:var(--sub);background:var(--surface2);border-radius:10px;padding:1px 7px;display:inline-block;margin-top:5px}
+  .group-compact{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .group-compact-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);cursor:pointer;background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;font-family:inherit;font-size:12px;color:var(--text)}
+  .group-compact-row:last-child{border-bottom:none}
+  .group-compact-row:hover{background:var(--surface2)}
+  .group-compact-row.expanded{background:var(--surface2);font-weight:600}
+  .group-compact-row .row-title{flex:1}
+
+  /* ── Arrastar produtos entre grupos ── */
+  [draggable="true"]{cursor:grab}
+  .dragging-source{opacity:.4}
+  .drag-over{outline:2px dashed var(--sage);outline-offset:-2px;background:rgba(106,140,110,.08)}
+  #plainList.drag-over,.uni-col.drag-over-col{outline:2px dashed var(--rust);outline-offset:-2px;background:rgba(160,90,58,.06)}
+
+  /* ── Grupo (card) ── */
+  .group-card{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .group-card.collapsed{overflow:visible}
+  .btn-icon{padding:6px 8px}
+  .group-head{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface2);border-bottom:1px solid var(--border)}
+  .group-icon{width:30px;height:30px;border-radius:50%;background:var(--sage);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+  .group-name{font-size:13px;font-weight:700;color:var(--text)}
+  .group-stat{font-size:11px;color:var(--muted)}
+  .group-actions{margin-left:auto;display:flex;gap:6px}
+  /* Faixa de tags do grupo (Tipo/Categoria). Fica entre o cabecalho e a lista de membros porque
+     descreve o grupo inteiro, nao um membro. flex-wrap pra cair pra duas linhas no celular. */
+  .group-tags{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .gt-hint{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:5px;cursor:help}
+  .gt-field{display:flex;align-items:center;gap:6px}
+  .gt-label{font-size:11px;color:var(--muted)}
+  .gt-input{width:150px;font:inherit;font-size:12px;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 8px}
+  .gt-input:focus{outline:none;border-color:var(--sage)}
+  .gt-input::placeholder{color:var(--muted);font-style:italic}
+  @media(max-width:640px){.gt-input{width:100%;min-width:0}.gt-field{flex:1 1 140px}}
+  .member-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
+  .member-row:last-child{border-bottom:none}
+  .row-thumb{width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--surface2);border:1px solid var(--border)}
+  .row-thumb-ph{width:32px;height:32px;border-radius:6px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
+  .row-title{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row-stat{font-size:11px;color:var(--muted);flex-shrink:0;white-space:nowrap}
+  .ch-badge{font-size:9px;font-weight:700;letter-spacing:.3px;padding:2px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap}
+  .row-remove{flex-shrink:0;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px 6px;border-radius:4px}
+  .row-remove:hover{background:var(--border2);color:var(--red)}
+  .other-card-collapse{display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:var(--surface2);border:1px solid var(--border2);color:var(--sub);cursor:pointer;border-radius:50%;font-size:12px;line-height:1;transition:all .15s}
+  .other-card-collapse:hover{border-color:var(--ink);color:var(--text);background:var(--bg)}
+  .group-add-foot{padding:10px 16px}
+
+  /* ── Lista de produtos sem grupo ── */
+  .plain-list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .plain-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)}
+  .plain-row:last-child{border-bottom:none}
+  .plain-row:nth-child(odd){background:var(--surface2)}
+  .select-check{width:15px;height:15px;flex-shrink:0;accent-color:var(--ink);cursor:pointer}
+  .empty{font-size:12px;color:var(--muted);padding:24px;text-align:center}
+
+  /* ── Modal ── */
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,18,15,.5);z-index:400;display:none;align-items:center;justify-content:center;padding:16px}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 20px 60px rgba(30,28,24,.28);width:100%;max-width:380px;padding:22px}
+  .modal h3{font-size:14px;font-weight:700;margin-bottom:3px}
+  .modal .sub{font-size:11px;color:var(--sub);margin-bottom:14px;line-height:1.5}
+  .modal input{width:100%;font-family:inherit;font-size:13px;color:var(--text);padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);outline:none}
+  .modal input:focus{border-color:var(--ink)}
+  .modal-err{font-size:11px;color:var(--red);min-height:14px;margin-top:6px}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+  .hide-tags-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .hide-tag-chip{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 5px 4px 10px}
+  .hide-tag-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 4px;border-radius:50%;line-height:1}
+  .hide-tag-chip button:hover{background:var(--border2);color:var(--red)}
+  .hide-add-row{display:flex;gap:6px}
+  .hide-add-row input{flex:1;min-width:0}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--side-text);font-size:12px;font-weight:600;padding:11px 20px;border-radius:20px;box-shadow:0 8px 28px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:all .25s;z-index:500}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red)}
+
+  @media(max-width:560px){
+    .content{padding:20px 16px}
+    .toolbar{flex-direction:column;align-items:stretch}
+    .search-wrap{max-width:none}
+    .select-bar{margin-left:0}
+  }
