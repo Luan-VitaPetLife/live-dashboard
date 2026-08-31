@@ -718,6 +718,28 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Quantidade/receita por produto usa `LineItem.currentQuantity` (Shopify) e desconta refund do
   valor do item — ver "Receita" acima. Sem isso, produto devolvido continuava contando venda.
 
+### Rótulo de status do pedido ("Pedidos recentes" e busca)
+- Quatro rótulos: **Autorizado**, **Em aberto**, **Cancelado** e **Reembolsado** (mais "Reembolso
+  parcial"). Escritos em DOIS lugares — `statusLabelPt` (`src/metrics.js`, alimenta a busca) e
+  `statusTag` (`js/paginas/index.js`, desenha a tag) — e os dois PRECISAM concordar, senão buscar
+  por "reembolsado" não acha o que a tela marca como reembolsado.
+  `scripts/test/status-pedido.test.mjs` executa as duas funções contra os mesmos casos e compara
+  uma com a outra, além de conferir que toda classe de tag usada tem estilo em `index.css`.
+- **Devolvido é estado próprio, não "ainda não pagou".** `REFUNDED` caía no `return 'Em aberto'`
+  do fim das duas funções, e a tela dizia que o cliente não tinha pagado — o oposto do que
+  aconteceu. Cor própria também (`.st-tag.ref`, cinza): nem o verde de autorizado, nem o vermelho
+  de cancelado; a venda existiu e foi desfeita.
+- **A Amazon NÃO informa devolução por nenhuma das duas fontes que lemos.** Conferido contra o
+  backup de produção (165 mil pedidos): os únicos status que existem em pedido Amazon são
+  `Shipped`, `Cancelled`/`Canceled`, `Pending` e `Shipping` — não existe `Refunded`. A Orders API
+  e o relatório `GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL` (de onde saem
+  `order-status` e `item-status`) reportam o ciclo do PEDIDO, não o do dinheiro: um pedido
+  devolvido continua `Shipped` pra sempre, com o total cheio.
+- Marcar devolução da Amazon exige uma fonte nova, não um ajuste de rótulo: o relatório de
+  devoluções (`GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE`, mesma Reports API e mesmo papel que o
+  backfill já usa) ou a Finances API. A Shopify manda `REFUNDED` no próprio pedido, e é por isso
+  que só ela tem o rótulo hoje.
+
 ### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
 - **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
   aparece em todas as telas. Antes disso a mesma informação vivia em cinco tabelas
@@ -1312,6 +1334,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   existe),
   `imagens` (nenhuma imagem depende de CSS injetado por script pra ter tamanho),
   `escape` (uma função de escape só, correta, e carregada antes de quem usa),
+  `status-pedido` (servidor e tela dão o mesmo rótulo, e devolvido não vira "em aberto"),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela

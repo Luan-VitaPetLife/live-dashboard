@@ -190,7 +190,7 @@
   .tbl tr:last-child td{border-bottom:none} .tbl tbody tr:hover td{background:var(--surface2)}
   .tbl .mono{font-family:'SF Mono','Fira Code',monospace;font-size:10px;color:var(--muted)} .tbl .dim{color:var(--sub)} .tbl .bold{font-weight:600}
   .st-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
-  .st-tag.ok{background:rgba(61,122,82,.08);color:var(--green)} .st-tag.pend{background:rgba(155,122,42,.08);color:var(--amber)} .st-tag.canc{background:rgba(155,58,58,.08);color:var(--red)}
+  .st-tag.ok{background:rgba(61,122,82,.08);color:var(--green)} .st-tag.pend{background:rgba(155,122,42,.08);color:var(--amber)} .st-tag.canc{background:rgba(155,58,58,.08);color:var(--red)} .st-tag.ref{background:rgba(30,28,24,.07);color:var(--sub)}
   .legend-row{display:flex;align-items:center;gap:16px;margin-top:10px}
   .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
   .legend-line{width:20px;height:1.5px;border-radius:1px} .legend-sq{width:10px;height:10px;border-radius:2px}

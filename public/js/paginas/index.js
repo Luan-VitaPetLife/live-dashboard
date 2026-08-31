@@ -1020,6 +1020,10 @@ function statusTag(o) {
     return { cls:'canc', label:'Cancelado' };
   }
   const s = (o.status||'').toUpperCase();
+  // Cor própria, nem verde nem vermelha: o pedido não está saudável, mas também não foi
+  // cancelado — a venda existiu e foi desfeita.
+  if (s === 'REFUNDED') return { cls:'ref', label:'Reembolsado' };
+  if (s === 'PARTIALLY_REFUNDED') return { cls:'ref', label:'Reembolso parcial' };
   if (['PAID','COMPLETED','SHIPPED','TO_CONFIRM_RECEIVE','READY_TO_SHIP'].includes(s)) return { cls:'ok', label:'Autorizado' };
   return { cls:'pend', label:'Em aberto' };
 }

@@ -984,6 +984,11 @@ function statusLabelPt(o) {
     return 'Cancelado';
   }
   const s = (o.status || '').toUpperCase();
+  // Devolvido é um estado próprio: houve pagamento de verdade e ele voltou. Sem isso, um pedido
+  // REFUNDED caía no "Em aberto" do fim da função e a tela dizia que o cliente ainda não tinha
+  // pagado — o oposto do que aconteceu.
+  if (s === 'REFUNDED') return 'Reembolsado';
+  if (s === 'PARTIALLY_REFUNDED') return 'Reembolso parcial';
   if (['PAID', 'COMPLETED', 'SHIPPED', 'TO_CONFIRM_RECEIVE', 'READY_TO_SHIP'].includes(s)) return 'Autorizado';
   return 'Em aberto';
 }
