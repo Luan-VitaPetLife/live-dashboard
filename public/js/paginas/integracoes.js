@@ -574,6 +574,13 @@ async function loadBackupStatus(){
 // A altura é medida do DOM, não calculada a partir da altura de linha: a fonte pode chegar
 // depois do primeiro desenho e mudar a altura da linha, e um número fixo no CSS cortaria no
 // meio da terceira ou sobraria um vão.
+//
+// A medida sai de getBoundingClientRect, e NÃO de offsetTop: offsetTop é relativo ao ancestral
+// posicionado mais próximo, e nem a lista nem as linhas têm position, então ele devolvia a
+// distância até um ancestral lá em cima da página. O max-height saía grande demais e não
+// recortava nada — a quarta linha aparecia apagada com a lista inteira embaixo dela. Os dois
+// rects são relativos à janela, então a subtração dá a distância real dentro da lista, com
+// position ou sem.
 const BACKUPS_VISIVEIS = 3;
 let backupsAbertos = false;
 
@@ -592,7 +599,7 @@ function ajustarListaDeBackups(total){
     btn.textContent = 'Ver menos';
   } else {
     const espia = linhas[BACKUPS_VISIVEIS];
-    lista.style.maxHeight = (espia.offsetTop + espia.offsetHeight) + 'px';
+    lista.style.maxHeight = (espia.getBoundingClientRect().bottom - lista.getBoundingClientRect().top) + 'px';
     btn.textContent = `Ver todos os ${total} backups`;
   }
 }
