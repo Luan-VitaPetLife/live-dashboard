@@ -885,10 +885,15 @@ app.post('/api/amazon/sync-names', (req, res) => {
 app.post('/api/amazon/sync-returns', requireAdmin, (req, res) => {
   if (backfillRunning) return res.status(409).json({ error: 'Backfill em andamento — tente depois que terminar.' });
   const markets = req.query.market === 'br' ? ['br'] : req.query.market === 'us' ? ['us'] : ['us', 'br'];
-  reconcileAmazonReturns({ markets, force: true })
+  // Varredura funda pra recuperar reembolso antigo: cada extrato de repasse é um download, e a
+  // cota é de ~1 por minuto, então `docs` alto faz a rodada demorar minutos. É o preço de
+  // consertar quantidade de período passado.
+  const dias = Math.min(730, Math.max(1, Number(req.query.days) || 60));
+  const docs = Math.min(40, Math.max(1, Number(req.query.docs) || 6));
+  reconcileAmazonReturns({ markets, force: true, dias, docs })
     .then(r => console.log('Amazon devoluções (manual):', r))
     .catch(e => console.error('Amazon devoluções (manual) falhou:', e.message));
-  res.json({ ok: true, message: `Busca de devoluções (${markets.join(', ')}) iniciada. Acompanhe no log; confirme em Pedidos recentes.` });
+  res.json({ ok: true, message: `Busca de reembolsos (${markets.join(', ')}, ${dias} dias, até ${docs} repasses) iniciada. Acompanhe no log; confirme em Pedidos recentes.` });
 });
 
 // Diagnóstico do relatório de REPASSE (settlement) da Amazon, que é o extrato do dinheiro.

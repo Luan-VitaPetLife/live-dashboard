@@ -125,6 +125,15 @@ if (iBusca > 0) {
 }
 
 t.ok(/export async function reconcileAmazonReturns/.test(syncSC), 'sync.js exporta reconcileAmazonReturns');
+// As duas fontes precisam continuar ligadas ao job. Sem esta trava, alguém removeria a consulta
+// ao extrato e o único sintoma seria reembolso sem devolução física parando de ser descontado —
+// ou seja, quantidade vendida errada, em silêncio.
+t.ok(/amazon\.fetchCustomerReturns\(/.test(syncSC), 'o job consulta o relatório de devoluções');
+t.ok(/amazon\.fetchSettlementRefunds\(/.test(syncSC), 'o job consulta o extrato de repasse');
+t.ok(/juntarFontesDeReembolso\(devolucoes, repasse\.reembolsos\)/.test(syncSC),
+  'e junta as duas antes de gravar');
+t.ok(/for \(const d of reembolsos\)/.test(syncSC),
+  'o job percorre a lista JUNTADA, não só as devoluções físicas');
 t.ok(/patchOrderRefunds\(patches\)/.test(syncSC), 'a reconciliação grava via patchOrderRefunds');
 t.ok(/setAmazonCursor\(`returns-\$\{market\}`/.test(syncSC), 'grava o cursor de throttle por mercado');
 // Janela curta veria a venda e nunca a volta dela: o pedido que originou isso foi vendido em
@@ -223,5 +232,115 @@ if (iUpsert > 0) {
 const mlSrc = semComentario(fs.readFileSync(path.join(ROOT, 'src', 'mercadolivre.js'), 'utf8'));
 t.ok(/transaction_amount_refunded/.test(mlSrc), 'ML lê o reembolso de payments[]');
 t.ok(/refundedQty: unidades/.test(mlSrc), 'reembolso integral do ML leva as unidades junto');
+
+// ── 6. Extrato de repasse: a segunda fonte de reembolso ─────────────────────
+// Ela existe porque o relatório de devoluções só vê mercadoria que voltou fisicamente. Um pedido
+// real de 08/08/2026, com "Reembolso aplicado (2)" no Seller Central, não existe naquele relatório
+// nem numa janela de 90 dias — o dinheiro voltou e o produto ficou com o cliente. Sem esta fonte
+// aquelas duas unidades continuam contando como vendidas, que é justamente o número errado.
+const doRepasse = carregar(AMAZON, 'reembolsosDoRepasse');
+t.ok(typeof doRepasse === 'function', 'achou reembolsosDoRepasse em amazon.js');
+
+if (typeof doRepasse === 'function') {
+  // Linhas no formato real do extrato (colunas conferidas contra a conta BR de produção).
+  const lin = (extra) => ({ 'transaction-type': 'Refund', 'order-id': '701-0000000-0000001',
+    'posted-date': '2026-08-15T03:12:08+00:00', sku: 'AREIA-4.5KG', ...extra });
+
+  // A função recebe DOCUMENTOS (uma lista de linhas por repasse), não linhas soltas.
+  const repasseUm = [
+    // O pedido de verdade: duas unidades reembolsadas, cada uma com a SUA linha Principal.
+    lin({ 'settlement-id': 'R1', 'price-type': 'Principal', 'price-amount': '-67.49' }),
+    lin({ 'settlement-id': 'R1', 'price-type': 'Shipping',  'price-amount': '-4.45' }),
+    lin({ 'settlement-id': 'R1', 'price-type': 'Principal', 'price-amount': '-67.49' }),
+    lin({ 'settlement-id': 'R1', 'price-type': 'Shipping',  'price-amount': '-4.45' }),
+    // Comissão estornada ao VENDEDOR: não é dinheiro que saiu da venda, não entra no desconto.
+    lin({ 'settlement-id': 'R1', 'item-related-fee-type': 'Commission', 'item-related-fee-amount': '14.98' }),
+    // Venda normal do mesmo período não pode virar reembolso.
+    { 'settlement-id': 'R1', 'transaction-type': 'Order', 'order-id': '701-0000000-0000002',
+      'price-type': 'Principal', 'price-amount': '59.99', sku: 'AREIA-4.5KG' },
+  ];
+  const r = doRepasse([repasseUm], 'br');
+
+  t.eq(r.length, 1, 'só o pedido reembolsado entra (venda normal fica de fora)');
+  t.eq(r[0].id, 'amazon-br:701-0000000-0000001', 'id sai carimbado com o mercado');
+  t.eq(r[0].qty, 2, 'duas linhas Principal = duas unidades reembolsadas');
+  t.eq(r[0].refundedTotal, 143.88, 'soma produto e frete, positivo (2x67,49 + 2x4,45)');
+  t.eq(r[0].porProduto.length, 1, 'as duas unidades são do mesmo SKU');
+  t.eq(r[0].porProduto[0].sku, 'AREIA-4.5KG', 'guarda o SKU, que é como o extrato identifica o produto');
+  t.eq(r[0].porProduto[0].qty, 2, 'com as duas unidades');
+
+  // Linha sem pedido não vira registro fantasma.
+  t.eq(doRepasse([[{ 'transaction-type': 'Refund', 'order-id': '', 'price-type': 'Principal', 'price-amount': '-10' }]], 'br').length,
+    0, 'linha sem número de pedido é descartada');
+
+  // O MESMO repasse chega em mais de um relatório da Amazon. Lê-lo duas vezes dobraria o
+  // reembolso, que é o erro mais caro possível aqui: descontaria o dobro do que voltou.
+  const repetido = doRepasse([repasseUm, repasseUm.map(l => ({ ...l }))], 'br');
+  t.eq(repetido.length, 1, 'repasse repetido não vira um segundo pedido');
+  t.eq(repetido[0].qty, 2, 'e não dobra as unidades');
+  t.eq(repetido[0].refundedTotal, 143.88, 'nem o valor');
+
+  // Descartar por LINHA repetida, em vez de por repasse, contaria a menos: as duas unidades do
+  // mesmo produto geram duas linhas idênticas de propósito.
+  t.eq(doRepasse([[
+    lin({ 'settlement-id': 'R9', 'price-type': 'Principal', 'price-amount': '-10.00' }),
+    lin({ 'settlement-id': 'R9', 'price-type': 'Principal', 'price-amount': '-10.00' }),
+  ]], 'br')[0].qty, 2, 'duas linhas idênticas no MESMO repasse são duas unidades de verdade');
+
+  // Repasses diferentes do mesmo pedido somam (reembolso parcelado em dois ciclos).
+  const doisCiclos = doRepasse([
+    [lin({ 'settlement-id': 'R1', 'price-type': 'Principal', 'price-amount': '-10.00' })],
+    [lin({ 'settlement-id': 'R2', 'price-type': 'Principal', 'price-amount': '-10.00' })],
+  ], 'br');
+  t.eq(doisCiclos[0].qty, 2, 'repasses diferentes somam');
+}
+
+// ── 7. As duas fontes juntas não podem contar a mesma unidade duas vezes ────
+const juntar = carregar(SYNC, 'juntarFontesDeReembolso');
+t.ok(typeof juntar === 'function', 'achou juntarFontesDeReembolso em sync.js');
+
+if (typeof juntar === 'function') {
+  const devolucao = { id: 'amazon-br:X', orderId: 'X', qty: 1, returnedAt: '2026-08-30',
+    porProduto: [{ asin: 'A1', sku: null, title: null, qty: 1 }] };
+  const repasse   = { id: 'amazon-br:X', orderId: 'X', qty: 1, refundedTotal: 59.99, returnedAt: '2026-08-28',
+    porProduto: [{ asin: null, sku: 'S1', title: null, qty: 1 }] };
+
+  const juntos = juntar([devolucao], [repasse]);
+  t.eq(juntos.length, 1, 'o mesmo pedido nas duas fontes vira um registro só');
+  t.eq(juntos[0].qty, 1, 'UMA unidade devolvida continua sendo uma (não soma as duas fontes)');
+  t.eq(juntos[0].refundedTotal, 59.99, 'o valor exato vem do extrato');
+  t.eq(juntos[0].porProduto.length, 1, 'e um produto só');
+  t.eq(juntos[0].porProduto[0].asin, 'A1', 'guarda o ASIN, que só a devolução tem');
+  t.eq(juntos[0].porProduto[0].sku,  'S1', 'e o SKU, que só o extrato tem');
+
+  // Cada fonte sozinha continua valendo: é isso que faz o reembolso sem devolução física entrar.
+  t.eq(juntar([devolucao], []).length, 1, 'pedido só no relatório de devoluções entra');
+  const soRepasse = juntar([], [{ ...repasse, id: 'amazon-br:Y', orderId: 'Y' }]);
+  t.eq(soRepasse.length, 1, 'pedido só no extrato de repasse entra (reembolso sem devolução)');
+  t.eq(soRepasse[0].refundedTotal, 59.99, 'com o valor do extrato');
+
+  // Quando as fontes discordam do produto, vale o extrato — concatenar marcaria duas unidades
+  // onde só uma voltou.
+  const discordam = juntar(
+    [{ ...devolucao, qty: 2, porProduto: [{ asin: 'A1', qty: 1 }, { asin: 'A2', qty: 1 }] }],
+    [{ ...repasse, qty: 2, porProduto: [{ sku: 'S1', qty: 2 }] }]);
+  t.eq(discordam[0].porProduto.length, 1, 'fontes em desacordo: vale o extrato, sem concatenar');
+  t.eq(discordam[0].porProduto.reduce((a, p) => a + p.qty, 0), 2, 'e o total de unidades não infla');
+}
+
+// ── 8. O que a tela recebe precisa carregar a marca ─────────────────────────
+// A tela monta o rótulo a partir de status + cancelled + refunded (statusTag). Mandar os dois
+// primeiros e esquecer o terceiro não dá erro nenhum: o pedido devolvido aparece "Autorizado" com
+// valor R$ 0,00, que é a pior combinação — o número já descontou e o rótulo diz que está tudo bem.
+// Foi o que aconteceu no primeiro deploy.
+// Duas formas de estar certo: mandar `refunded` (e a tela monta o rótulo) ou mandar o
+// `statusLabel` já pronto do servidor (é o caso da exportação em CSV). O que não pode é mandar só
+// `status` e `cancelled`, porque aí a devolução não tem como chegar do outro lado.
+for (const bloco of metrics.split('.map(o => ({').slice(1)) {
+  const corpo = bloco.slice(0, bloco.indexOf('}))'));
+  if (!corpo.includes('status: o.status')) continue;
+  t.ok(corpo.includes('refunded') || corpo.includes('statusLabel'),
+    'lista de pedidos com status leva também a devolução (campo refunded ou rótulo pronto)');
+}
 
 t.fim();

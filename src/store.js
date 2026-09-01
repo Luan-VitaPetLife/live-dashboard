@@ -260,6 +260,7 @@ export function upsertOrders(orders) {
       for (const novo of o.items) {
         if (!novo || novo.refundedQty != null) continue;
         const velho = (novo.asin  && existing.items.find(it => it?.asin  === novo.asin))
+                   || (novo.sku   && existing.items.find(it => it?.sku   === novo.sku))
                    || (novo.title && existing.items.find(it => it?.title === novo.title));
         if (velho && velho.refundedQty != null) novo.refundedQty = velho.refundedQty;
       }
@@ -491,6 +492,7 @@ export function patchOrderRefunds(patches) {
     const marcas = new Map();
     for (const d of (p.itens || [])) {
       const alvo = (d.asin  && itens.find(it => it?.asin  === d.asin))
+                || (d.sku   && itens.find(it => it?.sku   === d.sku))
                 || (d.title && itens.find(it => it?.title === d.title));
       if (!alvo) continue;
       marcas.set(alvo, (marcas.get(alvo) || 0) + (Number(d.qty) || 0));
