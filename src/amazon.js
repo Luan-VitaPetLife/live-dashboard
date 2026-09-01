@@ -831,6 +831,11 @@ export async function fetchCustomerReturns({ market = 'br', days = 30, onProgres
 // aceitar ir devagar.
 const DOC_MAX_POR_CHAMADA = 8;
 const DOC_ESPACO_MS       = 2500;
+// Ao tomar 429, esperar a cota se recompor vale mais que desistir: a varredura funda do histórico
+// (pra consertar quantidade de período antigo) precisa de dezenas de extratos, e o estouro
+// inicial cobre só uns 15. Desistir ali deixaria o resto do passado errado pra sempre.
+const DOC_ESPERA_COTA_MS  = 65 * 1000;
+const DOC_TENTATIVAS      = 3;
 
 export async function inspectSettlementRefunds({ market = 'br', days = 60, orderIds = [], limite = DOC_MAX_POR_CHAMADA } = {}) {
   if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
@@ -1045,12 +1050,22 @@ export async function fetchSettlementRefunds({ market = 'br', days = 60, limite 
   let cotaEstourada = false;
   for (const [i, rel] of fila.entries()) {
     if (i) await sleep(DOC_ESPACO_MS);
-    try {
-      documentos.push(await baixarDocumento(getLwa, rel.reportDocumentId));
-    } catch (e) {
-      if (/QuotaExceeded|HTTP 429/.test(e.message)) { cotaEstourada = true; break; }
-      throw e;
+    let baixou = false;
+    for (let tentativa = 1; tentativa <= DOC_TENTATIVAS && !baixou; tentativa++) {
+      try {
+        documentos.push(await baixarDocumento(getLwa, rel.reportDocumentId));
+        baixou = true;
+      } catch (e) {
+        if (!/QuotaExceeded|HTTP 429/.test(e.message)) throw e;
+        if (tentativa === DOC_TENTATIVAS) { cotaEstourada = true; break; }
+        onProgress?.(`${label}: cota estourada, esperando ${DOC_ESPERA_COTA_MS / 1000}s (${i + 1}/${fila.length})`);
+        await sleep(DOC_ESPERA_COTA_MS);
+      }
     }
+    // Desistiu depois de esperar: para aqui e AVISA. Seguir em frente devolveria uma lista curta
+    // que parece completa, e "não achou reembolso" quando na verdade nem foi lido é o pior
+    // resultado possível — vira quantidade errada sem ninguém desconfiar.
+    if (!baixou) break;
   }
 
   // Quem descarta repasse repetido é o reembolsosDoRepasse, que é puro e testável.
