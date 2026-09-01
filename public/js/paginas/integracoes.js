@@ -365,20 +365,34 @@ function retResumo(info){
 
 // O markup das quatro linhas também é um só. `extra` vira o title do rótulo: é onde a linha da
 // Shopify diz quais lojas ela alcança, sem que isso desmonte a frase padrão.
-function retLinha({ mkt, id, logo, info, botao, extra }){
+function retLinha({ mkt, id, logo, info, botao, extra, acao, campo, resumo }){
   const cap = mkt === 'us' ? 'Us' : 'Br';
   const titulo = extra ? ` title="${extra}"` : '';
+  // Sem `campo`, a linha não tem caixa de dias — é o caso do painel de reembolsos, onde não há
+  // número pra escolher (a busca é sempre do último ano).
+  const entrada = campo
+    ? `<div class="ret-row-input"><input type="number" id="${id}Days${cap}" min="${campo.min}"${campo.max ? ` max="${campo.max}"` : ''} value="${info.campo}"><span>dias</span></div>`
+    : '';
   return `<div class="ret-row">
     <div class="ret-row-main">
       <div class="ret-row-label"${titulo}>
         <img class="ret-row-logo" src="${logo}" alt="">
-        <span class="ret-row-label-text">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${retResumo(info)}</span></span>
+        <span class="ret-row-label-text">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${resumo || retResumo(info)}</span></span>
       </div>
-      <div class="ret-row-input"><input type="number" id="${id}Days${cap}" min="${id === 'ret' ? 0 : 1}"${id === 'ret' ? '' : ' max="1825"'} value="${info.campo}"><span>dias</span></div>
-      <button class="ret-btn" id="${id}Apply${cap}" onclick="${id === 'ret' ? 'applyHistory' : 'applyShopHistory'}('${mkt}')"${info.desabilitado ? ' disabled' : ''}>${botao}</button>
+      ${entrada}
+      <button class="ret-btn" id="${id}Apply${cap}" onclick="${acao}('${mkt}')"${info.desabilitado ? ' disabled' : ''}>${botao}</button>
     </div>
     <div class="ret-row-status" id="${id}Status${cap}"></div>
   </div>`;
+}
+
+// O painel de reembolsos não carrega nada do servidor: as duas linhas são só o botão de disparo.
+function renderReembolsos(){
+  $('refundsRows').innerHTML = ['br','us'].map(mkt => retLinha({
+    mkt, id: 'ref', logo: 'img/integracoes/Amazon_logo.png', botao: 'Buscar',
+    acao: 'buscarReembolsos', info: {}, resumo: 'busca no último ano',
+    extra: 'Lê o relatório de devoluções da FBA e o extrato de repasse',
+  })).join('');
 }
 async function loadHistory(){
   try{
@@ -388,6 +402,7 @@ async function loadHistory(){
     $('retPanelSub').textContent = 'Quantos dias de pedidos manter guardados em cada mercado. Um número menor apaga o excesso e pede confirmação antes; um número maior busca na Amazon o que estiver faltando. Zero significa sem limite.';
     $('retRows').innerHTML = ['br','us'].map(mkt => retLinha({
       mkt, id: 'ret', logo: 'img/integracoes/Amazon_logo.png', botao: 'Aplicar',
+      acao: 'applyHistory', campo: { min: 0 },
       info: { ...(d[mkt] || { days: 0, totalOrders: 0, oldestOrderDate: null, oldestOrderDays: null }), campo: (d[mkt] || {}).days ?? 0 },
     })).join('');
   }catch(e){
@@ -478,6 +493,7 @@ async function loadShopHistory(){
       const info = d[mkt] || { totalOrders: 0, oldestOrderDate: null, oldestOrderDays: null, lojas: [] };
       return retLinha({
         mkt, id: 'shop', logo: 'img/integracoes/Shopify_logo.png', botao: 'Buscar',
+        acao: 'applyShopHistory', campo: { min: 1, max: 1825 },
         info: { ...info, campo: 365, desabilitado: !info.lojas.length },
         extra: info.lojas.length ? info.lojas.join(' · ') : 'nenhuma loja ligada neste mercado',
       });
@@ -623,6 +639,38 @@ async function runBackupNow(){
   }
 }
 
+// ── Busca funda de reembolsos da Amazon ─────────────────────────────────────
+// A rodada automática cobre a janela recente. Este botão existe pro passado: reembolso mais antigo
+// que aquela janela nunca foi marcado, e enquanto não for, a quantidade vendida daquele período
+// segue contando a unidade que voltou. É lenta de propósito (a Amazon libera ~1 extrato de repasse
+// por minuto), então o resultado aparece no card de processos, não aqui.
+async function buscarReembolsos(mkt){
+  const cap = mkt === 'us' ? 'Us' : 'Br';
+  const btn = $('refApply' + cap);
+  const st  = $('refStatus' + cap);
+  const onde = mkt === 'us' ? 'Estados Unidos' : 'Brasil';
+
+  const ok = await cocoConfirm(
+    `Procurar reembolsos do último ano na Amazon ${onde} e descontar as unidades devolvidas. Leva vários minutos e o resultado aparece no card de processos.`,
+    { title: 'Buscar reembolsos', confirmText: 'Buscar' });
+  if (!ok) return;
+
+  btn.disabled = true;
+  st.textContent = 'Buscando…';
+  try{
+    const r = await fetch(`/api/amazon/sync-returns?market=${mkt}&days=365&docs=25`, { method:'POST', credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
+    st.textContent = 'Rodando em segundo plano — acompanhe no card de processos.';
+    toast('Busca de reembolsos iniciada.');
+  }catch(e){
+    st.textContent = 'Erro: ' + (e.message || 'falha de rede');
+    toast('Erro ao buscar reembolsos: ' + (e.message || 'falha de rede'), true);
+  }finally{
+    btn.disabled = false;
+  }
+}
+
 // ── Alerta de sincronização (Telegram) — ver src/alerts.js. Reaproveita GET /api/status
 // (mesma checagem já usada pra Bling/Amazon/etc.) em vez de um endpoint só pra isso. ────
 async function loadAlertsStatus(){
@@ -659,6 +707,7 @@ async function testAlertNow(){
 
 (async function(){
   syncViewSwitch();
+  renderReembolsos();
   await loadMe();
   await load();
   await loadHistory();

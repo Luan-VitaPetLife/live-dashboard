@@ -90,4 +90,26 @@ t.ok(/#backupFilesList\{[^}]*min-height:0/.test(tela),
   'a lista leva min-height:0 (item de coluna flex ignoraria o max-height sem isso)');
 t.ok(/onclick="alternarBackups\(\)"/.test(tela), 'o botão está ligado ao alternador');
 
+// ── Painel "Amazon — Reembolsos" ──
+// A rodada automática cobre só a janela recente. Sem este botão, reembolso mais antigo nunca é
+// marcado e a quantidade vendida daquele período fica errada pra sempre — e ninguém percebe,
+// porque não existe erro, existe um número a mais.
+t.ok(/id="refundsPanel"/.test(tela), 'o painel de reembolsos existe');
+t.ok(/id="refundsRows"/.test(tela), 'com o container onde as linhas são montadas');
+t.ok(/function renderReembolsos\(\)/.test(tela), 'e um montador próprio pras linhas');
+const montador = tela.slice(tela.indexOf('function renderReembolsos()'), tela.indexOf('async function loadHistory'));
+t.ok(/retLinha\(\{/.test(montador), 'que reaproveita o montador de linha compartilhado');
+t.ok(!/campo:/.test(montador), 'sem caixa de dias: aqui não há número pra escolher');
+
+const acao = tela.slice(tela.indexOf('async function buscarReembolsos'), tela.indexOf('// ── Alerta de sincronização'));
+t.ok(/\/api\/amazon\/sync-returns/.test(acao), 'o botão chama a busca de reembolsos');
+t.ok(/method:\s*'POST'/.test(acao), 'por POST');
+t.ok(/days=365/.test(acao), 'na janela funda de um ano, que é o que conserta período antigo');
+t.ok(/cocoConfirm/.test(acao), 'pede confirmação: a busca é longa e prende a cota da Amazon');
+// Montar as linhas e nunca chamar o montador deixa o painel vazio, sem erro nenhum.
+t.ok(/^\s*renderReembolsos\(\);/m.test(tela), 'o montador é chamado ao abrir a página');
+// A função do botão vem por parâmetro. Enquanto era um ternário em cima do `id`, só cabiam dois
+// painéis, e o terceiro apontaria para a ação de um dos outros.
+t.ok(/onclick="\$\{acao\}/.test(tela), 'o botão de cada linha chama a ação que a linha declarou');
+
 t.fim();

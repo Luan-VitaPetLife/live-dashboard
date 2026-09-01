@@ -15,7 +15,11 @@
   .main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
 
   .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
-  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+  /* O botão Sincronizar e o nome de quem está logado formam UM grupo, encostado na direita. Só o
+     primeiro do grupo leva o `margin-left:auto`: com o empurrão nos dois, o espaço livre se
+     divide entre eles e o botão fica boiando no meio do cabeçalho, longe dos dois cantos. */
+  #syncBtn{margin-left:auto}
+  .live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
   .ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
   .back-link{font-size:11px;font-weight:600;color:var(--sub);text-decoration:none;display:flex;align-items:center;gap:5px}

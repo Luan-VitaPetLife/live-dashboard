@@ -415,7 +415,7 @@ function juntarFontesDeReembolso(devolucoes, repasses) {
 // mais antigo que a janela padrão nunca foi marcado, e enquanto não for, a quantidade vendida
 // daquele período continua contando a unidade que voltou. Varredura funda é lenta de propósito
 // (a cota de download é de ~1/min), então não entra no automático.
-export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = false, dias = RETURNS_DAYS, docs = SETTLEMENT_MAX_DOCS } = {}) {
+export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = false, dias = RETURNS_DAYS, docs = SETTLEMENT_MAX_DOCS, onProgress } = {}) {
   const out = { patched: 0, byMarket: {}, skipped: [], errors: [] };
   if (!amazon.hasAwsCreds()) { out.errors.push('amazon.returns: credenciais AWS ausentes'); return out; }
 
@@ -424,14 +424,15 @@ export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = f
     if (!configured) { out.skipped.push(`${market}: sem token`); continue; }
     if (!force && !returnsDue(market)) { out.skipped.push(`${market}: throttle`); continue; }
     try {
-      const devolucoes = await amazon.fetchCustomerReturns({ market, days: dias });
+      onProgress?.(`${market.toUpperCase()}: lendo devoluções`);
+      const devolucoes = await amazon.fetchCustomerReturns({ market, days: dias, onProgress });
 
       // O extrato de repasse não pode derrubar o job: ele é a fonte mais frágil (cota de download
       // apertada, e a Amazon pode simplesmente não ter fechado repasse novo). Falhou, seguimos
       // com o que o relatório de devoluções trouxe, e o erro aparece no retorno em vez de sumir.
       let repasse = { reembolsos: [], repasses: 0, cotaEstourada: false };
       try {
-        repasse = await amazon.fetchSettlementRefunds({ market, days: dias, limite: docs });
+        repasse = await amazon.fetchSettlementRefunds({ market, days: dias, limite: docs, onProgress });
         if (repasse.cotaEstourada) out.errors.push(`amazon.returns.${market}.repasse: cota de download estourou, leitura incompleta`);
       } catch (e) {
         out.errors.push(`amazon.returns.${market}.repasse: ${e.message}`);
@@ -460,6 +461,7 @@ export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = f
         });
       }
       const r = patchOrderRefunds(patches);
+      onProgress?.(`${market.toUpperCase()}: ${r.patched} pedido(s) marcado(s) de ${reembolsos.length} reembolso(s)`);
       setAmazonCursor(`returns-${market}`, new Date().toISOString());
       out.patched += r.patched;
       out.byMarket[market] = {

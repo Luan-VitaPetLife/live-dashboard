@@ -867,6 +867,16 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   janela padrão nunca foi marcado, e enquanto não for, a quantidade vendida daquele período segue
   contando a unidade que voltou. A varredura funda é lenta de propósito (cada repasse é um
   download, ~1/min), então ela não entra no automático — é uma corrida manual, uma vez.
+- **Botão em Integrações → "Amazon — Reembolsos"**, uma linha por mercado, disparando a varredura
+  funda de 365 dias. Ele aparece como job `amazon-returns` no card de processos: sem isso, quem
+  clicasse não saberia se achou reembolso, se deu erro ou se ainda está rodando — e aqui isso
+  importa mais que o normal, porque o resultado mexe em quantidade vendida. O `STALE_AFTER_MS`
+  dele é o maior de todos (90 min) justamente porque esperar a cota da Amazon **é** o trabalho:
+  com o padrão de 30 min, o job apareceria como "interrompido" no meio de uma varredura saudável.
+- As linhas desse painel saem do MESMO `retLinha` dos painéis de histórico. Pra isso ele deixou de
+  decidir a caixa de dias e a função do botão por um ternário em cima do `id` (o que só funcionava
+  enquanto existissem exatamente dois painéis) e passou a receber `acao`, `campo` e `resumo` por
+  parâmetro. Linha sem `campo` não tem caixa de dias, que é o caso dos reembolsos.
 - O extrato **não derruba o job** se falhar: a fonte mais frágil é ele (cota apertada, e pode
   simplesmente não haver repasse novo). Falhou, segue com o que o relatório de devoluções trouxe e
   o erro aparece em `errors` em vez de sumir.
@@ -1142,6 +1152,16 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   devolveu o pill deslizando da borda a cada carga de página.
 - O `.ios-switch` (liga/desliga, `public/css/switch.css`) é outro controle e continua como está:
   ele não escolhe entre opções, ele liga ou desliga uma coisa.
+
+### Dois `margin-left:auto` na mesma linha flex partem o espaço no meio
+- No cabeçalho do Unificador, o botão "Sincronizar" e o nome de quem está logado tinham CADA UM o
+  seu `margin-left:auto` (um inline no botão, outro no `.live-dot-wrap`). Com dois, o espaço livre
+  se divide entre eles: o botão não vai pra direita, ele para no MEIO do cabeçalho, longe dos dois
+  cantos. Parece bug de posicionamento e é só aritmética de flexbox.
+- Regra: num grupo encostado numa borda, só o PRIMEIRO elemento do grupo leva o empurrão; os
+  outros vêm atrás dele. Corrigido movendo o `margin-left:auto` do `.live-dot-wrap` pro `#syncBtn`
+  (e de quebra o `style=` inline saiu do markup, que é dívida de CSP, ver "Cabeçalhos de
+  segurança").
 
 ### Padrões de UI compartilhados
 - Sidebar (`sidebar.js`), sistema de cores (`colors.js`) e o widget de processos em segundo plano
@@ -1488,7 +1508,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   `devolucoes` (o relatório de devoluções da Amazon vira marca de pedido sem inserir pedido nenhum,
   e a unidade devolvida sai mesmo da quantidade e da receita, em todo canal),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
-  `integracoes` (quando a lista de backups recolhe e quando não pode recolher),
+  `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
+  reembolsos com a varredura funda ligada ao botão),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
   em blocos, sem buraco nem dia repetido, mais a ligação com servidor e tela) e `periodo` (o ano aparece no
   rótulo quando o período é de outro ano, e nenhuma tela remonta esse texto por conta própria).
