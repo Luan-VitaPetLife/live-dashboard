@@ -983,6 +983,11 @@ function statusLabelPt(o) {
     if (unpaid && unpaid.includes(o.status)) return 'Em aberto';
     return 'Cancelado';
   }
+  // A Amazon não diz em pedido nenhum que houve devolução: quem marca é o relatório de
+  // devoluções da FBA, gravado no campo `refunded` pelo reconcileAmazonReturns (src/sync.js).
+  // A Shopify não precisa disso, ela manda o status devolvido no próprio pedido (logo abaixo).
+  if (o.refunded === 'total')   return 'Reembolsado';
+  if (o.refunded === 'parcial') return 'Reembolso parcial';
   const s = (o.status || '').toUpperCase();
   // Devolvido é um estado próprio: houve pagamento de verdade e ele voltou. Sem isso, um pedido
   // REFUNDED caía no "Em aberto" do fim da função e a tela dizia que o cliente ainda não tinha

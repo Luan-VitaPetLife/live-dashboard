@@ -53,6 +53,13 @@ if (typeof doServidor === 'function' && typeof daTela === 'function') {
     [{ channel: 'shopify', status: 'PAID', cancelled: false }, 'Autorizado'],
     [{ channel: 'shopify', status: 'PARTIALLY_PAID', cancelled: false }, 'Em aberto'],
     [{ channel: 'amazon', status: 'Shipped', cancelled: false }, 'Autorizado'],
+    // A Amazon não tem status 'Refunded': um pedido devolvido continua 'Shipped' pra sempre.
+    // A devolução chega pelo relatório da FBA e é gravada no campo `refunded` (ver
+    // reconcileAmazonReturns em src/sync.js), então é ELE que as duas funções precisam ler.
+    [{ channel: 'amazon', status: 'Shipped', cancelled: false, refunded: 'total' }, 'Reembolsado'],
+    [{ channel: 'amazon', status: 'Shipped', cancelled: false, refunded: 'parcial' }, 'Reembolso parcial'],
+    // Cancelado nunca foi enviado, então não teve o que voltar: o cancelamento vem antes.
+    [{ channel: 'amazon', status: 'Canceled', cancelled: true, refunded: 'total' }, 'Cancelado'],
     // Não pago não é cancelamento: rótulo próprio pra não alarmar à toa.
     [{ channel: 'amazon', status: 'Pending', cancelled: true }, 'Em aberto'],
     [{ channel: 'shopify', status: 'AUTHORIZED', cancelled: true }, 'Em aberto'],
@@ -76,6 +83,8 @@ if (typeof doServidor === 'function' && typeof daTela === 'function') {
   // Devolvido não pode cair no balde de "ainda não pagou".
   t.ok(doServidor({ channel: 'shopify', status: 'REFUNDED', cancelled: false }) !== 'Em aberto',
     'REFUNDED não é tratado como pagamento pendente');
+  t.ok(doServidor({ channel: 'amazon', status: 'Shipped', cancelled: false, refunded: 'total' }) !== 'Autorizado',
+    'pedido Amazon devolvido não continua "Autorizado"');
 }
 
 // A tag precisa de uma cor própria: nem o verde de autorizado, nem o vermelho de cancelado.

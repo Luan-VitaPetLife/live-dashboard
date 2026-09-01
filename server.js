@@ -5,7 +5,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
-import { runSync, reconcileAmazonNames, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
+import { runSync, reconcileAmazonNames, reconcileAmazonReturns, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
@@ -878,6 +878,19 @@ app.post('/api/amazon/sync-names', (req, res) => {
   res.json({ ok: true, message: `Reconciliação de nomes (${markets.join(', ')}) iniciada. Acompanhe no log; confirme em Produtos.` });
 });
 
+// Forçar a reconciliação de devoluções da Amazon (relatório de devoluções da FBA). A Amazon
+// não marca devolução no pedido — este relatório é a única fonte que o papel do app alcança
+// (ver src/sync.js). Ignora o throttle e roda em background; confirme em "Pedidos recentes",
+// o pedido devolvido passa a mostrar a tag "Reembolsado".
+app.post('/api/amazon/sync-returns', requireAdmin, (req, res) => {
+  if (backfillRunning) return res.status(409).json({ error: 'Backfill em andamento — tente depois que terminar.' });
+  const markets = req.query.market === 'br' ? ['br'] : req.query.market === 'us' ? ['us'] : ['us', 'br'];
+  reconcileAmazonReturns({ markets, force: true })
+    .then(r => console.log('Amazon devoluções (manual):', r))
+    .catch(e => console.error('Amazon devoluções (manual) falhou:', e.message));
+  res.json({ ok: true, message: `Busca de devoluções (${markets.join(', ')}) iniciada. Acompanhe no log; confirme em Pedidos recentes.` });
+});
+
 // Limpeza pontual do vazamento de mercado da Amazon: remove pedidos US que foram gravados
 // como Amazon BR por um relatório cego-tagueado (ver CLAUDE.md 4.7.8). Rodar UMA vez após o
 // deploy da correção. Idempotente — pode rodar de novo sem efeito se já estiver limpo.
@@ -1673,6 +1686,19 @@ app.listen(PORT, () => {
   };
   setTimeout(runAmazonNames, 3 * 60 * 1000);        // 3 min após subir
   setInterval(runAmazonNames, 6 * 60 * 60 * 1000);  // a cada 6h (throttle interno limita a 12h)
+
+  // Devoluções da Amazon (mesma Reports API, mesmo balde de cota). Job à parte do de nomes de
+  // propósito: são relatórios diferentes, com janelas diferentes (2 dias contra 60), e um não
+  // pode segurar o outro. Sai defasado dos nomes pra não criar dois relatórios no mesmo
+  // instante — criar relatório tem cota de 1/min.
+  const runAmazonReturns = () => {
+    if (backfillRunning) return;
+    reconcileAmazonReturns({ markets: ['br', 'us'] })
+      .then(r => { if (r.patched || r.errors.length) console.log('Amazon devoluções:', r); })
+      .catch(e => console.error('Amazon devoluções falhou:', e.message));
+  };
+  setTimeout(runAmazonReturns, 8 * 60 * 1000);        // 8 min após subir (5 min depois dos nomes)
+  setInterval(runAmazonReturns, 6 * 60 * 60 * 1000);  // a cada 6h (throttle interno limita a 12h)
 
   // Geografia via Bling (preenche state vazio — hoje só afeta Shopee, ver src/sync.js).
   // Job próprio, fora do runSync — não disputa a cota do sync principal. A própria função

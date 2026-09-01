@@ -347,6 +347,8 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   Amazon, só populada em pedido que passou pela Reports API). Limitação conhecida, não é bug:
   "Vendas de produto" pode ficar bem abaixo do real porque o relatório frequentemente vem sem
   imposto/frete detalhado por pedido — aviso já fica na própria tela.
+- **Devolução** não vem em pedido nenhum (nem Orders API nem relatório de pedidos): sai do
+  relatório `GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA`, ver "Devoluções da Amazon".
 - Diagnóstico: `GET /api/amazon/{whoami,probe-order,report-columns,probe-image}`.
 - Portal atual: `solutionproviderportal.amazon.com`. Criar app novo exige verificação de
   identidade + revisão de "Solution Provider Account Profile" antes de liberar app de produção
@@ -444,13 +446,12 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   vendido aparecer no Unificador mesmo sem pedido nenhum.
 - Como o `market` é compartilhado, os pedidos da Yucaloo entram automaticamente em todos os
   agregados por mercado (KPI, channelSplit, catálogo, Segmentos, Produtos) sem mudança de código
-  nesses lugares — só telas com lista FIXA de canais (em vez de descobrir dinamicamente pelos
-  dados) precisam de uma entrada própria pra Yucaloo aparecer: já adicionada em `index.html`
-  (`MARKET_CHANNELS`), `produtos.html`/`estoque.html` (`CHANNELS_BR`/`CHANNELS_US` + `CH_META`),
-  `segmentos.html` (`CH_BY_MARKET`) e `geografia.html` (`CHAN_BR`/`CHAN_US` +
-  `CHAN_COLORS_MAP`/`CHAN_LABELS_MAP`). `campanhas.html` fica de fora de propósito — não
-  tem lista genérica de canais Shopify, só cards fixos por conta de Ads, e a Yucaloo ainda não tem
-  conta de Ads própria. Se um canal novo for adicionado no futuro, checar essas mesmas telas.
+  nesses lugares. As telas com lista fixa de canais precisavam de uma entrada própria pra Yucaloo
+  aparecer, e eram cinco tabelas espalhadas (`MARKET_CHANNELS`, `CH_META`, `CHANNELS_BR/US`,
+  `CH_BY_MARKET`, `CHAN_BR/US`); **nenhuma existe mais** — hoje canal é UMA linha em `DEFAULT_CH`
+  (`public/js/colors.js`, ver "Catálogo de canais"), e as telas leem de lá. `campanhas.html` fica
+  de fora de propósito: não tem lista genérica de canais Shopify, só cards fixos por conta de Ads,
+  e a Yucaloo ainda não tem conta de Ads própria.
 - Cor padrão da marca: `#4466FF`. Badge de canal: "Shopify - Yucaloo BR"/"EUA" (e os da Coco and
   Luna viraram "Shopify - Coco and Luna BR"/"EUA" pra desambiguar, já que as duas rodam no Shopify).
 
@@ -634,11 +635,10 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - `byState` no mercado US passa por `normalizeUsState`. Endereço fora dos EUA no mercado US vira
   bucket `'INTL'` (não perde receita, só não vira linha própria por país). Território/militar
   contam como EUA.
-- Lista de canais por mercado (`CHAN_BR`/`CHAN_US`) ainda é hardcoded no JS — ao adicionar canal
-  novo em qualquer lugar do app, checar também aqui. O dropdown de canal em si já não é mais HTML
-  estático: `renderChannelOptions()` monta as `.csel-opt` a partir de `CHAN_BR`/`CHAN_US` toda vez
-  que o mercado troca, então só as duas constantes precisam de manutenção (antes eram 2 arquivos
-  com `<div class="csel-opt">` duplicado cada).
+- Lista de canais por mercado sai de `CocoColors.channelsFor(market)` (ver "Catálogo de canais"),
+  não de constante local — canal novo aparece aqui sozinho. `renderChannelOptions()` remonta as
+  `.csel-opt` a cada troca de mercado (antes eram 2 arquivos com `<div class="csel-opt">`
+  duplicado cada).
 - Formatação (`fmtMoney`/`fmtInt`/`pctStr`/`fmtDM`) lê a variável `market` em cada chamada — BRL/
   pt-BR no Brasil, USD/en-US nos EUA (mesmo padrão de moeda por mercado do resto do app; texto em
   pt-BR nos dois — a antiga `geografia-us.html` tinha "order"/"orders" em inglês vazado em dois
@@ -729,16 +729,55 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   do fim das duas funções, e a tela dizia que o cliente não tinha pagado — o oposto do que
   aconteceu. Cor própria também (`.st-tag.ref`, cinza): nem o verde de autorizado, nem o vermelho
   de cancelado; a venda existiu e foi desfeita.
-- **A Amazon NÃO informa devolução por nenhuma das duas fontes que lemos.** Conferido contra o
-  backup de produção (165 mil pedidos): os únicos status que existem em pedido Amazon são
-  `Shipped`, `Cancelled`/`Canceled`, `Pending` e `Shipping` — não existe `Refunded`. A Orders API
-  e o relatório `GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL` (de onde saem
-  `order-status` e `item-status`) reportam o ciclo do PEDIDO, não o do dinheiro: um pedido
-  devolvido continua `Shipped` pra sempre, com o total cheio.
-- Marcar devolução da Amazon exige uma fonte nova, não um ajuste de rótulo: o relatório de
-  devoluções (`GET_FLAT_FILE_RETURNS_DATA_BY_RETURN_DATE`, mesma Reports API e mesmo papel que o
-  backfill já usa) ou a Finances API. A Shopify manda `REFUNDED` no próprio pedido, e é por isso
-  que só ela tem o rótulo hoje.
+- **O pedido da Amazon não diz que foi devolvido, e nunca vai dizer.** Conferido contra o backup
+  de produção (165 mil pedidos): os únicos status que existem em pedido Amazon são `Shipped`,
+  `Cancelled`/`Canceled`, `Pending` e `Shipping` — não existe `Refunded`. A Orders API e o
+  relatório `GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL` (de onde saem `order-status` e
+  `item-status`) reportam o ciclo do PEDIDO, não o do dinheiro: um pedido devolvido continua
+  `Shipped` pra sempre, com o total cheio. Por isso a devolução da Amazon NÃO chega pelo campo
+  `status` — ela vem de um relatório à parte e é gravada no campo `refunded` (ver a seção
+  "Devoluções da Amazon" abaixo). As duas funções de rótulo leem `refunded` ANTES de olhar o
+  status; a Shopify não precisa disso, ela manda `REFUNDED` no próprio pedido.
+- Ordem que não pode inverter: **cancelado vem antes de devolvido**. Pedido cancelado nunca foi
+  enviado, então não teve o que voltar — se a devolução fosse checada primeiro, um cancelamento
+  apareceria como reembolso.
+
+### Devoluções da Amazon (`reconcileAmazonReturns`, src/sync.js)
+- **Fonte: `GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA`** (Reports API, o mesmo canal do backfill).
+  Escolhido por ser a única fonte de devolução que o papel **"Inventory and Order Tracking"**
+  alcança, e o app BR já tem esse papel — confirmado contra a conta de produção, o relatório abre
+  sem 403 e traz o pedido que o Luan mostrou no Seller Central (`#702-9546667-8914602`, vendido em
+  18/08/2026, mercadoria de volta em 30/08). Quem traria o dinheiro exato é a Finances API
+  (`listFinancialEvents` → `RefundEventList`), mas ela exige o papel restrito "Finance and
+  Accounting", a mesma fila de aprovação que segura o PII há meses.
+- **O que ele é e o que ele não é:** lista a MERCADORIA que voltou pro centro de distribuição, não
+  o dinheiro que saiu. Na prática as duas coisas andam juntas na FBA, mas dois casos ficam de
+  fora e é bom saber disso antes de tratar o número como financeiro: reembolso sem devolução
+  física (o vendedor devolve o valor e deixa o produto com o cliente) e pedido enviado por você e
+  não pela Amazon (MFN), que sai noutro relatório. Hoje quase tudo é FBA e o que sai por fora vai
+  pra criador de conteúdo, que praticamente nunca volta — por isso o MFN não foi incluído.
+- **Janela de 60 dias**, contra 2 da reconciliação de nomes, e a diferença é o ponto: a devolução
+  chega DEPOIS da venda. O pedido que originou isso foi vendido em 18/08 e voltou em 30/08 — uma
+  janela curta veria a venda e nunca a volta dela. `AMAZON_RETURNS_DAYS`/`AMAZON_RETURNS_EVERY_HOURS`.
+- **Patch-only, e isso é proteção, não detalhe.** `patchOrderRefunds` (store.js) só marca pedido
+  que JÁ EXISTE — nunca insere, nunca toca em `total`/`status`/`items`. O relatório de devoluções
+  não traz país de entrega, então não dá pra filtrar mercado por linha como o `ordersFromRows`
+  faz; o que segura o vazamento de mercado (CLAUDE.md 4.7.8) é justamente não inserir: um id do
+  outro mercado que venha junto não acha pedido e cai fora sozinho.
+- Grava `refunded` (`'total'`/`'parcial'`), `refundedQty` e `refundedAt`. Total ou parcial sai de
+  comparar as unidades devolvidas com as unidades do pedido; **pedido sem item conhecido cai em
+  `'total'`** — quase todo pedido da Amazon BR é de uma unidade só, então chutar `'parcial'`
+  erraria em praticamente todos, e o número real fica em `refundedQty` de qualquer jeito.
+- Job próprio no agendador (não entra no `runSync`, senão o "Sincronizar agora" ficaria travado
+  os ~1-2 min que a Amazon leva pra montar o relatório), defasado do job de nomes porque criar
+  relatório tem cota de 1/min. Throttle de 12h por mercado via cursor `returns-<market>`.
+  Disparo manual: `POST /api/amazon/sync-returns?market=br|us` (admin).
+- **Marcar como devolvido NÃO tira o pedido da receita**, de propósito: hoje ele continua contando
+  o valor cheio, igual a um pedido `REFUNDED` da Shopify no nível do pedido. Descontar o valor é
+  decisão de negócio separada e ainda não tomada — o rótulo diz o que aconteceu, o número não
+  mudou.
+- `scripts/test/devolucoes.test.mjs` executa o agrupamento e a classificação de verdade, e guarda
+  o patch-only (falha se alguém fizer a reconciliação inserir pedido ou mexer em total/status).
 
 ### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
 - **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
@@ -1298,6 +1337,7 @@ Railway — nunca colar valor aqui, só o nome da variável e pra que serve.
 | `AMAZON_BACKFILL_DAYS` | Janela da 1ª carga antes de existir cursor (padrão 2) |
 | `AMAZON_FETCH_PII` | `1` liga busca de nome do comprador (exige papel PII aprovado) |
 | `AMAZON_NAMES_EVERY_HOURS` / `AMAZON_NAMES_DAYS` | Reconciliação de nome de produto (padrão 12h / 2 dias) |
+| `AMAZON_RETURNS_EVERY_HOURS` / `AMAZON_RETURNS_DAYS` | Devoluções da Amazon (padrão 12h / 60 dias) — janela longa de propósito, a devolução chega semanas depois da venda |
 | `AMAZON_RETENTION_DAYS` | Poda de pedidos Amazon antigos, opt-in (padrão 0 = desligado; produção usa 365) |
 | `AMAZON_ROLE_ARN` / `AMAZON_AWS_ACCESS_KEY` / `_SECRET_KEY` | IAM Role + credenciais do IAM User (compartilhados BR/US) |
 | `GOOGLE_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URL` | OAuth do projeto Google Cloud |
@@ -1335,6 +1375,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   `imagens` (nenhuma imagem depende de CSS injetado por script pra ter tamanho),
   `escape` (uma função de escape só, correta, e carregada antes de quem usa),
   `status-pedido` (servidor e tela dão o mesmo rótulo, e devolvido não vira "em aberto"),
+  `devolucoes` (o relatório de devoluções da Amazon vira marca de pedido sem inserir pedido nenhum),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
@@ -1358,6 +1399,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   plano, alimenta o widget flutuante (`jobs-widget.js`)
 - `POST /api/jobs/:id/cancel` — cancela um job em segundo plano (só os cancelable, ver acima)
 - `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
+- `POST /api/amazon/sync-returns?market=br|us` (admin) — busca o relatório de devoluções da FBA e
+  marca os pedidos devolvidos; roda sozinho a cada 12h, ver "Devoluções da Amazon"
 - `POST /api/shopify/backfill?market=&days=` (admin) · `GET /api/shopify/history` (admin) —
   recupera histórico antigo das lojas Shopify, ver tela Integrações
 - `GET/POST /api/amazon/history` (admin) · `GET /api/amazon/history/preview` — histórico por

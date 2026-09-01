@@ -463,6 +463,12 @@ export async function fetchOrders(sinceISO, untilISO) {
 // Fluxo: createReport → poll até DONE → getReportDocument → baixa (gzip) → parse TSV.
 
 const REPORT_TYPE      = 'GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL';
+// Devolução de pedido FBA. Relatório SEPARADO de propósito: o ALL_ORDERS acima conta o
+// ciclo do PEDIDO (um pedido devolvido continua 'Shipped' pra sempre, com o total cheio) e
+// nunca o do dinheiro. Este é a única fonte de devolução que o papel "Inventory and Order
+// Tracking" (o que o app BR já tem) alcança — a Finances API, que traria o reembolso exato
+// em dinheiro, exige o papel restrito "Finance and Accounting".
+const RETURNS_REPORT_TYPE = 'GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA';
 const REPORT_CHUNK_DAYS = 30;        // a Amazon limita o intervalo por relatório
 const REPORT_POLL_MS    = 30 * 1000; // getReport permite 2 req/s; 30s é folgado
 const REPORT_MAX_POLLS  = 40;        // até ~20 min por relatório
@@ -582,11 +588,12 @@ function ordersFromRows(rows, marketplaceId) {
 
 // Busca o relatório e devolve as LINHAS cruas (parseTsv). Reaproveitado por runOneReport
 // e pelo diagnóstico inspectReport.
-async function fetchReportRows({ getLwa, marketplaceId, startISO, endISO, label, onProgress }) {
+async function fetchReportRows({ getLwa, marketplaceId, startISO, endISO, label, onProgress,
+                                 reportType = REPORT_TYPE }) {
   onProgress?.(`${label}: criando relatório ${startISO.slice(0, 10)} → ${endISO.slice(0, 10)}`);
 
   const created = await spPost(getLwa, '/reports/2021-06-30/reports', {
-    reportType:    REPORT_TYPE,
+    reportType,
     marketplaceIds: [marketplaceId],
     dataStartTime: startISO,
     dataEndTime:   endISO,
@@ -724,6 +731,104 @@ export async function fetchRecentNamedOrders({ market = 'us', days = 2, onProgre
     startISO: start.toISOString(), endISO: end.toISOString(),
     onProgress,
   });
+}
+
+// ── Devoluções de pedido FBA ───────────────────────────────────────────────────
+// A Amazon NÃO diz em lugar nenhum do pedido que ele foi devolvido: nem a Orders API nem o
+// relatório ALL_ORDERS têm status 'Refunded' — os dois reportam o ciclo do PEDIDO, e um
+// pedido devolvido continua 'Shipped' pra sempre, com o total cheio (conferido contra 165
+// mil pedidos de produção). A devolução mora num relatório à parte, e é ele que está aqui.
+//
+// O que este relatório é e o que ele NÃO é: ele lista a MERCADORIA que voltou pro centro de
+// distribuição, não o dinheiro que saiu. Na prática, devolução FBA e reembolso andam juntos
+// (a Amazon reembolsa quando a unidade volta), mas os dois casos de borda existem e não são
+// cobertos aqui: reembolso sem devolução física (o vendedor devolve o valor e deixa o
+// produto com o cliente) e pedido enviado por você, não pela Amazon (MFN), que sai noutro
+// relatório. Quem traria o dinheiro exato é a Finances API, que exige o papel restrito
+// "Finance and Accounting"; este relatório se contenta com "Inventory and Order Tracking",
+// que o app BR já tem — foi essa a razão da escolha.
+//
+// Uma linha é uma unidade devolvida. Agrupa por pedido somando as unidades: é o que permite
+// separar devolução total de parcial mais adiante, no servidor.
+function devolucoesDasLinhas(rows, market) {
+  const porPedido = new Map();
+  for (const r of rows) {
+    const orderId = (r['order-id'] || '').trim();
+    const qty     = Number(r['quantity'] || 0);
+    if (!orderId || !(qty > 0)) continue;
+
+    const id  = `amazon-${market}:` + orderId;
+    const cur = porPedido.get(id) || { id, orderId, qty: 0, returnedAt: null };
+    cur.qty += qty;
+    // Fica a devolução MAIS RECENTE do pedido: um pedido pode voltar em duas remessas.
+    const quando = String(r['return-date'] || '').trim();
+    if (quando && (!cur.returnedAt || quando > cur.returnedAt)) cur.returnedAt = quando;
+    porPedido.set(id, cur);
+  }
+  return [...porPedido.values()];
+}
+
+// Devolve [{ id, orderId, qty, returnedAt }] do mercado pedido, sem tocar em pedido nenhum
+// — quem casa isso com o store é o servidor.
+//
+// Não filtra mercado por linha (o relatório não traz país de entrega, e o filtro do
+// ALL_ORDERS não se aplica aqui): o id já sai carimbado com o mercado do relatório
+// (`amazon-br:...`), e quem grava só toca em pedido que JÁ EXISTE naquele mercado. Um id de
+// pedido do outro mercado que venha junto (as contas são vinculadas) simplesmente não acha
+// pedido nenhum e cai fora sozinho — mesma proteção do patchOrderItems, ver CLAUDE.md 4.7.8.
+export async function fetchCustomerReturns({ market = 'br', days = 30, onProgress } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+
+  const isUs          = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  const label         = isUs ? 'Devoluções US' : 'Devoluções BR';
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`${label}: refresh token não configurado.`);
+
+  const end   = new Date(Date.now() - 3 * 60 * 1000); // margem exigida pela SP-API
+  const start = new Date(end.getTime() - days * 864e5);
+
+  const rows = await fetchReportRows({
+    getLwa, marketplaceId, label, reportType: RETURNS_REPORT_TYPE,
+    startISO: start.toISOString(), endISO: end.toISOString(),
+    onProgress,
+  });
+  const devolucoes = devolucoesDasLinhas(rows, isUs ? 'us' : 'br');
+  onProgress?.(`${label}: ${rows.length} linhas → ${devolucoes.length} pedidos devolvidos`);
+  return devolucoes;
+}
+
+// Diagnóstico do relatório de devoluções: colunas reais + amostra. Sem `customer-comments`
+// (texto livre escrito pelo cliente) e sem nada que identifique quem comprou.
+export async function inspectReturns({ market = 'br', days = 30 } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+
+  const isUs          = market === 'us';
+  const getLwa        = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const marketplaceId = isUs ? MARKETPLACE_ID : MARKETPLACE_ID_BR;
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`inspectReturns: token ${market} não configurado.`);
+
+  const end   = new Date(Date.now() - 3 * 60 * 1000);
+  const start = new Date(end.getTime() - days * 864e5);
+  const rows  = await fetchReportRows({
+    getLwa, marketplaceId, reportType: RETURNS_REPORT_TYPE,
+    label: `Devoluções ${market.toUpperCase()} (diag)`,
+    startISO: start.toISOString(), endISO: end.toISOString(),
+  });
+
+  const conta = campo => {
+    const t = {};
+    for (const r of rows) { const v = (r[campo] || '(vazio)').trim(); t[v] = (t[v] || 0) + 1; }
+    return t;
+  };
+  return {
+    market,
+    totalRows: rows.length,
+    columns:   rows.length ? Object.keys(rows[0]) : [],
+    porStatus:      rows.length ? conta('status') : {},
+    porDisposicao:  rows.length ? conta('detailed-disposition') : {},
+    pedidos:   devolucoesDasLinhas(rows, isUs ? 'us' : 'br').length,
+  };
 }
 
 // ── Itens de UM pedido via Orders API (getOrderItems) ──────────────────────────
