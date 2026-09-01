@@ -612,6 +612,13 @@ async function fetchReportRows({ getLwa, marketplaceId, startISO, endISO, label,
   }
   if (!documentId) throw new Error(`${label}: relatório não ficou pronto a tempo`);
 
+  return baixarDocumento(getLwa, documentId);
+}
+
+// Baixa e destrincha UM documento de relatório já pronto. Separado do fetchReportRows porque
+// nem todo relatório é criado por nós: o de repasse (settlement) a Amazon gera sozinha a cada
+// ciclo e a gente só baixa o que já existe.
+async function baixarDocumento(getLwa, documentId) {
   const doc = await spGet(getLwa, `/reports/2021-06-30/documents/${documentId}`);
   const res = await safeFetch(doc.url);
   const buf = Buffer.from(await res.arrayBuffer());
@@ -805,6 +812,140 @@ export async function fetchCustomerReturns({ market = 'br', days = 30, onProgres
   const devolucoes = devolucoesDasLinhas(rows, isUs ? 'us' : 'br');
   onProgress?.(`${label}: ${rows.length} linhas → ${devolucoes.length} pedidos devolvidos`);
   return devolucoes;
+}
+
+// Diagnóstico: o que existe DENTRO do relatório de repasse, nas linhas de reembolso. Sem PII —
+// o settlement não traz nome nem endereço de comprador, só número de pedido e dinheiro.
+// Baixar documento tem cota PRÓPRIA e apertada: ~1 por minuto, com um estouro inicial de uns 15.
+// Descobri isso do jeito difícil, varrendo o histórico de repasses de uma vez e tomando 429 no
+// meio (os primeiros vieram, o resto não, e sem esta trava o retorno mentia dizendo que o período
+// não tinha reembolso quando na verdade nem tinha sido lido). Quem varrer repasse antigo precisa
+// aceitar ir devagar.
+const DOC_MAX_POR_CHAMADA = 8;
+const DOC_ESPACO_MS       = 2500;
+
+export async function inspectSettlementRefunds({ market = 'br', days = 60, orderIds = [], limite = DOC_MAX_POR_CHAMADA } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const isUs   = market === 'us';
+  const getLwa = isUs ? getLwaTokenUS : getLwaTokenBR;
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`inspectSettlementRefunds: token ${market} não configurado.`);
+
+  const r = await spGet(getLwa, '/reports/2021-06-30/reports',
+    { reportTypes: 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE', pageSize: '100' });
+  const corte = Date.now() - days * 864e5;
+  const prontos = (r.reports || [])
+    .filter(x => x.processingStatus === 'DONE' && x.reportDocumentId)
+    .filter(x => Date.parse(x.dataEndTime || x.createdTime) >= corte);
+
+  // Do mais recente pro mais antigo, e só até o limite: o reembolso de hoje está no repasse de
+  // agora, não no de janeiro.
+  const fila = [...prontos]
+    .sort((a, b) => Date.parse(b.dataEndTime || b.createdTime) - Date.parse(a.dataEndTime || a.createdTime))
+    .slice(0, Math.max(1, limite));
+
+  const linhas = [];
+  const baixados = [];
+  let cotaEstourada = false;
+  for (const [i, rel] of fila.entries()) {
+    if (i) await sleep(DOC_ESPACO_MS);
+    try {
+      const rows = await baixarDocumento(getLwa, rel.reportDocumentId);
+      baixados.push({ reportId: rel.reportId, de: rel.dataStartTime, ate: rel.dataEndTime, linhas: rows.length });
+      linhas.push(...rows);
+    } catch (e) {
+      baixados.push({ reportId: rel.reportId, erro: e.message });
+      // 429 aqui não é "não tem reembolso", é "não foi lido". Para na hora em vez de devolver um
+      // retorno que parece completo e não é.
+      if (/QuotaExceeded|HTTP 429/.test(e.message)) { cotaEstourada = true; break; }
+    }
+  }
+
+  const tipos = {};
+  for (const l of linhas) { const t = (l['transaction-type'] || '(vazio)').trim(); tipos[t] = (tipos[t] || 0) + 1; }
+
+  // O V1 do settlement NÃO tem coluna `amount`: o dinheiro cobrado do cliente vem em
+  // `price-amount` (com `price-type` dizendo se é Principal, Shipping, Tax) e as taxas da Amazon
+  // em `item-related-fee-amount`. Somar `amount` devolvia 0,00 pra todo pedido, que é pior que
+  // não somar nada — parecia um reembolso de valor zero. Cada unidade reembolsada gera a sua
+  // própria linha `Principal`, e é assim que se conta quantas voltaram (o `quantity-purchased`
+  // vem vazio na linha de reembolso).
+  const reembolsos = linhas.filter(l => /refund/i.test(l['transaction-type'] || ''));
+  const porPedido = {};
+  for (const l of reembolsos) {
+    const id = (l['order-id'] || '(sem pedido)').trim();
+    if (!porPedido[id]) porPedido[id] = { linhas: [], aoCliente: 0, taxas: 0, unidades: 0 };
+    const preco = Number(l['price-amount'] || 0);
+    const taxa  = Number(l['item-related-fee-amount'] || 0);
+    porPedido[id].linhas.push({
+      tipoPreco: l['price-type'], valor: preco || null,
+      taxaTipo: l['item-related-fee-type'], taxaValor: taxa || null,
+      sku: l['sku'], postado: l['posted-date'], repasse: l['settlement-id'],
+    });
+    porPedido[id].aoCliente += preco;
+    porPedido[id].taxas     += taxa;
+    if ((l['price-type'] || '').trim() === 'Principal') porPedido[id].unidades++;
+  }
+
+  const procurados = {};
+  for (const id of orderIds) {
+    procurados[id] = linhas.filter(l => (l['order-id'] || '').trim() === id).map(l => ({
+      transacao: l['transaction-type'], postado: l['posted-date'], sku: l['sku'],
+      qtd: l['quantity-purchased'], tipoPreco: l['price-type'], valor: l['price-amount'],
+      taxaTipo: l['item-related-fee-type'], taxaValor: l['item-related-fee-amount'],
+    }));
+  }
+
+  return {
+    market,
+    cotaEstourada,
+    aviso: cotaEstourada
+      ? 'A cota de download estourou no meio: o que veio está incompleto, tente de novo daqui a alguns minutos.'
+      : null,
+    quantosRelatorios: prontos.length,
+    quantosBaixados: fila.length,
+    relatorios: baixados,
+    totalLinhas: linhas.length,
+    colunas: linhas.length ? Object.keys(linhas[0]) : [],
+    porTipoDeTransacao: tipos,
+    pedidosComReembolso: Object.keys(porPedido).length,
+    reembolsos: porPedido,
+    procurados,
+  };
+}
+
+// Diagnóstico: o relatório de REPASSE (settlement) está ao alcance deste app? Ele é a única
+// fonte que registra reembolso SEM devolução física — o relatório de devoluções da FBA só vê a
+// mercadoria que voltou pro centro de distribuição. Settlement não se cria por createReport: a
+// Amazon gera sozinha a cada ciclo de repasse e a gente só LISTA o que já existe. Se o papel do
+// app não alcançar, isto devolve o erro em vez de estourar.
+export async function inspectSettlement({ market = 'br' } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+  const isUs   = market === 'us';
+  const getLwa = isUs ? getLwaTokenUS : getLwaTokenBR;
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`inspectSettlement: token ${market} não configurado.`);
+
+  const tipos = [
+    'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2',
+    'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE',
+  ];
+  const out = {};
+  for (const tipo of tipos) {
+    try {
+      const r = await spGet(getLwa, '/reports/2021-06-30/reports', { reportTypes: tipo, pageSize: '10' });
+      const lista = r.reports || [];
+      out[tipo] = {
+        ok: true,
+        quantos: lista.length,
+        amostra: lista.slice(0, 3).map(x => ({
+          reportId: x.reportId, status: x.processingStatus,
+          de: x.dataStartTime, ate: x.dataEndTime, criado: x.createdTime,
+        })),
+      };
+    } catch (e) {
+      out[tipo] = { ok: false, erro: e.message };
+    }
+  }
+  return { market, tipos: out };
 }
 
 // Diagnóstico do relatório de devoluções: colunas reais + amostra. Sem `customer-comments`
