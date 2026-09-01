@@ -891,6 +891,20 @@ app.post('/api/amazon/sync-returns', requireAdmin, (req, res) => {
   res.json({ ok: true, message: `Busca de devoluções (${markets.join(', ')}) iniciada. Acompanhe no log; confirme em Pedidos recentes.` });
 });
 
+// Diagnóstico do relatório de REPASSE (settlement) da Amazon, que é o extrato do dinheiro.
+// Ele enxerga reembolso que o relatório de devoluções NÃO enxerga: quando o dinheiro volta sem a
+// mercadoria voltar, não existe devolução pra registrar, e só o repasse mostra. Sem PII — o
+// settlement não traz nome nem endereço de comprador, só número de pedido, SKU e valor.
+// `orderIds` (separados por vírgula) filtra as linhas de pedidos específicos.
+app.get('/api/amazon/settlement-probe', requireAdmin, async (req, res) => {
+  const market = req.query.market === 'us' ? 'us' : 'br';
+  const days   = Math.min(365, Math.max(1, Number(req.query.days) || 60));
+  const limite = Math.min(15, Math.max(1, Number(req.query.limite) || 3));
+  const orderIds = String(req.query.orderIds || '').split(',').map(x => x.trim()).filter(Boolean);
+  try { res.json(await amazon.inspectSettlementRefunds({ market, days, orderIds, limite })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Limpeza pontual do vazamento de mercado da Amazon: remove pedidos US que foram gravados
 // como Amazon BR por um relatório cego-tagueado (ver CLAUDE.md 4.7.8). Rodar UMA vez após o
 // deploy da correção. Idempotente — pode rodar de novo sem efeito se já estiver limpo.
