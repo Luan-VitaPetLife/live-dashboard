@@ -128,7 +128,27 @@ export async function fetchOrders(sinceISO, untilISO) {
       // não aprovado) somam-se a cancelled/invalid. 'paid' e 'partially_paid' (teve pagamento
       // real, mesmo que insuficiente) continuam contando.
       const cancelled = ['cancelled', 'invalid', 'confirmed', 'payment_required', 'payment_in_process'].includes(o.status);
+
+      // Reembolso: o ML já manda isso DENTRO do pedido, em payments[].transaction_amount_refunded
+      // — nenhuma chamada a mais. Um pedido reembolsado costuma continuar com status 'paid', então
+      // sem olhar os pagamentos ele seguiria contando como venda cheia.
+      const totalPedido = Number(o.total_amount) || 0;
+      const devolvido   = (o.payments || [])
+        .reduce((a, p) => a + (Number(p?.transaction_amount_refunded) || 0), 0);
+      // Tolerância de 1 centavo: comparação de dinheiro em ponto flutuante.
+      const cheio    = devolvido > 0 && devolvido >= totalPedido - 0.01;
+      const unidades = (o.order_items || []).reduce((a, it) => a + (it.quantity || 1), 0);
+      // Reembolso PARCIAL leva só o dinheiro: o ML não diz de qual item ele saiu, e chutar a
+      // unidade errada estragaria a contagem de um produto pra corrigir a de outro. Reembolso
+      // integral leva as unidades junto, porque aí não há dúvida — voltou tudo.
+      const devolucao = !devolvido ? {} : {
+        refunded:      cheio ? 'total' : 'parcial',
+        refundedTotal: devolvido,
+        ...(cheio ? { refundedQty: unidades } : {}),
+      };
+
       out.push({
+        ...devolucao,
         id:          'mercadolivre:' + o.id,
         channel:     'mercadolivre',
         market:      'br',

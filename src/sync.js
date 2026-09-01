@@ -398,6 +398,7 @@ export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = f
           refunded:    classificarDevolucao(pedido, d.qty),
           refundedQty: d.qty,
           refundedAt:  d.returnedAt,
+          itens:       d.porProduto || [],
         });
       }
       const r = patchOrderRefunds(patches);

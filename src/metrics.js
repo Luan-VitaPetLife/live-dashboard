@@ -1,10 +1,86 @@
 // metrics.js — calcula o payload da dashboard a
 // partir dos pedidos e sessões guardados no store.
 // Receita SEMPRE exclui pedidos cancelados.
-import { getOrders, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductGroupTypes, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, getOldestOrderDate, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
+import { getOrders as lerPedidosBrutos, getSessionsDaily, getYucalooSessionsDaily, getMetaInsightsDaily, getMetaUSInsightsDaily, getMlAdCostsDaily, getProductFinance, getProductStock, getProductStockAgg, getProductGroups, getProductGroupsEnabled, getProductGroupTypes, getProductTypeGroups, getProductHiddenTags, getAmazonProductImages, getShopifyProductCatalog, getOldestOrderDate, load, UNPAID_STATUS_BY_CHANNEL } from './store.js';
 import { normalizeUsState, isUsRegionCode, US_STATE_NAMES } from './us-states.js';
 import { normalizeBrState, BR_STATE_NAMES } from './br-states.js';
 import { buildInsights } from './insights.js';
+
+// ── Devolução vira desconto de verdade ────────────────────────────────────────
+// Unidade devolvida não foi vendida, e o dinheiro dela não é receita. Quem já resolve isso na
+// origem é a Shopify (`currentQuantity` e `currentTotalPriceSet` da Admin API já vêm líquidos,
+// ver src/shopify.js) — nesses pedidos não há nada a fazer aqui. Os outros canais não têm um
+// campo equivalente, então a devolução chega depois, por reconciliação, gravada em três campos:
+//
+//   items[].refundedQty  unidades devolvidas DAQUELA linha (o melhor caso: sabemos o produto)
+//   refundedQty          unidades devolvidas no pedido, sem saber de qual linha
+//   refundedTotal        dinheiro devolvido, quando o canal informa o valor exato
+//
+// TODO O CÁLCULO da dashboard passa por aqui porque `getOrders` abaixo é a única porta de
+// entrada de pedido neste arquivo: KPI, Top produtos, Segmentos, Produtos, Estoque, Geografia e
+// Insights recebem o pedido já líquido, sem que cada um precise lembrar de descontar. Um
+// `getOrders` novo importado direto do store furaria isso em silêncio, e é o que o teste
+// `devolucoes` impede.
+//
+// O pedido devolvido CONTINUA sendo um pedido (não vira cancelado): o mesmo tratamento que a
+// Shopify já dá a um pedido `REFUNDED`, que segue na contagem com a receita zerada. Cancelado é
+// outra coisa — é a venda que nunca aconteceu.
+function pedidoLiquido(o) {
+  const itens     = o.items || [];
+  const porItem   = itens.some(it => Number(it?.refundedQty || 0) > 0);
+  const noPedido  = Number(o.refundedQty || 0);
+  const emDinheiro = Number(o.refundedTotal || 0);
+  if (!porItem && !(noPedido > 0) && !(emDinheiro > 0)) return o;
+
+  // Quantas unidades saem de cada linha. Com `items[].refundedQty` sabemos exatamente; com só o
+  // total do pedido, distribuímos linha a linha até acabar. A distribuição pode errar DE QUAL
+  // produto a unidade saiu num pedido de vários produtos, mas nunca erra o total de unidades —
+  // e ela só entra em ação quando o canal não disse o produto (a Amazon diz, pelo ASIN).
+  const baixa = new Array(itens.length).fill(0);
+  if (porItem) {
+    itens.forEach((it, i) => { baixa[i] = Math.min(Number(it?.qty || 0), Number(it?.refundedQty || 0)); });
+  } else if (noPedido > 0) {
+    let resta = noPedido;
+    itens.forEach((it, i) => {
+      if (resta <= 0) return;
+      const tira = Math.min(Number(it?.qty || 0), resta);
+      baixa[i] = tira;
+      resta -= tira;
+    });
+  }
+
+  let perdido = 0;
+  const novos = itens.map((it, i) => {
+    const bruto = Number(it?.qty || 0);
+    if (!baixa[i] || !(bruto > 0)) return it;
+    const qty    = Math.max(0, bruto - baixa[i]);
+    const amount = (Number(it?.amount) || 0) * (qty / bruto);
+    perdido += (Number(it?.amount) || 0) - amount;
+    return { ...it, qty, amount };
+  });
+
+  // Quanto tirar do valor do pedido: o valor exato quando o canal informou, senão o que as linhas
+  // deixaram de valer. Pedido devolvido sem NENHUMA linha conhecida (a Orders API da Amazon não
+  // traz item) zera: se a mercadoria voltou e não sabemos o que era, ela não pode continuar
+  // valendo o total cheio.
+  let desconto = emDinheiro > 0 ? emDinheiro : perdido;
+  if (!desconto && noPedido > 0 && !itens.length) desconto = Number(o.total) || 0;
+
+  const totalBruto = Number(o.total) || 0;
+  const total      = Math.max(0, Math.round((totalBruto - desconto) * 100) / 100);
+  const liquido    = { ...o, items: novos, total };
+  // "Vendas de produto" da Amazon (toggle de receita, ver orderRevenue) acompanha na mesma
+  // proporção — deixar esse número bruto faria os dois modos discordarem só no pedido devolvido.
+  if (o.productSales != null && totalBruto > 0) {
+    liquido.productSales = Math.max(0, Math.round(Number(o.productSales) * (total / totalBruto) * 100) / 100);
+  }
+  return liquido;
+}
+
+// A porta de entrada de pedido deste arquivo. Ver pedidoLiquido acima.
+function getOrders(args) {
+  return lerPedidosBrutos(args).map(pedidoLiquido);
+}
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
 

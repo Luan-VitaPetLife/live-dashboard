@@ -241,6 +241,29 @@ export function upsertOrders(orders) {
     if (existing && o.productSales == null && existing.productSales != null) {
       o.productSales = existing.productSales;
     }
+    // Mesma proteção para a marca de DEVOLUÇÃO. Ela não vem do sync de pedidos: chega por uma
+    // reconciliação separada, a cada 12h (relatório de devoluções da Amazon, ver src/sync.js),
+    // e o pedido que o sync rebaixa a cada 15 min não sabe nada dela. Sem isto a marca era
+    // apagada minutos depois de gravada e o pedido devolvido passaria quase todo o tempo
+    // contando como venda cheia. Só protege contra APAGAR — canal que informa a devolução no
+    // próprio pedido (Mercado Livre, em payments[]) sobrescreve normal.
+    if (existing && o.refunded == null && existing.refunded != null) {
+      o.refunded    = existing.refunded;
+      o.refundedQty = existing.refundedQty;
+      o.refundedAt  = existing.refundedAt;
+      if (existing.refundedTotal != null) o.refundedTotal = existing.refundedTotal;
+    }
+    // A marca por LINHA sobrevive a uma lista de itens nova (é o que um backfill via Reports API
+    // traz). Recarrega por ASIN/título: sem isso, um backfill rodando no meio desfaria o desconto
+    // por produto e ele só voltaria na rodada seguinte do job de devoluções.
+    if (existing && Array.isArray(o.items) && Array.isArray(existing.items) && o.items !== existing.items) {
+      for (const novo of o.items) {
+        if (!novo || novo.refundedQty != null) continue;
+        const velho = (novo.asin  && existing.items.find(it => it?.asin  === novo.asin))
+                   || (novo.title && existing.items.find(it => it?.title === novo.title));
+        if (velho && velho.refundedQty != null) novo.refundedQty = velho.refundedQty;
+      }
+    }
     db.orders[o.id] = o;
   }
   indexDirty = true;
@@ -459,12 +482,38 @@ export function patchOrderRefunds(patches) {
   for (const p of patches) {
     const existing = db.orders[p.id];
     if (!existing || !p.refunded) { skipped++; continue; }
+
+    // Marca a devolução na LINHA certa quando o canal disse qual produto voltou (a Amazon manda
+    // o ASIN no relatório). Casa por ASIN e, na falta dele, por título exato. Linha que não casa
+    // fica sem marca e o desconto acontece pelo total do pedido — ver pedidoLiquido em
+    // metrics.js, que é quem aplica isso no cálculo.
+    const itens  = Array.isArray(existing.items) ? existing.items : [];
+    const marcas = new Map();
+    for (const d of (p.itens || [])) {
+      const alvo = (d.asin  && itens.find(it => it?.asin  === d.asin))
+                || (d.title && itens.find(it => it?.title === d.title));
+      if (!alvo) continue;
+      marcas.set(alvo, (marcas.get(alvo) || 0) + (Number(d.qty) || 0));
+    }
+    const temMarca = marcas.size > 0;
+
     // Idempotente: a janela do relatório é móvel, então a mesma devolução volta em toda
     // rodada. Sem esta comparação, cada execução reescreveria os mesmos pedidos à toa.
-    if (existing.refunded === p.refunded && existing.refundedQty === (p.refundedQty ?? null)) { skipped++; continue; }
+    const antes  = itens.map(it => Number(it?.refundedQty || 0)).join(',');
+    const depois = temMarca ? itens.map(it => Number(marcas.get(it) || 0)).join(',') : antes;
+    if (existing.refunded === p.refunded && existing.refundedQty === (p.refundedQty ?? null) && antes === depois) { skipped++; continue; }
+
+    if (temMarca) {
+      for (const it of itens) {
+        const q = Number(marcas.get(it) || 0);
+        if (q > 0) it.refundedQty = q;
+        else delete it.refundedQty;
+      }
+    }
     existing.refunded    = p.refunded;
     existing.refundedQty = p.refundedQty ?? null;
     existing.refundedAt  = p.refundedAt || null;
+    if (p.refundedTotal != null) existing.refundedTotal = Number(p.refundedTotal) || 0;
     patched++;
     toPersist.push(existing);
   }

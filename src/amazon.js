@@ -758,8 +758,17 @@ function devolucoesDasLinhas(rows, market) {
     if (!orderId || !(qty > 0)) continue;
 
     const id  = `amazon-${market}:` + orderId;
-    const cur = porPedido.get(id) || { id, orderId, qty: 0, returnedAt: null };
+    const cur = porPedido.get(id) || { id, orderId, qty: 0, returnedAt: null, porProduto: [] };
     cur.qty += qty;
+    // O relatório diz QUAL produto voltou (asin/sku/nome). É o que permite descontar a unidade
+    // do produto certo, e não do pedido inteiro — num pedido com areia e suplemento em que só a
+    // areia voltou, sem isso a baixa poderia cair no suplemento.
+    const asin  = (r['asin'] || '').trim() || null;
+    const sku   = (r['sku'] || '').trim() || null;
+    const title = (r['product-name'] || '').trim() || null;
+    const mesmo = cur.porProduto.find(x => x.asin === asin && x.sku === sku && x.title === title);
+    if (mesmo) mesmo.qty += qty;
+    else cur.porProduto.push({ asin, sku, title, qty });
     // Fica a devolução MAIS RECENTE do pedido: um pedido pode voltar em duas remessas.
     const quando = String(r['return-date'] || '').trim();
     if (quando && (!cur.returnedAt || quando > cur.returnedAt)) cur.returnedAt = quando;

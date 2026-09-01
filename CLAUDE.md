@@ -239,6 +239,11 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 ### Shopee (`src/shopee.js`)
 - Open Platform API v2 direto. Assinatura HMAC-SHA256(partner_key, partner_id+path+timestamp[+token+shop_id]).
 - Sem analytics via API (só no Seller Center).
+- **Devolução ainda não é descontada** (único canal que falta). A API existe
+  (`/api/v2/returns/get_return_list`), mas a documentação pública não expõe os nomes de campo da
+  resposta. `GET /api/shopee/probe-returns?days=N` (admin) devolve o ESQUELETO da resposta real
+  (só nomes de campo e valores que não identificam ninguém) pra o mapeamento ser escrito em cima
+  de dado de verdade, e não de chute.
 - A Shopee mascara todos os campos de endereço do pedido como `"****"` — não tem correção via
   código, é política da plataforma. O Bling ERP (recebe pedidos de todos os canais) traz o
   endereço sem máscara; `reconcileGeoFromBling` (`sync.js`) preenche `state` a partir de lá,
@@ -246,6 +251,9 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 
 ### Mercado Livre (`src/mercadolivre.js`)
 - Cancelado = status `cancelled`/`invalid`. Sem tokens → `[]`, canal fica 0, nada quebra.
+- **Reembolso vem no próprio pedido**, em `payments[].transaction_amount_refunded` — um pedido
+  reembolsado costuma continuar `paid`, então sem olhar os pagamentos ele contaria como venda
+  cheia. Ver "Devoluções descontam da quantidade E da receita".
 - Estado do pedido via `/shipments/{id}` → `receiver_address.state.id`.
 - `listingType`: só `gold_pro`/`gold_premium` = `'premium'` (Destaque/Diamante, exposição paga de
   verdade). Qualquer outro (`gold_special` "Clássico", `free`, tipo legado desconhecido) =
@@ -714,9 +722,57 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Amazon BR sem nenhum item no catálogo recebe uma linha sintética "Produto TESTE" pra permitir
   cadastro manual de estoque mesmo sem nome de produto real.
 
-### Devoluções
-- Quantidade/receita por produto usa `LineItem.currentQuantity` (Shopify) e desconta refund do
-  valor do item — ver "Receita" acima. Sem isso, produto devolvido continuava contando venda.
+### Devoluções descontam da quantidade E da receita (`pedidoLiquido`, src/metrics.js)
+- **Unidade devolvida não foi vendida, e o dinheiro dela não é receita.** Pedido do Luan
+  (01/09/2026): "marca que 3 foram vendidas, mas nós sabemos que 1 foi reembolsada, então devemos
+  atualizar o número". Vale nos quatro canais, não só onde era fácil.
+- **Um lugar só faz esse desconto**, e é o que torna a regra confiável: `metrics.js` importa o
+  `getOrders` do store como `lerPedidosBrutos` e define um `getOrders` local que aplica
+  `pedidoLiquido` em cada pedido. KPI, Top produtos, Segmentos, Produtos, Estoque, Geografia,
+  Insights e a busca recebem o pedido já líquido sem que nenhum deles precise lembrar de
+  descontar. Importar `getOrders` direto do store dentro do metrics.js furaria isso **em
+  silêncio** (os números voltariam ao bruto sem erro nenhum), e é o que
+  `scripts/test/devolucoes.test.mjs` impede: `lerPedidosBrutos` só pode aparecer duas vezes no
+  arquivo, no import e dentro do wrapper.
+- Três campos alimentam o desconto, do mais preciso pro menos:
+  - `items[].refundedQty` — unidades devolvidas DAQUELA linha. Melhor caso: sabemos o produto.
+  - `refundedQty` — unidades devolvidas no pedido, sem saber de qual linha. A baixa é distribuída
+    linha a linha até acabar; pode errar de qual produto saiu num pedido com vários produtos, mas
+    **nunca erra o total de unidades**, e o dinheiro acompanha exatamente as unidades tiradas.
+  - `refundedTotal` — dinheiro devolvido, quando o canal informa o valor exato. Sozinho, desconta
+    só o dinheiro: reembolso parcial sem saber o item não pode chutar qual unidade saiu.
+- Pedido devolvido **continua sendo um pedido** (não vira cancelado): segue na contagem com a
+  receita zerada, exatamente como a Shopify já tratava um `REFUNDED`. Cancelado é outra coisa, é
+  a venda que nunca aconteceu. Isso significa que o ticket médio cai num período com devolução,
+  e é o comportamento certo.
+- `productSales` (toggle "Receita da Amazon") acompanha na mesma proporção. Deixar bruto faria os
+  dois modos de receita discordarem só no pedido devolvido, que é o pior lugar pra discordarem.
+- Pedido devolvido **sem nenhum item conhecido** zera. A Orders API da Amazon não traz item; se a
+  mercadoria voltou e não sabemos o que era, ela não pode continuar valendo o total cheio.
+- **Onde cada canal pega a devolução:**
+  - **Shopify** (BR/US/Yucaloo): já vem líquida da própria API. `currentQuantity` desconta a
+    unidade devolvida, `currentTotalPriceSet` desconta o dinheiro, e o valor do item já sai de
+    `discountedTotalSet` menos `order.refunds`. Por isso pedido Shopify não carrega campo de
+    devolução nenhum, e `pedidoLiquido` o devolve intacto — descontar aqui seria descontar duas
+    vezes.
+  - **Amazon**: relatório de devoluções da FBA, com o ASIN de cada unidade (ver a seção logo
+    abaixo). É o único canal que diz QUAL produto voltou.
+  - **Mercado Livre**: vem dentro do próprio pedido, em `payments[].transaction_amount_refunded`
+    — nenhuma chamada a mais. Um pedido reembolsado costuma continuar com status `paid`, então
+    sem olhar os pagamentos ele seguia contando como venda cheia. Reembolso integral leva as
+    unidades junto; parcial leva só o dinheiro, porque o ML não diz de qual item ele saiu.
+  - **Shopee**: ainda não. A Shopee tem API de devolução própria
+    (`/api/v2/returns/get_return_list`), mas a documentação pública não expõe os nomes de campo da
+    resposta, e escrever o mapeamento por adivinhação é exatamente como um número errado entra em
+    produção sem ninguém ver. `GET /api/shopee/probe-returns` (admin) lê a FORMA real da resposta
+    com token de verdade, sem nome/endereço/comentário de comprador — mesmo caminho usado na
+    Amazon: sondar primeiro, mapear depois.
+- **O sync de 15 min não pode apagar a marca.** A devolução da Amazon chega por reconciliação a
+  cada 12h, e `upsertOrders` substitui o pedido inteiro a cada ciclo. Sem a guarda, a marca era
+  apagada minutos depois de gravada e o pedido devolvido passaria quase todo o tempo contando
+  como venda cheia. Mesma família das guardas que já existiam ali para título de item, `state` e
+  `productSales` — e há uma segunda, que recarrega a marca POR LINHA quando a lista de itens é
+  substituída (um backfill via Reports API traz itens novos e desfaria o desconto por produto).
 
 ### Rótulo de status do pedido ("Pedidos recentes" e busca)
 - Quatro rótulos: **Autorizado**, **Em aberto**, **Cancelado** e **Reembolsado** (mais "Reembolso
@@ -772,10 +828,15 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   os ~1-2 min que a Amazon leva pra montar o relatório), defasado do job de nomes porque criar
   relatório tem cota de 1/min. Throttle de 12h por mercado via cursor `returns-<market>`.
   Disparo manual: `POST /api/amazon/sync-returns?market=br|us` (admin).
-- **Marcar como devolvido NÃO tira o pedido da receita**, de propósito: hoje ele continua contando
-  o valor cheio, igual a um pedido `REFUNDED` da Shopify no nível do pedido. Descontar o valor é
-  decisão de negócio separada e ainda não tomada — o rótulo diz o que aconteceu, o número não
-  mudou.
+- **A marca desconta de verdade**: a unidade devolvida sai da quantidade vendida e o dinheiro sai
+  da receita, em toda a dashboard. Quem aplica isso é `pedidoLiquido` (ver "Devoluções descontam
+  da quantidade E da receita"), não este job — aqui só se grava o que aconteceu. Na primeira
+  versão a marca era só rótulo e o pedido seguia valendo o total cheio; o Luan pediu o desconto no
+  dia seguinte, e é o comportamento atual.
+- O relatório traz `asin`/`sku`/`product-name` de cada unidade devolvida, e é isso que permite
+  descontar do PRODUTO certo: num pedido com areia e suplemento em que só a areia voltou, sem o
+  ASIN a baixa poderia cair no suplemento. `patchOrderRefunds` casa por ASIN e, na falta dele,
+  por título exato; linha que não casa deixa o desconto acontecer pelo total do pedido.
 - `scripts/test/devolucoes.test.mjs` executa o agrupamento e a classificação de verdade, e guarda
   o patch-only (falha se alguém fizer a reconciliação inserir pedido ou mexer em total/status).
 
@@ -1375,7 +1436,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   `imagens` (nenhuma imagem depende de CSS injetado por script pra ter tamanho),
   `escape` (uma função de escape só, correta, e carregada antes de quem usa),
   `status-pedido` (servidor e tela dão o mesmo rótulo, e devolvido não vira "em aberto"),
-  `devolucoes` (o relatório de devoluções da Amazon vira marca de pedido sem inserir pedido nenhum),
+  `devolucoes` (o relatório de devoluções da Amazon vira marca de pedido sem inserir pedido nenhum,
+  e a unidade devolvida sai mesmo da quantidade e da receita, em todo canal),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
@@ -1407,6 +1469,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   mercado (poda OU busca, decide sozinho), ver tela Integrações
 - `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
 - `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
+- `GET /api/shopee/probe-returns?days=N` (admin) — esqueleto da resposta da API de devolução da
+  Shopee, pra escrever o mapeamento em cima de dado real
 - `GET /shopee/connect` · `GET /mercadolivre/connect` · `GET /googleads/connect`
 - `GET /shopify-yucaloo/:mkt(br|us)/{connect,callback}` — chamadas pela própria Shopify
 - `POST /api/login` / `POST /api/logout` / `GET /api/me`
@@ -1446,6 +1510,10 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   na janela fixa de 60 dias do sync periódico. Resolvido com série diária (`kv.mlAdCostsDaily`,
   mesmo padrão do `metaInsightsDaily`) em vez de quebrar o princípio de `/api/dashboard` nunca
   chamar API externa na hora — ver seção "Mercado Livre" (`fetchAdCostsForDays`) mais abaixo.
+- **Shopee — descontar devolução:** único canal em que a unidade devolvida ainda conta como
+  vendida. Falta rodar `GET /api/shopee/probe-returns` em produção (precisa do token, que vive no
+  banco) e escrever o mapeamento em cima da resposta real. Ver "Devoluções descontam da quantidade
+  E da receita".
 - **Yucaloo sem conta de Ads própria:** não tem card em Campanhas nem ROAS calculado. Revisitar
   quando a marca tiver conta de anúncios própria.
 - **Microsoft Clarity:** o Luan tem Clarity conectado nos 4 sites (Coco BR/EUA, Yucaloo BR/EUA) e
