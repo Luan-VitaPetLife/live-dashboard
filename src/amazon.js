@@ -863,17 +863,27 @@ export async function inspectSettlementRefunds({ market = 'br', days = 60, order
   const tipos = {};
   for (const l of linhas) { const t = (l['transaction-type'] || '(vazio)').trim(); tipos[t] = (tipos[t] || 0) + 1; }
 
+  // O V1 do settlement NÃO tem coluna `amount`: o dinheiro cobrado do cliente vem em
+  // `price-amount` (com `price-type` dizendo se é Principal, Shipping, Tax) e as taxas da Amazon
+  // em `item-related-fee-amount`. Somar `amount` devolvia 0,00 pra todo pedido, que é pior que
+  // não somar nada — parecia um reembolso de valor zero. Cada unidade reembolsada gera a sua
+  // própria linha `Principal`, e é assim que se conta quantas voltaram (o `quantity-purchased`
+  // vem vazio na linha de reembolso).
   const reembolsos = linhas.filter(l => /refund/i.test(l['transaction-type'] || ''));
   const porPedido = {};
   for (const l of reembolsos) {
     const id = (l['order-id'] || '(sem pedido)').trim();
-    if (!porPedido[id]) porPedido[id] = { linhas: [], soma: 0 };
+    if (!porPedido[id]) porPedido[id] = { linhas: [], aoCliente: 0, taxas: 0, unidades: 0 };
+    const preco = Number(l['price-amount'] || 0);
+    const taxa  = Number(l['item-related-fee-amount'] || 0);
     porPedido[id].linhas.push({
-      amountType: l['amount-type'], amountDescription: l['amount-description'],
-      amount: Number(l['amount'] || 0), qty: l['quantity-purchased'], sku: l['sku'],
-      postedDate: l['posted-date'],
+      tipoPreco: l['price-type'], valor: preco || null,
+      taxaTipo: l['item-related-fee-type'], taxaValor: taxa || null,
+      sku: l['sku'], postado: l['posted-date'], repasse: l['settlement-id'],
     });
-    porPedido[id].soma += Number(l['amount'] || 0);
+    porPedido[id].aoCliente += preco;
+    porPedido[id].taxas     += taxa;
+    if ((l['price-type'] || '').trim() === 'Principal') porPedido[id].unidades++;
   }
 
   const procurados = {};
