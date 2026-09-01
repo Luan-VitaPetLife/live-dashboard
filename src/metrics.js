@@ -907,7 +907,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // RECENT_MAX é só uma trava de segurança de payload para o amazon_us (~1000 pedidos/dia).
   const recent = getOrders({ channel, since, until, market })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, RECENT_MAX)
-    .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o), products: productTitles(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled }));
+    .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o), products: productTitles(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled, refunded: o.refunded || null }));
 
   // conversão anterior
   const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil, market, channel) : emptySess;
@@ -1089,6 +1089,7 @@ export function searchOrders({ market = 'br', q = '', limit = 200 } = {}) {
   const results = matched.slice(0, limit).map(o => ({
     name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o),
     products: productTitles(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled,
+    refunded: o.refunded || null,
   }));
   return { market, q, total, results, limited: total > limit };
 }

@@ -356,6 +356,10 @@ export async function reconcileAmazonNames({ markets = ['us', 'br'], force = fal
 //  Uma janela curta veria a venda e nunca a volta dela.
 const RETURNS_EVERY_MS = Number(process.env.AMAZON_RETURNS_EVERY_HOURS || 12) * 3600 * 1000;
 const RETURNS_DAYS     = Number(process.env.AMAZON_RETURNS_DAYS || 60);
+// Quantos extratos de repasse baixar por rodada. Baixar documento tem cota própria e apertada
+// (~1/min): seis a cada 12h cabe com folga, e como a fila vai do mais recente pro mais antigo, o
+// reembolso novo está sempre entre eles.
+const SETTLEMENT_MAX_DOCS = Number(process.env.AMAZON_SETTLEMENT_DOCS || 6);
 
 function returnsDue(market) {
   const last = getAmazonCursor(`returns-${market}`);
@@ -373,7 +377,45 @@ function classificarDevolucao(pedido, qtdDevolvida) {
   return qtdDevolvida >= noPedido ? 'total' : 'parcial';
 }
 
-export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = false } = {}) {
+// Junta as DUAS fontes de reembolso da Amazon. Elas não competem, se completam:
+//   relatório de devoluções — rápido e diz o ASIN, mas só vê mercadoria que voltou fisicamente;
+//   extrato de repasse      — demora (fecha a cada ciclo) mas vê reembolso sem devolução e traz
+//                             o valor exato em dinheiro.
+// Quando as duas falam do mesmo pedido, o repasse manda: ele é o extrato do dinheiro.
+//
+// O `porProduto` NÃO pode ser concatenado. As duas fontes descrevem A MESMA unidade devolvida de
+// jeitos diferentes (uma por ASIN, a outra por SKU); somar as duas marcaria duas unidades onde só
+// uma voltou. Quando cada lado aponta um único produto e concordam na quantidade, dá pra juntar
+// num registro só que carrega os dois identificadores, e aí a marca acha a linha do pedido tanto
+// por ASIN quanto por SKU. Fora desse caso, vale o do repasse.
+function juntarFontesDeReembolso(devolucoes, repasses) {
+  const mapa = new Map();
+  for (const d of devolucoes) mapa.set(d.id, { ...d });
+
+  for (const r of repasses) {
+    const antes = mapa.get(r.id);
+    if (!antes) { mapa.set(r.id, { ...r }); continue; }
+
+    const dosDois = (antes.porProduto || []).length === 1 && (r.porProduto || []).length === 1
+                 && antes.porProduto[0].qty === r.porProduto[0].qty;
+    mapa.set(r.id, {
+      ...antes,
+      qty:           r.qty || antes.qty,
+      refundedTotal: r.refundedTotal,
+      returnedAt:    antes.returnedAt || r.returnedAt,
+      porProduto:    dosDois
+        ? [{ ...r.porProduto[0], asin: antes.porProduto[0].asin || r.porProduto[0].asin }]
+        : (r.porProduto || []),
+    });
+  }
+  return [...mapa.values()];
+}
+
+// `dias`/`docs` existem pro disparo manual varrer mais fundo que a rodada automática: reembolso
+// mais antigo que a janela padrão nunca foi marcado, e enquanto não for, a quantidade vendida
+// daquele período continua contando a unidade que voltou. Varredura funda é lenta de propósito
+// (a cota de download é de ~1/min), então não entra no automático.
+export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = false, dias = RETURNS_DAYS, docs = SETTLEMENT_MAX_DOCS } = {}) {
   const out = { patched: 0, byMarket: {}, skipped: [], errors: [] };
   if (!amazon.hasAwsCreds()) { out.errors.push('amazon.returns: credenciais AWS ausentes'); return out; }
 
@@ -382,13 +424,26 @@ export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = f
     if (!configured) { out.skipped.push(`${market}: sem token`); continue; }
     if (!force && !returnsDue(market)) { out.skipped.push(`${market}: throttle`); continue; }
     try {
-      const devolucoes = await amazon.fetchCustomerReturns({ market, days: RETURNS_DAYS });
+      const devolucoes = await amazon.fetchCustomerReturns({ market, days: dias });
+
+      // O extrato de repasse não pode derrubar o job: ele é a fonte mais frágil (cota de download
+      // apertada, e a Amazon pode simplesmente não ter fechado repasse novo). Falhou, seguimos
+      // com o que o relatório de devoluções trouxe, e o erro aparece no retorno em vez de sumir.
+      let repasse = { reembolsos: [], repasses: 0, cotaEstourada: false };
+      try {
+        repasse = await amazon.fetchSettlementRefunds({ market, days: dias, limite: docs });
+        if (repasse.cotaEstourada) out.errors.push(`amazon.returns.${market}.repasse: cota de download estourou, leitura incompleta`);
+      } catch (e) {
+        out.errors.push(`amazon.returns.${market}.repasse: ${e.message}`);
+      }
+
+      const reembolsos = juntarFontesDeReembolso(devolucoes, repasse.reembolsos);
       const channel = market === 'us' ? 'amazon_us' : 'amazon';
       const porId   = new Map(getOrders({ channel, market }).map(o => [o.id, o]));
 
       const patches = [];
       let semPedido = 0;
-      for (const d of devolucoes) {
+      for (const d of reembolsos) {
         const pedido = porId.get(d.id);
         // Devolução de pedido que não temos: fora da janela de histórico guardada, ou id do
         // outro mercado vindo junto no relatório. Nos dois casos é pra ignorar mesmo.
@@ -399,12 +454,19 @@ export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = f
           refundedQty: d.qty,
           refundedAt:  d.returnedAt,
           itens:       d.porProduto || [],
+          // Só o repasse sabe o valor exato. Sem ele, o desconto sai das unidades (ver
+          // pedidoLiquido em metrics.js), que é uma boa aproximação mas não é o extrato.
+          ...(d.refundedTotal != null ? { refundedTotal: d.refundedTotal } : {}),
         });
       }
       const r = patchOrderRefunds(patches);
       setAmazonCursor(`returns-${market}`, new Date().toISOString());
       out.patched += r.patched;
-      out.byMarket[market] = { devolucoes: devolucoes.length, semPedido, ...r };
+      out.byMarket[market] = {
+        devolucoes: devolucoes.length,
+        repasses: repasse.repasses, reembolsosNoRepasse: repasse.reembolsos.length,
+        juntos: reembolsos.length, semPedido, ...r,
+      };
     } catch (e) {
       out.errors.push(`amazon.returns.${market}: ${e.message}`);
     }

@@ -469,6 +469,11 @@ const REPORT_TYPE      = 'GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL';
 // Tracking" (o que o app BR já tem) alcança — a Finances API, que traria o reembolso exato
 // em dinheiro, exige o papel restrito "Finance and Accounting".
 const RETURNS_REPORT_TYPE = 'GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA';
+// Extrato de repasse: o registro do DINHEIRO, não da mercadoria. É a segunda fonte de reembolso,
+// e a única que enxerga reembolso sem devolução física (o dinheiro volta e o produto fica com o
+// cliente) — caso real e confirmado num pedido de 08/08/2026 que não existe no relatório de
+// devoluções nem numa janela de 90 dias. A versão V2 dá 403 com o papel do app; esta V1 abre.
+const SETTLEMENT_REPORT_TYPE = 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE';
 const REPORT_CHUNK_DAYS = 30;        // a Amazon limita o intervalo por relatório
 const REPORT_POLL_MS    = 30 * 1000; // getReport permite 2 req/s; 30s é folgado
 const REPORT_MAX_POLLS  = 40;        // até ~20 min por relatório
@@ -576,7 +581,10 @@ function ordersFromRows(rows, marketplaceId) {
     // produto de verdade) — não é vazio, então passava batido e virava um produto fantasma
     // "-" agregando dezenas de pedidos com receita 0. Trata como ausente, igual string vazia.
     const name = (r['product-name'] || '').trim();
-    if (name && name !== '-') o.items.push({ title: name, qty, amount: amt, asin: r['asin'] || null });
+    // O `sku` vai junto do `asin` porque as duas fontes de reembolso identificam o produto de
+    // jeitos diferentes: o relatório de devoluções manda ASIN, o extrato de repasse manda SKU.
+    // Sem os dois, metade dos reembolsos não sabe de qual linha do pedido descontar.
+    if (name && name !== '-') o.items.push({ title: name, qty, amount: amt, asin: r['asin'] || null, sku: r['sku'] || null });
   }
 
   for (const o of byOrder.values()) {
@@ -948,6 +956,109 @@ export async function inspectSettlement({ market = 'br' } = {}) {
   return { market, tipos: out };
 }
 
+// Lê as linhas de reembolso de um extrato de repasse e agrupa por pedido. Separada pra poder ser
+// testada sem chamar a Amazon.
+//
+// O extrato descreve dinheiro, não mercadoria: uma linha por movimento, com `price-type` dizendo
+// se aquele valor é produto (`Principal`), frete ou imposto.
+function reembolsosDoRepasse(documentos, market) {
+  // Um documento é UM repasse, e o mesmo repasse aparece em mais de um relatório da Amazon.
+  // Pular o repetido tem que ser no DOCUMENTO inteiro: descartar linha repetida contaria a
+  // MENOS, porque duas unidades reembolsadas do mesmo produto geram duas linhas idênticas de
+  // propósito (foi o caso do pedido com "Reembolso aplicado (2)").
+  const vistos = new Set();
+  const linhas = [];
+  for (const doc of documentos) {
+    const idRepasse = (doc || []).map(l => (l['settlement-id'] || '').trim()).find(Boolean);
+    if (idRepasse && vistos.has(idRepasse)) continue;
+    if (idRepasse) vistos.add(idRepasse);
+    linhas.push(...(doc || []));
+  }
+
+  const porPedido = new Map();
+  for (const l of linhas) {
+    if (!/refund/i.test(l['transaction-type'] || '')) continue;
+    const orderId = (l['order-id'] || '').trim();
+    if (!orderId) continue;
+
+    const id  = `amazon-${market}:` + orderId;
+    const cur = porPedido.get(id) || { id, orderId, qty: 0, refundedTotal: 0, returnedAt: null, porProduto: [] };
+
+    // `price-amount` vem NEGATIVO no reembolso (dinheiro saindo). Guardamos positivo: é quanto
+    // descontar. Soma produto, frete e imposto, que é tudo que o cliente recebeu de volta; a taxa
+    // que a Amazon devolve ao vendedor vive noutra coluna e não entra aqui — ela não é dinheiro
+    // que saiu da venda, é comissão estornada.
+    const preco = Number(l['price-amount'] || 0);
+    if (preco) cur.refundedTotal += -preco;
+
+    // Cada unidade reembolsada gera a SUA linha `Principal`. O `quantity-purchased` vem vazio na
+    // linha de reembolso, então contar linha é a única forma de saber quantas voltaram — foi o
+    // que o pedido com "Reembolso aplicado (2)" mostrou, com duas linhas Principal idênticas.
+    if ((l['price-type'] || '').trim() === 'Principal') {
+      cur.qty += 1;
+      const sku = (l['sku'] || '').trim() || null;
+      const mesmo = cur.porProduto.find(x => x.sku === sku);
+      if (mesmo) mesmo.qty += 1;
+      else cur.porProduto.push({ asin: null, sku, title: null, qty: 1 });
+    }
+
+    const quando = String(l['posted-date'] || '').trim();
+    if (quando && (!cur.returnedAt || quando > cur.returnedAt)) cur.returnedAt = quando;
+    porPedido.set(id, cur);
+  }
+
+  const out = [...porPedido.values()].filter(d => d.qty > 0 || d.refundedTotal > 0);
+  for (const d of out) d.refundedTotal = Math.round(d.refundedTotal * 100) / 100;
+  return out;
+}
+
+// Reembolsos pelo extrato de repasse. Devolve o mesmo formato de fetchCustomerReturns, mais o
+// `refundedTotal` (o valor exato que voltou pro cliente, que o relatório de devoluções não tem).
+//
+// Diferente de todos os outros relatórios daqui, este NÃO é criado por nós: a Amazon fecha um
+// repasse a cada ciclo e a gente só baixa o que já existe. Duas consequências:
+//   1. o reembolso demora a aparecer (só entra quando o repasse daquele período fecha), e é por
+//      isso que o relatório de devoluções continua valendo — ele é mais rápido pro que voltou
+//      fisicamente;
+//   2. baixar documento tem cota própria e apertada (~1/min, com estouro inicial de uns 15), daí
+//      o limite e a pausa. Ao tomar 429 a função PARA e avisa, em vez de devolver uma lista curta
+//      que parece completa — foi assim que uma varredura minha "não achou reembolso nenhum" num
+//      período que na verdade nem tinha sido lido.
+export async function fetchSettlementRefunds({ market = 'br', days = 60, limite = DOC_MAX_POR_CHAMADA, onProgress } = {}) {
+  if (!hasAwsCreds()) throw new Error('Amazon: credenciais AWS ausentes.');
+
+  const isUs   = market === 'us';
+  const getLwa = isUs ? getLwaTokenUS : getLwaTokenBR;
+  const label  = isUs ? 'Repasse US' : 'Repasse BR';
+  if (isUs ? !isConfigured() : !isConfiguredBR()) throw new Error(`${label}: refresh token não configurado.`);
+
+  const lista = await spGet(getLwa, '/reports/2021-06-30/reports',
+    { reportTypes: SETTLEMENT_REPORT_TYPE, pageSize: '100' });
+  const corte = Date.now() - days * 864e5;
+  const fila = (lista.reports || [])
+    .filter(x => x.processingStatus === 'DONE' && x.reportDocumentId)
+    .filter(x => Date.parse(x.dataEndTime || x.createdTime) >= corte)
+    .sort((a, b) => Date.parse(b.dataEndTime || b.createdTime) - Date.parse(a.dataEndTime || a.createdTime))
+    .slice(0, Math.max(1, limite));
+
+  const documentos = [];
+  let cotaEstourada = false;
+  for (const [i, rel] of fila.entries()) {
+    if (i) await sleep(DOC_ESPACO_MS);
+    try {
+      documentos.push(await baixarDocumento(getLwa, rel.reportDocumentId));
+    } catch (e) {
+      if (/QuotaExceeded|HTTP 429/.test(e.message)) { cotaEstourada = true; break; }
+      throw e;
+    }
+  }
+
+  // Quem descarta repasse repetido é o reembolsosDoRepasse, que é puro e testável.
+  const reembolsos = reembolsosDoRepasse(documentos, isUs ? 'us' : 'br');
+  onProgress?.(`${label}: ${fila.length} repasses → ${reembolsos.length} pedidos com reembolso`);
+  return { reembolsos, repasses: fila.length, cotaEstourada };
+}
+
 // Diagnóstico do relatório de devoluções: colunas reais + amostra. Sem `customer-comments`
 // (texto livre escrito pelo cliente) e sem nada que identifique quem comprou.
 export async function inspectReturns({ market = 'br', days = 30 } = {}) {
@@ -1002,7 +1113,8 @@ export async function fetchOrderItems(orderId, { market = 'br' } = {}) {
       const title = it.Title || '';
       const qty   = Number(it.QuantityOrdered || 0);
       const amount = Number(it.ItemPrice?.Amount || 0); // preço da LINHA (não por unidade)
-      if (title) items.push({ title, qty, amount, asin: it.ASIN || null });
+      // sku junto do asin: ver o comentário em ordersFromRows.
+      if (title) items.push({ title, qty, amount, asin: it.ASIN || null, sku: it.SellerSKU || null });
     }
     nextToken = data.payload?.NextToken || null;
   } while (nextToken);

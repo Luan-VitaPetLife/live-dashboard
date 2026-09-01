@@ -799,19 +799,54 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   apareceria como reembolso.
 
 ### Devoluções da Amazon (`reconcileAmazonReturns`, src/sync.js)
-- **Fonte: `GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA`** (Reports API, o mesmo canal do backfill).
-  Escolhido por ser a única fonte de devolução que o papel **"Inventory and Order Tracking"**
-  alcança, e o app BR já tem esse papel — confirmado contra a conta de produção, o relatório abre
-  sem 403 e traz o pedido que o Luan mostrou no Seller Central (`#702-9546667-8914602`, vendido em
-  18/08/2026, mercadoria de volta em 30/08). Quem traria o dinheiro exato é a Finances API
-  (`listFinancialEvents` → `RefundEventList`), mas ela exige o papel restrito "Finance and
-  Accounting", a mesma fila de aprovação que segura o PII há meses.
-- **O que ele é e o que ele não é:** lista a MERCADORIA que voltou pro centro de distribuição, não
-  o dinheiro que saiu. Na prática as duas coisas andam juntas na FBA, mas dois casos ficam de
-  fora e é bom saber disso antes de tratar o número como financeiro: reembolso sem devolução
-  física (o vendedor devolve o valor e deixa o produto com o cliente) e pedido enviado por você e
-  não pela Amazon (MFN), que sai noutro relatório. Hoje quase tudo é FBA e o que sai por fora vai
-  pra criador de conteúdo, que praticamente nunca volta — por isso o MFN não foi incluído.
+> A regra de negócio é uma só, e é do Luan (01/09/2026): **"o que não podemos ter é um número
+> errado, falar que vendeu 5 mas vendeu 3 na realidade"**. Tudo aqui existe pra isso — o rótulo na
+> tela é secundário, a quantidade certa não é.
+
+- **DUAS fontes, e as duas são necessárias.** Uma sozinha deixa buraco, e buraco aqui é quantidade
+  vendida errada:
+  | | Relatório de devoluções (FBA) | Extrato de repasse (settlement) |
+  |---|---|---|
+  | Tipo | `GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA` | `GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE` |
+  | Enxerga | mercadoria que voltou pro centro de distribuição | o dinheiro que saiu |
+  | Não enxerga | reembolso sem devolução física | nada, mas só depois do repasse fechar |
+  | Velocidade | rápida | lenta (fecha a cada ciclo de repasse) |
+  | Identifica o produto por | ASIN | SKU |
+  | Traz o valor | não | sim, exato |
+- **Por que não é uma só:** o pedido `#701-1986193-1656211` (08/08/2026, "Reembolso aplicado (2)"
+  no Seller Central) **não existe** no relatório de devoluções nem numa janela de 90 dias — o
+  dinheiro voltou e o produto ficou com o cliente. Sem o extrato, aquelas duas unidades continuam
+  contando como vendidas pra sempre. Já o `#702-9546667-8914602` (18/08) está nos dois.
+- **A versão do extrato importa.** O `..._V2` dá **403** com o papel do app; o V1 (sem sufixo)
+  abre. A Finances API (`listFinancialEvents` → `RefundEventList`) seria mais direta, mas exige o
+  papel restrito "Finance and Accounting", a mesma fila que segura o PII há meses.
+- **O extrato não é criado por nós.** Todos os outros relatórios daqui saem de um `createReport`;
+  este a Amazon fecha sozinha a cada ciclo, e a gente só LISTA e baixa o que já existe. É por isso
+  que ele demora a ver um reembolso, e é por isso que o relatório de devoluções continua valendo.
+- **Baixar documento tem cota própria e apertada, ~1 por minuto** (com estouro inicial de uns 15).
+  Descoberto varrendo o histórico de uma vez e tomando 429 no meio: os primeiros vieram, o resto
+  não, e o resultado **parecia completo** — dizia que o período não tinha reembolso quando na
+  verdade nem tinha sido lido. Por isso a fila vai do repasse mais recente pro mais antigo, com
+  limite (`AMAZON_SETTLEMENT_DOCS`, padrão 6) e pausa entre downloads, e **para no 429 avisando
+  que a leitura ficou incompleta** em vez de devolver uma lista curta que parece inteira.
+- **Contar unidade no extrato é contar LINHA `Principal`.** O `quantity-purchased` vem vazio na
+  linha de reembolso; cada unidade devolvida gera a sua própria linha. O pedido de duas unidades
+  aparece com duas linhas `Principal` de -R$ 67,49, idênticas.
+- **Repasse repetido tem que ser pulado no DOCUMENTO inteiro.** O mesmo repasse aparece em mais de
+  um relatório da Amazon, e ler duas vezes descontaria o dobro. Deduplicar por LINHA seria pior
+  ainda no outro sentido: as duas linhas idênticas acima são duas unidades de verdade, e virariam
+  uma. Por isso `reembolsosDoRepasse` recebe os DOCUMENTOS (uma lista de linhas por repasse) e
+  decide ali — é puro, e o teste cobre os dois erros.
+- **A junção das duas fontes não pode concatenar `porProduto`.** As duas descrevem A MESMA unidade
+  de jeitos diferentes (uma por ASIN, a outra por SKU); somar marcaria duas unidades onde só uma
+  voltou. Quando cada lado aponta um único produto e concordam na quantidade,
+  `juntarFontesDeReembolso` (sync.js) junta num registro só carregando os DOIS identificadores.
+  Fora desse caso vale o do extrato, que é o extrato do dinheiro.
+- Por isso o item da Amazon guarda `sku` junto do `asin` (`ordersFromRows` e `fetchOrderItems`):
+  sem os dois, metade dos reembolsos não sabe de qual linha do pedido descontar.
+- Fica de fora, e é bom saber: pedido enviado por você e não pela Amazon (MFN) tem relatório de
+  devolução próprio, não incluído — hoje quase tudo é FBA e o que sai por fora vai pra criador de
+  conteúdo, que praticamente nunca volta. O reembolso desses, no entanto, **aparece no extrato**.
 - **Janela de 60 dias**, contra 2 da reconciliação de nomes, e a diferença é o ponto: a devolução
   chega DEPOIS da venda. O pedido que originou isso foi vendido em 18/08 e voltou em 30/08 — uma
   janela curta veria a venda e nunca a volta dela. `AMAZON_RETURNS_DAYS`/`AMAZON_RETURNS_EVERY_HOURS`.
@@ -827,7 +862,20 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Job próprio no agendador (não entra no `runSync`, senão o "Sincronizar agora" ficaria travado
   os ~1-2 min que a Amazon leva pra montar o relatório), defasado do job de nomes porque criar
   relatório tem cota de 1/min. Throttle de 12h por mercado via cursor `returns-<market>`.
-  Disparo manual: `POST /api/amazon/sync-returns?market=br|us` (admin).
+  Disparo manual: `POST /api/amazon/sync-returns?market=br|us&days=N&docs=N` (admin).
+- **`days`/`docs` no disparo manual existem pra consertar o passado.** Reembolso mais antigo que a
+  janela padrão nunca foi marcado, e enquanto não for, a quantidade vendida daquele período segue
+  contando a unidade que voltou. A varredura funda é lenta de propósito (cada repasse é um
+  download, ~1/min), então ela não entra no automático — é uma corrida manual, uma vez.
+- O extrato **não derruba o job** se falhar: a fonte mais frágil é ele (cota apertada, e pode
+  simplesmente não haver repasse novo). Falhou, segue com o que o relatório de devoluções trouxe e
+  o erro aparece em `errors` em vez de sumir.
+- **Quem recebe `status` precisa receber a devolução junto.** A tela monta o rótulo a partir de
+  `status` + `cancelled` + `refunded` (`statusTag`), e as listas que o servidor manda são montadas
+  campo a campo. Mandar os dois primeiros e esquecer o terceiro **não dá erro nenhum**: o pedido
+  devolvido aparece "Autorizado" com valor R$ 0,00, que é a pior combinação possível — o número já
+  descontou e o rótulo diz que está tudo bem. Aconteceu no primeiro deploy. A exportação em CSV é
+  a exceção legítima: ela manda `statusLabel` já pronto do servidor. O teste cobre as duas formas.
 - **A marca desconta de verdade**: a unidade devolvida sai da quantidade vendida e o dinheiro sai
   da receita, em toda a dashboard. Quem aplica isso é `pedidoLiquido` (ver "Devoluções descontam
   da quantidade E da receita"), não este job — aqui só se grava o que aconteceu. Na primeira
@@ -1399,6 +1447,7 @@ Railway — nunca colar valor aqui, só o nome da variável e pra que serve.
 | `AMAZON_FETCH_PII` | `1` liga busca de nome do comprador (exige papel PII aprovado) |
 | `AMAZON_NAMES_EVERY_HOURS` / `AMAZON_NAMES_DAYS` | Reconciliação de nome de produto (padrão 12h / 2 dias) |
 | `AMAZON_RETURNS_EVERY_HOURS` / `AMAZON_RETURNS_DAYS` | Devoluções da Amazon (padrão 12h / 60 dias) — janela longa de propósito, a devolução chega semanas depois da venda |
+| `AMAZON_SETTLEMENT_DOCS` | Quantos extratos de repasse baixar por rodada (padrão 6) — baixar documento tem cota de ~1/min |
 | `AMAZON_RETENTION_DAYS` | Poda de pedidos Amazon antigos, opt-in (padrão 0 = desligado; produção usa 365) |
 | `AMAZON_ROLE_ARN` / `AMAZON_AWS_ACCESS_KEY` / `_SECRET_KEY` | IAM Role + credenciais do IAM User (compartilhados BR/US) |
 | `GOOGLE_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URL` | OAuth do projeto Google Cloud |
@@ -1461,8 +1510,10 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   plano, alimenta o widget flutuante (`jobs-widget.js`)
 - `POST /api/jobs/:id/cancel` — cancela um job em segundo plano (só os cancelable, ver acima)
 - `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
-- `POST /api/amazon/sync-returns?market=br|us` (admin) — busca o relatório de devoluções da FBA e
-  marca os pedidos devolvidos; roda sozinho a cada 12h, ver "Devoluções da Amazon"
+- `POST /api/amazon/sync-returns?market=br|us&days=N&docs=N` (admin) — lê as duas fontes de
+  reembolso da Amazon e marca os pedidos; roda sozinho a cada 12h, ver "Devoluções da Amazon".
+  `days`/`docs` servem pra varredura funda (consertar quantidade de período antigo)
+- `GET /api/amazon/settlement-probe` (admin) — diagnóstico do extrato de repasse (sem PII)
 - `POST /api/shopify/backfill?market=&days=` (admin) · `GET /api/shopify/history` (admin) —
   recupera histórico antigo das lojas Shopify, ver tela Integrações
 - `GET/POST /api/amazon/history` (admin) · `GET /api/amazon/history/preview` — histórico por
