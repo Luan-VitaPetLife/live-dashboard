@@ -444,6 +444,37 @@ export function patchOrderState(patches) {
   return { patched, skipped };
 }
 
+// Marca DEVOLUÇÃO num pedido que já existe. Mesmo contrato do patchOrderItems/patchOrderState:
+// nunca insere pedido novo, nunca mexe em total/status/items. Só a Amazon precisa disso — a
+// Shopify manda `REFUNDED` no status do próprio pedido. `patches`: [{ id, refunded,
+// refundedQty, refundedAt }], com `refunded` valendo 'total' ou 'parcial'.
+//
+// Não inserir é o que protege do vazamento de mercado de sempre (CLAUDE.md 4.7.8): o relatório
+// de devoluções não tem país de entrega, então um id do outro mercado que venha junto
+// simplesmente não acha pedido e é ignorado, em vez de virar pedido novo no mercado errado.
+export function patchOrderRefunds(patches) {
+  const db = load();
+  let patched = 0, skipped = 0;
+  const toPersist = [];
+  for (const p of patches) {
+    const existing = db.orders[p.id];
+    if (!existing || !p.refunded) { skipped++; continue; }
+    // Idempotente: a janela do relatório é móvel, então a mesma devolução volta em toda
+    // rodada. Sem esta comparação, cada execução reescreveria os mesmos pedidos à toa.
+    if (existing.refunded === p.refunded && existing.refundedQty === (p.refundedQty ?? null)) { skipped++; continue; }
+    existing.refunded    = p.refunded;
+    existing.refundedQty = p.refundedQty ?? null;
+    existing.refundedAt  = p.refundedAt || null;
+    patched++;
+    toPersist.push(existing);
+  }
+  if (!toPersist.length) return { patched, skipped };
+  indexDirty = true;
+  saveJson();
+  if (USE_PG) pgUpsertOrders(toPersist);
+  return { patched, skipped };
+}
+
 // Limpeza pontual do vazamento de mercado da Amazon (ver patchOrderItems / CLAUDE.md
 // 4.7.8): remove pedidos US que um relatório cego-tagueado gravou como Amazon BR.
 // Dois sinais, ambos seguros porque o canal Amazon BR nunca passou pela Reports API

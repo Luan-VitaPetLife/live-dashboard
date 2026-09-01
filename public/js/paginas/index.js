@@ -1019,6 +1019,9 @@ function statusTag(o) {
     if (unpaid && unpaid.includes(o.status)) return { cls:'pend', label:'Em aberto' };
     return { cls:'canc', label:'Cancelado' };
   }
+  // Amazon: marcado pelo relatório de devoluções (campo `refunded`, ver src/sync.js).
+  if (o.refunded === 'total')   return { cls:'ref', label:'Reembolsado' };
+  if (o.refunded === 'parcial') return { cls:'ref', label:'Reembolso parcial' };
   const s = (o.status||'').toUpperCase();
   // Cor própria, nem verde nem vermelha: o pedido não está saudável, mas também não foi
   // cancelado — a venda existiu e foi desfeita.

@@ -10,7 +10,7 @@ import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
 import * as shopifyYucaloo from './shopifyYucaloo.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, getMlAdCostsDaily, setMlAdCostsDaily, patchOrderItems, patchOrderState, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, getAmazonRetentionConfig } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, getMlAdCostsDaily, setMlAdCostsDaily, patchOrderItems, patchOrderState, patchOrderRefunds, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, getAmazonRetentionConfig } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -336,6 +336,76 @@ export async function reconcileAmazonNames({ markets = ['us', 'br'], force = fal
       out.byMarket[market] = r;
     } catch (e) {
       out.errors.push(`amazon.names.${market}: ${e.message}`);
+    }
+  }
+  return out;
+}
+
+// ── Devoluções da Amazon (Reports API) ────────────────────────────────────────
+//  A Amazon não marca devolução em lugar nenhum do pedido: nem a Orders API nem o relatório
+//  de pedidos têm status 'Refunded', os dois contam o ciclo do PEDIDO e não o do dinheiro
+//  (um pedido devolvido fica 'Shipped' pra sempre, com o total cheio). Quem sabe da
+//  devolução é o relatório de devoluções da FBA, e é o que este job lê.
+//
+//  Mesmo desenho do reconcileAmazonNames logo acima: job separado (não trava o "Sincronizar
+//  agora"), balde de cota próprio da Reports API, throttle por mercado via cursor
+//  'returns-<market>', e patch-only — não insere pedido, não mexe em total/status.
+//
+//  A janela é bem maior que a dos nomes (60 dias contra 2) porque a devolução chega DEPOIS
+//  da venda: o pedido que originou este job é de 18/08 e a mercadoria só voltou em 30/08.
+//  Uma janela curta veria a venda e nunca a volta dela.
+const RETURNS_EVERY_MS = Number(process.env.AMAZON_RETURNS_EVERY_HOURS || 12) * 3600 * 1000;
+const RETURNS_DAYS     = Number(process.env.AMAZON_RETURNS_DAYS || 60);
+
+function returnsDue(market) {
+  const last = getAmazonCursor(`returns-${market}`);
+  return !last || (Date.now() - Date.parse(last)) >= RETURNS_EVERY_MS;
+}
+
+// Devolveu tudo ou só parte? Compara as unidades que voltaram com as unidades do pedido.
+// Pedido sem item conhecido cai em 'total': quase todo pedido da Amazon BR é de uma unidade
+// só, então chutar 'parcial' erraria em praticamente todos eles, enquanto chutar 'total' só
+// erra no pedido de várias unidades que teve parte devolvida. De qualquer forma o número real
+// fica gravado em `refundedQty`, então nada se perde.
+function classificarDevolucao(pedido, qtdDevolvida) {
+  const noPedido = (pedido.items || []).reduce((s, it) => s + Number(it?.qty || 0), 0);
+  if (!(noPedido > 0)) return 'total';
+  return qtdDevolvida >= noPedido ? 'total' : 'parcial';
+}
+
+export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = false } = {}) {
+  const out = { patched: 0, byMarket: {}, skipped: [], errors: [] };
+  if (!amazon.hasAwsCreds()) { out.errors.push('amazon.returns: credenciais AWS ausentes'); return out; }
+
+  for (const market of markets) {
+    const configured = market === 'us' ? amazon.isConfigured() : amazon.isConfiguredBR();
+    if (!configured) { out.skipped.push(`${market}: sem token`); continue; }
+    if (!force && !returnsDue(market)) { out.skipped.push(`${market}: throttle`); continue; }
+    try {
+      const devolucoes = await amazon.fetchCustomerReturns({ market, days: RETURNS_DAYS });
+      const channel = market === 'us' ? 'amazon_us' : 'amazon';
+      const porId   = new Map(getOrders({ channel, market }).map(o => [o.id, o]));
+
+      const patches = [];
+      let semPedido = 0;
+      for (const d of devolucoes) {
+        const pedido = porId.get(d.id);
+        // Devolução de pedido que não temos: fora da janela de histórico guardada, ou id do
+        // outro mercado vindo junto no relatório. Nos dois casos é pra ignorar mesmo.
+        if (!pedido) { semPedido++; continue; }
+        patches.push({
+          id:          d.id,
+          refunded:    classificarDevolucao(pedido, d.qty),
+          refundedQty: d.qty,
+          refundedAt:  d.returnedAt,
+        });
+      }
+      const r = patchOrderRefunds(patches);
+      setAmazonCursor(`returns-${market}`, new Date().toISOString());
+      out.patched += r.patched;
+      out.byMarket[market] = { devolucoes: devolucoes.length, semPedido, ...r };
+    } catch (e) {
+      out.errors.push(`amazon.returns.${market}: ${e.message}`);
     }
   }
   return out;
