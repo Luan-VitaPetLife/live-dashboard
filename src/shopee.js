@@ -162,6 +162,61 @@ export async function probeOrder() {
   };
 }
 
+// Diagnóstico das DEVOLUÇÕES da Shopee. A Shopee tem uma API de devolução separada
+// (/api/v2/returns/get_return_list), mas a documentação pública dela não expõe os nomes de campo
+// da resposta, e escrever o mapeamento por adivinhação é como um número errado entra em produção
+// sem ninguém ver. Esta sonda existe pra ler a FORMA real da resposta uma vez, com token de
+// verdade, e só então escrever o mapeamento — mesmo caminho que deu certo na Amazon.
+//
+// Devolve só o ESQUELETO (nomes de campo) e valores que não identificam ninguém. Nada de nome,
+// endereço ou comentário de comprador. Usado por GET /api/shopee/probe-returns.
+const CAMPOS_SEGUROS = new Set([
+  'return_sn', 'order_sn', 'status', 'reason', 'text_reason', 'negotiation_status',
+  'refund_amount', 'amount', 'currency', 'create_time', 'update_time', 'return_solution',
+  'item_id', 'model_id', 'quantity', 'item_sku', 'name', 'seller_proof_status',
+]);
+
+function esqueleto(valor, prof = 0) {
+  if (Array.isArray(valor)) return prof > 3 ? '[…]' : valor.slice(0, 1).map(v => esqueleto(v, prof + 1));
+  if (valor && typeof valor === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(valor)) {
+      if (v && typeof v === 'object') out[k] = esqueleto(v, prof + 1);
+      else out[k] = CAMPOS_SEGUROS.has(k) ? v : `<${typeof v}>`;
+    }
+    return out;
+  }
+  return `<${typeof valor}>`;
+}
+
+export async function probeReturns({ days = 60 } = {}) {
+  if (!isConfigured() || !getShopeeTokens()) return { error: 'Shopee não configurada/autorizada.' };
+
+  const ate   = Math.floor(Date.now() / 1000);
+  const desde = ate - days * 24 * 60 * 60;
+  const tentativas = [
+    { rotulo: 'com janela de tempo', params: { page_no: '0', page_size: '20', create_time_from: String(desde), create_time_to: String(ate) } },
+    { rotulo: 'sem janela de tempo', params: { page_no: '0', page_size: '20' } },
+  ];
+
+  const erros = [];
+  for (const t of tentativas) {
+    try {
+      const r = await shopCall('/api/v2/returns/get_return_list', t.params);
+      return {
+        chamada:  t.rotulo,
+        chaves:   Object.keys(r.response || {}),
+        // A resposta inteira em forma de esqueleto: é isso que diz como escrever o mapeamento.
+        formato:  esqueleto(r.response || {}),
+        quantas:  Array.isArray(r.response?.return) ? r.response.return.length : null,
+      };
+    } catch (e) {
+      erros.push(`${t.rotulo}: ${e.message}`);
+    }
+  }
+  return { error: 'nenhuma variação da chamada funcionou', tentativas: erros };
+}
+
 // Lista pedidos no intervalo e devolve normalizados (mesmo formato da Shopify).
 // A Shopee limita cada chamada a 15 dias — a janela é fatiada em chunks.
 export async function fetchOrders(sinceISO, untilISO) {

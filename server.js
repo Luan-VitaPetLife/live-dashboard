@@ -1208,6 +1208,16 @@ app.get('/api/shopee/probe-order', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Diagnóstico das devoluções da Shopee: devolve o ESQUELETO da resposta da API de devolução
+// (nomes de campo, sem nome/endereço/comentário de comprador). A documentação pública não expõe
+// esses nomes, então o mapeamento só será escrito depois de ver a resposta real — o mesmo
+// caminho usado na Amazon. Ver src/shopee.js (probeReturns).
+app.get('/api/shopee/probe-returns', requireAdmin, async (req, res) => {
+  const days = Math.min(180, Math.max(1, Number(req.query.days) || 60));
+  try { res.json(await shopee.probeReturns({ days })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Mercado Livre OAuth ──
 app.get('/mercadolivre/connect', (req, res) => {
   try {

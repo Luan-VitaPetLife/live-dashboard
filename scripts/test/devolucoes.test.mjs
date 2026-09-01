@@ -137,4 +137,91 @@ t.ok(/reconcileAmazonReturns/.test(server), 'server.js chama a reconciliação d
 t.ok(/app\.post\('\/api\/amazon\/sync-returns', requireAdmin/.test(server),
   'o disparo manual existe e é só de admin');
 
+// ── 5. O desconto de verdade: unidade devolvida não conta como vendida ───────
+// É a parte que mexe em número, não em rótulo. Roda a função de cálculo de verdade.
+const liquido = carregar(path.join(ROOT, 'src', 'metrics.js'), 'pedidoLiquido');
+t.ok(typeof liquido === 'function', 'achou pedidoLiquido em metrics.js');
+
+if (typeof liquido === 'function') {
+  // Pedido da Shopify: já vem líquido da própria API (currentQuantity/currentTotalPriceSet), não
+  // carrega campo de devolução nenhum e não pode ser mexido aqui — descontar de novo seria
+  // descontar duas vezes.
+  const shopify = { total: 119, items: [{ title: 'Lisina', qty: 1, amount: 119 }] };
+  t.eq(liquido(shopify), shopify, 'pedido sem marca de devolução passa intacto (Shopify já vem líquido)');
+
+  // O caso do Luan: 3 areias + 1 suplemento, uma areia devolvida. A baixa tem que sair da AREIA.
+  const misto = liquido({
+    total: 239.96,
+    items: [
+      { title: 'Areia', qty: 3, amount: 179.97, asin: 'A1', refundedQty: 1 },
+      { title: 'Suplemento', qty: 1, amount: 59.99, asin: 'A2' },
+    ],
+  });
+  t.eq(misto.items[0].qty, 2, 'areia cai de 3 para 2 unidades');
+  t.eq(misto.items[1].qty, 1, 'o suplemento não é tocado');
+  t.eq(Math.round(misto.items[0].amount * 100) / 100, 119.98, 'a receita da areia cai junto');
+  t.eq(misto.total, 179.97, 'o total do pedido perde exatamente a unidade devolvida');
+
+  // Sabemos quantas unidades voltaram, mas não de qual linha (canal que não informa o produto):
+  // distribui linha a linha. Pode errar de qual produto saiu, nunca erra o total de unidades.
+  const semProduto = liquido({
+    total: 200, refundedQty: 2,
+    items: [{ title: 'A', qty: 1, amount: 100 }, { title: 'B', qty: 3, amount: 100 }],
+  });
+  t.eq(semProduto.items[0].qty + semProduto.items[1].qty, 2, 'sem saber o produto, o total de unidades ainda fecha (4 - 2)');
+  // A baixa sai da linha A inteira (R$100) e de 1 das 3 unidades de B (R$33,33). O dinheiro
+  // acompanha exatamente as unidades tiradas, seja qual for a linha de onde saíram.
+  t.eq(semProduto.total, 66.67, 'e o dinheiro acompanha as unidades tiradas');
+
+  // Amazon BR: a Orders API não traz item nenhum. Se a mercadoria voltou e não sabemos o que
+  // era, o pedido não pode continuar valendo o total cheio.
+  const semItem = liquido({ total: 59.99, refundedQty: 1, items: [] });
+  t.eq(semItem.total, 0, 'pedido devolvido sem item conhecido zera');
+
+  // Mercado Livre, reembolso parcial: sabemos o dinheiro, não a unidade. Só o dinheiro sai.
+  const parcialML = liquido({ total: 128.76, refundedTotal: 28.76, items: [{ title: 'X', qty: 2, amount: 128.76 }] });
+  t.eq(parcialML.total, 100, 'reembolso parcial desconta o valor informado pelo canal');
+  t.eq(parcialML.items[0].qty, 2, 'e não chuta qual unidade saiu');
+
+  // O toggle "Vendas de produto" da Amazon acompanha, senão os dois modos de receita
+  // discordariam só no pedido devolvido.
+  const comProductSales = liquido({ total: 100, productSales: 80, refundedQty: 1, items: [{ title: 'X', qty: 2, amount: 100 }] });
+  t.eq(comProductSales.total, 50, 'metade da unidade sai do total');
+  t.eq(comProductSales.productSales, 40, 'e a mesma proporção sai de productSales');
+
+  // Nunca negativo, mesmo com relatório repetindo linha. Os dois caminhos precisam do caso:
+  // pelo total do pedido e pela linha, que são contas diferentes.
+  const exagero = liquido({ total: 50, refundedQty: 9, items: [{ title: 'X', qty: 1, amount: 50 }] });
+  t.eq(exagero.items[0].qty, 0, 'unidade não fica negativa (baixa pelo pedido)');
+  t.eq(exagero.total, 0, 'total não fica negativo');
+  const exageroLinha = liquido({ total: 50, items: [{ title: 'X', qty: 1, amount: 50, refundedQty: 9 }] });
+  t.eq(exageroLinha.items[0].qty, 0, 'unidade não fica negativa (baixa pela linha)');
+  t.eq(exageroLinha.total, 0, 'e o total também não');
+}
+
+// Toda leitura de pedido em metrics.js passa pelo desconto: `lerPedidosBrutos` só pode aparecer
+// duas vezes, no import e dentro do getOrders local. Um getOrders novo importado direto do store
+// furaria o desconto em silêncio — KPI e Top produtos voltariam ao número bruto sem erro nenhum.
+const metrics = fs.readFileSync(path.join(ROOT, 'src', 'metrics.js'), 'utf8');
+t.eq((metrics.match(/lerPedidosBrutos/g) || []).length, 2,
+  'metrics.js lê pedido cru num lugar só (o resto passa pelo desconto)');
+t.ok(/function getOrders\(args\)\s*\{\s*return lerPedidosBrutos\(args\)\.map\(pedidoLiquido\);/.test(metrics),
+  'a porta de entrada de pedido aplica o desconto');
+
+// O sync de 15 min não pode apagar a marca que a reconciliação de 12h gravou.
+const iUpsert = store.indexOf('export function upsertOrders(');
+t.ok(iUpsert > 0, 'achou upsertOrders');
+if (iUpsert > 0) {
+  const corpo = store.slice(iUpsert, store.indexOf('\n}\n', iUpsert));
+  t.ok(/o\.refunded == null && existing\.refunded != null/.test(corpo),
+    'upsertOrders preserva a marca de devolução quando o pedido novo não a traz');
+  t.ok(/velho\.refundedQty != null\) novo\.refundedQty = velho\.refundedQty/.test(corpo),
+    'e preserva a marca por linha quando a lista de itens é substituída');
+}
+
+// Mercado Livre: o reembolso vem no próprio pedido, sem chamada nova.
+const mlSrc = semComentario(fs.readFileSync(path.join(ROOT, 'src', 'mercadolivre.js'), 'utf8'));
+t.ok(/transaction_amount_refunded/.test(mlSrc), 'ML lê o reembolso de payments[]');
+t.ok(/refundedQty: unidades/.test(mlSrc), 'reembolso integral do ML leva as unidades junto');
+
 t.fim();
