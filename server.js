@@ -671,7 +671,10 @@ function checkCancelled(jobId) {
 // botão "Aplicar") ficava com o botão travado pra sempre olhando pro mesmo job fantasma que o
 // widget já mostrava como erro (reportado em produção — via CLAUDE.md "Campanhas": os dois
 // lugares que mostram o mesmo dado nunca podem discordar).
-const STALE_AFTER_MS = { 'amazon-backfill': 45 * 60 * 1000, 'shopify-backfill': 45 * 60 * 1000, 'amazon-images': 20 * 60 * 1000, 'amazon-items': 20 * 60 * 1000, 'bling-geo': 10 * 60 * 1000, 'backup': 10 * 60 * 1000 };
+// 'amazon-returns' tem a folga maior de todos de propósito: a varredura funda espera a cota de
+// download da Amazon (~1 extrato por minuto), então dezenas de extratos levam mais de meia hora
+// sem que nada esteja travado.
+const STALE_AFTER_MS = { 'amazon-backfill': 45 * 60 * 1000, 'shopify-backfill': 45 * 60 * 1000, 'amazon-images': 20 * 60 * 1000, 'amazon-items': 20 * 60 * 1000, 'amazon-returns': 90 * 60 * 1000, 'bling-geo': 10 * 60 * 1000, 'backup': 10 * 60 * 1000 };
 function destaleJob(jobId, raw) {
   if (!raw || raw.status !== 'running' || !raw.startedAt) return raw;
   const age = Date.now() - Date.parse(raw.startedAt);
@@ -884,16 +887,36 @@ app.post('/api/amazon/sync-names', (req, res) => {
 // o pedido devolvido passa a mostrar a tag "Reembolsado".
 app.post('/api/amazon/sync-returns', requireAdmin, (req, res) => {
   if (backfillRunning) return res.status(409).json({ error: 'Backfill em andamento — tente depois que terminar.' });
+  if (returnsRunning) return res.status(409).json({ error: 'Já tem uma busca de reembolsos rodando.' });
   const markets = req.query.market === 'br' ? ['br'] : req.query.market === 'us' ? ['us'] : ['us', 'br'];
   // Varredura funda pra recuperar reembolso antigo: cada extrato de repasse é um download, e a
-  // cota é de ~1 por minuto, então `docs` alto faz a rodada demorar minutos. É o preço de
-  // consertar quantidade de período passado.
+  // cota é de ~1 por minuto, então `docs` alto faz a rodada demorar dezenas de minutos. É o preço
+  // de consertar quantidade de período passado.
   const dias = Math.min(730, Math.max(1, Number(req.query.days) || 60));
   const docs = Math.min(40, Math.max(1, Number(req.query.docs) || 6));
-  reconcileAmazonReturns({ markets, force: true, dias, docs })
-    .then(r => console.log('Amazon devoluções (manual):', r))
-    .catch(e => console.error('Amazon devoluções (manual) falhou:', e.message));
-  res.json({ ok: true, message: `Busca de reembolsos (${markets.join(', ')}, ${dias} dias, até ${docs} repasses) iniciada. Acompanhe no log; confirme em Pedidos recentes.` });
+  const market = markets.length === 1 ? markets[0] : 'br';
+
+  returnsRunning = true;
+  returnsStatus = { status: 'running', market, message: 'iniciando', startedBy: req.authUser?.name || null, startedAt: new Date().toISOString() };
+  reconcileAmazonReturns({
+    markets, force: true, dias, docs,
+    onProgress: m => { returnsStatus = { ...returnsStatus, status: 'running', message: m }; },
+  })
+    .then(r => {
+      const marcados = r.patched || 0;
+      // A mensagem final diz o número, não "concluído": o que interessa é se algum pedido mudou.
+      returnsStatus = { ...returnsStatus, status: r.errors.length ? 'error' : 'done',
+        message: r.errors.length ? r.errors.join(' · ') : `${marcados} pedido(s) marcado(s) como reembolsado`,
+        result: r, finishedAt: new Date().toISOString() };
+      console.log('Amazon reembolsos (manual):', r);
+    })
+    .catch(e => {
+      returnsStatus = { ...returnsStatus, status: 'error', message: e.message, finishedAt: new Date().toISOString() };
+      console.error('Amazon reembolsos (manual) falhou:', e.message);
+    })
+    .finally(() => { returnsRunning = false; });
+
+  res.json({ ok: true, message: `Busca de reembolsos (${markets.join(', ')}, ${dias} dias, até ${docs} repasses) iniciada. Acompanhe no card de processos.` });
 });
 
 // Diagnóstico do relatório de REPASSE (settlement) da Amazon, que é o extrato do dinheiro.
@@ -1080,6 +1103,11 @@ app.post('/api/orders/fix-unpaid', (req, res) => {
 // GET /api/status → amazon.items. Padrão market=br (o US usa a Reports API, seria inviável aqui).
 let itemsRunning = false;
 let itemsStatus  = null;
+// Estado do job de reembolsos, pro widget de processos. Sem isto o botão de Integrações dispara e
+// some: quem clicou nunca saberia se achou reembolso, se deu erro ou se ainda está rodando — e
+// aqui isso importa, porque o resultado mexe em quantidade vendida.
+let returnsStatus  = null;
+let returnsRunning = false;
 
 let geoRunning = false;
 let geoStatus  = null; // último resultado de reconcileGeoFromBling, ver GET /api/status → bling.geo
@@ -1517,6 +1545,7 @@ app.get('/api/jobs', (_req, res) => {
     normalizeJob('shopify-backfill', `Buscar histórico Shopify ${shopifyBf?.market === 'us' ? 'EUA' : 'BR'}`, shopifyBf),
     normalizeJob('amazon-images', `Buscar imagens Amazon ${images?.market === 'us' ? 'EUA' : 'BR'}`, images),
     normalizeJob('amazon-items', `Reconciliar itens Amazon ${itemsStatus?.market === 'us' ? 'EUA' : 'BR'}`, itemsStatus),
+    normalizeJob('amazon-returns', `Buscar reembolsos Amazon ${returnsStatus?.market === 'us' ? 'EUA' : 'BR'}`, returnsStatus),
     normalizeJob('bling-geo', 'Geografia via Bling', geoStatus),
     normalizeJob('backup', 'Backup do banco', backupSt),
   ].filter(Boolean);
