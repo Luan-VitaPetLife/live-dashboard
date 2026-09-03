@@ -909,6 +909,38 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - `scripts/test/devolucoes.test.mjs` executa o agrupamento e a classificação de verdade, e guarda
   o patch-only (falha se alguém fizer a reconciliação inserir pedido ou mexer em total/status).
 
+### As colunas de "Pedidos recentes" são um modelo, não markup
+- A tabela do card tem 7 colunas (Pedido, Data/Hora, Cliente, Situação, **Qtd. de itens**, Valor,
+  Canal) e a ordem delas é **arrastável no modo de edição** (pedido do Luan, 03/09/2026). Por isso
+  cabeçalho, células e linha de total saem de UMA lista (`RO_COLUMNS`/`roCols` em
+  `js/paginas/index.js`), e não do markup: escritos à mão em três lugares, o cabeçalho passaria a
+  dizer "Cliente" com o canal embaixo na primeira vez que alguém mexesse na ordem, e a tabela
+  continuaria desenhando normalmente.
+- O RÓTULO de cada coluna vem de `EXPORT_COLUMN_DEFS`, o mesmo do modal de exportar — a mesma
+  coluna com nomes diferentes nas duas telas é divergência que ninguém percebe. Só o desenho da
+  célula é próprio do card (badge de canal, tag de status), porque ali é HTML e no CSV é texto.
+- **A linha de total não usa colspan**: é uma célula por coluna, com o valor embaixo da coluna
+  "Valor" onde quer que ela esteja. Com colspan fixo o total ficava embaixo da coluna errada assim
+  que a ordem mudava, e no celular a linha ficava com mais células do que a tabela tem colunas.
+- **O celular esconde coluna por IDENTIDADE, não por posição.** Era
+  `.tbl th:nth-child(3)`/`(4)` (Cliente e Situação); com a ordem editável isso passou a significar
+  "o que tiver parado no 3º e no 4º lugar", que pode ser o número do pedido e o valor. Hoje é
+  `[data-col="customer"]`/`[data-col="statusLabel"]`, e é por isso que TODA célula gerada carrega
+  o próprio `data-col`.
+- O arraste é o MESMO `makeDragController` dos cards (ponteiro, nunca a API nativa de drag do
+  HTML5 — ver "Padrões de UI compartilhados"), agora com `horizontal`, `handle` e `onDrop` por
+  parâmetro. Duas armadilhas que ele escondia:
+  - o placeholder era um `<div>` fixo, e dentro de um `<tr>` só cabe `<th>`/`<td>` — o navegador
+    expulsa qualquer outra coisa da tabela. Hoje ele nasce com a tag do item arrastado;
+  - o placeholder também é um `<th>`, então a ordem salva é lida de `#ordersHead th[data-col]` —
+    sem isso ela ganhava uma "coluna" sem nome.
+- A ordem escolhida entra no MESMO `coco_layout_<market>` do resto da página (`colOrder`), e não
+  numa chave própria: é parte do que o modo de edição arruma, então o botão "Redefinir" desfaz ela
+  junto. Ordem salva velha é remendada em vez de descartada — coluna que não existe mais sai,
+  coluna que nasceu depois entra no fim.
+- `scripts/test/colunas-pedidos.test.mjs` executa o modelo de verdade (célula a célula, linha de
+  total com a coluna "Valor" em três posições, cabeçalho montado) e guarda as armadilhas acima.
+
 ### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
 - **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
   aparece em todas as telas. Antes disso a mesma informação vivia em cinco tabelas
@@ -1519,6 +1551,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   opção do filtro de status pega os mesmos pedidos no card e no CSV),
   `devolucoes` (o relatório de devoluções da Amazon vira marca de pedido sem inserir pedido nenhum,
   e a unidade devolvida sai mesmo da quantidade e da receita, em todo canal),
+  `colunas-pedidos` (a tabela de "Pedidos recentes" sai de um modelo de colunas, o total segue a
+  coluna "Valor" e o celular esconde coluna por identidade),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),
