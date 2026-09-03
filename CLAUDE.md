@@ -528,6 +528,21 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   `computeStock.agg` (grupo manual tem prioridade sobre a família automática Lysine/Daily).
 - Também mostra produto do catálogo Shopify mesmo sem venda nenhuma (`listProductCatalog` mescla
   pedidos reais com `kv.shopifyProductCatalog`).
+
+### Só produto ATIVO da Shopify vira linha em Produtos/Estoque
+- A consulta de catálogo (`fetchProductCatalog`) não filtra status, então traz `ACTIVE`, `DRAFT` e
+  `ARCHIVED` — e isso é de propósito: os índices de tag e de tipo (`catalogTagsIdx`/`catalogTypeIdx`)
+  precisam das tags ATUAIS até de produto arquivado que já vendeu, senão a decisão de ocultar
+  produto volta a depender da tag presa no pedido antigo (ver "Ocultar produtos").
+- Quem separa é o `mergeShopifyCatalog`: **só LISTA produto `ACTIVE`**. Rascunho e arquivado não
+  são catálogo — o dono da loja não vê esses produtos na lista dele, e vê-los aqui é a dashboard
+  inventar produto. O card "Shopify - Coco and Luna BR" aparecia com 11 produtos, dos quais 9 não
+  existem na loja (relatado pelo Luan em 03/09/2026).
+- Produto sem `status` gravado é catálogo salvo antes dessa mudança: conta como ativo até o sync
+  seguinte reescrever (a cada 15 min). Sem essa tolerância a lista encolheria sozinha logo depois
+  do deploy e voltaria minutos depois, sem explicação nenhuma na tela.
+- Produto que JÁ VENDEU nunca é tocado pelo catálogo (`if (products[p.title]) continue`): o
+  catálogo só ACRESCENTA quem não tem venda. Sobrescrever zeraria a venda em silêncio.
 - **"Tag mãe" do grupo** (`kv.productGroupTypes` = `{ [market]: { [nomeDoGrupo]: {type, typeGroup} } }`,
   campos Tipo/Categoria em cada card do Unificador, 26/08/2026): um grupo unificado é UM produto
   físico, então tem UM tipo. Antes disso o tipo era INFERIDO em tempo de consulta a partir dos
@@ -1161,6 +1176,22 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   junto — ninguém mais a usava, e o teste de seletores acusa regra apontando pra classe que não
   existe no markup.
 
+### Invisível não é intangível: `opacity:0` continua comendo clique
+- O card de processos é `position:fixed` no canto inferior direito de TODA página e ficava
+  escondido só com `opacity:0`. Um elemento invisível continua recebendo o clique: na prática
+  havia um retângulo de 280px por até 400px colado naquele canto engolindo tudo que caísse ali, e
+  os botões do ÚLTIMO card de Produtos/Estoque (que ficam justamente no fim da página) não
+  respondiam ao mouse. Não há nada na tela pra explicar isso — o clique só não acontece.
+  Relatado pelo Luan em 03/09/2026; corrigido com `pointer-events:none` na base e
+  `pointer-events:auto` no `.jw-show`.
+- `display:none` também resolveria, mas mataria a transição de entrada — por isso a dupla
+  `opacity` + `pointer-events`.
+- Todo o resto do app já fazia certo (toast, overlay da sidebar, balão de rótulo do menu
+  colapsado): quem esconde por opacidade sempre acompanha de `pointer-events:none`.
+  `scripts/test/jobs-widget.test.mjs` varre o CSS das páginas e o injetado pelos componentes e
+  falha em qualquer regra posicionada, invisível e sem `pointer-events:none` (ignora `display:none`
+  e caixa de tamanho zero, que já são intangíveis).
+
 ### Imagem precisa declarar o próprio tamanho
 - **`<img>` dimensionado só por CSS que um script injeta aparece no tamanho do ARQUIVO até o
   script rodar.** A bandeira dos EUA do seletor Brasil/EUA piscava ocupando a tela inteira a cada
@@ -1619,8 +1650,10 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   coluna "Valor" e o celular esconde coluna por identidade),
   `combo` (kit de produtos diferentes conta unidade avulsa, combo de verdade conta pacote, e
   linha que saiu do pedido não carrega dinheiro),
-  `jobs-widget` (o card de processos some 3s depois de tudo concluir, não reacende sozinho e
-  volta quando surge processo novo),
+  `jobs-widget` (o card de processos some 3s depois de tudo concluir, não reacende sozinho, volta
+  quando surge processo novo, e nenhum elemento invisível do app intercepta clique),
+  `catalogo-loja` (só produto ativo da Shopify entra na lista de Produtos/Estoque, e o catálogo
+  nunca zera a venda de quem já vendeu),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),

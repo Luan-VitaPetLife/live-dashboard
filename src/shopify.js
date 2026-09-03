@@ -120,14 +120,17 @@ export async function fetchProductCatalog(cfg = {}) {
     const data = await gqlFetch(store, token, version, `
       query($after: String) {
         products(first: 100, after: $after) {
-          edges { node { title productType tags featuredImage { url } } }
+          edges { node { title status productType tags featuredImage { url } } }
           pageInfo { hasNextPage endCursor }
         }
       }`, { after });
     const conn = data.products;
     for (const e of conn.edges) {
       const n = e.node;
-      out.push({ title: n.title, image: n.featuredImage?.url || null, productType: n.productType || null, tags: n.tags || [] });
+      // `status` é ACTIVE / DRAFT / ARCHIVED. A consulta traz os três, e é isso que queremos pros
+      // índices de tag e tipo (produto arquivado que já vendeu continua precisando das tags atuais
+      // pra decisão de ocultar). Quem separa é o mergeShopifyCatalog, que só LISTA produto ativo.
+      out.push({ title: n.title, status: n.status || null, image: n.featuredImage?.url || null, productType: n.productType || null, tags: n.tags || [] });
     }
     after = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
     guard++;
