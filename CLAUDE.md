@@ -699,6 +699,37 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     como ser feito (o título individual não aparece mais em lugar nenhum uma vez agrupado) —
     corrigido 17/08/2026.
 - Combo/bundle (tag `combo` ou Shopify Bundles) mescla no produto-base, não vira linha própria.
+
+### Combo é o MESMO produto repetido; kit é produto diferente junto
+- "Combo de 3 unidades" é combo: três unidades do mesmo produto, e o card mostra "3 un total ·
+  1 combo de 3". Já **"Daily Support + Lysine" é um KIT**: cada componente é UMA unidade avulsa do
+  seu próprio produto. O kit não vira linha no Top produtos (nunca virou — o Shopify manda os
+  componentes como itens e o produto-pai não é item de pedido), e é isso que o Luan pediu em
+  03/09/2026: "não precisa mostrar o combo, apenas contabilize 1 daily e 1 lysine".
+- Tratar o kit como combo tinha um efeito silencioso e feio: a unidade entrava em `comboQty`, mas
+  `comboBySize` ficava vazio (não há "combo de N" no título pra ler), e a tela caía no texto fixo
+  **"0 un" para um produto que tinha acabado de vender uma unidade**. Quem decide agora é
+  `comboSize(it.bundle)`: sem tamanho no título, a unidade é avulsa. Conferido contra o backup de
+  produção: as 36 linhas de bundle existentes têm "Combo de N" no título, então nenhum combo antigo
+  muda de classificação.
+- **A frase de unidades só mostra o detalhamento quando ele FECHA com o total.** Ela dizia
+  "6 un total · 3 avulso, 1 combo de 2", que dá 5, sempre que alguma unidade não tinha tamanho de
+  combo pra exibir. O total é o número que importa, então ele é sempre o que aparece; o
+  detalhamento é opcional.
+- **`currentQuantity` 0 significa que a linha saiu do pedido** (item devolvido, removido numa
+  edição, ou reposto no estoque ao cancelar) — e o `discountedTotalSet` do Shopify **não**
+  acompanha, fica com o valor original. Sem zerar o valor junto, a dashboard guarda o dinheiro de
+  mercadoria que não está mais no pedido e o produto aparece com receita e nenhuma unidade. O
+  próprio `currentTotalPriceSet` do pedido já desconta essas linhas, então manter o valor no item
+  fazia a soma dos itens discordar do total do pedido. Achado no backup de produção (pedido
+  `#19681`, R$ 33,25 de receita fantasma em pedidos válidos).
+- Rede de segurança em `productRevenueRows`: **produto sem uma unidade sequer não entra no "Top
+  produtos"**. Receita sem mercadoria é sempre anomalia de dado, e ali ela mente do jeito mais
+  direto possível — a linha diz que o produto vendeu. As causas conhecidas estão corrigidas na
+  origem; a rede existe pra um canal novo não criar uma linha fantasma sem ninguém ver.
+- `scripts/test/combo.test.mjs` executa a agregação de verdade (kit misto, combo real, pacote
+  contado uma vez só, detalhamento fechando com o total) e guarda as duas regras de dinheiro do
+  `shopify.js` (linha fora do pedido não vale nada; reembolso do item continua descontado).
 - Exportar CSV: só Shopify US por enquanto (`GET /api/products/export`).
 
 ### Estoque (`public/estoque.html`)
@@ -927,19 +958,39 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   "o que tiver parado no 3º e no 4º lugar", que pode ser o número do pedido e o valor. Hoje é
   `[data-col="customer"]`/`[data-col="statusLabel"]`, e é por isso que TODA célula gerada carrega
   o próprio `data-col`.
-- O arraste é o MESMO `makeDragController` dos cards (ponteiro, nunca a API nativa de drag do
-  HTML5 — ver "Padrões de UI compartilhados"), agora com `horizontal`, `handle` e `onDrop` por
-  parâmetro. Duas armadilhas que ele escondia:
-  - o placeholder era um `<div>` fixo, e dentro de um `<tr>` só cabe `<th>`/`<td>` — o navegador
-    expulsa qualquer outra coisa da tabela. Hoje ele nasce com a tag do item arrastado;
-  - o placeholder também é um `<th>`, então a ordem salva é lida de `#ordersHead th[data-col]` —
-    sem isso ela ganhava uma "coluna" sem nome.
-- A ordem escolhida entra no MESMO `coco_layout_<market>` do resto da página (`colOrder`), e não
-  numa chave própria: é parte do que o modo de edição arruma, então o botão "Redefinir" desfaz ela
-  junto. Ordem salva velha é remendada em vez de descartada — coluna que não existe mais sai,
-  coluna que nasceu depois entra no fim.
-- `scripts/test/colunas-pedidos.test.mjs` executa o modelo de verdade (célula a célula, linha de
-  total com a coluna "Valor" em três posições, cabeçalho montado) e guarda as armadilhas acima.
+- **Numa `<table>` não dá pra reordenar arrastando só o `<th>`.** Foi a primeira tentativa e ela
+  parecia funcionar no código: o cabeçalho recebia o placeholder e o nó do `<th>` mudava de lugar.
+  Na tela, nada se reorganizava (relatado pelo Luan com print) — cabeçalho e corpo DIVIDEM as
+  mesmas colunas, então mexer só no cabeçalho não abre espaço nenhum: o corpo continua na ordem
+  antiga e a tabela ganha uma coluna que nenhuma linha preenche. Vale pra qualquer tabela deste
+  app, não só esta.
+- O que funciona é remontar a tabela INTEIRA a cada troca de posição, a partir de uma ordem
+  provisória (`roDragKey` + `roReordenar`/`roOrdemCompleta`): a coluna se move de verdade, com os
+  dados dela junto, e o lugar de onde ela saiu vira uma coluna tracejada de cima a baixo. O
+  arraste em si é o mesmo por ponteiro de Produtos/Estoque (clone `position:fixed` seguindo o
+  cursor, nunca a API nativa de drag do HTML5), mas é controlador PRÓPRIO: o `makeDragController`
+  compartilhado move o nó do item, que é justamente o que não serve aqui.
+- A etiqueta que segue o cursor é um `<div>` solto no `body`, não o `<th>` clonado: célula
+  arrancada da tabela perde o próprio tamanho e vira texto cru boiando na tela.
+- **Ocultar coluna**: no modo de edição a coluna oculta CONTINUA na tela, apagada e com o botão
+  oferecendo mostrar; fora dele ela some de verdade (`roVisibleCols`). Os dois lados são o
+  recurso: sumir nos dois modos deixaria a coluna inalcançável, e ficar cinza nos dois faria
+  "ocultar" não ocultar nada. A última coluna visível não pode ser ocultada — a tabela ficaria sem
+  coluna nenhuma e ninguém adivinharia que o conserto está em "Editar". Entrar e sair do modo de
+  edição remonta a tabela, senão a alça e o olho ficariam pra trás.
+- Ocultar aqui não mexe no CSV: o modal de exportar tem a própria escolha de colunas.
+- A ordem e as ocultas entram no MESMO `coco_layout_<market>` do resto da página
+  (`colOrder`/`colHidden`), e não numa chave própria: são parte do que o modo de edição arruma,
+  então o botão "Redefinir" desfaz as duas junto. Ordem salva velha é remendada em vez de
+  descartada — coluna que não existe mais sai, coluna que nasceu depois entra no fim. E arrastar
+  uma coluna visível passa por `roOrdemCompleta`, que devolve as ocultas às posições relativas que
+  tinham: sem isso elas caem todas pro fim e reaparecem fora de lugar quando alguém as mostra.
+- `scripts/test/colunas-pedidos.test.mjs` executa o modelo de verdade (célula a célula, ocultar
+  nos dois modos, a conta da reordenação, a linha de total com a coluna "Valor" em três posições,
+  cabeçalho montado) e guarda as armadilhas acima.
+- O teste de rótulo de status varria o arquivo inteiro atrás de `cls: '...'` pra conferir que toda
+  classe de tag tem estilo. Com `RO_COLUMNS` carregando `cls: 'mono'/'dim'/'bold'`, ele passou a
+  exigir um `.st-tag.mono` que nunca deveria existir — hoje ele varre só o corpo do `statusTag`.
 
 ### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
 - **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
@@ -1553,6 +1604,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   e a unidade devolvida sai mesmo da quantidade e da receita, em todo canal),
   `colunas-pedidos` (a tabela de "Pedidos recentes" sai de um modelo de colunas, o total segue a
   coluna "Valor" e o celular esconde coluna por identidade),
+  `combo` (kit de produtos diferentes conta unidade avulsa, combo de verdade conta pacote, e
+  linha que saiu do pedido não carrega dinheiro),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),

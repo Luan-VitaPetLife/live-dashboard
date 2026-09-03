@@ -82,7 +82,16 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
         items:     (n.lineItems?.edges || []).map(x => ({
           title:       x.node.title,
           qty:         x.node.currentQuantity,
-          amount:      parseFloat(x.node.discountedTotalSet?.shopMoney?.amount || '0') - (refundByLineItemId[x.node.id] || 0),
+          // `currentQuantity` 0 quer dizer que esta linha não faz mais parte do pedido (item
+          // devolvido, removido numa edição, ou reposto no estoque ao cancelar). O
+          // `discountedTotalSet` NÃO acompanha: fica com o valor original. Sem zerar aqui, a
+          // dashboard guarda o dinheiro de mercadoria que saiu do pedido e o produto aparece no
+          // Top produtos com receita e nenhuma unidade. Achado em produção (pedido #19681). O
+          // próprio `currentTotalPriceSet` do pedido já desconta essas linhas, então manter o
+          // valor no item fazia a soma dos itens discordar do total do pedido.
+          amount:      x.node.currentQuantity > 0
+                         ? parseFloat(x.node.discountedTotalSet?.shopMoney?.amount || '0') - (refundByLineItemId[x.node.id] || 0)
+                         : 0,
           tags:        x.node.product?.tags || [],
           productType: x.node.product?.productType || null,
           // Presente quando o item foi vendido através de um combo (Shopify Bundles):

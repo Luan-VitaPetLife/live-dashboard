@@ -613,7 +613,12 @@ function productRevenueRows(validOrders, market, groups, catalogTagsIdx) {
     objSumKeys: ['comboBySize'],
     collectKeys: [{ from: 'channel', to: 'channels' }],
   }).map(p => (p.channels ? p : { ...p, channels: [p.channel] }));
-  return rows.filter(p => p.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+  // Receita sem uma unidade sequer é sempre anomalia de dado, e no "Top produtos" ela mente do
+  // jeito mais direto possível: a linha diz que o produto vendeu. As causas conhecidas estão
+  // corrigidas na origem (ver shopify.js, `currentQuantity` 0), mas a rede fica: um canal novo
+  // que mande valor sem quantidade não vai virar uma linha fantasma no ranking sem ninguém ver.
+  return rows.filter(p => p.revenue > 0 && (p.avulsoQty + p.comboQty) > 0)
+    .sort((a, b) => b.revenue - a.revenue);
 }
 
 // Receita/pedidos por estado de entrega. Mesma extração e mesmo motivo da função acima. US:
@@ -1193,14 +1198,20 @@ function aggregateProductsByChannel(orders) {
         const packages = qty; // aqui o item É o produto-combo: qty = nº de pacotes comprados
         p.comboQty += packages * taggedSize;
         p.comboBySize[taggedSize] = (p.comboBySize[taggedSize] || 0) + packages;
-      } else if (it.bundle) {
+      } else if (it.bundle && comboSize(it.bundle)) {
+        // Combo de verdade: N unidades DO MESMO produto ("Combo de 3 unidades").
         p.comboQty += qty; // aqui qty = unidades de componente (Shopify já quebrou o combo)
         const size = comboSize(it.bundle);
-        if (size && !seenBundleIds.has(it.bundle.id)) {
+        if (!seenBundleIds.has(it.bundle.id)) {
           seenBundleIds.add(it.bundle.id);
           p.comboBySize[size] = (p.comboBySize[size] || 0) + (it.bundle.qty || 1);
         }
       } else {
+        // Kit de produtos DIFERENTES ("Daily Support + Lysine") cai aqui de propósito: cada
+        // componente é uma unidade AVULSA daquele produto, não um combo dele — combo é o mesmo
+        // produto repetido. Contando como combo, a unidade entrava em `comboQty` sem nada em
+        // `comboBySize` (não há "combo de N" no título pra ler) e a tela caía no texto "0 un":
+        // o produto vendia uma unidade e aparecia como se não tivesse vendido nenhuma.
         p.avulsoQty += qty;
       }
     });

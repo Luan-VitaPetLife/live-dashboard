@@ -133,8 +133,11 @@ for (const filtro of Object.keys(clsPorFiltro || {})) {
 
 // A tag precisa de uma cor própria: nem o verde de autorizado, nem o vermelho de cancelado.
 const css = fs.readFileSync(path.join(PUB, 'css', 'paginas', 'index.css'), 'utf8');
-const classes = [...(fs.readFileSync(path.join(PUB, 'js', 'paginas', 'index.js'), 'utf8')
-  .matchAll(/cls\s*:\s*'([a-z]+)'/g))].map(m => m[1]);
+// Só as classes que o statusTag devolve. Varrendo o arquivo inteiro, qualquer outro objeto com um
+// campo `cls` virava "tag de status" — as colunas de "Pedidos recentes" têm um (`cls:'mono'`,
+// `'dim'`, `'bold'`) e o teste passou a exigir um `.st-tag.mono` que nunca deveria existir.
+const corpoStatusTag = fonteFront.slice(fonteFront.indexOf('function statusTag('), fonteFront.indexOf('// Cards sem regra de visibilidade'));
+const classes = [...corpoStatusTag.matchAll(/cls\s*:\s*'([a-z]+)'/g)].map(m => m[1]);
 for (const c of [...new Set(classes)]) {
   t.ok(new RegExp(`\\.st-tag\\.${c}\\{`).test(css), `.st-tag.${c} tem estilo declarado`);
 }
