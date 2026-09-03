@@ -699,6 +699,37 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     como ser feito (o título individual não aparece mais em lugar nenhum uma vez agrupado) —
     corrigido 17/08/2026.
 - Combo/bundle (tag `combo` ou Shopify Bundles) mescla no produto-base, não vira linha própria.
+
+### Combo é o MESMO produto repetido; kit é produto diferente junto
+- "Combo de 3 unidades" é combo: três unidades do mesmo produto, e o card mostra "3 un total ·
+  1 combo de 3". Já **"Daily Support + Lysine" é um KIT**: cada componente é UMA unidade avulsa do
+  seu próprio produto. O kit não vira linha no Top produtos (nunca virou — o Shopify manda os
+  componentes como itens e o produto-pai não é item de pedido), e é isso que o Luan pediu em
+  03/09/2026: "não precisa mostrar o combo, apenas contabilize 1 daily e 1 lysine".
+- Tratar o kit como combo tinha um efeito silencioso e feio: a unidade entrava em `comboQty`, mas
+  `comboBySize` ficava vazio (não há "combo de N" no título pra ler), e a tela caía no texto fixo
+  **"0 un" para um produto que tinha acabado de vender uma unidade**. Quem decide agora é
+  `comboSize(it.bundle)`: sem tamanho no título, a unidade é avulsa. Conferido contra o backup de
+  produção: as 36 linhas de bundle existentes têm "Combo de N" no título, então nenhum combo antigo
+  muda de classificação.
+- **A frase de unidades só mostra o detalhamento quando ele FECHA com o total.** Ela dizia
+  "6 un total · 3 avulso, 1 combo de 2", que dá 5, sempre que alguma unidade não tinha tamanho de
+  combo pra exibir. O total é o número que importa, então ele é sempre o que aparece; o
+  detalhamento é opcional.
+- **`currentQuantity` 0 significa que a linha saiu do pedido** (item devolvido, removido numa
+  edição, ou reposto no estoque ao cancelar) — e o `discountedTotalSet` do Shopify **não**
+  acompanha, fica com o valor original. Sem zerar o valor junto, a dashboard guarda o dinheiro de
+  mercadoria que não está mais no pedido e o produto aparece com receita e nenhuma unidade. O
+  próprio `currentTotalPriceSet` do pedido já desconta essas linhas, então manter o valor no item
+  fazia a soma dos itens discordar do total do pedido. Achado no backup de produção (pedido
+  `#19681`, R$ 33,25 de receita fantasma em pedidos válidos).
+- Rede de segurança em `productRevenueRows`: **produto sem uma unidade sequer não entra no "Top
+  produtos"**. Receita sem mercadoria é sempre anomalia de dado, e ali ela mente do jeito mais
+  direto possível — a linha diz que o produto vendeu. As causas conhecidas estão corrigidas na
+  origem; a rede existe pra um canal novo não criar uma linha fantasma sem ninguém ver.
+- `scripts/test/combo.test.mjs` executa a agregação de verdade (kit misto, combo real, pacote
+  contado uma vez só, detalhamento fechando com o total) e guarda as duas regras de dinheiro do
+  `shopify.js` (linha fora do pedido não vale nada; reembolso do item continua descontado).
 - Exportar CSV: só Shopify US por enquanto (`GET /api/products/export`).
 
 ### Estoque (`public/estoque.html`)
@@ -1573,6 +1604,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   e a unidade devolvida sai mesmo da quantidade e da receita, em todo canal),
   `colunas-pedidos` (a tabela de "Pedidos recentes" sai de um modelo de colunas, o total segue a
   coluna "Valor" e o celular esconde coluna por identidade),
+  `combo` (kit de produtos diferentes conta unidade avulsa, combo de verdade conta pacote, e
+  linha que saiu do pedido não carrega dinheiro),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),

@@ -864,7 +864,14 @@ function render(d) {
       if (avQty > 0) bits.push(`${fmtInt(avQty)} avulso`);
       bits.push(...comboParts);
       const total = avQty + (p.comboQty || 0);
-      const qtyLine = bits.length ? `${fmtInt(total)} un total · ${bits.join(', ')}` : '0 un';
+      // O detalhamento só aparece quando ele soma o total: senão a linha dizia "6 un total ·
+      // 3 avulso, 1 combo de 2" (que dá 5) ou, pior, "0 un" pra um produto que vendeu — bastava a
+      // unidade estar num combo cujo título não diz "combo de N". O total é o número que importa
+      // e agora ele é sempre o que aparece.
+      const somaBits = avQty + Object.entries(comboBySize||{}).reduce((a,[size,n]) => a + Number(size)*n, 0);
+      const qtyLine = (bits.length && somaBits === total)
+        ? `${fmtInt(total)} un total · ${bits.join(', ')}`
+        : `${fmtInt(total)} un`;
       return `<div class="tp-row"><div class="tp-info"><div class="tp-name-row"><span>${i+1} · ${name}</span>${groupBadge}${badge}</div><div class="tp-qty">${qtyLine}</div></div><span class="tp-val">${fmtMoney(v)}</span></div>`;
     }).join('');
     const prodTotal = prodList.reduce((a,p)=>a+p.revenue, 0);
