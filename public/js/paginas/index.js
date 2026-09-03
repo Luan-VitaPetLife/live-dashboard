@@ -1587,11 +1587,15 @@ function renderExportCols() {
   attachExportColDrag();
   renderExportPreview();
 }
-// Mapeia o filtro de status do export (mesmo vocabulário de statusTag(), ver UNPAID_STATUS_BY_CHANNEL
-// acima) pra classe interna — usado só pra filtrar a amostra da pré-visualização no cliente; o CSV de
-// verdade sempre filtra no backend (ver expDownloadBtn), aqui é só pra a prévia bater com o que foi
-// escolhido.
-const EXPORT_STATUS_CLS = { autorizado: 'ok', em_aberto: 'pend', cancelado: 'canc' };
+// Mapeia cada opção da fileira de status (mesmo vocabulário de statusTag(), ver
+// UNPAID_STATUS_BY_CHANNEL acima) pra classe interna. Serve os dois filtros do cliente: o do card
+// "Pedidos recentes" (activeOrders) e a amostra da pré-visualização do export. O CSV de verdade
+// sempre filtra no backend (ver expDownloadBtn), aqui é só pra a prévia bater com o escolhido.
+// "Reembolsado" cobre o parcial junto (statusTag devolve a classe `ref` pros dois): separar em
+// dois botões deixaria a fileira longa por uma distinção que quase nunca importa na hora de
+// filtrar. O EXPORT_STATUS_LABELS do metrics.js precisa agrupar igual, senão o CSV vem menor que
+// a tela sem erro nenhum.
+const EXPORT_STATUS_CLS = { autorizado: 'ok', em_aberto: 'pend', cancelado: 'canc', reembolsado: 'ref' };
 function renderExportPreview() {
   const onCols = exportCols.filter(c => c.on);
   const tbl = document.getElementById('expPreviewTbl');

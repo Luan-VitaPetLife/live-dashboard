@@ -1098,19 +1098,23 @@ export function searchOrders({ market = 'br', q = '', limit = 200 } = {}) {
 // opcional de status (Autorizado/Em aberto/Cancelado). Diferente do `recent` do dashboard (capado
 // em RECENT_MAX por segurança de payload do carregamento normal da tela), aqui não há teto — é
 // sob demanda, só quando o usuário clica em "Exportar". Usado por GET /api/orders/export.
+// Cada botão da fileira de status (index.html, no card de recentes e no modal de exportar) vale
+// pelos rótulos listados aqui. "Reembolsado" leva o parcial junto de propósito: na tela os dois
+// dividem a mesma classe de tag (`ref` em statusTag), então um botão só filtra os dois. Aceitar
+// aqui só o rótulo exato faria o CSV vir MENOR que a tela, sem erro nenhum e sem ninguém ver —
+// que é a divergência que scripts/test/status-pedido.test.mjs existe pra impedir.
+const EXPORT_STATUS_LABELS = {
+  autorizado:  ['Autorizado'],
+  em_aberto:   ['Em aberto'],
+  cancelado:   ['Cancelado'],
+  reembolsado: ['Reembolsado', 'Reembolso parcial'],
+};
 export function exportOrdersList({ market = 'br', channel = 'todos', since, until, status = 'todos' } = {}) {
   let orders = getOrders({ channel, since, until, market })
     .slice()
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  if (status && status !== 'todos') {
-    orders = orders.filter(o => {
-      const label = statusLabelPt(o);
-      if (status === 'autorizado') return label === 'Autorizado';
-      if (status === 'em_aberto') return label === 'Em aberto';
-      if (status === 'cancelado') return label === 'Cancelado';
-      return true;
-    });
-  }
+  const querido = status && status !== 'todos' ? EXPORT_STATUS_LABELS[status] : null;
+  if (querido) orders = orders.filter(o => querido.includes(statusLabelPt(o)));
   return orders.map(o => ({
     name: o.name, channel: o.channel, customer: o.customer,
     itemsCount: o.items.length, itemsQty: sumItemsQty(o),

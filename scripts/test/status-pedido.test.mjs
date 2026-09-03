@@ -42,6 +42,26 @@ function carregar(arquivo, nomeFn) {
 
 const doServidor = carregar(path.join(ROOT, 'src', 'metrics.js'), 'statusLabelPt');
 const daTela = carregar(path.join(PUB, 'js', 'paginas', 'index.js'), 'statusTag');
+
+// A fileira de filtros de status ("Todos / Autorizado / Em aberto / Cancelado / Reembolsado")
+// existe em TRÊS lugares: o botão no markup, o filtro do card (por CLASSE de tag) e o filtro do
+// CSV (por RÓTULO, no servidor). Botão que só exista no markup não filtra nada; opção que exista
+// no front e não no servidor devolve o CSV inteiro. Nenhum dos dois dá erro na tela.
+const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
+const fonteFront = fs.readFileSync(path.join(PUB, 'js', 'paginas', 'index.js'), 'utf8');
+const fonteServidor = fs.readFileSync(path.join(ROOT, 'src', 'metrics.js'), 'utf8');
+function objetoLiteral(src, nome) {
+  const i = src.indexOf('const ' + nome);
+  if (i < 0) return null;
+  const ini = src.indexOf('{', i);
+  const fim = src.indexOf('}', ini);
+  if (ini < 0 || fim < 0) return null;
+  return vm.runInNewContext('(' + src.slice(ini, fim + 1) + ')');
+}
+const clsPorFiltro = objetoLiteral(fonteFront, 'EXPORT_STATUS_CLS');
+const rotulosPorFiltro = objetoLiteral(fonteServidor, 'EXPORT_STATUS_LABELS');
+t.ok(clsPorFiltro, 'achou EXPORT_STATUS_CLS no front');
+t.ok(rotulosPorFiltro, 'achou EXPORT_STATUS_LABELS no servidor');
 t.ok(typeof doServidor === 'function', 'achou statusLabelPt em metrics.js');
 t.ok(typeof daTela === 'function', 'achou statusTag em index.js');
 
@@ -85,6 +105,30 @@ if (typeof doServidor === 'function' && typeof daTela === 'function') {
     'REFUNDED não é tratado como pagamento pendente');
   t.ok(doServidor({ channel: 'amazon', status: 'Shipped', cancelled: false, refunded: 'total' }) !== 'Autorizado',
     'pedido Amazon devolvido não continua "Autorizado"');
+
+  // Cada opção da fileira tem que pegar EXATAMENTE os mesmos pedidos nos dois lados. É aqui que
+  // "Reembolsado" se prova: na tela ele e o parcial dividem a classe `ref`, então o servidor
+  // precisa aceitar os dois rótulos — senão o CSV sai sem os reembolsos parciais e parece só um
+  // período mais magro.
+  for (const filtro of Object.keys(clsPorFiltro || {})) {
+    const discorda = casos.filter(([p]) =>
+      (daTela(p).cls === clsPorFiltro[filtro]) !== ((rotulosPorFiltro || {})[filtro] || []).includes(doServidor(p)));
+    t.eq(discorda.length, 0, `filtro "${filtro}": card e CSV pegam os mesmos pedidos`);
+  }
+}
+
+// Toda opção do markup precisa existir nas duas pontas, e nas DUAS fileiras (card e exportar).
+const filtrosDoMarkup = [...new Set([...html.matchAll(/data-status="([a-z_]+)"/g)].map(m => m[1]))]
+  .filter(v => v !== 'todos');
+t.ok(filtrosDoMarkup.includes('reembolsado'), 'a fileira de status oferece "Reembolsado"');
+for (const filtro of filtrosDoMarkup) {
+  t.eq(html.split(`data-status="${filtro}"`).length - 1, 2, `"${filtro}" está nas duas fileiras (card e exportar)`);
+  t.ok(!!(clsPorFiltro || {})[filtro], `"${filtro}" tem classe de tag no front`);
+  t.ok(!!(rotulosPorFiltro || {})[filtro], `"${filtro}" tem rótulo no servidor`);
+}
+// E o contrário: opção no código sem botão nenhum é opção que ninguém consegue escolher.
+for (const filtro of Object.keys(clsPorFiltro || {})) {
+  t.ok(filtrosDoMarkup.includes(filtro), `"${filtro}" tem botão no markup`);
 }
 
 // A tag precisa de uma cor própria: nem o verde de autorizado, nem o vermelho de cancelado.

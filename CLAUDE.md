@@ -794,6 +794,17 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   `status` — ela vem de um relatório à parte e é gravada no campo `refunded` (ver a seção
   "Devoluções da Amazon" abaixo). As duas funções de rótulo leem `refunded` ANTES de olhar o
   status; a Shopify não precisa disso, ela manda `REFUNDED` no próprio pedido.
+- **A fileira de filtros de status vive em TRÊS lugares**, e o botão "Reembolsado" precisa dos
+  três: o botão no markup (`data-status`, duas fileiras em `index.html` — a do card e a do modal
+  de exportar), o filtro do card, que casa por CLASSE de tag (`EXPORT_STATUS_CLS` em
+  `js/paginas/index.js`), e o filtro do CSV, que casa por RÓTULO no servidor
+  (`EXPORT_STATUS_LABELS` em `metrics.js`). Faltar num deles não dá erro: botão sem entrada no
+  front não filtra nada, e entrada sem rótulo no servidor devolve o CSV inteiro.
+- **"Reembolsado" leva o parcial junto**, de propósito: na tela os dois compartilham a classe
+  `ref`, então um botão só filtra os dois, e a distinção raramente importa na hora de filtrar. Por
+  isso o servidor aceita os DOIS rótulos nessa opção. Aceitar só o exato faria o CSV vir menor que
+  a tela, sem erro e sem ninguém ver. `status-pedido.test.mjs` executa as duas pontas contra a
+  mesma lista de casos e falha se uma opção pegar pedidos diferentes da outra.
 - Ordem que não pode inverter: **cancelado vem antes de devolvido**. Pedido cancelado nunca foi
   enviado, então não teve o que voltar — se a devolução fosse checada primeiro, um cancelamento
   apareceria como reembolso.
@@ -1504,7 +1515,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   existe),
   `imagens` (nenhuma imagem depende de CSS injetado por script pra ter tamanho),
   `escape` (uma função de escape só, correta, e carregada antes de quem usa),
-  `status-pedido` (servidor e tela dão o mesmo rótulo, e devolvido não vira "em aberto"),
+  `status-pedido` (servidor e tela dão o mesmo rótulo, devolvido não vira "em aberto", e cada
+  opção do filtro de status pega os mesmos pedidos no card e no CSV),
   `devolucoes` (o relatório de devoluções da Amazon vira marca de pedido sem inserir pedido nenhum,
   e a unidade devolvida sai mesmo da quantidade e da receita, em todo canal),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
