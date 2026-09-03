@@ -37,8 +37,14 @@
     + '.jw-widget{position:fixed;right:20px;bottom:20px;width:280px;max-height:400px;background:var(--surface);'
     + 'border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 28px rgba(30,28,24,.2);'
     + 'z-index:900;font-family:inherit;overflow:hidden;opacity:0;transform:translateY(8px);'
+    // `opacity:0` deixa invisível, NÃO deixa intangível: sem `pointer-events:none` o card escondido
+    // continua sendo um retângulo de 280px colado no canto inferior direito de toda página,
+    // comendo todo clique que cai ali. Na prática os botões do último card de Produtos/Estoque
+    // simplesmente não respondiam ao mouse (relatado pelo Luan em 03/09/2026), sem nada na tela
+    // pra explicar. `display:none` resolveria também, mas mataria a transição de entrada.
+    + 'pointer-events:none;'
     + 'display:flex;flex-direction:column;transition:opacity .2s,transform .2s}'
-    + '.jw-widget.jw-show{opacity:1;transform:translateY(0)}'
+    + '.jw-widget.jw-show{opacity:1;transform:translateY(0);pointer-events:auto}'
     + '.jw-widget.jw-collapsed{width:auto!important;height:auto!important;max-height:none!important}'
     + '.jw-widget.jw-collapsed .jw-body{display:none}'
     + '.jw-widget.jw-collapsed .jw-resize{display:none}'

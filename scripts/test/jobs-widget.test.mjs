@@ -69,4 +69,44 @@ t.ok(/remove\('jw-show'\)/.test(disparo), 'e some de fato');
 // Estado que só é escrito e nunca lido engana quem for mexer aqui depois.
 t.ok(!/lastAnyRunning/.test(src), 'sem estado morto sobrando da versão que dependia da transição');
 
+// ── Escondido tem que ser intangível, não só invisível ──
+// `opacity:0` deixa invisível e CLICÁVEL. O card fica fixo no canto inferior direito de TODA
+// página: escondido, ele era um retângulo de 280px comendo todo clique que caísse ali, e os botões
+// do último card de Produtos/Estoque simplesmente não respondiam ao mouse — sem nada na tela pra
+// explicar o motivo (relatado pelo Luan em 03/09/2026).
+// Sem os comentários: eles ficam DENTRO do trecho da regra e citam `pointer-events:none` ao
+// explicar a armadilha, então a asserção passaria mesmo com a propriedade removida do CSS.
+const semComentarios = src.replace(/^\s*\/\/.*$/gm, '');
+t.ok(/\.jw-widget\{[^}]*pointer-events:none/.test(semComentarios), 'o card escondido não intercepta clique');
+t.ok(/\.jw-widget\.jw-show\{[^}]*pointer-events:auto/.test(semComentarios), 'e volta a receber clique quando aparece');
+
+// A mesma armadilha em qualquer outro lugar: regra posicionada, invisível e sem `pointer-events`.
+// Varre o CSS das páginas e o que os componentes injetam por JS.
+const arquivos = [
+  ...fs.readdirSync(path.join(PUB, 'css')).filter(f => f.endsWith('.css')).map(f => ['css/' + f, path.join(PUB, 'css', f)]),
+  ...fs.readdirSync(path.join(PUB, 'css', 'paginas')).map(f => ['css/paginas/' + f, path.join(PUB, 'css', 'paginas', f)]),
+  ...fs.readdirSync(path.join(PUB, 'js')).filter(f => f.endsWith('.js')).map(f => ['js/' + f, path.join(PUB, 'js', f)]),
+];
+const culpados = [];
+for (const [nome, caminho] of arquivos) {
+  const texto = fs.readFileSync(caminho, 'utf8').replace(/^\s*\/\/.*$/gm, '');
+  for (const m of texto.matchAll(/([^{};\n]+)\{([^}]*)\}/g)) {
+    const seletor = m[1].trim(), corpo = m[2];
+    // Dentro de um .js o mesmo formato casa com trecho de código (`(function () { ... }`), então
+    // só vale o que tem cara de seletor de CSS.
+    if (!/^[.#a-zA-Z[*:@]/.test(seletor) || /function|=>/.test(seletor)) continue;
+    if (!/position:\s*(fixed|absolute)/.test(corpo)) continue;
+    if (!/opacity:\s*0\b/.test(corpo)) continue;
+    if (/pointer-events:\s*none/.test(corpo)) continue;
+    // `display:none` já tira o elemento do caminho do mouse (é o caso do .notice-fab, que só ganha
+    // display quando aparece).
+    if (/display:\s*none/.test(corpo)) continue;
+    // Caixa sem área nenhuma não tem como interceptar clique (é o caso do input do .ios-switch,
+    // escondido atrás do próprio rótulo).
+    if (/width:\s*0/.test(corpo) && /height:\s*0/.test(corpo)) continue;
+    culpados.push(`${nome}: ${seletor.trim().slice(0, 60)}`);
+  }
+}
+t.eq(culpados.length, 0, `nenhum elemento invisível intercepta clique${culpados.length ? ' — ' + culpados.join(' | ') : ''}`);
+
 t.fim();

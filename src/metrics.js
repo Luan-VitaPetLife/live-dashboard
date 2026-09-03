@@ -489,6 +489,12 @@ function mergeShopifyCatalog(catalogByChannel, market) {
     if (!catalogByChannel[channel]) catalogByChannel[channel] = { revenue: 0, orders: 0, products: {} };
     const products = catalogByChannel[channel].products;
     for (const p of rawCatalog[channel] || []) {
+      // Rascunho e arquivado não são catálogo: o dono da loja não vê esses produtos na lista dele,
+      // e vê-los aqui é o mesmo que a dashboard inventar produto ("o Shopify BR tem 11 produtos"
+      // com 9 que não existem, relatado pelo Luan em 03/09/2026). Só entram os que a loja vende
+      // hoje. Produto sem `status` é catálogo gravado antes desta mudança: conta como ativo até o
+      // próximo sync reescrever, pra ninguém ver a lista encolher sozinha e depois voltar.
+      if (p.status && p.status !== 'ACTIVE') continue;
       if (products[p.title]) continue;
       products[p.title] = { revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, type: classifyType(p), image: p.image || null, tags: p.tags || [] };
     }
