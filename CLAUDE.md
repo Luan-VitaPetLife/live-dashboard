@@ -1331,13 +1331,26 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - **Widget de processos** (`jobs-widget.js`, pedido do Luan 18/08/2026): card flutuante,
   arrastável e redimensionável pelas bordas/cantos (posição e tamanho em `localStorage`) que
   aparece sozinho quando algo está rodando em segundo plano (backfill/imagens/itens da Amazon,
-  geografia via Bling, backup) e some sozinho ~8s depois de terminar. Consome `GET /api/jobs`
+  geografia via Bling, backup) e **some sozinho 3s depois de tudo concluir** (`HIDE_AFTER_DONE_MS`,
+  pedido do Luan em 03/09/2026; igual ao `POLL_MS`, então o card não vive mais que uma leitura
+  depois de não ter mais nada a contar). Consome `GET /api/jobs`
   (server.js, agrega os status já existentes de cada job — não duplica lógica) a cada 3s. Mostra
   quem disparou cada processo (`startedBy`, capturado no handler do POST que iniciou via
   `req.authUser`; jobs automáticos/agendados ficam `null` → aparece como "automático"). Continua
   visível ao trocar de página porque toda página recarrega o mesmo script — a posição/tamanho
   arrastados e se está minimizado ficam salvos, não o estado do job em si (isso vem sempre fresco
   do servidor).
+  - **Quem decide se o card fica na tela é `planoDoCard`, e ela é pura** — a regra já errou de dois
+    jeitos, e nenhum dos dois dá erro nenhum, só teima na tela:
+    - o card **reacendia 3s depois de ter sumido**: o `render` roda a cada volta do poll e fazia
+      `add('jw-show')` sem saber que o sumiço tinha sido deliberado, então ele piscava de volta até
+      o servidor esquecer o job (15 min). Quem segura isso é a marca `autoHidden`, esquecida assim
+      que aparece qualquer job rodando (senão um processo novo nasceria escondido);
+    - o card **ficava parado pra sempre** pra quem trocava de página logo depois do processo
+      terminar: o cronômetro só era armado ao VER a transição de rodando pra concluído, e nessa
+      tela não havia transição nenhuma pra ver. Hoje ele arma sempre que não há nada rodando — mas
+      só se ainda não estiver armado, senão o poll de 3s empurraria o prazo pra frente pra sempre.
+  - `scripts/test/jobs-widget.test.mjs` executa `planoDoCard` de verdade e guarda os dois erros.
   - Barra de progresso: cheia e sólida em concluído/erro/cancelado; só fica "correndo" (indeterminada)
     enquanto o processo está rodando sem uma % conhecida ainda (iniciando) — bug relatado pelo Luan
     19/08/2026, job já concluído aparecia com a barra animada e parcialmente cheia, parecendo travado.
@@ -1606,6 +1619,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   coluna "Valor" e o celular esconde coluna por identidade),
   `combo` (kit de produtos diferentes conta unidade avulsa, combo de verdade conta pacote, e
   linha que saiu do pedido não carrega dinheiro),
+  `jobs-widget` (o card de processos some 3s depois de tudo concluir, não reacende sozinho e
+  volta quando surge processo novo),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),
