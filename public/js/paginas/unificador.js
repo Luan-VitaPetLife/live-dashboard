@@ -1,6 +1,9 @@
 const $ = id => document.getElementById(id);
 function fmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
-function fmtMoney(n){ return (market==='us'?'US$ ':'R$ ') + (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Delega pro CocoMoeda (js/moeda.js), fonte única do formato de dinheiro. O segundo parâmetro
+// continua existindo só pra não mexer nas chamadas que já passam ele; as casas decimais não são
+// mais escolha de quem chama — valor SEMPRE sai com centavos (decisão do Luan, 03/09/2026).
+function fmtMoney(n){ return CocoMoeda.fmt(n, market); }
 function toast(msg, isErr){
   const t = $('toast');
   t.textContent = msg;

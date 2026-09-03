@@ -1,9 +1,8 @@
 const fmtInt = v => Math.round(v || 0).toLocaleString('pt-BR');
-function fmtMoney(v, mkt = market) {
-  return (mkt === 'us')
-    ? (v || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-    : (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
-}
+// Delega pro CocoMoeda (js/moeda.js), fonte única do formato de dinheiro. O segundo parâmetro
+// continua existindo só pra não mexer nas chamadas que já passam ele; as casas decimais não são
+// mais escolha de quem chama — valor SEMPRE sai com centavos (decisão do Luan, 03/09/2026).
+function fmtMoney(v, mkt = market) { return CocoMoeda.fmt(v, mkt); }
 
 // ── Metadados de canal (mesmas cores de index.html/DEFAULT_CH) ──
 // Nome, cor, logo e mercado de cada canal vêm do catálogo único em js/colors.js — antes esta

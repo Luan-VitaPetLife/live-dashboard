@@ -20,11 +20,10 @@ const US_50 = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','I
 const METRIC_LABEL = { receita:'Receita', pedidos:'Pedidos' };
 
 // ── Formatting (BRL/pt-BR ou USD/en-US conforme o mercado ativo) ──
-function fmtMoney(v, dec=0) {
-  return market === 'us'
-    ? 'U$ '+(Number(v)||0).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})
-    : 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec});
-}
+// Delega pro CocoMoeda (js/moeda.js), fonte única do formato de dinheiro. O segundo parâmetro
+// continua existindo só pra não mexer nas chamadas que já passam ele; as casas decimais não são
+// mais escolha de quem chama — valor SEMPRE sai com centavos (decisão do Luan, 03/09/2026).
+function fmtMoney(v) { return CocoMoeda.fmt(v, market); }
 function fmtInt(v) {
   return market === 'us' ? (Number(v)||0).toLocaleString('en-US') : (Number(v)||0).toLocaleString('pt-BR');
 }

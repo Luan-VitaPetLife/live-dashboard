@@ -112,8 +112,8 @@ public/
   favicon.png            convenção de raiz, fica onde está
   css/                   switch.css anim.css catalogo.css   (estilo compartilhado)
   css/paginas/           um .css por página, extraído do <style> dela
-  js/                    sidebar.js colors.js geo.js periodo.js pill-switch.js confirm-modal.js
-                         jobs-widget.js escape.js   (componentes compartilhados)
+  js/                    sidebar.js colors.js geo.js periodo.js moeda.js pill-switch.js
+                         confirm-modal.js jobs-widget.js escape.js   (componentes compartilhados)
   js/paginas/            um .js por página, extraído do <script> dela
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
@@ -1059,6 +1059,33 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   o teste varre todas as regras `.x.open{display:` do app e falha se alguma ficou de fora, e
   falha de novo se ela não tiver estado de entrada declarado (sairia suave e entraria seca).
 
+### Dinheiro sempre com centavos (`public/js/moeda.js`, `CocoMoeda`)
+- **Fonte única do formato de valor**, nas 6 telas que mostram dinheiro (Visão geral, Geografia,
+  Campanhas, Produtos, Segmentos, Unificador). Estoque não entra: aquela tela não mostra valor
+  nenhum. Eram SEIS implementações independentes, uma por página, que tinham divergido em duas
+  coisas ao mesmo tempo.
+- **Casas decimais.** Visão geral, Geografia, Campanhas e Produtos mostravam SEM centavos; um
+  pedido de R$ 119,90 aparecia como "R$ 120" nelas e como "R$ 119,90" em Segmentos, Unificador e na
+  exportação em CSV — o mesmo pedido, dois números. Decisão do Luan (03/09/2026): **tudo com
+  centavos, sem arredondar**, porque o valor precisa bater com o que a Shopify e o Bling mostram.
+- **O arredondamento NUNCA esteve no cálculo.** No servidor só existe arredondamento pra CENTAVO
+  (`Math.round(x * 100) / 100`), que é obrigatório: sem ele, somar dinheiro em ponto flutuante
+  produz 119,90000000000002. O valor gravado sempre foi o exato. O que arredondava era a tela.
+- Exibição arredondada tem um efeito ruim próprio, e é o argumento que decidiu: três produtos de
+  R$ 0,40 apareciam como "R$ 0" cada, com o total dizendo "R$ 1". Nada errado por baixo, e mesmo
+  assim a coluna não fechava.
+- **O símbolo sai do `Intl`**, não escrito à mão. Antes eram três grafias pro dólar ("U$", "US$",
+  "$") dependendo da página. BRL em pt-BR dá "R$ 119,90", idêntico ao que quatro páginas já
+  montavam; USD em en-US dá "$119.90", que é o que Campanhas, Produtos e Segmentos já mostravam —
+  as outras três convergiram pro mesmo.
+- `CocoMoeda.curto()` é a ÚNICA exceção e serve só a **rótulo de eixo de gráfico**: cinco marcas
+  de "R$ 651.487,32" empilhadas ficam ilegíveis e empurram o gráfico pra fora do card, e ali o
+  número é régua, não valor a conferir. Abaixo de mil ela devolve o valor cheio, com centavos.
+- O `fmtMoney` de cada página virou repasse de uma linha, e o segundo parâmetro que algumas tinham
+  (`dec`) não decide mais nada — ficou só pra não mexer nas chamadas existentes. `scripts/test/
+  moeda.test.mjs` executa o módulo de verdade e falha se uma tela voltar a montar moeda por conta
+  própria, se esquecer o `<script>` ou se carregá-lo depois do script da página.
+
 ### Rótulo de período (`public/js/periodo.js`, `CocoPeriodo`)
 - **Fonte única do texto que aparece na pill de período**, nas 6 telas que têm seletor (Visão
   geral, Geografia, Segmentos, Produtos, Campanhas, Estoque). Eram sete implementações
@@ -1654,6 +1681,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   quando surge processo novo, e nenhum elemento invisível do app intercepta clique),
   `catalogo-loja` (só produto ativo da Shopify entra na lista de Produtos/Estoque, e o catálogo
   nunca zera a venda de quem já vendeu),
+  `moeda` (valor sempre com centavos, símbolo vindo do Intl, e nenhuma tela formatando por conta
+  própria),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),

@@ -2,11 +2,10 @@
 // Gasto de Ads real: Meta BR e US. ML Ads aparece quando o app for autorizado
 // para Mercado Ads. Shopee/Amazon Ads não têm API pública de gasto (mostram —).
 const fmtInt = v => Math.round(v || 0).toLocaleString('pt-BR');
-function fmtMoney(v, mkt = market) {
-  return (mkt === 'us')
-    ? (v || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-    : (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
-}
+// Delega pro CocoMoeda (js/moeda.js), fonte única do formato de dinheiro. O segundo parâmetro
+// continua existindo só pra não mexer nas chamadas que já passam ele; as casas decimais não são
+// mais escolha de quem chama — valor SEMPRE sai com centavos (decisão do Luan, 03/09/2026).
+function fmtMoney(v, mkt = market) { return CocoMoeda.fmt(v, mkt); }
 
 // ── State ─────────────────────────────────────────────────
 let market = localStorage.getItem('coco_market') || 'br';
