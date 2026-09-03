@@ -222,17 +222,12 @@ function presetRange(p) {
   return [todayISO, todayISO];
 }
 
-function fmtMoney(v, dec=0) {
-  const n=Number(v)||0;
-  return market==='us'
-    ? 'U$ '+n.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})
-    : 'R$ '+n.toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec});
-}
-function fmtMoneyShort(v) {
-  const n=Number(v)||0;
-  if (market==='us') return n>=1000?'U$ '+(n/1000).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})+'K':fmtMoney(n);
-  return n>=1000?'R$ '+(n/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'K':fmtMoney(n);
-}
+// Delega pro CocoMoeda (js/moeda.js), fonte única do formato de dinheiro. O segundo parâmetro
+// continua existindo só pra não mexer nas chamadas que já passam ele; as casas decimais não são
+// mais escolha de quem chama — valor SEMPRE sai com centavos (decisão do Luan, 03/09/2026).
+function fmtMoney(v) { return CocoMoeda.fmt(v, market); }
+// Só o rótulo de eixo dos gráficos usa a forma curta: ali o número é régua, não valor a conferir.
+function fmtMoneyShort(v) { return CocoMoeda.curto(v, market); }
 function fmtInt(v) { return (Number(v)||0).toLocaleString('pt-BR') }
 function pctStr(n, dec=1) { return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:dec,minimumFractionDigits:dec})+'%' }
 

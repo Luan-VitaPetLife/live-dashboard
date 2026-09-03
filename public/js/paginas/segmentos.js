@@ -21,10 +21,10 @@ const segTypeOpen = {};
 let lastSegs = {};
 
 // ── Formatters ──
-function fmtMoney(v) {
-  if (market === 'us') return '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-  return v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-}
+// Delega pro CocoMoeda (js/moeda.js), fonte única do formato de dinheiro. O segundo parâmetro
+// continua existindo só pra não mexer nas chamadas que já passam ele; as casas decimais não são
+// mais escolha de quem chama — valor SEMPRE sai com centavos (decisão do Luan, 03/09/2026).
+function fmtMoney(v) { return CocoMoeda.fmt(v, market); }
 function rangeLabel(s, u) { return CocoPeriodo.rotulo(s, u, { hoje: todayISO }); }
 
 // ── Live indicator ──
