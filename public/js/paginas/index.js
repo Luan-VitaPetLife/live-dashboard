@@ -949,32 +949,45 @@ function scheduleSearch() {
 }
 
 // ── Colunas do card "Pedidos recentes" ──
-// A tabela é MONTADA a partir desta lista, em vez de escrita à mão no markup. É o que permite
-// arrastar pra reordenar no modo de edição sem que cabeçalho, células, linha de total e colspan
-// dos estados vazios saiam de sincronia: quatro lugares que, escritos à mão, divergem sozinhos na
-// primeira vez que alguém mexe na ordem, e divergem em silêncio (a tabela continua desenhando).
-// O RÓTULO vem do EXPORT_COLUMN_DEFS, o mesmo do modal de exportar — a mesma coluna com nomes
+// A tabela é MONTADA a partir desta lista, em vez de escrita à mão no markup: no modo de edição a
+// ordem é arrastável e cada coluna pode ser ocultada. Escritos à mão, cabeçalho, células e linha
+// de total divergem na primeira vez que alguém mexe na ordem — e divergem em silêncio, porque a
+// tabela continua desenhando (o cabeçalho diria "Cliente" com o canal embaixo).
+// O RÓTULO vem do EXPORT_COLUMN_DEFS, o mesmo do modal de exportar: a mesma coluna com nomes
 // diferentes nas duas telas é o tipo de divergência que ninguém percebe.
-// Cada `<td>` carrega o `data-col` porque o CSS do celular esconde coluna por IDENTIDADE, não por
-// posição (ver .tbl th[data-col=...] em index.css): com a ordem editável, esconder a 3ª e a 4ª
-// esconderia qualquer coisa que tivesse parado ali.
 const RO_COLUMNS = {
-  name:        o => `<td class="mono" data-col="name">${escapeHtml(o.name || '')}</td>`,
-  createdAt:   o => `<td class="dim" data-col="createdAt">${new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>`,
-  customer:    o => `<td class="dim" data-col="customer">${escapeHtml(o.customer || '—')}</td>`,
-  statusLabel: o => { const st = statusTag(o); return `<td data-col="statusLabel"><span class="st-tag ${st.cls}">${st.label}</span></td>`; },
-  itemsQty:    o => `<td class="dim" data-col="itemsQty">${o.itemsQty ?? o.items ?? '—'}</td>`,
-  total:       o => `<td class="bold" data-col="total">${fmtMoney(o.total, 2)}</td>`,
-  channel:     o => `<td data-col="channel">${(_roMode === 'search' || _roIsAllCh) ? CocoColors.chBadgeHTML(o.channel) : `<span class="mc-meta">${escapeHtml(CocoColors.ch[o.channel]?.label || o.channel)}</span>`}</td>`,
+  name:        { cls: 'mono', html: o => escapeHtml(o.name || '') },
+  createdAt:   { cls: 'dim',  html: o => new Date(o.createdAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) },
+  customer:    { cls: 'dim',  html: o => escapeHtml(o.customer || '—') },
+  statusLabel: { cls: '',     html: o => { const st = statusTag(o); return `<span class="st-tag ${st.cls}">${st.label}</span>`; } },
+  itemsQty:    { cls: 'dim',  html: o => o.itemsQty ?? o.items ?? '—' },
+  total:       { cls: 'bold', html: o => fmtMoney(o.total, 2) },
+  channel:     { cls: '',     html: o => (_roMode === 'search' || _roIsAllCh) ? CocoColors.chBadgeHTML(o.channel) : `<span class="mc-meta">${escapeHtml(CocoColors.ch[o.channel]?.label || o.channel)}</span>` },
 };
 const RO_DEFAULT_COLS = ['name','createdAt','customer','statusLabel','itemsQty','total','channel'];
 let roColOrder = [...RO_DEFAULT_COLS];
+let roHiddenCols = new Set();
+let roDragKey = null;      // coluna sendo arrastada agora (vira a coluna tracejada na tabela)
+
+function emEdicao() { return document.body.classList.contains('edit-mode'); }
+
 // A ordem salva no navegador pode estar velha: uma coluna que deixou de existir, ou uma que nasceu
 // depois. Descarta o que não existe mais e acrescenta no fim o que apareceu depois, em vez de
 // jogar a ordem inteira fora ou deixar a tabela sem a coluna nova pra sempre.
 function roCols() {
   const validas = roColOrder.filter(k => RO_COLUMNS[k]);
   return [...validas, ...RO_DEFAULT_COLS.filter(k => !validas.includes(k))];
+}
+// No modo de edição a coluna oculta CONTINUA na tela, apagada: é o que permite trazer ela de volta.
+// Fora dele, ela some de verdade. Mesma ideia do card removido, que só existe enquanto se edita.
+function roVisibleCols() {
+  const todas = roCols();
+  return emEdicao() ? todas : todas.filter(k => !roHiddenCols.has(k));
+}
+function roCell(k, o) {
+  if (k === roDragKey) return `<td class="ro-col-ghost" data-col="${k}"></td>`;
+  const classes = [RO_COLUMNS[k].cls, roHiddenCols.has(k) ? 'ro-col-off' : ''].filter(Boolean).join(' ');
+  return `<td${classes ? ` class="${classes}"` : ''} data-col="${k}">${RO_COLUMNS[k].html(o)}</td>`;
 }
 // Linha de total: uma célula por coluna, sem colspan. O valor cai embaixo da coluna "Valor" onde
 // quer que ela esteja, e cada célula carrega o `data-col` que o celular usa pra esconder as mesmas
@@ -984,24 +997,130 @@ function roSummaryRow(cols, validos, total) {
   const rotulo = `Total (${validos} válidos)`;
   const iRotulo = cols.findIndex(k => k !== 'total');   // "Valor" na 1ª coluna: o rótulo vai pra seguinte em vez de sumir
   return '<tr class="ro-summary-row">' + cols.map((k, i) =>
-      k === 'total' ? `<td class="ro-summary-val" data-col="total">${fmtMoney(total, 2)}</td>`
-    : i === iRotulo ? `<td class="ro-summary-label" data-col="${k}">${rotulo}</td>`
+      k === roDragKey ? `<td class="ro-col-ghost" data-col="${k}"></td>`
+    : k === 'total'   ? `<td class="ro-summary-val" data-col="total">${fmtMoney(total, 2)}</td>`
+    : i === iRotulo   ? `<td class="ro-summary-label" data-col="${k}">${rotulo}</td>`
     : `<td data-col="${k}"></td>`
   ).join('') + '</tr>';
 }
 function renderOrdersHead() {
   const cabecalho = document.getElementById('ordersHead');
   if (!cabecalho) return;
-  cabecalho.innerHTML = '<tr>' + roCols().map(k =>
-    `<th class="ro-th" data-col="${k}"><span class="ro-th-grip" title="Arrastar para reordenar"><i class="bi bi-grip-vertical"></i></span>${escapeHtml(EXPORT_COLUMN_DEFS[k] || k)}</th>`
-  ).join('') + '</tr>';
+  cabecalho.innerHTML = '<tr>' + roVisibleCols().map(k => {
+    if (k === roDragKey) return `<th class="ro-th ro-col-ghost" data-col="${k}"></th>`;
+    const oculta = roHiddenCols.has(k);
+    const olho = `<button type="button" class="ro-th-eye" data-eye="${k}" title="${oculta ? 'Mostrar esta coluna' : 'Ocultar esta coluna'}"><i class="bi bi-eye${oculta ? '' : '-slash'}"></i></button>`;
+    return `<th class="ro-th${oculta ? ' ro-col-off' : ''}" data-col="${k}">`
+      + `<span class="ro-th-grip" title="Arrastar para reordenar"><i class="bi bi-grip-vertical"></i></span>`
+      + escapeHtml(EXPORT_COLUMN_DEFS[k] || k) + olho + '</th>';
+  }).join('') + '</tr>';
 }
+
+// ── Arrastar coluna ──
+// Mesmo arraste por ponteiro dos cards de Produtos/Estoque (nunca a API nativa de drag do HTML5):
+// um clone em position:fixed segue o cursor e o lugar de onde ele saiu fica tracejado.
+// A diferença é que aqui NÃO dá pra só mover o <th>: numa <table>, cabeçalho e corpo dividem as
+// mesmas colunas, então mexer só no cabeçalho não abre espaço nenhum — o corpo continua na ordem
+// antiga e a tabela fica com uma coluna a mais que ninguém preencheu (foi o que aconteceu na
+// primeira versão: o clone flutuava e nada se reorganizava). Por isso a ordem provisória vive numa
+// variável e a tabela INTEIRA é remontada a cada troca de posição: a coluna se move de verdade,
+// com os dados dela junto.
+let roDragClone = null, roDragX = 0, roDragY = 0, roDragGrab = 0, roDragOn = false;
+const RO_DRAG_LIMIAR = 4;
+
+function roDragMove(e) {
+  if (!roDragOn) {
+    if (Math.abs(e.clientX - roDragX) < RO_DRAG_LIMIAR && Math.abs(e.clientY - roDragY) < RO_DRAG_LIMIAR) return;
+    roDragOn = true;
+    document.body.classList.add('dragging-active');
+    renderOrdersPage();   // a coluna vira o rastro tracejado
+  }
+  roDragClone.style.left = (e.clientX - roDragGrab) + 'px';
+  roDragClone.style.top = (e.clientY - 14) + 'px';
+
+  // O <th> tracejado ocupa o lugar da coluna arrastada, então a lista de células do cabeçalho e a
+  // ordem provisória andam lado a lado: o índice de uma é o índice da outra.
+  const ths = [...document.querySelectorAll('#ordersHead th[data-col]')];
+  const cols = ths.map(th => th.dataset.col);
+  let alvo = ths.length - 1;
+  for (let i = 0; i < ths.length; i++) {
+    const box = ths[i].getBoundingClientRect();
+    if (e.clientX < box.left + box.width / 2) { alvo = i; break; }
+  }
+  if (cols.indexOf(roDragKey) === alvo) return;
+  roColOrder = roOrdemCompleta(roReordenar(cols, roDragKey, alvo));
+  renderOrdersPage();
+}
+// Move `k` pro lugar `alvo` da lista. A célula tracejada ocupa o lugar da coluna arrastada, então
+// a lista de células do cabeçalho e esta lista andam lado a lado e o índice de uma é o da outra.
+function roReordenar(cols, k, alvo) {
+  const atual = cols.indexOf(k);
+  if (atual < 0) return [...cols];
+  const nova = [...cols];
+  nova.splice(atual, 1);
+  nova.splice(Math.max(0, Math.min(alvo, nova.length)), 0, k);
+  return nova;
+}
+// Recoloca as colunas que não estão na tela (ocultas) nas posições relativas que já tinham, pra
+// arrastar uma coluna visível não embaralhar a ordem das escondidas.
+function roOrdemCompleta(visivel) {
+  const nova = [...visivel];
+  roCols().forEach((k, i) => {
+    if (nova.includes(k)) return;
+    const anterior = roCols().slice(0, i).reverse().find(x => nova.includes(x));
+    nova.splice(anterior ? nova.indexOf(anterior) + 1 : 0, 0, k);
+  });
+  return nova;
+}
+function roDragUp() {
+  document.removeEventListener('mousemove', roDragMove);
+  document.removeEventListener('mouseup', roDragUp);
+  if (roDragClone) { roDragClone.remove(); roDragClone = null; }
+  document.body.classList.remove('dragging-active');
+  const arrastou = roDragOn;
+  roDragKey = null;
+  roDragOn = false;
+  if (arrastou) persistLayout();
+  renderOrdersPage();
+}
+document.getElementById('ordersHead').addEventListener('mousedown', e => {
+  if (e.button !== 0 || !emEdicao()) return;
+  const alca = e.target.closest('.ro-th-grip');
+  if (!alca) return;
+  const th = alca.closest('th[data-col]');
+  if (!th) return;
+  e.preventDefault();
+  const rect = th.getBoundingClientRect();
+  roDragKey = th.dataset.col;
+  roDragX = e.clientX; roDragY = e.clientY; roDragGrab = e.clientX - rect.left;
+  roDragOn = false;
+  roDragClone = document.createElement('div');
+  roDragClone.className = 'ro-col-floating';
+  roDragClone.textContent = EXPORT_COLUMN_DEFS[roDragKey] || roDragKey;
+  roDragClone.style.width = rect.width + 'px';
+  roDragClone.style.left = rect.left + 'px';
+  roDragClone.style.top = (rect.top - 4) + 'px';
+  document.body.appendChild(roDragClone);
+  document.addEventListener('mousemove', roDragMove);
+  document.addEventListener('mouseup', roDragUp);
+});
+// Ocultar/mostrar. A última coluna visível não pode sumir: fora do modo de edição a tabela ficaria
+// sem coluna nenhuma, e quem visse isso não teria como adivinhar que o conserto está em "Editar".
+document.getElementById('ordersHead').addEventListener('click', e => {
+  const botao = e.target.closest('.ro-th-eye');
+  if (!botao) return;
+  const k = botao.dataset.eye;
+  if (!roHiddenCols.has(k) && roCols().filter(c => !roHiddenCols.has(c)).length <= 1) return;
+  roHiddenCols.has(k) ? roHiddenCols.delete(k) : roHiddenCols.add(k);
+  persistLayout();
+  renderOrdersPage();
+});
 
 function renderOrdersPage() {
   const body = document.getElementById('ordersBody');
   const pager = document.getElementById('ordersPager');
-  const cols = roCols();
-  renderOrdersHead();   // antes das saidas antecipadas: o cabecalho depende da ordem, nao dos dados
+  const cols = roVisibleCols();
+  renderOrdersHead();   // antes das saídas antecipadas: o cabeçalho depende da ordem, não dos dados
   const meta = document.getElementById('ordersMeta');
   const searching = _roMode === 'search';
   const filtered = _roStatusFilter !== 'todos';
@@ -1031,7 +1150,7 @@ function renderOrdersPage() {
   const start = _roPage * RO_PAGE_SIZE;
   const pageItems = ro.slice(start, start + RO_PAGE_SIZE);
 
-  const orderRows = pageItems.map(o => '<tr>' + cols.map(k => RO_COLUMNS[k](o)).join('') + '</tr>').join('');
+  const orderRows = pageItems.map(o => '<tr>' + cols.map(k => roCell(k, o)).join('') + '</tr>').join('');
   // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
   const roValidCount = ro.filter(o=>!o.cancelled).length;
   const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
@@ -1157,13 +1276,14 @@ function persistLayout() {
   const kpiOrder = [...kpiStripGrid.querySelectorAll('.kpi-mini')].map(c => c.dataset.kpiId);
   // A ordem das colunas entra AQUI, no layout da página, e não numa chave própria: é parte do que
   // o modo de edição arruma, então o botão "Redefinir" tem que desfazer ela junto com o resto.
-  localStorage.setItem(layoutKey(), JSON.stringify({ order, hidden: [...hiddenByUser], kpiOrder, kpiHidden: [...hiddenKpis], colOrder: roColOrder }));
+  localStorage.setItem(layoutKey(), JSON.stringify({ order, hidden: [...hiddenByUser], kpiOrder, kpiHidden: [...hiddenKpis], colOrder: roColOrder, colHidden: [...roHiddenCols] }));
 }
 function applyLayout() {
   const saved = loadLayout();
   hiddenByUser = new Set(saved.hidden || []);
   hiddenKpis = new Set(saved.kpiHidden || []);
   if (Array.isArray(saved.colOrder) && saved.colOrder.length) roColOrder = saved.colOrder;
+  roHiddenCols = new Set((saved.colHidden || []).filter(k => RO_COLUMNS[k]));
   renderOrdersHead();
   (saved.order || []).forEach(id => {
     const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
@@ -1186,6 +1306,7 @@ function resetLayout() {
   hiddenByUser = new Set();
   hiddenKpis = new Set();
   roColOrder = [...RO_DEFAULT_COLS];
+  roHiddenCols = new Set();
   renderOrdersPage();
   DEFAULT_ORDER.forEach(id => {
     const card = editGrid.querySelector(`.edit-card[data-card-id="${id}"]`);
@@ -1319,10 +1440,10 @@ kpiStripGrid.addEventListener('click', e => {
 // fixo "Indicadores" seja arrastado ou usado como referência de posição.
 const EC_DRAG_THRESHOLD = 4;
 let ecDragItem = null, ecDragGhost = null, ecDragClone = null, ecDragContainer = null;
-let ecDragItemClass = null, ecDragExclude = null, ecDragHorizontal = false, ecDragOnDrop = null;
+let ecDragItemClass = null, ecDragExclude = null;
 let ecDragGrabX = 0, ecDragGrabY = 0, ecDragStartX = 0, ecDragStartY = 0, ecDragStarted = false;
 
-function getEcDragAfterElement(container, itemClass, excludeSelector, x, y, horizontal) {
+function getEcDragAfterElement(container, itemClass, excludeSelector, x, y) {
   let els = [...container.querySelectorAll(`.${itemClass}`)];
   if (excludeSelector) els = els.filter(el => !el.matches(excludeSelector));
   let closest = null, closestDist = Infinity;
@@ -1333,12 +1454,6 @@ function getEcDragAfterElement(container, itemClass, excludeSelector, x, y, hori
     if (dist < closestDist) closestDist = dist, closest = { el, box };
   }
   if (!closest) return null;
-  // Numa fileira de colunas quem manda é o X: comparar o Y compararia sempre o mesmo valor (todas
-  // as células do cabeçalho estão na mesma linha) e a coluna nunca passaria pra direita.
-  if (horizontal) {
-    const cx = closest.box.left + closest.box.width / 2;
-    return (x > cx) ? closest.el.nextElementSibling : closest.el;
-  }
   const cy = closest.box.top + closest.box.height / 2;
   return (y > cy) ? closest.el.nextElementSibling : closest.el;
 }
@@ -1349,12 +1464,9 @@ function ecBeginDrag() {
   ecDragGrabX = ecDragStartX - rect.left;
   ecDragGrabY = ecDragStartY - rect.top;
 
-  // Mesma TAG do item, não um <div> fixo: dentro de um <tr> só cabe <th>/<td>, e o navegador
-  // expulsa da tabela qualquer outra coisa — o placeholder ia parar acima da tabela, sozinho.
-  ecDragGhost = document.createElement(ecDragItem.tagName);
+  ecDragGhost = document.createElement('div');
   ecDragGhost.className = ecDragItemClass + '-ghost';
-  if (ecDragHorizontal) ecDragGhost.style.width = rect.width + 'px';
-  else ecDragGhost.style.height = rect.height + 'px';
+  ecDragGhost.style.height = rect.height + 'px';
   if (ecDragItemClass === 'edit-card') ecDragGhost.style.gridColumn = item.style.gridColumn;
   item.after(ecDragGhost);
 
@@ -1375,7 +1487,7 @@ function ecDragPointerMove(e) {
   }
   ecDragClone.style.left = (e.clientX - ecDragGrabX) + 'px';
   ecDragClone.style.top = (e.clientY - ecDragGrabY) + 'px';
-  const afterEl = getEcDragAfterElement(ecDragContainer, ecDragItemClass, ecDragExclude, e.clientX, e.clientY, ecDragHorizontal);
+  const afterEl = getEcDragAfterElement(ecDragContainer, ecDragItemClass, ecDragExclude, e.clientX, e.clientY);
   if (afterEl == null) ecDragContainer.appendChild(ecDragGhost);
   else if (afterEl !== ecDragGhost) ecDragContainer.insertBefore(ecDragGhost, afterEl);
 }
@@ -1387,7 +1499,7 @@ function ecDragPointerUp() {
     ecDragContainer.insertBefore(item, ecDragGhost);
     item.classList.add('drop-bounce');
     setTimeout(() => item.classList.remove('drop-bounce'), 320);
-    (ecDragOnDrop || persistLayout)();
+    persistLayout();
   }
   if (ecDragGhost) { ecDragGhost.remove(); ecDragGhost = null; }
   if (ecDragClone) { ecDragClone.remove(); ecDragClone = null; }
@@ -1395,13 +1507,11 @@ function ecDragPointerUp() {
   ecDragItem = null;
   ecDragContainer = null;
   ecDragStarted = false;
-  ecDragHorizontal = false;
-  ecDragOnDrop = null;
 }
-function makeDragController(container, itemClass, excludeSelector, opts = {}) {
+function makeDragController(container, itemClass, excludeSelector) {
   container.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
-    const handle = e.target.closest(opts.handle || '.ec-handle');
+    const handle = e.target.closest('.ec-handle');
     if (!handle) return;
     const item = handle.closest(`.${itemClass}`);
     if (!item || (excludeSelector && item.matches(excludeSelector))) return;
@@ -1414,32 +1524,18 @@ function makeDragController(container, itemClass, excludeSelector, opts = {}) {
     ecDragStartX = e.clientX;
     ecDragStartY = e.clientY;
     ecDragStarted = false;
-    ecDragHorizontal = !!opts.horizontal;
-    ecDragOnDrop = opts.onDrop || null;
     document.addEventListener('mousemove', ecDragPointerMove);
     document.addEventListener('mouseup', ecDragPointerUp);
   });
 }
 makeDragController(editGrid, 'edit-card', '[data-card-id="kpiStrip"]');
 makeDragController(kpiStripGrid, 'kpi-mini');
-// As colunas de "Pedidos recentes" reordenam pelo MESMO mecanismo dos cards (arraste por ponteiro,
-// nunca a API nativa de drag do HTML5 — ver o comentário do controlador acima), só que na
-// horizontal e com o cabeçalho da própria coluna como alça. O listener fica no <thead>, que
-// sobrevive à remontagem do conteúdo dele.
-// O placeholder também é um <th>, então filtrar por [data-col] é o que impede ele de entrar na
-// ordem salva como uma coluna sem nome.
-makeDragController(document.getElementById('ordersHead'), 'ro-th', null, {
-  handle: '.ro-th-grip',
-  horizontal: true,
-  onDrop: () => {
-    roColOrder = [...document.querySelectorAll('#ordersHead th[data-col]')].map(th => th.dataset.col);
-    persistLayout();
-    renderOrdersPage();
-  },
-});
 
 function setEditMode(on) {
   document.body.classList.toggle('edit-mode', on);
+  // A tabela muda de conteúdo entre os dois modos: editando, a coluna oculta aparece apagada pra
+  // poder voltar; fora daí, ela some. Sem remontar aqui, a alça e o olho ficariam pra trás.
+  renderOrdersPage();
   document.getElementById('editModeBtn').classList.toggle('period-pill-active', on);
   document.getElementById('cardBank').classList.remove('open');
   if (on) renderCardBank();

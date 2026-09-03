@@ -927,19 +927,39 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   "o que tiver parado no 3º e no 4º lugar", que pode ser o número do pedido e o valor. Hoje é
   `[data-col="customer"]`/`[data-col="statusLabel"]`, e é por isso que TODA célula gerada carrega
   o próprio `data-col`.
-- O arraste é o MESMO `makeDragController` dos cards (ponteiro, nunca a API nativa de drag do
-  HTML5 — ver "Padrões de UI compartilhados"), agora com `horizontal`, `handle` e `onDrop` por
-  parâmetro. Duas armadilhas que ele escondia:
-  - o placeholder era um `<div>` fixo, e dentro de um `<tr>` só cabe `<th>`/`<td>` — o navegador
-    expulsa qualquer outra coisa da tabela. Hoje ele nasce com a tag do item arrastado;
-  - o placeholder também é um `<th>`, então a ordem salva é lida de `#ordersHead th[data-col]` —
-    sem isso ela ganhava uma "coluna" sem nome.
-- A ordem escolhida entra no MESMO `coco_layout_<market>` do resto da página (`colOrder`), e não
-  numa chave própria: é parte do que o modo de edição arruma, então o botão "Redefinir" desfaz ela
-  junto. Ordem salva velha é remendada em vez de descartada — coluna que não existe mais sai,
-  coluna que nasceu depois entra no fim.
-- `scripts/test/colunas-pedidos.test.mjs` executa o modelo de verdade (célula a célula, linha de
-  total com a coluna "Valor" em três posições, cabeçalho montado) e guarda as armadilhas acima.
+- **Numa `<table>` não dá pra reordenar arrastando só o `<th>`.** Foi a primeira tentativa e ela
+  parecia funcionar no código: o cabeçalho recebia o placeholder e o nó do `<th>` mudava de lugar.
+  Na tela, nada se reorganizava (relatado pelo Luan com print) — cabeçalho e corpo DIVIDEM as
+  mesmas colunas, então mexer só no cabeçalho não abre espaço nenhum: o corpo continua na ordem
+  antiga e a tabela ganha uma coluna que nenhuma linha preenche. Vale pra qualquer tabela deste
+  app, não só esta.
+- O que funciona é remontar a tabela INTEIRA a cada troca de posição, a partir de uma ordem
+  provisória (`roDragKey` + `roReordenar`/`roOrdemCompleta`): a coluna se move de verdade, com os
+  dados dela junto, e o lugar de onde ela saiu vira uma coluna tracejada de cima a baixo. O
+  arraste em si é o mesmo por ponteiro de Produtos/Estoque (clone `position:fixed` seguindo o
+  cursor, nunca a API nativa de drag do HTML5), mas é controlador PRÓPRIO: o `makeDragController`
+  compartilhado move o nó do item, que é justamente o que não serve aqui.
+- A etiqueta que segue o cursor é um `<div>` solto no `body`, não o `<th>` clonado: célula
+  arrancada da tabela perde o próprio tamanho e vira texto cru boiando na tela.
+- **Ocultar coluna**: no modo de edição a coluna oculta CONTINUA na tela, apagada e com o botão
+  oferecendo mostrar; fora dele ela some de verdade (`roVisibleCols`). Os dois lados são o
+  recurso: sumir nos dois modos deixaria a coluna inalcançável, e ficar cinza nos dois faria
+  "ocultar" não ocultar nada. A última coluna visível não pode ser ocultada — a tabela ficaria sem
+  coluna nenhuma e ninguém adivinharia que o conserto está em "Editar". Entrar e sair do modo de
+  edição remonta a tabela, senão a alça e o olho ficariam pra trás.
+- Ocultar aqui não mexe no CSV: o modal de exportar tem a própria escolha de colunas.
+- A ordem e as ocultas entram no MESMO `coco_layout_<market>` do resto da página
+  (`colOrder`/`colHidden`), e não numa chave própria: são parte do que o modo de edição arruma,
+  então o botão "Redefinir" desfaz as duas junto. Ordem salva velha é remendada em vez de
+  descartada — coluna que não existe mais sai, coluna que nasceu depois entra no fim. E arrastar
+  uma coluna visível passa por `roOrdemCompleta`, que devolve as ocultas às posições relativas que
+  tinham: sem isso elas caem todas pro fim e reaparecem fora de lugar quando alguém as mostra.
+- `scripts/test/colunas-pedidos.test.mjs` executa o modelo de verdade (célula a célula, ocultar
+  nos dois modos, a conta da reordenação, a linha de total com a coluna "Valor" em três posições,
+  cabeçalho montado) e guarda as armadilhas acima.
+- O teste de rótulo de status varria o arquivo inteiro atrás de `cls: '...'` pra conferir que toda
+  classe de tag tem estilo. Com `RO_COLUMNS` carregando `cls: 'mono'/'dim'/'bold'`, ele passou a
+  exigir um `.st-tag.mono` que nunca deveria existir — hoje ele varre só o corpo do `statusTag`.
 
 ### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
 - **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
