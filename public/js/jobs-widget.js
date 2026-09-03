@@ -25,7 +25,10 @@
   const DISMISSED_ALL_KEY = 'coco_jobs_widget_dismissed_all';
   const DISMISSED_JOBS_KEY = 'coco_jobs_widget_dismissed_jobs';
   const POLL_MS = 3000;
-  const HIDE_AFTER_DONE_MS = 8000;
+  // Com tudo concluído o card some sozinho depois disso. Igual ao POLL_MS de propósito: é o tempo
+  // de uma volta do poll, então o card não vive mais que uma leitura depois de não ter mais nada
+  // pra contar.
+  const HIDE_AFTER_DONE_MS = 3000;
   const MIN_W = 240, MIN_H = 130;
 
   const esc = window.escapeHtml;
@@ -323,8 +326,12 @@
     try { sessionStorage.setItem(DISMISSED_JOBS_KEY, JSON.stringify([...set])); } catch (e) {}
   }
 
-  let lastAnyRunning = false;
   let hideTimer = null;
+  // Sumiu sozinho porque tudo terminou. Precisa de estado próprio: o render roda a cada volta do
+  // poll e reacende o card (`add('jw-show')` mais abaixo), então sem esta marca ele voltava três
+  // segundos depois de ter sumido, e seguia piscando até o servidor esquecer o job (15 min).
+  // Volta a zero sozinho quando aparece qualquer job rodando — aí há o que mostrar de novo.
+  let autoHidden = false;
   let lastRawJobs = [];
   // Fechar o widget inteiro (×) só "pega de novo" quando aparece um job rodando que não estava
   // na lista no momento do fechamento — ver comentário no listener do jwClose abaixo. Restaurado
@@ -335,6 +342,20 @@
   // Fechar um job já concluído/erro/cancelado individualmente (× na linha) — chave por
   // id+finishedAt, então uma execução NOVA do mesmo job (finishedAt diferente) volta a aparecer.
   let dismissedJobKeys = loadDismissedJobs();
+
+  // Decide, a cada leitura, se o card fica na tela e o que fazer com o cronômetro de sumir.
+  // Pura de propósito: é a regra que já errou de dois jeitos, e nenhum dos dois dá erro nenhum —
+  // reacender sozinho três segundos depois de ter sumido, e ficar parado pra sempre na tela de
+  // quem chegou com tudo já concluído.
+  function planoDoCard({ anyRunning, dismissed, autoHidden, timerArmado }) {
+    // Rodando: há o que mostrar. O sumiu-sozinho anterior é esquecido, senão um processo novo
+    // nasceria escondido.
+    if (anyRunning) return { mostrar: !dismissed, autoHidden: false, cancelarTimer: true, armarTimer: false };
+    // Tudo concluído: arma o cronômetro mesmo sem ter visto a transição — quem troca de página
+    // logo depois que o processo terminou chega aqui com tudo pronto. Rearmar a cada volta do
+    // poll empurraria o prazo pra frente pra sempre, então só arma se ainda não estiver armado.
+    return { mostrar: !dismissed && !autoHidden, autoHidden, cancelarTimer: false, armarTimer: !timerArmado };
+  }
 
   function render(rawJobs) {
     lastRawJobs = rawJobs;
@@ -362,18 +383,16 @@
       ? (running.length === 1 ? running[0].label : running.length + ' processos em andamento')
       : 'Processos concluídos';
     widget.querySelector('.jw-spinner').style.display = anyRunning ? '' : 'none';
-    if (dismissed) widget.classList.remove('jw-show');
-    else widget.classList.add('jw-show');
-
-    if (anyRunning) {
-      lastAnyRunning = true;
-      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-    } else if (lastAnyRunning) {
-      // Acabou de terminar agora — some sozinho depois de um tempo, dá pra ler o resultado antes.
-      lastAnyRunning = false;
-      if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(() => { widget.classList.remove('jw-show'); }, HIDE_AFTER_DONE_MS);
-    }
+    const plano = planoDoCard({ anyRunning, dismissed, autoHidden, timerArmado: !!hideTimer });
+    autoHidden = plano.autoHidden;
+    if (plano.mostrar) widget.classList.add('jw-show');
+    else widget.classList.remove('jw-show');
+    if (plano.cancelarTimer && hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (plano.armarTimer) hideTimer = setTimeout(() => {
+      hideTimer = null;
+      autoHidden = true;
+      widget.classList.remove('jw-show');
+    }, HIDE_AFTER_DONE_MS);
   }
 
   async function poll() {
