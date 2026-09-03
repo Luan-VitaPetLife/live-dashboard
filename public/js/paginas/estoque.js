@@ -581,10 +581,10 @@ async function load() {
 }
 
 // ── Sincronizar agora ───────────────────────────────────────
-document.getElementById('syncBtn').addEventListener('click', async () => {
-  try { await fetch('/api/sync', { method: 'POST' }); } catch (e) {}
-  load();
-});
+// Comportamento compartilhado (js/sync-btn.js): desabilita, mostra que está rodando e mostra o
+// erro no próprio botão quando falha. Antes cada tela tinha a sua cópia, três delas sem retorno
+// nenhum, e todas engoliam o erro.
+CocoSync.ligar(load);
 
 // ── Atualizar (frequência de refresh automático) ───────────
 document.getElementById('cselRefresh').addEventListener('click', e => {

@@ -112,8 +112,9 @@ public/
   favicon.png            convenção de raiz, fica onde está
   css/                   switch.css anim.css catalogo.css   (estilo compartilhado)
   css/paginas/           um .css por página, extraído do <style> dela
-  js/                    sidebar.js colors.js geo.js periodo.js moeda.js pill-switch.js
-                         confirm-modal.js jobs-widget.js escape.js   (componentes compartilhados)
+  js/                    sidebar.js colors.js geo.js periodo.js moeda.js sync-btn.js
+                         pill-switch.js confirm-modal.js jobs-widget.js escape.js
+                         (componentes compartilhados)
   js/paginas/            um .js por página, extraído do <script> dela
   img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
   img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
@@ -1059,6 +1060,31 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   o teste varre todas as regras `.x.open{display:` do app e falha se alguma ficou de fora, e
   falha de novo se ela não tiver estado de entrada declarado (sairia suave e entraria seca).
 
+### Botão "Sincronizar" (`public/js/sync-btn.js`, `CocoSync`)
+- **`POST /api/sync` é síncrono**: ele espera a sincronização INTEIRA terminar antes de responder,
+  e isso leva minutos. Qualquer botão ligado nele PRECISA dizer que está trabalhando, senão o
+  clique não muda nada na tela por vários minutos e a única leitura possível é "não funciona".
+- Eram seis handlers copiados, com quatro comportamentos: Visão geral e Geografia mexiam no "Ao
+  vivo" do topo, o Unificador desabilitava e dava um toast, e **Produtos, Estoque e Campanhas não
+  davam retorno nenhum** — foi o que o Luan relatou em 03/09/2026 ("clico e nada acontece").
+- **Os seis engoliam o erro** (`catch (e) {}`), o que a última linha das convenções proíbe. E como
+  o endpoint tem limite de chamadas (`syncLimiter`), o reflexo natural de clicar de novo rende um
+  429 — o segundo clique era justamente o que sumia calado. O Unificador era o pior: dizia
+  "Sincronizado." mesmo quando tinha falhado.
+- Hoje o estado aparece **no próprio botão** (trava, ícone girando, "Sincronizando…", e a falha
+  vira texto ali mesmo por 5s). É o único canal que serve às 6 telas: nem toda página tem toast, e
+  erro que só vai pro console é erro que ninguém vê. 429 e 401 ganham frase própria, porque
+  "aguarde" e "sua sessão caiu" são coisas que a pessoa consegue resolver.
+- **Falhou, não recarrega.** Recarregar depois de erro redesenha os mesmos números e faz parecer
+  que sincronizou.
+- `CocoSync.ligar(recarregar, { aoIniciar })`: `recarregar` é o que a página faz pra reler os
+  dados, `aoIniciar` é opcional e serve às duas telas que também mexem no indicador "Ao vivo".
+  Passar a função como VALOR só é seguro porque `load`/`loadData` são `function` declarada em todas
+  as páginas (içamento) — se alguma virar `const`, a chamada precisa virar `() => load()`.
+- `scripts/test/sync-btn.test.mjs` executa o botão contra um DOM e um `fetch` falsos (estado
+  durante, clique duplo, cada código de erro, rede fora) e falha se uma página voltar a chamar
+  `/api/sync` por conta própria ou esquecer o `<script>`.
+
 ### Dinheiro sempre com centavos (`public/js/moeda.js`, `CocoMoeda`)
 - **Fonte única do formato de valor**, nas 6 telas que mostram dinheiro (Visão geral, Geografia,
   Campanhas, Produtos, Segmentos, Unificador). Estoque não entra: aquela tela não mostra valor
@@ -1683,6 +1709,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   nunca zera a venda de quem já vendeu),
   `moeda` (valor sempre com centavos, símbolo vindo do Intl, e nenhuma tela formatando por conta
   própria),
+  `sync-btn` (o botão avisa que está sincronizando, não aceita clique duplo, mostra o erro na tela
+  e não recarrega depois de falhar),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),
