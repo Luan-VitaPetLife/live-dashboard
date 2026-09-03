@@ -695,13 +695,12 @@ async function hideRemoveTag(tag){
   renderHideTags();
   load();
 }
-$('syncBtn').addEventListener('click', async () => {
-  $('syncBtn').disabled = true;
-  try { await fetch('/api/sync', { method: 'POST' }); } catch (e) {}
-  await load();
-  $('syncBtn').disabled = false;
-  toast('Sincronizado.');
-});
+// Comportamento compartilhado (js/sync-btn.js): desabilita, mostra que está rodando e mostra o
+// erro no próprio botão quando falha. Antes cada tela tinha a sua cópia, três delas sem retorno
+// nenhum, e todas engoliam o erro.
+// O aviso de sucesso só sai depois de recarregar de verdade: antes ele aparecia mesmo quando a
+// sincronização tinha falhado, que é pior que não avisar nada.
+CocoSync.ligar(async () => { await load(); toast('Sincronizado.'); });
 
 $('hideBtn').addEventListener('click', openHideModal);
 $('hideCloseBtn').addEventListener('click', closeHideModal);

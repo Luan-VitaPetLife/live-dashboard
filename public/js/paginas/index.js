@@ -1702,11 +1702,10 @@ document.getElementById('mktToggleWrap').addEventListener('click', e => {
   loadData();
 });
 
-document.getElementById('syncBtn').addEventListener('click',async()=>{
-  setLive('loading','Sincronizando…');
-  try { await fetch('/api/sync',{method:'POST'}); } catch(e){}
-  loadData();
-});
+// Comportamento compartilhado (js/sync-btn.js): desabilita, mostra que está rodando e mostra o
+// erro no próprio botão quando falha. Antes cada tela tinha a sua cópia, três delas sem retorno
+// nenhum, e todas engoliam o erro.
+CocoSync.ligar(loadData, { aoIniciar: () => setLive('loading', 'Sincronizando…') });
 
 // ── Busca de pedidos recentes ──
 document.getElementById('ordersSearch').addEventListener('input', e => {
