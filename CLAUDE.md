@@ -690,6 +690,17 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   lojas entram pelo mesmo `loja.id`, esse campo sozinho não separa as marcas, e a dashboard
   distingue Yucaloo de Coco and Luna justamente pelo `channel`. A separação vai ter que sair de
   outro sinal do próprio pedido.
+- **Saída em bonificação (doação para UGC):** a empresa envia produto sem cobrar, e no Bling isso
+  sai com "Natureza de operação: Saída em bonificação", valor R$ 0. A dashboard precisa contar
+  essas UNIDADES sem que elas virem receita (pedido do Luan, 04/09/2026). O bloqueio é o mesmo de
+  sempre: "natureza de operação" é campo de NOTA FISCAL e o que lemos hoje é PEDIDO DE VENDA, então
+  não se sabe ainda onde a marca vive de forma legível pela API. `GET /api/bling/probe-bonificacao
+  ?since=&until=` (admin) tenta as variações da chamada e devolve o esqueleto da resposta mais as
+  naturezas encontradas, contadas — sondar primeiro, mapear depois.
+- **A sonda de bonificação nunca devolve dado de quem recebeu.** A nota fiscal carrega nome, CPF,
+  endereço, e-mail e telefone, e essa resposta é feita pra ser lida e colada numa conversa. O
+  mascaramento é allowlist POSITIVA (campo novo nasce mascarado) e é TESTADO, não só documentado:
+  a sonda da Shopee já vazou o texto livre do comprador contrariando o próprio comentário dela.
 - **A captura está bloqueada até chegar pedido de teste**, e é bloqueio deliberado: quem decide se
   um pedido conta como venda é o `situacao` do Bling, cujo vocabulário não foi observado ainda.
   Adivinhar isso quebraria a regra mais importante do projeto ("só pedido com pagamento de verdade
@@ -1872,6 +1883,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   não vira linha, senha nunca entra, e a tela não reformata valor por conta própria),
   `comparacao` (a janela comparada tem o mesmo tamanho e termina no dia anterior, meia escolha cai
   no automático, e só barra de período leva data),
+  `bling-sonda` (a sonda de bonificação mostra a natureza e o produto, e nunca o nome, CPF,
+  endereço, e-mail ou telefone de quem recebeu),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),
@@ -1907,6 +1920,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   mercado (poda OU busca, decide sozinho), ver tela Integrações
 - `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
 - `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
+- `GET /api/bling/probe-bonificacao?since=&until=` (admin) — naturezas de operação encontradas e
+  o esqueleto da nota, pra mapear a saída em bonificação sobre dado real (sem dado do destinatário)
 - `GET /api/shopee/probe-returns?days=N` (admin) — esqueleto da resposta da API de devolução da
   Shopee, pra escrever o mapeamento em cima de dado real
 - `POST /api/shopee/sync-returns` (admin) — relê as devoluções da Shopee agora e marca os pedidos;

@@ -1409,6 +1409,19 @@ app.get('/bling/callback', async (req, res) => {
 // completo (com bloco de transporte/transportadora) dos primeiros pedidos da página.
 // Sob o mesmo syncLimiter das rotas Amazon: dispara chamada real à API do Bling, que também
 // tem cota própria e apertada (3 req/s, 120k/dia, confirmado na documentação) — nunca martelar.
+// Sonda das saídas em bonificação (doação para UGC). Admin: a resposta descreve a operação da
+// empresa, e é feita pra ser lida e colada numa conversa — por isso ela já vem sem dado do
+// destinatário (ver esqueletoBling em src/bling.js).
+app.get('/api/bling/probe-bonificacao', requireAdmin, syncLimiter, async (req, res) => {
+  try {
+    const { since, until } = req.query;
+    if (!since || !until) return res.status(400).json({ error: 'Parâmetros since/until obrigatórios (YYYY-MM-DD).' });
+    res.json(await bling.probeBonificacao(since, until));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/bling/probe-orders', syncLimiter, async (req, res) => {
   try {
     const { since, until } = req.query;
