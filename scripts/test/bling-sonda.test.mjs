@@ -64,6 +64,31 @@ t.ok(!JSON.stringify(comCampoNovo).includes('Outro Nome'), 'campo novo que o Bli
 t.ok(!JSON.stringify(comCampoNovo).includes('anotação interna'), 'inclusive observação livre');
 t.eq(comCampoNovo.nomeSocial, '<string>', 'aparecendo como tipo, pra sonda continuar mostrando a FORMA da resposta');
 
+// ── Campo vazio é vazio, não um bloco ilegível ──
+// `typeof null` é 'object': sem tratar, um campo sem valor saía como "<object>" e parecia um
+// pedaço que a sonda não conseguiu ler. Aconteceu na primeira rodada, com o pedido zerado.
+t.eq(esqueletoBling(null), null, 'campo nulo continua nulo em vez de virar "<object>"');
+t.eq(esqueletoBling({ loja: null }).loja, null, 'inclusive aninhado');
+
+// ── A natureza vem como ID, e é assim que ela precisa ser lida ──
+// Confirmado ao vivo: a nota traz `naturezaOperacao: { id }`, SEM descrição. Uma leitura que
+// procure só o nome devolve "sem natureza" para todas as notas e não separa nada.
+const comId = esqueletoBling({ naturezaOperacao: { id: 15110849801 } });
+t.eq(comId.naturezaOperacao.id, 15110849801, 'o id da natureza chega inteiro para poder ser cruzado com o nome');
+
+const bling = fs.readFileSync(path.join(ROOT, 'src', 'bling.js'), 'utf8');
+t.ok(/naturezas-operacoes/.test(bling), 'a sonda busca a tabela de nomes das naturezas');
+t.ok(/n\.naturezaOperacao\?\.id/.test(bling), 'e agrupa as notas pelo id da natureza, não pelo nome que não vem');
+
+// ── Nada pode parar em 100 fingindo que acabou ──
+// Uma página é o tamanho da página, não o tamanho do período. Foi o que aconteceu na primeira
+// rodada: 100 notas e 100 pedidos, os dois truncados sem dizer.
+t.ok(/incompleta = true/.test(bling), 'a paginação declara quando parou antes do fim');
+// As DUAS listas paginam (notas e pedidos). Procurar a condição no arquivo inteiro passaria com
+// uma das duas parando na primeira página, porque a outra ainda casa com a busca.
+const paginam = (bling.match(/if \(lote\.length < 100\) break/g) || []).length;
+t.eq(paginam, 2, 'as duas listas só terminam quando a página vem incompleta');
+
 // ── A sonda é de administrador ──
 // A resposta descreve a operação da empresa. `syncLimiter` sozinho não é controle de acesso.
 const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
