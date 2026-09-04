@@ -171,7 +171,9 @@ export async function probeOrder() {
 // Devolve só o ESQUELETO (nomes de campo) e valores que não identificam ninguém. Nada de nome,
 // endereço ou comentário de comprador. Usado por GET /api/shopee/probe-returns.
 const CAMPOS_SEGUROS = new Set([
-  'return_sn', 'order_sn', 'status', 'reason', 'text_reason', 'negotiation_status',
+  // 'text_reason' fica FORA de propósito: é o texto livre que o comprador escreveu, e a sonda
+  // promete não trazer comentário de comprador. 'reason' entra porque é código fixo (NOT_RECEIPT).
+  'return_sn', 'order_sn', 'status', 'reason', 'negotiation_status',
   'refund_amount', 'amount', 'currency', 'create_time', 'update_time', 'return_solution',
   'item_id', 'model_id', 'quantity', 'item_sku', 'name', 'seller_proof_status',
 ]);
@@ -215,6 +217,85 @@ export async function probeReturns({ days = 60 } = {}) {
     }
   }
   return { error: 'nenhuma variação da chamada funcionou', tentativas: erros };
+}
+
+// ── Devoluções (reembolso) ───────────────────────────────────────────────────────────────────
+// Escrito em cima da resposta REAL da API (a sonda acima, rodada em produção em 04/09/2026), e
+// não da documentação — os nomes de campo daqui enganam:
+//   `item[].amount`  é QUANTIDADE de unidades, não dinheiro (o dinheiro do item é `refund_amount`);
+//   `refund_amount`  existe nos dois níveis, no pedido de devolução e dentro de cada item;
+//   `order_sn`       é o que liga a devolução ao nosso pedido ('shopee:' + order_sn).
+//
+// A variação da chamada COM janela de tempo falhou na sonda e a sem janela funcionou, então não
+// dá pra filtrar por data no servidor deles. Lemos a lista inteira e deixamos o cruzamento por
+// pedido decidir o que interessa: devolução de pedido que não temos cai fora sozinha.
+const RETURNS_MAX_PAGES = 40;
+const RETURNS_PAGE_SIZE = 50;
+
+// Agrupa a resposta crua por PEDIDO. Separada da chamada de rede de propósito: é aqui que mora
+// a decisão de quanto foi devolvido, e ela precisa ser executável num teste sem token.
+export function reembolsosDaLista(brutos) {
+  // ALLOWLIST POSITIVA: só entra o status que significa dinheiro devolvido de verdade. Um pedido
+  // de devolução que o comprador abriu e ainda está em análise (ou que foi recusado) não pode
+  // tirar a unidade da venda. Lista negativa erraria no sentido pior: qualquer status novo que a
+  // Shopee criasse passaria a descontar venda sozinho, sem ninguém decidir isso.
+  //
+  // O que fica de fora NÃO some calado — volta contado em `porStatus`, pra um status novo
+  // aparecer no relatório do sync em vez de virar número errado em silêncio.
+  const STATUS_REEMBOLSADO = new Set(['ACCEPTED']);
+
+  const porStatus = {};
+  const porPedido = new Map();
+  const vistos = new Set();
+
+  for (const d of brutos) {
+    // A mesma devolução pode voltar em mais de uma página; contá-la duas vezes dobraria a baixa.
+    if (!d?.return_sn || vistos.has(d.return_sn)) continue;
+    vistos.add(d.return_sn);
+
+    const status = String(d.status || '').toUpperCase();
+    porStatus[status] = (porStatus[status] || 0) + 1;
+    if (!STATUS_REEMBOLSADO.has(status) || !d.order_sn) continue;
+
+    const id = 'shopee:' + d.order_sn;
+    // Um pedido pode ter mais de uma devolução: as unidades e o dinheiro somam.
+    const alvo = porPedido.get(id) || { id, qty: 0, refundedTotal: 0, returnedAt: null, porProduto: [] };
+    for (const it of (d.item || [])) {
+      const qty = Number(it?.amount) || 0; // `amount` é quantidade, não dinheiro
+      if (!(qty > 0)) continue;
+      alvo.qty += qty;
+      alvo.porProduto.push({ sku: it.item_sku || null, title: it.name || null, qty });
+    }
+    alvo.refundedTotal += Number(d.refund_amount) || 0;
+    const quando = Number(d.update_time || d.create_time) || 0;
+    if (quando) {
+      const iso = new Date(quando * 1000).toISOString();
+      if (!alvo.returnedAt || iso > alvo.returnedAt) alvo.returnedAt = iso;
+    }
+    porPedido.set(id, alvo);
+  }
+
+  return { reembolsos: [...porPedido.values()], porStatus };
+}
+
+export async function fetchReturns() {
+  if (!isConfigured() || !getShopeeTokens()) return { reembolsos: [], porStatus: {}, incompleta: false };
+
+  const brutos = [];
+  let incompleta = false;
+  for (let pagina = 0; ; pagina++) {
+    // Sem filtro de data, a lista só cresce. O teto existe pra uma conta com muita devolução não
+    // prender o sync — e quando ele é atingido a leitura se declara INCOMPLETA em vez de passar
+    // por completa. Lista curta que parece inteira é o erro que já custou caro na Amazon.
+    if (pagina >= RETURNS_MAX_PAGES) { incompleta = true; break; }
+    const r = await shopCall('/api/v2/returns/get_return_list', {
+      page_no: String(pagina), page_size: String(RETURNS_PAGE_SIZE),
+    });
+    brutos.push(...(r.response?.return || []));
+    if (!r.response?.more) break;
+  }
+
+  return { ...reembolsosDaLista(brutos), incompleta };
 }
 
 // Lista pedidos no intervalo e devolve normalizados (mesmo formato da Shopify).
@@ -277,6 +358,9 @@ export async function fetchOrders(sinceISO, untilISO) {
         state:     toUF(o.recipient_address?.state),
         items: (o.item_list || []).map(it => ({
           title:  it.item_name,
+          // O SKU é o que liga a devolução à LINHA certa do pedido (ver fetchReturns e
+          // patchOrderRefunds). Sem ele a baixa cairia no produto errado num pedido de vários.
+          sku:    it.item_sku || it.model_sku || null,
           qty:    it.model_quantity_purchased || it.quantity || 1,
           amount: (Number(it.model_discounted_price ?? it.model_original_price) || 0) * (it.model_quantity_purchased || 1),
           image:  it.image_info?.image_url || null,

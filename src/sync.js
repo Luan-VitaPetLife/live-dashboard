@@ -140,6 +140,14 @@ async function doSync() {
       upsertOrders(orders);
       report.shopee = orders.length;
     } catch (e) { report.errors.push('shopee.orders: ' + e.message); }
+
+    // Devolução vem de uma API separada e chega DEPOIS da venda, então é lida a cada ciclo em vez
+    // de junto do pedido. Custa uma chamada: a lista inteira da conta cabe numa página só hoje.
+    try {
+      const r = await reconcileShopeeReturns();
+      report.shopee_returns = r.patched;
+      if (r.incompleta) report.errors.push('shopee.returns: lista veio incompleta (teto de páginas)');
+    } catch (e) { report.errors.push('shopee.returns: ' + e.message); }
   } else { report.disabled.push('shopee'); }
 
   // Mercado Livre — pedidos (só se já autorizado)
@@ -474,6 +482,45 @@ export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = f
     }
   }
   return out;
+}
+
+// ── Devoluções da Shopee ──────────────────────────────────────────────────────
+// Fecha o último canal em que a unidade devolvida ainda contava como vendida (CLAUDE.md,
+// "Devoluções descontam da quantidade E da receita").
+//
+// Total ou parcial. Com unidade conhecida vale a conta de sempre. Sem unidade — devolução só em
+// dinheiro, que acontece quando a Shopee não detalha o item — quem decide é o valor: comparar
+// unidades daria "parcial" pra um estorno do pedido inteiro.
+function classificarReembolsoShopee(pedido, d) {
+  if (d.qty > 0) return classificarDevolucao(pedido, d.qty);
+  return d.refundedTotal >= (Number(pedido.total) || 0) ? 'total' : 'parcial';
+}
+
+// Patch-only, igual à Amazon: nunca insere pedido, nunca toca em total/status/items — só marca
+// o que voltou. Devolução de pedido que não temos cai fora sozinha, sem criar nada.
+export async function reconcileShopeeReturns() {
+  const { reembolsos, porStatus, incompleta } = await shopee.fetchReturns();
+  const porId = new Map(getOrders({ channel: 'shopee', market: 'br' }).map(o => [o.id, o]));
+
+  const patches = [];
+  let semPedido = 0;
+  for (const d of reembolsos) {
+    const pedido = porId.get(d.id);
+    // Devolução de pedido que não temos (mais antigo que o histórico guardado): ignorar é o certo.
+    if (!pedido) { semPedido++; continue; }
+    patches.push({
+      id:          d.id,
+      refunded:    classificarReembolsoShopee(pedido, d),
+      refundedQty: d.qty,
+      refundedAt:  d.returnedAt,
+      itens:       d.porProduto,
+      // A Shopee informa o valor exato devolvido, então o desconto sai dele e não da conta por
+      // unidade — mesmo princípio do extrato de repasse da Amazon.
+      ...(d.refundedTotal > 0 ? { refundedTotal: d.refundedTotal } : {}),
+    });
+  }
+  const r = patchOrderRefunds(patches);
+  return { ...r, reembolsos: reembolsos.length, semPedido, porStatus, incompleta };
 }
 
 // ── Nomes de produto da Amazon via getOrderItems (Orders API) ──────────────────

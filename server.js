@@ -5,7 +5,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
-import { runSync, reconcileAmazonNames, reconcileAmazonReturns, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
+import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeReturns, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import * as ml from './src/mercadolivre.js';
@@ -1262,6 +1262,14 @@ app.get('/api/shopee/probe-order', async (req, res) => {
 app.get('/api/shopee/probe-returns', requireAdmin, async (req, res) => {
   const days = Math.min(180, Math.max(1, Number(req.query.days) || 60));
   try { res.json(await shopee.probeReturns({ days })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Releitura manual das devoluções da Shopee. Diferente da Amazon, aqui não é job em segundo
+// plano: é uma chamada só, responde em segundos. O sync normal já faz isso a cada ciclo — este
+// endpoint serve pra conferir o resultado na hora (`porStatus` mostra o que ficou de fora).
+app.post('/api/shopee/sync-returns', requireAdmin, async (req, res) => {
+  try { res.json(await reconcileShopeeReturns()); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 

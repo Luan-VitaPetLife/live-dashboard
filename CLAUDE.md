@@ -240,11 +240,11 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 ### Shopee (`src/shopee.js`)
 - Open Platform API v2 direto. Assinatura HMAC-SHA256(partner_key, partner_id+path+timestamp[+token+shop_id]).
 - Sem analytics via API (só no Seller Center).
-- **Devolução ainda não é descontada** (único canal que falta). A API existe
-  (`/api/v2/returns/get_return_list`), mas a documentação pública não expõe os nomes de campo da
-  resposta. `GET /api/shopee/probe-returns?days=N` (admin) devolve o ESQUELETO da resposta real
-  (só nomes de campo e valores que não identificam ninguém) pra o mapeamento ser escrito em cima
-  de dado de verdade, e não de chute.
+- **Devolução é descontada** desde 04/09/2026, via `/api/v2/returns/get_return_list`
+  (`fetchReturns`). A documentação pública não expõe os nomes de campo da resposta, então o
+  mapeamento foi escrito em cima do ESQUELETO que `GET /api/shopee/probe-returns?days=N` (admin)
+  leu da API de verdade — sondar primeiro, mapear depois, o mesmo caminho da Amazon. Detalhes em
+  "Devoluções da Shopee".
 - A Shopee mascara todos os campos de endereço do pedido como `"****"` — não tem correção via
   código, é política da plataforma. O Bling ERP (recebe pedidos de todos os canais) traz o
   endereço sem máscara; `reconcileGeoFromBling` (`sync.js`) preenche `state` a partir de lá,
@@ -364,6 +364,44 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (sem revisão, só Sandbox — não vê pedido real). Roles renomeados: usar "Inventory and Order
   Tracking" (equivalente ao antigo "Orders") + "Product Listing" (exigido pela Catalog Items API —
   imagem de produto; o app US não tem esse role hoje, o app BR já nasceu com ele).
+
+### Devoluções da Shopee (`fetchReturns` em src/shopee.js, `reconcileShopeeReturns` em src/sync.js)
+- Fecha o último canal em que a unidade devolvida ainda contava como vendida. O mapeamento foi
+  escrito em cima da resposta REAL da API (a sonda `GET /api/shopee/probe-returns`, rodada em
+  produção em 04/09/2026), e não da documentação — que não publica os nomes de campo.
+- **`item[].amount` é QUANTIDADE, não dinheiro.** O dinheiro do item é `refund_amount`, que existe
+  nos dois níveis (no pedido de devolução e dentro de cada item). Ler o campo errado transformaria
+  um reembolso de R$ 101,15 em 101 unidades devolvidas num pedido de uma.
+- **`status` é ALLOWLIST POSITIVA, hoje só `ACCEPTED`.** Um pedido de devolução que o comprador
+  abriu e ainda está em análise (ou que foi recusado) não pode tirar a unidade da venda. Lista
+  negativa erraria no sentido pior: qualquer status novo que a Shopee criasse passaria a descontar
+  venda sozinho, sem ninguém decidir isso.
+- **O que fica de fora NÃO some calado**: volta contado em `porStatus`, que aparece no retorno do
+  sync e do endpoint manual. É assim que um status novo (ou um `CLOSED` que na prática seja
+  reembolso) aparece pra ser decidido, em vez de virar número errado em silêncio. Vale conferir
+  esse resumo depois das primeiras devoluções reais.
+- **A chamada COM janela de tempo falhou na sonda** e a sem janela funcionou, então não dá pra
+  filtrar por data no servidor deles: lê-se a lista inteira e o cruzamento por pedido decide o que
+  interessa (devolução de pedido que não temos cai fora sozinha). Por isso a paginação tem teto
+  (`RETURNS_MAX_PAGES`) e, ao atingi-lo, declara a leitura INCOMPLETA em vez de passar por
+  completa — lista curta que parece inteira é o erro que já custou caro na Amazon.
+- Roda a cada ciclo de sync, não num job separado: é uma chamada só (a conta inteira cabe numa
+  página hoje). A devolução chega DEPOIS da venda, então ler a lista toda todo ciclo é o que faz a
+  marca aparecer sem esperar. Falha vira `shopee.returns` em `report.errors`, nunca silêncio.
+- **Patch-only**, igual à Amazon: `patchOrderRefunds` só marca pedido que já existe, nunca insere
+  e nunca toca em `total`/`status`/`items`.
+- O item do PEDIDO passou a guardar `sku` (`item_sku`) porque é por ele que a baixa acha a LINHA
+  certa: num pedido com areia e suplemento em que só a areia voltou, sem o SKU a unidade poderia
+  sair do produto errado. Pedido antigo sem `sku` gravado ainda casa por título exato.
+- Total × parcial sai de `classificarReembolsoShopee`: com unidade conhecida vale a contagem de
+  unidades; sem ela (devolução só em dinheiro) quem decide é o valor, senão um estorno do pedido
+  inteiro apareceria como "parcial".
+- Disparo manual: `POST /api/shopee/sync-returns` (admin), síncrono — diferente da Amazon, não
+  precisa de job em segundo plano.
+- A sonda deixou de expor `text_reason`: é o texto livre que o comprador escreve, e ela promete
+  não trazer comentário de comprador. `reason` continua (é código fixo, tipo `NOT_RECEIPT`).
+- `scripts/test/shopee-devolucoes.test.mjs` executa o agrupamento contra a resposta real e guarda
+  cada uma dessas armadilhas.
 
 ### Insights (`src/insights.js`, card da Visão geral)
 - Frases curtas explicando O QUE mudou no período contra o período anterior comparável. Nasceu do
@@ -808,12 +846,9 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     — nenhuma chamada a mais. Um pedido reembolsado costuma continuar com status `paid`, então
     sem olhar os pagamentos ele seguia contando como venda cheia. Reembolso integral leva as
     unidades junto; parcial leva só o dinheiro, porque o ML não diz de qual item ele saiu.
-  - **Shopee**: ainda não. A Shopee tem API de devolução própria
-    (`/api/v2/returns/get_return_list`), mas a documentação pública não expõe os nomes de campo da
-    resposta, e escrever o mapeamento por adivinhação é exatamente como um número errado entra em
-    produção sem ninguém ver. `GET /api/shopee/probe-returns` (admin) lê a FORMA real da resposta
-    com token de verdade, sem nome/endereço/comentário de comprador — mesmo caminho usado na
-    Amazon: sondar primeiro, mapear depois.
+  - **Shopee**: API de devolução própria (`/api/v2/returns/get_return_list`), lida a cada ciclo
+    de sync. Ela diz o produto (por SKU), a quantidade e o valor exato devolvido. Ver "Devoluções
+    da Shopee" logo abaixo.
 - **O sync de 15 min não pode apagar a marca.** A devolução da Amazon chega por reconciliação a
   cada 12h, e `upsertOrders` substitui o pedido inteiro a cada ciclo. Sem a guarda, a marca era
   apagada minutos depois de gravada e o pedido devolvido passaria quase todo o tempo contando
@@ -1699,6 +1734,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   opção do filtro de status pega os mesmos pedidos no card e no CSV),
   `devolucoes` (o relatório de devoluções da Amazon vira marca de pedido sem inserir pedido nenhum,
   e a unidade devolvida sai mesmo da quantidade e da receita, em todo canal),
+  `shopee-devolucoes` (a devolução da Shopee é lida da resposta real: quantidade não é dinheiro,
+  só reembolso aceito desconta venda, e status novo aparece contado em vez de sumir),
   `colunas-pedidos` (a tabela de "Pedidos recentes" sai de um modelo de colunas, o total segue a
   coluna "Valor" e o celular esconde coluna por identidade),
   `combo` (kit de produtos diferentes conta unidade avulsa, combo de verdade conta pacote, e
@@ -1747,6 +1784,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
 - `GET /api/shopee/probe-returns?days=N` (admin) — esqueleto da resposta da API de devolução da
   Shopee, pra escrever o mapeamento em cima de dado real
+- `POST /api/shopee/sync-returns` (admin) — relê as devoluções da Shopee agora e marca os pedidos;
+  o sync normal já faz isso a cada ciclo. Devolve `porStatus`, o resumo do que ficou de fora
 - `GET /shopee/connect` · `GET /mercadolivre/connect` · `GET /googleads/connect`
 - `GET /shopify-yucaloo/:mkt(br|us)/{connect,callback}` — chamadas pela própria Shopify
 - `POST /api/login` / `POST /api/logout` / `GET /api/me`
@@ -1762,7 +1801,7 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 |---|---|
 | Shopify BR/US | Ativo |
 | Shopify Yucaloo BR/EUA | Ativo, mesclado no market da Coco and Luna |
-| Shopee | Ativo — sem analytics, endereço via Bling |
+| Shopee | Ativo — sem analytics, endereço via Bling, devolução descontada |
 | Mercado Livre | Ativo — pedidos + Mercado Ads |
 | Amazon BR | Ativo — app próprio, corrigido de um token de conta errada |
 | Amazon US | Ativo — cursor incremental + backfill via Reports API |
@@ -1786,10 +1825,10 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   na janela fixa de 60 dias do sync periódico. Resolvido com série diária (`kv.mlAdCostsDaily`,
   mesmo padrão do `metaInsightsDaily`) em vez de quebrar o princípio de `/api/dashboard` nunca
   chamar API externa na hora — ver seção "Mercado Livre" (`fetchAdCostsForDays`) mais abaixo.
-- **Shopee — descontar devolução:** único canal em que a unidade devolvida ainda conta como
-  vendida. Falta rodar `GET /api/shopee/probe-returns` em produção (precisa do token, que vive no
-  banco) e escrever o mapeamento em cima da resposta real. Ver "Devoluções descontam da quantidade
-  E da receita".
+- **Shopee — vocabulário de `status` da devolução:** o mapeamento conta só `ACCEPTED`, e os
+  demais status voltam contados em `porStatus`. Depois das primeiras devoluções reais, conferir
+  esse resumo: se aparecer volume preso em `CLOSED` (ou num status novo) que na prática é
+  reembolso, ele precisa entrar na allowlist. Ver "Devoluções da Shopee".
 - **Yucaloo sem conta de Ads própria:** não tem card em Campanhas nem ROAS calculado. Revisitar
   quando a marca tiver conta de anúncios própria.
 - **Microsoft Clarity:** o Luan tem Clarity conectado nos 4 sites (Coco BR/EUA, Yucaloo BR/EUA) e
