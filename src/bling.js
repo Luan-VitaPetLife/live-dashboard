@@ -178,9 +178,15 @@ export async function fetchSalesChannels() {
 // Mapeia loja.id (Bling) → nosso channel/market. Hardcoded de propósito, NÃO descoberto em
 // runtime via /canais-venda: a conta Bling tem canais que não são pedido Coco and Luna —
 // PETLOVE (205506010, descontinuado), Yucaloo (206156145, segunda marca da Vita Pet Life,
-// integração ainda não decidida) e TikTok Shop (206171502, em configuração, sem pedidos ainda)
-// — e nenhum deles pode entrar na reconciliação de geografia por engano. Confirmado ao vivo via
-// GET /canais-venda (ver CLAUDE.md, seção Bling).
+// integração ainda não decidida) e TikTok Shop (206279174, "TikTok Shop - Vita Pet Life",
+// sem pedidos ainda) — e nenhum deles pode entrar na reconciliação de geografia por engano.
+// Confirmado ao vivo via GET /canais-venda (ver CLAUDE.md, seção Bling).
+//
+// O id do TikTok Shop estava anotado aqui como 206171502, que não aparece mais na listagem ao
+// vivo; o id acima é o que a conta devolveu em 04/09/2026 e é o único canal TikTok que existe
+// nela. As DUAS marcas (Yucaloo e Coco and Luna) vão vender por esse mesmo canal — decisão do
+// Luan. A consequência é que o `loja.id` sozinho não separa as marcas nos pedidos do TikTok;
+// quando a captura for escrita, a separação vai precisar de outro sinal do próprio pedido.
 export const KNOWN_CHANNELS = {
   205761639: { channel: 'shopify',      market: 'br' }, // Coco and Luna - Brasil
   205370623: { channel: 'shopee',       market: 'br' },

@@ -613,6 +613,30 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   Campo vazio = automático (volta pra inferência). Apagar o grupo apaga a tag mãe junto
   (`deleteProductGroup`), senão um grupo novo com nome repetido herdaria o tipo do antigo.
 
+### Bling ERP (`src/bling.js`)
+- O Bling recebe pedido de TODOS os canais e é usado hoje para UMA coisa só: preencher o `state`
+  de pedido da Shopee, que mascara o endereço (ver "Shopee"). Ele **nunca cria pedido** — só
+  completa campo de pedido que já existe.
+- `KNOWN_CHANNELS` (loja.id do Bling → nosso channel/market) é **hardcoded de propósito**, não
+  descoberto em runtime: a conta tem canais que não são venda nossa (PETLOVE descontinuado,
+  Yucaloo, TikTok Shop), e nenhum deles pode entrar na reconciliação por engano.
+- **TikTok Shop:** a integração vai ser captada pelo Bling, não pela API da TikTok — o cadastro de
+  desenvolvedor da TikTok Shop exige gerente de conta designado, que a conta não tem. O canal já
+  existe no Bling e ainda não tem pedido nenhum. Decisão do Luan (03/09/2026): **as duas marcas
+  (Yucaloo e Coco and Luna) vão usar esse mesmo canal**, em vez de um canal por marca.
+- **A consequência dessa decisão precisa ficar clara antes de escrever a captura:** se as duas
+  lojas entram pelo mesmo `loja.id`, esse campo sozinho não separa as marcas, e a dashboard
+  distingue Yucaloo de Coco and Luna justamente pelo `channel`. A separação vai ter que sair de
+  outro sinal do próprio pedido.
+- **A captura está bloqueada até chegar pedido de teste**, e é bloqueio deliberado: quem decide se
+  um pedido conta como venda é o `situacao` do Bling, cujo vocabulário não foi observado ainda.
+  Adivinhar isso quebraria a regra mais importante do projeto ("só pedido com pagamento de verdade
+  recebido conta como venda"). `GET /api/bling/probe-channel?since=&until=&lojaId=` existe pra ler
+  a forma real de um pedido antes de mapear — mesmo caminho da Amazon e da Shopee.
+- Bling virar FONTE de pedido (e não só remendo de campo) é mudança de arquitetura de verdade:
+  precisa ficar estritamente restrita ao canal do TikTok, senão passa a duplicar pedido que os
+  canais já trazem sozinhos.
+
 ### Segmentos de público — "Gato vs Cachorro" (`public/segmentos.html`)
 - Rótulo é **"Cachorro"**, não "Cão" (pedido do Luan, 25/08/2026). As CHAVES internas seguem
   `cat`/`dog` — é o modelo de dado (`computeSegments`, `metrics.js`), não texto de tela, e mudar
