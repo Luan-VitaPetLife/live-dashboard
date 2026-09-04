@@ -5,7 +5,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
-import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeReturns, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
+import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeReturns, syncBonificacoes, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import { comAutor } from './src/autor.js';
@@ -1409,6 +1409,14 @@ app.get('/bling/callback', async (req, res) => {
 // completo (com bloco de transporte/transportadora) dos primeiros pedidos da página.
 // Sob o mesmo syncLimiter das rotas Amazon: dispara chamada real à API do Bling, que também
 // tem cota própria e apertada (3 req/s, 120k/dia, confirmado na documentação) — nunca martelar.
+// Recupera as saídas em bonificação de um período grande. O sync normal só varre uma janela curta
+// (cada nota custa uma chamada de detalhe), então o histórico se recupera aqui, de uma vez.
+app.post('/api/bling/sync-bonificacao', requireAdmin, syncLimiter, async (req, res) => {
+  const days = Math.min(365, Math.max(1, Number(req.query.days) || 60));
+  try { res.json(await syncBonificacoes({ days })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Sonda das saídas em bonificação (doação para UGC). Admin: a resposta descreve a operação da
 // empresa, e é feita pra ser lida e colada numa conversa — por isso ela já vem sem dado do
 // destinatário (ver esqueletoBling em src/bling.js).

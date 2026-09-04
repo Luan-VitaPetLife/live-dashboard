@@ -921,13 +921,26 @@ function render(d) {
       const qtyLine = (bits.length && somaBits === total)
         ? `${fmtInt(total)} un total · ${bits.join(', ')}`
         : `${fmtInt(total)} un`;
-      return `<div class="tp-row"><div class="tp-info"><div class="tp-name-row"><span>${i+1} · ${name}</span>${groupBadge}${badge}</div><div class="tp-qty">${qtyLine}</div></div><span class="tp-val">${fmtMoney(v)}</span></div>`;
+      // Doação (saída em bonificação) fica numa COLUNA à parte, nunca somada ao dinheiro: a
+      // mercadoria saiu, mas não foi vendida. A coluna só existe quando houve doação — um "0 un"
+      // em toda linha só ocuparia espaço dizendo que nada aconteceu.
+      const bonus = Number(p.bonusQty) || 0;
+      const bonusCol = bonus > 0
+        ? `<div class="tp-bonus"><span class="tp-bonus-val">${fmtInt(bonus)} un</span><span class="tp-bonus-lbl">doação</span></div>`
+        : '';
+      return `<div class="tp-row"><div class="tp-info"><div class="tp-name-row"><span>${i+1} · ${name}</span>${groupBadge}${badge}</div><div class="tp-qty">${qtyLine}</div></div>${bonusCol}<span class="tp-val">${fmtMoney(v)}</span></div>`;
     }).join('');
     const prodTotal = prodList.reduce((a,p)=>a+p.revenue, 0);
+    const prodBonus = prodList.reduce((a,p)=>a+(Number(p.bonusQty)||0), 0);
     const totalLabel = topProductsExpanded ? `Total geral (${prodList.length})` : `Total top ${prodList.length}`;
     const toggleLabel = topProductsExpanded ? 'Mostrar top 5' : `Ver todos (${allProds.length})`;
     const showToggle = allProds.length > d.topProducts.length;
-    const totalRow = `<div class="tp-summary"><span class="tp-summary-label">${totalLabel}</span><span class="tp-summary-val">${fmtMoney(prodTotal)}</span></div>${showToggle?`<div class="tp-toggle-wrap"><button onclick="toggleTopProducts()" class="tp-toggle-btn">${toggleLabel}</button></div>`:''}`;
+    // O total da coluna de doação some junto quando não houve doação nenhuma: a linha de total
+    // não pode anunciar uma coluna que as linhas acima não têm.
+    const bonusTotalCol = prodBonus > 0
+      ? `<div class="tp-bonus"><span class="tp-bonus-val">${fmtInt(prodBonus)} un</span><span class="tp-bonus-lbl">doação</span></div>`
+      : '';
+    const totalRow = `<div class="tp-summary"><span class="tp-summary-label">${totalLabel}</span>${bonusTotalCol}<span class="tp-summary-val">${fmtMoney(prodTotal)}</span></div>${showToggle?`<div class="tp-toggle-wrap"><button onclick="toggleTopProducts()" class="tp-toggle-btn">${toggleLabel}</button></div>`:''}`;
     const listWrap = topProductsExpanded ? `<div class="tp-list-scroll">${prodRows}</div>` : prodRows;
     document.getElementById('topProducts').innerHTML = listWrap + totalRow;
   } else if (d.kpis.revenue > 0) {
@@ -1239,6 +1252,10 @@ const UNPAID_STATUS_BY_CHANNEL = {
 // o caso "Não pago" da Amazon, ver UNPAID_STATUS_BY_CHANNEL) cai em "Em aberto". Rótulo, não muda
 // nada do cálculo de receita/cancelamento — `o.cancelled` continua a mesma fonte de verdade de sempre.
 function statusTag(o) {
+  // Saída em bonificação (doação para UGC): mercadoria que saiu sem venda. Vem ANTES de tudo
+  // porque não é um estado do pagamento — não faz sentido perguntar se foi pago, cancelado ou
+  // devolvido algo que nunca foi cobrado.
+  if (o.bonificacao) return { cls:'boni', label:'Bonificação' };
   if (o.cancelled) {
     const unpaid = UNPAID_STATUS_BY_CHANNEL[o.channel];
     if (unpaid && unpaid.includes(o.status)) return { cls:'pend', label:'Em aberto' };
