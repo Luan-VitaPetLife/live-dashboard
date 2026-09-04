@@ -38,7 +38,7 @@ for (const nome of paginas()) {
   });
 }
 
-t.ok(comSwitch.length === 9, `nove telas usam o componente (${comSwitch.length}: ${comSwitch.join(', ')})`);
+t.ok(comSwitch.length === 10, `dez telas usam o componente (${comSwitch.length}: ${comSwitch.join(', ')})`);
 
 // ── Nenhuma página pode ressuscitar a aparência antiga ──
 // Estes eram os quatro seletores com visual próprio. As CLASSES seguem nos botões, porque são

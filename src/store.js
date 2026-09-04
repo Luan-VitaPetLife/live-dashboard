@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
+import { autorAtual } from './autor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '..', 'data', 'db.json');
@@ -20,6 +21,7 @@ const pool = USE_PG
 
 const EMPTY = {
   orders: {},
+  historico: [],            // edições feitas por pessoas — só no modo JSON; em Postgres é tabela própria (ver "Histórico de edições")
   sessionsDaily: {},
   yucalooSessionsDaily: {}, // { [market]: { [date]: {sessions,visitors,cart,checkout,completed} } } — loja Shopify própria da Yucaloo, balde separado do sessionsDaily da Coco and Luna pra não colidir chave de data (ver aggregateSessions em metrics.js)
   metaInsightsDaily: {},
@@ -116,6 +118,8 @@ export async function initStore() {
       CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, data JSONB NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions_daily (date TEXT PRIMARY KEY, data JSONB NOT NULL);
       CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value JSONB);
+      CREATE TABLE IF NOT EXISTS historico (id BIGSERIAL PRIMARY KEY, ts TIMESTAMPTZ NOT NULL, data JSONB NOT NULL);
+      CREATE INDEX IF NOT EXISTS historico_ts_idx ON historico (ts DESC);
     `);
     cache = structuredClone(EMPTY);
     const [ord, sess, kv] = await Promise.all([
@@ -316,9 +320,21 @@ export function countOrdersOlderThan({ channel, olderThanIso }) {
 // Janela de retenção da Amazon por mercado — ver tela Integrações. Mercado sem chave própria
 // aqui cai no legado AMAZON_RETENTION_DAYS (env var), ver sync.js: preserva o comportamento já
 // ativo em produção (365 dias, BR+US juntos) até o usuário mudar algo pela tela.
-export function getAmazonRetentionConfig() { return load().amazonRetentionConfig || {}; }
+// Devolve uma CÓPIA. Quem chama isto costuma mexer no objeto e devolvê-lo pro setter
+// (`cfg[market] = days; setAmazonRetentionConfig(cfg)`), e com a referência viva o setter
+// receberia o objeto JÁ alterado como se fosse o valor antigo: a comparação daria "não mudou
+// nada" e a edição sumiria do Histórico, sem erro nenhum.
+export function getAmazonRetentionConfig() { return { ...(load().amazonRetentionConfig || {}) }; }
 export function setAmazonRetentionConfig(cfg) {
-  const db = load(); db.amazonRetentionConfig = cfg; saveJson();
+  const db = load();
+  const antes = db.amazonRetentionConfig || {};
+  for (const mkt of Object.keys(cfg || {})) {
+    const de = antes[mkt] ?? null, para = cfg[mkt] ?? null;
+    if (de === para) continue;
+    registrarEdicao({ pagina: 'integracoes', market: mkt, acao: 'editou',
+      alvo: 'Amazon — Histórico', campo: 'Dias de histórico', de, para });
+  }
+  db.amazonRetentionConfig = cfg; saveJson();
   if (USE_PG) pgKv('amazonRetentionConfig', cfg);
 }
 
@@ -767,10 +783,19 @@ export function setShopifyProductCatalog(channel, items) {
 
 // ── Dados financeiros editáveis por produto (COG, impostos, comissão) ──
 // Chave: "canal|||título do produto" (mesma chave usada no agrupamento de Top Produtos/Produtos).
+const ROTULOS_FINANCE = {
+  cog:           { rotulo: 'COG',       formato: 'dinheiro' },
+  shipping:      { rotulo: 'Frete',     formato: 'dinheiro' },
+  taxPct:        { rotulo: 'Impostos',  formato: 'porcentagem' },
+  commissionPct: { rotulo: 'Comissão',  formato: 'porcentagem' },
+};
 export function setProductFinance(key, patch) {
   const db = load();
   if (!db.productFinance) db.productFinance = {};
-  db.productFinance[key] = { ...(db.productFinance[key] || {}), ...patch };
+  const antes = db.productFinance[key] || {};
+  db.productFinance[key] = { ...antes, ...patch };
+  const [canal, titulo] = String(key).split('|||');
+  registrarCampos({ pagina: 'produtos', canal, alvo: titulo }, antes, patch, ROTULOS_FINANCE);
   saveJson();
   if (USE_PG) pgKv('productFinance', db.productFinance);
 }
@@ -778,10 +803,17 @@ export function getProductFinance() { return load().productFinance || {}; }
 
 // ── Dados de estoque/produção editáveis por produto (estoque, a caminho, pedido ao laboratório) ──
 // Mesma chave "canal|||título" da tela de Produtos/Top Produtos. Ver tela de Estoque.
+const ROTULOS_STOCK = {
+  stock:    { rotulo: 'Estoque',    formato: 'numero' },
+  incoming: { rotulo: 'A caminho',  formato: 'numero' },
+};
 export function setProductStock(key, patch) {
   const db = load();
   if (!db.productStock) db.productStock = {};
-  db.productStock[key] = { ...(db.productStock[key] || {}), ...patch };
+  const antes = db.productStock[key] || {};
+  db.productStock[key] = { ...antes, ...patch };
+  const [canal, titulo] = String(key).split('|||');
+  registrarCampos({ pagina: 'estoque', canal, alvo: titulo }, antes, patch, ROTULOS_STOCK);
   saveJson();
   if (USE_PG) pgKv('productStock', db.productStock);
 }
@@ -791,10 +823,18 @@ export function getProductStock() { return load().productStock || {}; }
 // Chave: "market|||família" (ex: "br|||Lysine"). Usado pelo card "Estoque" (panorama geral) da
 // tela de Estoque — Ordem Projetada/Nova/Em Andamento não são mais por canal (o pedido ao
 // laboratório abastece todos os canais de uma vez). Ver metrics.js computeStock / CLAUDE.md 4.14.
+const ROTULOS_STOCK_AGG = {
+  orderInProgress: { rotulo: 'Ordem em andamento', formato: 'numero' },
+  orderNew:        { rotulo: 'Ordem nova',         formato: 'numero' },
+  projected:       { rotulo: 'Projetado',          formato: 'numero' },
+};
 export function setProductStockAgg(key, patch) {
   const db = load();
   if (!db.productStockAgg) db.productStockAgg = {};
-  db.productStockAgg[key] = { ...(db.productStockAgg[key] || {}), ...patch };
+  const antes = db.productStockAgg[key] || {};
+  db.productStockAgg[key] = { ...antes, ...patch };
+  const [market, titulo] = String(key).split('|||');
+  registrarCampos({ pagina: 'estoque', market, alvo: titulo }, antes, patch, ROTULOS_STOCK_AGG);
   saveJson();
   if (USE_PG) pgKv('productStockAgg', db.productStockAgg);
 }
@@ -807,8 +847,9 @@ export function upsertProductGroup(market, name, members) {
   const db = load();
   if (!db.productGroups) db.productGroups = {};
   const mkt = db.productGroups[market] || (db.productGroups[market] = {});
+  const antesMembros = mkt[name] || [];
   // Une aos membros já existentes no grupo (reusar o mesmo nome = adicionar a ele).
-  const merged = Array.from(new Set([...(mkt[name] || []), ...members]));
+  const merged = Array.from(new Set([...antesMembros, ...members]));
   // Um título nunca fica em dois grupos: some de qualquer outro grupo do mesmo mercado.
   for (const [gName, gMembers] of Object.entries(mkt)) {
     if (gName === name) continue;
@@ -816,6 +857,13 @@ export function upsertProductGroup(market, name, members) {
     if (kept.length) mkt[gName] = kept; else delete mkt[gName];
   }
   if (merged.length) mkt[name] = merged; else delete mkt[name];
+  // Só os títulos que ENTRARAM agora: reenviar o grupo inteiro é o caminho normal da tela, e sem
+  // esse recorte cada salvamento repetiria a lista toda como se fosse novidade.
+  const novos = merged.filter(t => !(antesMembros || []).includes(t));
+  if (novos.length) {
+    registrarEdicao({ pagina: 'unificador', market, acao: 'agrupou', alvo: name,
+      campo: 'Produtos do grupo', de: null, para: novos.join(', ') });
+  }
   saveJson();
   if (USE_PG) pgKv('productGroups', db.productGroups);
   return mkt;
@@ -824,6 +872,10 @@ export function deleteProductGroup(market, name) {
   const db = load();
   if (!db.productGroups) db.productGroups = {};
   const mkt = db.productGroups[market] || (db.productGroups[market] = {});
+  if (mkt[name]) {
+    registrarEdicao({ pagina: 'unificador', market, acao: 'apagou', alvo: name,
+      campo: 'Grupo', de: (mkt[name] || []).join(', '), para: null });
+  }
   delete mkt[name];
   saveJson();
   if (USE_PG) pgKv('productGroups', db.productGroups);
@@ -839,6 +891,10 @@ export function removeFromProductGroup(market, name, title) {
   const mkt = db.productGroups[market] || (db.productGroups[market] = {});
   if (mkt[name]) {
     const kept = mkt[name].filter(t => t !== title);
+    if (kept.length !== mkt[name].length) {
+      registrarEdicao({ pagina: 'unificador', market, acao: 'editou', alvo: name,
+        campo: 'Produtos do grupo', de: title, para: null });
+    }
     if (kept.length) mkt[name] = kept; else delete mkt[name];
   }
   saveJson();
@@ -854,7 +910,12 @@ export function getProductGroupsEnabled() {
 }
 export function setProductGroupsEnabled(enabled) {
   const db = load();
+  const antes = getProductGroupsEnabled();
   db.productGroupsConfig = { enabled: Boolean(enabled) };
+  if (antes !== Boolean(enabled)) {
+    registrarEdicao({ pagina: 'unificador', acao: enabled ? 'ligou' : 'desligou',
+      alvo: 'Unificação de produtos', campo: null, de: null, para: null });
+  }
   saveJson();
   if (USE_PG) pgKv('productGroupsConfig', db.productGroupsConfig);
   return db.productGroupsConfig;
@@ -880,12 +941,17 @@ export function setProductGroupType(market, name, patch = {}) {
   const db = load();
   if (!db.productGroupTypes) db.productGroupTypes = {};
   const mkt = db.productGroupTypes[market] || (db.productGroupTypes[market] = {});
+  const antesTipos = { type: null, typeGroup: null, ...(mkt[name] || {}) };
   const cur = { ...(mkt[name] || {}) };
   for (const k of ['type', 'typeGroup']) {
     if (!(k in patch)) continue;
     const v = String(patch[k] ?? '').trim();
     if (v) cur[k] = v; else delete cur[k];
   }
+  registrarCampos({ pagina: 'unificador', market, alvo: name }, antesTipos, {
+    ...( 'type'      in patch ? { type:      cur.type      ?? null } : {}),
+    ...( 'typeGroup' in patch ? { typeGroup: cur.typeGroup ?? null } : {}),
+  }, { type: { rotulo: 'Tipo' }, typeGroup: { rotulo: 'Categoria' } });
   if (Object.keys(cur).length) mkt[name] = cur; else delete mkt[name];
   saveJson();
   if (USE_PG) pgKv('productGroupTypes', db.productGroupTypes);
@@ -905,7 +971,13 @@ export function upsertProductTypeGroup(market, name, keywords) {
   if (!db.productTypeGroups) db.productTypeGroups = {};
   const mkt = db.productTypeGroups[market] || (db.productTypeGroups[market] = {});
   const clean = keywords.map(k => String(k || '').trim()).filter(Boolean);
-  const merged = Array.from(new Set([...(mkt[name] || []), ...clean]));
+  const antesPalavras = mkt[name] || [];
+  const merged = Array.from(new Set([...antesPalavras, ...clean]));
+  const novas = merged.filter(k => !antesPalavras.includes(k));
+  if (novas.length) {
+    registrarEdicao({ pagina: 'segmentos', market, acao: novas.length === merged.length ? 'criou' : 'editou',
+      alvo: name, campo: 'Palavras-chave', de: null, para: novas.join(', ') });
+  }
   if (merged.length) mkt[name] = merged; else delete mkt[name];
   saveJson();
   if (USE_PG) pgKv('productTypeGroups', db.productTypeGroups);
@@ -917,6 +989,10 @@ export function removeProductTypeKeyword(market, name, keyword) {
   const mkt = db.productTypeGroups[market] || (db.productTypeGroups[market] = {});
   if (mkt[name]) {
     const kept = mkt[name].filter(k => k !== keyword);
+    if (kept.length !== mkt[name].length) {
+      registrarEdicao({ pagina: 'segmentos', market, acao: 'editou', alvo: name,
+        campo: 'Palavras-chave', de: keyword, para: null });
+    }
     if (kept.length) mkt[name] = kept; else delete mkt[name];
   }
   saveJson();
@@ -927,6 +1003,10 @@ export function deleteProductTypeGroup(market, name) {
   const db = load();
   if (!db.productTypeGroups) db.productTypeGroups = {};
   const mkt = db.productTypeGroups[market] || (db.productTypeGroups[market] = {});
+  if (mkt[name]) {
+    registrarEdicao({ pagina: 'segmentos', market, acao: 'apagou', alvo: name,
+      campo: 'Tipo de produto', de: (mkt[name] || []).join(', '), para: null });
+  }
   delete mkt[name];
   saveJson();
   if (USE_PG) pgKv('productTypeGroups', db.productTypeGroups);
@@ -940,7 +1020,13 @@ export function upsertProductHiddenTags(market, tags) {
   const db = load();
   if (!db.productHiddenTags) db.productHiddenTags = {};
   const clean = (tags || []).map(t => String(t || '').trim()).filter(Boolean);
-  const merged = Array.from(new Set([...(db.productHiddenTags[market] || []), ...clean]));
+  const antesTags = db.productHiddenTags[market] || [];
+  const merged = Array.from(new Set([...antesTags, ...clean]));
+  const novas = merged.filter(t => !antesTags.includes(t));
+  if (novas.length) {
+    registrarEdicao({ pagina: 'unificador', market, acao: 'editou', alvo: 'Produtos ocultos',
+      campo: 'Tags ocultas', de: null, para: novas.join(', ') });
+  }
   db.productHiddenTags[market] = merged;
   saveJson();
   if (USE_PG) pgKv('productHiddenTags', db.productHiddenTags);
@@ -950,10 +1036,86 @@ export function removeProductHiddenTag(market, tag) {
   const db = load();
   if (!db.productHiddenTags) db.productHiddenTags = {};
   const kept = (db.productHiddenTags[market] || []).filter(t => t !== tag);
+  if (kept.length !== (db.productHiddenTags[market] || []).length) {
+    registrarEdicao({ pagina: 'unificador', market, acao: 'editou', alvo: 'Produtos ocultos',
+      campo: 'Tags ocultas', de: tag, para: null });
+  }
   db.productHiddenTags[market] = kept;
   saveJson();
   if (USE_PG) pgKv('productHiddenTags', db.productHiddenTags);
   return kept;
+}
+
+// ── Histórico de edições ──────────────────────────────────────────────────────
+// Quem mudou o quê, quando, e de quanto pra quanto. Registrado AQUI, dentro das funções de
+// gravação, e não nos handlers do servidor: é aqui que o valor ANTIGO ainda existe, e é por aqui
+// que passa obrigatoriamente qualquer tela que salve alguma coisa — inclusive uma tela que ainda
+// não existe. Registrar no handler daria só o valor NOVO, e a próxima rota esqueceria de chamar.
+//
+// TABELA própria, não uma chave do kv: o kv reescreve o blob inteiro a cada gravação, então uma
+// lista que só cresce ali significaria reescrever o histórico completo toda vez que alguém salva
+// um campo. Aqui só entra linha nova; nada é editado depois.
+const HISTORICO_DIAS = Number(process.env.HISTORICO_DIAS || 180);
+const HISTORICO_MAX  = 2000;
+
+export function registrarEdicao(reg) {
+  const linha = { ts: new Date().toISOString(), autor: autorAtual(), ...reg };
+  // Falha de registro não pode derrubar a edição em si: o que a pessoa pediu é salvar o valor.
+  // Mas também não some — vai pro log, como qualquer erro deste projeto.
+  try {
+    if (USE_PG) {
+      pool.query('INSERT INTO historico(ts, data) VALUES($1, $2::jsonb)', [linha.ts, JSON.stringify(linha)])
+        .catch(e => console.error('PG historico error:', e.message));
+    } else {
+      const db = load();
+      if (!Array.isArray(db.historico)) db.historico = [];
+      db.historico.push(linha);
+    }
+  } catch (e) { console.error('historico: ' + e.message); }
+  return linha;
+}
+
+// Registra só o que MUDOU de verdade. Salvar um formulário sem alterar nada não pode virar linha
+// no histórico: se toda gravação virasse registro, "mudou" deixaria de significar mudou.
+function registrarCampos(base, antes, patch, rotulos) {
+  for (const campo of Object.keys(patch || {})) {
+    const de   = (antes || {})[campo] ?? null;
+    const para = patch[campo] ?? null;
+    if (de === para) continue;
+    const r = rotulos[campo] || {};
+    registrarEdicao({ ...base, acao: 'editou', campo: r.rotulo || campo, formato: r.formato || 'texto', de, para });
+  }
+}
+
+// Lê a janela pedida, do mais recente pro mais antigo. Assíncrona porque em Postgres o histórico
+// NÃO fica no cache em memória (ele só cresce, e nenhuma outra parte do app precisa dele).
+export async function lerHistorico({ desde, ate, limite = HISTORICO_MAX } = {}) {
+  const lim = Math.min(HISTORICO_MAX, Math.max(1, Number(limite) || HISTORICO_MAX));
+  if (USE_PG) {
+    const r = await pool.query(
+      'SELECT data FROM historico WHERE ts >= $1 AND ts <= $2 ORDER BY ts DESC LIMIT $3',
+      [desde, ate, lim]);
+    return r.rows.map(x => x.data);
+  }
+  return (load().historico || [])
+    .filter(l => l.ts >= desde && l.ts <= ate)
+    .sort((a, b) => (a.ts < b.ts ? 1 : -1))
+    .slice(0, lim);
+}
+
+// Poda o que passou da retenção. Chamada pelo sync, junto das outras podas.
+export function podarHistorico(dias = HISTORICO_DIAS) {
+  const corte = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+  if (USE_PG) {
+    pool.query('DELETE FROM historico WHERE ts < $1', [corte])
+      .catch(e => console.error('PG historico prune error:', e.message));
+    return null;
+  }
+  const db = load();
+  const antes = (db.historico || []).length;
+  db.historico = (db.historico || []).filter(l => l.ts >= corte);
+  if (db.historico.length !== antes) saveJson();
+  return antes - db.historico.length;
 }
 
 // ── Meta Insights ─────────────────────────────
@@ -1074,7 +1236,12 @@ export function getIntegrationsConfig() { return load().integrationsConfig || {}
 export function setIntegrationEnabled(key, enabled) {
   const db = load();
   db.integrationsConfig = db.integrationsConfig || {};
+  const antes = isIntegrationEnabled(key);
   db.integrationsConfig[key] = { enabled: Boolean(enabled) };
+  if (antes !== Boolean(enabled)) {
+    registrarEdicao({ pagina: 'integracoes', acao: enabled ? 'ligou' : 'desligou',
+      alvo: key, campo: null, de: null, para: null });
+  }
   saveJson();
   if (USE_PG) pgKv('integrationsConfig', db.integrationsConfig);
 }

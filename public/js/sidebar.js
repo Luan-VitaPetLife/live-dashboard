@@ -96,6 +96,7 @@ window.initCollapsibleNotice = initCollapsibleNotice;
   <div class="nav-group"><div class="nav-label">Marketing</div>
     <a class="nav-item" data-page="campanhas.html" data-label="Campanhas" href="/campanhas"><i class="bi bi-megaphone nav-icon"></i><span class="nav-text">Campanhas</span></a></div>
   <div class="nav-group" id="navGroupSistema"><div class="nav-label">Sistema</div>
+    <a class="nav-item" data-page="historico.html" data-label="Histórico" href="/historico" id="navHistorico" style="display:none"><i class="bi bi-clock-history nav-icon"></i><span class="nav-text">Histórico</span></a>
     <a class="nav-item" data-page="configuracoes.html" data-label="Configurações" href="/configuracoes" id="navConfig" style="display:none"><i class="bi bi-gear nav-icon"></i><span class="nav-text">Configurações</span></a></div>
   <div class="side-user" id="sideUser" style="display:none"></div>
 </nav>
@@ -261,7 +262,7 @@ body.sidebar-hidden .nav-item:hover::after{opacity:1}
     '': 'index.html', segmentos: 'segmentos.html', geografia: 'geografia.html',
     produtos: 'produtos.html', estoque: 'estoque.html',
     campanhas: 'campanhas.html', configuracoes: 'configuracoes.html', integracoes: 'integracoes.html',
-    unificador: 'unificador.html', login: 'login.html',
+    unificador: 'unificador.html', historico: 'historico.html', login: 'login.html',
   };
 
   function mount() {
@@ -354,7 +355,7 @@ body.sidebar-hidden .nav-item:hover::after{opacity:1}
       if (managed.has(page) && !isAdmin && !allowed.includes(page)) {
         if (allowed.length) { location.href = FILE_TO_SLUG[allowed[0]] || '/'; return; }
       }
-      if ((page === 'configuracoes.html' || page === 'integracoes.html' || page === 'unificador.html') && !isAdmin) { location.href = '/'; return; }
+      if ((page === 'configuracoes.html' || page === 'integracoes.html' || page === 'unificador.html' || page === 'historico.html') && !isAdmin) { location.href = '/'; return; }
     }
 
     // Visibilidade dos itens de navegação gerenciados
@@ -366,11 +367,13 @@ body.sidebar-hidden .nav-item:hover::after{opacity:1}
       el.style.display = hide ? 'none' : '';
     });
 
-    // Item "Configurações": admin, ou modo aberto (login desligado) p/ configuração inicial
-    const cfg = document.getElementById('navConfig');
-    if (cfg) {
-      const showCfg = (user && user.role === 'admin') || !data.enabled;
-      cfg.style.display = showCfg ? '' : 'none';
+    // Itens de sistema: admin, ou modo aberto (login desligado) p/ configuração inicial.
+    // "Histórico" segue a mesma regra que "Configurações" — ele mostra o que cada pessoa fez, e
+    // isso não é informação pra qualquer usuário.
+    const showSistema = (user && user.role === 'admin') || !data.enabled;
+    for (const id of ['navConfig', 'navHistorico']) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = showSistema ? '' : 'none';
     }
 
     // Bloco de usuário no rodapé
