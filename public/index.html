@@ -162,7 +162,22 @@
         <div class="card" id="cardInsights"><div class="card-pad">
           <div class="card-top">
             <div><div class="ct-title">Insights</div><div class="ct-sub" id="insightsSub">O que mudou em relação ao período anterior</div></div>
-            <div class="ct-top-right"><div class="ct-val" id="insightsCount">—</div></div>
+            <div class="ct-top-right">
+              <div class="ins-cmp-wrap" id="insCmpWrap">
+                <button class="ins-cmp-btn" id="insCmpBtn" title="Trocar o período de comparação"><i class="bi bi-arrow-left-right"></i> Trocar</button>
+                <div class="period-pop" id="insCmpPop">
+                  <div class="pp-section-label">Comparar com</div>
+                  <div class="pp-dates">
+                    <div class="pp-field"><label>De</label><input type="date" id="insCmpFrom"></div>
+                    <div class="pp-field"><label>Até</label><input type="date" id="insCmpTo"></div>
+                  </div>
+                  <div class="pp-err" id="insCmpErr"></div>
+                  <button class="pp-apply" id="insCmpApply">Comparar</button>
+                  <button class="ins-cmp-auto" id="insCmpAuto">Voltar ao período anterior automático</button>
+                </div>
+              </div>
+              <div class="ct-val" id="insightsCount">—</div>
+            </div>
           </div>
           <div class="ins-body" id="insightsBody"></div>
         </div></div>

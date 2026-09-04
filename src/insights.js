@@ -69,8 +69,18 @@ function curto(s, max = 42) {
 }
 
 // Duas barras comparativas (atual em cima, anterior embaixo), mesmo desenho do card do Shopify.
-function chart(fmt, curVal, prevVal, curLabel = 'Período atual', prevLabel = 'Período anterior') {
-  return { fmt, rows: [{ label: curLabel, value: curVal }, { label: prevLabel, value: prevVal }] };
+//
+// A linha ganha `periodo: 'cur'|'prev'` SÓ quando os rótulos são os padrão, e isso importa: três
+// regras usam as mesmas barras pra comparar outra coisa (um produto contra todo o resto, uma etapa
+// do funil contra a anterior, receita atribuída contra o investido). Marcar essas como período
+// faria a tela escrever uma data ao lado de "Todo o resto", que não se refere a período nenhum.
+function chart(fmt, curVal, prevVal, curLabel, prevLabel) {
+  const dePeriodo = curLabel === undefined && prevLabel === undefined;
+  const linha = (label, value, qual) => (dePeriodo ? { label, value, periodo: qual } : { label, value });
+  return { fmt, rows: [
+    linha(curLabel ?? 'Período atual',   curVal,  'cur'),
+    linha(prevLabel ?? 'Período anterior', prevVal, 'prev'),
+  ] };
 }
 
 // Uma variação em dinheiro só entra na lista se passar nos TRÊS pisos: valer alguma coisa em

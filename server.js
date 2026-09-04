@@ -283,7 +283,14 @@ app.get('/api/dashboard', (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const { channel = 'todos', metric = 'receita', since = today, until = today, market = 'br', amazonRevenueMode = 'total' } = req.query;
-    res.json(computeDashboard({ channel, metric, since, until, market, amazonRevenueMode }));
+    // Período de comparação escolhido à mão (botão "Trocar" no card de Insights). Data fora do
+    // formato é ignorada em vez de virar erro: a comparação volta a ser a automática, que é o
+    // comportamento de sempre, em vez de a tela inteira falhar por causa de um parâmetro.
+    const dataOk = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+    let compSince = dataOk(req.query.prevSince) ? req.query.prevSince : null;
+    let compUntil = dataOk(req.query.prevUntil) ? req.query.prevUntil : null;
+    if (compSince && compUntil && compSince > compUntil) [compSince, compUntil] = [compUntil, compSince];
+    res.json(computeDashboard({ channel, metric, since, until, market, amazonRevenueMode, compSince, compUntil }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

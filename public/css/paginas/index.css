@@ -125,6 +125,19 @@
   .ct-title{font-size:12px;font-weight:600} .ct-sub{font-size:11px;color:var(--muted);margin-top:1px} .ct-val{font-size:12px;font-weight:500;color:var(--sub)}
   .ct-sub-logo{height:16px;width:auto;vertical-align:-3.5px;margin-right:5px;opacity:.9}
   .ct-top-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  /* Trocar o período de comparação. Mora no cabeçalho do card de Insights porque é ele que
+     compara — o seletor do topo da página escolhe o período ATUAL, que é outra coisa. */
+  .ins-cmp-wrap{position:relative}
+  .ins-cmp-btn{display:flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:16px;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;transition:all .15s}
+  .ins-cmp-btn:hover{border-color:var(--ink);color:var(--text)}
+  .ins-cmp-btn.ativo{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+  .ins-cmp-auto{font-size:11px;font-weight:600;padding:8px 0;background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--sub);cursor:pointer;font-family:inherit}
+  .ins-cmp-auto:hover{border-color:var(--ink);color:var(--text)}
+  .ins-cmp-auto[hidden]{display:none}
+  /* A data comparada, ao lado do rótulo da barra e do sufixo do delta: mesma informação, tom mais
+     apagado, pra dizer COM O QUÊ o número está sendo comparado sem disputar com ele. */
+  .ins-bar-quando{color:var(--muted);font-weight:500}
+  .kc-delta-quando{color:var(--muted)}
   /* Toggle Geral/Por canal — mesmo visual do seletor de tipo de gráfico do campanhas.html, só
      menor pra caber ao lado do valor no cabeçalho do card. */
   /* Geral x Por canal, no cabeçalho dos cards: mesma aparência dos outros seletores, na

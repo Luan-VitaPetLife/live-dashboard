@@ -213,6 +213,46 @@ if (channel !== 'todos' && !CocoColors.ch[channel]) channel = 'todos';
 if (!METRIC_LABEL[metric]) metric = 'receita';
 
 function rangeLabel(s, u) { return CocoPeriodo.rotulo(s, u, { hoje: todayISO }); }
+
+// ── Período de comparação ────────────────────────────────────────────────────
+// Por padrão a dashboard compara com a janela imediatamente anterior, do mesmo tamanho. O botão
+// "Trocar" do card de Insights deixa escolher outra, e aí a comparação inteira (deltas dos
+// Indicadores e Insights) passa a ser contra ela.
+//
+// sessionStorage, e não localStorage: a escolha precisa sobreviver ao refresh automático de dados
+// e à navegação entre páginas na mesma aba, mas não pode durar pra sempre. Uma comparação
+// esquecida de semanas atrás faria a dashboard mentir sem ninguém lembrar por quê.
+let compSince = sessionStorage.getItem('coco_comp_since') || '';
+let compUntil = sessionStorage.getItem('coco_comp_until') || '';
+// A janela de comparação que o SERVIDOR usou de verdade — é ela que vira texto na tela, e não o
+// que está guardado aqui: sem comparação escolhida, quem calcula a janela automática é o servidor.
+let _comparacao = null;
+
+function comparacaoManual() { return Boolean(compSince && compUntil); }
+
+// Rótulo da janela comparada, no mesmo formato do seletor de período (CocoPeriodo é a fonte única
+// desse texto no app inteiro — ver CLAUDE.md).
+function rotuloComparacao() {
+  if (!_comparacao || !_comparacao.prevSince || !_comparacao.prevUntil) return '';
+  return rangeLabel(_comparacao.prevSince, _comparacao.prevUntil);
+}
+
+// "anterior" deixa de ser verdade quando a pessoa escolhe a janela na mão: ela pode comparar com
+// um período que nem vem antes. O texto acompanha em vez de continuar afirmando algo errado.
+function sufixoComparacao() {
+  return comparacaoManual() ? 'vs. período escolhido' : 'vs. período anterior';
+}
+
+function guardarComparacao(s, u) {
+  compSince = s; compUntil = u;
+  if (s && u) { sessionStorage.setItem('coco_comp_since', s); sessionStorage.setItem('coco_comp_until', u); }
+  else { sessionStorage.removeItem('coco_comp_since'); sessionStorage.removeItem('coco_comp_until'); }
+}
+
+// Trocar o período ATUAL desfaz a comparação escolhida. Sem isso, escolher "7 dias" depois de ter
+// fixado uma comparação de 90 dias mostraria uma queda enorme que é só a diferença de tamanho das
+// janelas — e nada na tela explicaria isso.
+function resetarComparacao() { guardarComparacao('', ''); }
 function presetRange(p) {
   const n = new Date();
   if (p === 'today') return [todayISO, todayISO];
@@ -444,8 +484,13 @@ function renderInsightDetail() {
     const w = Math.max((Math.abs(v) / max) * 100, v === 0 ? 2 : 6);
     // A primeira linha é sempre o período/valor atual: ganha a cor do tipo, a segunda fica neutra.
     const cor = n === 0 ? (INS_BAR_COLOR[i.kind] || INS_BAR_COLOR[INS_KIND_FALLBACK]) : 'var(--border2)';
+    // "Período anterior" sozinho não diz com o quê a barra está comparando. A data vem do
+    // CocoPeriodo, a mesma fonte do rótulo do seletor de período — duas formatações do mesmo
+    // intervalo acabariam discordando. Só as linhas marcadas como período recebem data: as barras
+    // que comparam outra coisa ("Todo o resto", "Investido") não se referem a período nenhum.
+    const quando = r.periodo === 'prev' ? rotuloComparacao() : '';
     return `<div class="ins-bar-cell">
-      <div class="ins-bar-lbl">${escapeHtml(r.label)}</div>
+      <div class="ins-bar-lbl">${escapeHtml(r.label)}${quando ? ` <span class="ins-bar-quando">(${escapeHtml(quando)})</span>` : ''}</div>
       <div class="ins-bar-row">
         <div class="ins-bar-track"><div class="ins-bar-fill" style="width:${w}%;background:${cor}"></div></div>
         <span class="ins-bar-val">${insFmtVal(v, i.chart.fmt)}</span>
@@ -461,7 +506,12 @@ function renderInsightDetail() {
     <div class="ins-bars">${bars}</div>`;
 }
 
-function renderDelta(el, p, suffix='vs. período anterior') {
+function renderDelta(el, p) {
+  // O intervalo comparado vai junto: aqui também se fala em "período anterior", e ele sozinho não
+  // diz com o quê o número está sendo comparado. Em tom mais apagado, pra não competir com a
+  // variação, que é o dado principal da faixa.
+  const q = rotuloComparacao();
+  const suffix = sufixoComparacao() + (q ? ` <span class="kc-delta-quando">(${escapeHtml(q)})</span>` : '');
   if (p === null || p === undefined) { el.innerHTML=`<span class="delta-val flat">—</span> ${suffix}`; return }
   const up = p >= 0, cls = Math.abs(p) < 0.05 ? 'flat' : (up ? 'up' : 'down');
   el.innerHTML = `<span class="delta-val ${cls}">${up?'↑':'↓'} ${Math.abs(p).toLocaleString('pt-BR',{maximumFractionDigits:1})}%</span> ${suffix}`;
@@ -547,6 +597,10 @@ function drawDonut(id, data, colors, labels) {
 
 function render(d) {
   lastData = d;
+  // A janela que o servidor comparou de verdade, lida antes de desenhar qualquer coisa: o sufixo
+  // de cada delta e o rótulo de cada barra saem dela.
+  _comparacao = d.period || null;
+  sincronizarComparacao();
   const label = rangeLabel(d.period.since, d.period.until);
   document.getElementById('pageSub').textContent = `Vita Pet Life · ${CocoColors.chLabel(d.channel)} · multicanal`;
 
@@ -1580,10 +1634,75 @@ function syncControls() {
   document.getElementById('periodValue').textContent = rangeLabel(sinceDate, untilDate);
 }
 
+// ── Botão "Trocar" (período de comparação) ───────────────────────────────────
+// Mantém o cabeçalho do card e as caixas de data em dia com a comparação em vigor. Chamado a cada
+// desenho, porque a janela automática muda junto com o período escolhido lá em cima.
+function sincronizarComparacao() {
+  const sub = document.getElementById('insightsSub');
+  const btn = document.getElementById('insCmpBtn');
+  const auto = document.getElementById('insCmpAuto');
+  const q = rotuloComparacao();
+  if (sub) sub.textContent = q
+    ? `O que mudou em relação ao ${comparacaoManual() ? 'período escolhido' : 'período anterior'} (${q})`
+    : 'O que mudou em relação ao período anterior';
+  // O botão fica marcado quando a comparação não é mais a automática: sem esse sinal, uma
+  // comparação escolhida ontem continuaria valendo hoje sem nada na tela dizendo isso.
+  if (btn) btn.classList.toggle('ativo', comparacaoManual());
+  if (auto) auto.hidden = !comparacaoManual();
+  const de = document.getElementById('insCmpFrom');
+  const ate = document.getElementById('insCmpTo');
+  if (de && !de.value && _comparacao) de.value = _comparacao.prevSince || '';
+  if (ate && !ate.value && _comparacao) ate.value = _comparacao.prevUntil || '';
+}
+
+function fecharComparacaoPop() {
+  document.getElementById('insCmpPop')?.classList.remove('open');
+}
+
+document.getElementById('insCmpBtn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const pop = document.getElementById('insCmpPop');
+  if (!pop) return;
+  // Reabrir sempre mostra a janela em vigor, não o que sobrou da última digitação.
+  if (!pop.classList.contains('open') && _comparacao) {
+    document.getElementById('insCmpFrom').value = _comparacao.prevSince || '';
+    document.getElementById('insCmpTo').value = _comparacao.prevUntil || '';
+    document.getElementById('insCmpErr').textContent = '';
+  }
+  pop.classList.toggle('open');
+});
+
+document.getElementById('insCmpPop')?.addEventListener('click', e => e.stopPropagation());
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('insCmpWrap');
+  if (wrap && !wrap.contains(e.target)) fecharComparacaoPop();
+});
+
+document.getElementById('insCmpApply')?.addEventListener('click', () => {
+  const s = document.getElementById('insCmpFrom').value;
+  const u = document.getElementById('insCmpTo').value;
+  const err = document.getElementById('insCmpErr');
+  if (!s || !u) { err.textContent = 'Selecione as duas datas.'; return; }
+  if (s > u) { err.textContent = 'A data inicial deve ser anterior à final.'; return; }
+  err.textContent = '';
+  guardarComparacao(s, u);
+  fecharComparacaoPop();
+  loadData();
+});
+
+document.getElementById('insCmpAuto')?.addEventListener('click', () => {
+  resetarComparacao();
+  document.getElementById('insCmpFrom').value = '';
+  document.getElementById('insCmpTo').value = '';
+  fecharComparacaoPop();
+  loadData();
+});
+
 async function loadData() {
   setLive('loading','Atualizando…');
   try {
     const p = new URLSearchParams({ channel, metric, since:sinceDate, until:untilDate, market, amazonRevenueMode: isAmazonProductRev() ? 'product' : 'total' });
+    if (comparacaoManual()) { p.set('prevSince', compSince); p.set('prevUntil', compUntil); }
     const r = await fetch('/api/dashboard?'+p);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
@@ -1673,6 +1792,7 @@ pop.addEventListener('click', e=>e.stopPropagation());
 document.querySelectorAll('.pp-presets button').forEach(b=>b.addEventListener('click',()=>{
   const[s,u]=presetRange(b.dataset.preset);
   sinceDate=s; untilDate=u;
+  resetarComparacao();
   localStorage.setItem('coco_since',s); localStorage.setItem('coco_until',u);
   pop.classList.remove('open');
   syncControls(); loadData();
@@ -1684,6 +1804,7 @@ document.getElementById('applyRange').addEventListener('click',()=>{
   if(parseISO(s)>parseISO(u)){ppErr.textContent='A data inicial deve ser anterior à final.';return}
   ppErr.textContent='';
   sinceDate=s; untilDate=u;
+  resetarComparacao();
   localStorage.setItem('coco_since',s); localStorage.setItem('coco_until',u);
   pop.classList.remove('open');
   syncControls(); loadData();
