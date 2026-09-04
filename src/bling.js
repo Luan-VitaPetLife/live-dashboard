@@ -256,11 +256,15 @@ const BONI_CAMPOS_SEGUROS = new Set([
 // lista de proibidos: um campo novo que o Bling passe a mandar nasce mascarado, em vez de nascer
 // exposto até alguém reparar.
 export function esqueletoBling(valor, prof = 0) {
+  // typeof null é 'object': sem esta linha, um campo vazio virava "<object>" e parecia um bloco
+  // que a sonda não conseguiu ler, quando na verdade não havia nada ali.
+  if (valor === null || valor === undefined) return null;
   if (Array.isArray(valor)) return prof > 3 ? '[…]' : valor.slice(0, 1).map(v => esqueletoBling(v, prof + 1));
   if (valor && typeof valor === 'object') {
     const out = {};
     for (const [k, v] of Object.entries(valor)) {
-      if (v && typeof v === 'object') out[k] = esqueletoBling(v, prof + 1);
+      if (v === null || v === undefined) out[k] = null; // vazio é vazio, e vazio não expõe ninguém
+      else if (typeof v === 'object') out[k] = esqueletoBling(v, prof + 1);
       else out[k] = BONI_CAMPOS_SEGUROS.has(k) ? v : `<${typeof v}>`;
     }
     return out;
@@ -268,66 +272,93 @@ export function esqueletoBling(valor, prof = 0) {
   return `<${typeof valor}>`;
 }
 
-// O texto da natureza pode vir solto ou dentro de um objeto ({ id, descricao }) — a sonda existe
-// justamente porque não se sabe qual. Esta leitura cobre as duas formas sem decidir nada.
-function naturezaDe(n) {
-  const v = n?.naturezaOperacao ?? n?.natureza ?? null;
-  if (!v) return null;
-  return typeof v === 'string' ? v : (v.descricao || v.nome || null);
-}
 
-export async function probeBonificacao(sinceISO, untilISO) {
+export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amostras = 5 } = {}) {
   if (!isConfigured()) throw new Error('Bling não configurado.');
   if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
-
-  const tentativas = [
-    { rotulo: '/nfe com dataEmissao',  path: '/nfe',            params: { dataEmissaoInicial: sinceISO, dataEmissaoFinal: untilISO, limite: 100, pagina: 1 } },
-    { rotulo: '/nfe com dataInicial',  path: '/nfe',            params: { dataInicial: sinceISO, dataFinal: untilISO, limite: 100, pagina: 1 } },
-    { rotulo: '/nfe sem janela',       path: '/nfe',            params: { limite: 100, pagina: 1 } },
-    { rotulo: '/notas-fiscais',        path: '/notas-fiscais',  params: { limite: 100, pagina: 1 } },
-  ];
-
   const erros = [];
-  let notas = null;
-  for (const t of tentativas) {
+
+  // 1) Nome de cada natureza de operação. A nota traz só o ID dela ({ id: ... }, sem descrição —
+  // confirmado ao vivo em 04/09/2026), então sem esta tabela não dá pra saber qual id é
+  // "Saída em bonificação" a não ser conferindo à mão no Bling.
+  let naturezas = {};
+  for (const path of ['/naturezas-operacoes', '/naturezas-operacao', '/natureza-operacoes']) {
     try {
-      const r = await apiGet(t.path, t.params);
-      notas = { chamada: t.rotulo, lista: r.data || [] };
-      break;
-    } catch (e) { erros.push(`${t.rotulo}: ${e.message}`); }
+      const r = await apiGet(path, { limite: 100, pagina: 1 });
+      for (const n of (r.data || [])) naturezas[String(n.id)] = n.descricao || n.nome || null;
+      if (Object.keys(naturezas).length) { erros.push(`(ok) nomes vieram de ${path}`); break; }
+    } catch (e) { erros.push(`${path}: ${e.message}`); }
   }
 
-  // Naturezas encontradas, contadas. É o que diz o TEXTO exato da que interessa ("Saída em
-  // bonificação") e se existem outras parecidas que não podem ser confundidas com ela.
+  // 2) Notas do período, PAGINANDO. Uma página só pareceria completa e responderia a pergunta
+  // errada: 100 notas é o tamanho da página, não o tamanho do período.
   const porNatureza = {};
-  for (const n of (notas?.lista || [])) {
-    const nat = naturezaDe(n) || '(sem natureza)';
-    porNatureza[nat] = (porNatureza[nat] || 0) + 1;
+  const daBonificacao = [];
+  let lidas = 0, incompleta = false;
+  const ehBonificacao = id => /bonifica/i.test(naturezas[String(id)] || '');
+  for (let pagina = 1; ; pagina++) {
+    if (pagina > paginas) { incompleta = true; break; }
+    let lote = [];
+    try {
+      const r = await apiGet('/nfe', { dataEmissaoInicial: sinceISO, dataEmissaoFinal: untilISO, limite: 100, pagina });
+      lote = r.data || [];
+    } catch (e) { erros.push(`/nfe pagina ${pagina}: ${e.message}`); break; }
+    for (const n of lote) {
+      lidas++;
+      const id = n.naturezaOperacao?.id ?? n.naturezaOperacao ?? null;
+      const chave = `${id ?? 'sem id'} · ${naturezas[String(id)] || '(nome desconhecido)'}`;
+      porNatureza[chave] = (porNatureza[chave] || 0) + 1;
+      if (ehBonificacao(id)) daBonificacao.push(n);
+    }
+    if (lote.length < 100) break;
   }
 
-  // E o mesmo período pelo lado dos PEDIDOS: se a doação for reconhecível já ali, a captura não
-  // precisa de um endpoint novo. Total 0 é o sinal mais óbvio, e por isso mesmo é o que precisa
-  // ser conferido contra a contagem de notas antes de virar regra.
+  // 3) O detalhe de algumas notas de bonificação: a LISTAGEM não traz os itens (confirmado ao
+  // vivo), e é o item que diz qual produto e quantas unidades saíram — o único número que
+  // interessa aqui.
+  const detalhes = [];
+  for (const n of daBonificacao.slice(0, amostras)) {
+    try {
+      const d = await apiGet(`/nfe/${n.id}`);
+      detalhes.push(esqueletoBling(d.data || d));
+    } catch (e) { erros.push(`/nfe/${n.id}: ${e.message}`); }
+  }
+
+  // 4) Os canais cadastrados, pra dar nome aos loja.id que aparecem nos pedidos. A sonda anterior
+  // mostrou dois ids que não estão em KNOWN_CHANNELS, e é preciso saber o que são antes de
+  // qualquer captura nova encostar neles.
+  let canais = null;
+  try {
+    const r = await fetchSalesChannels();
+    canais = (r.data || []).map(c => ({ id: c.id, descricao: c.descricao, tipo: c.tipo, situacao: c.situacao }));
+  } catch (e) { erros.push(`/canais-venda: ${e.message}`); }
+
+  // 5) E o lado dos PEDIDOS, também paginando: se a doação já for reconhecível ali, a captura não
+  // precisa mexer em nota fiscal nenhuma.
   let pedidos = null;
   try {
-    const lista = await fetchOrdersList(sinceISO, untilISO, { pagina: 1, limite: 100 });
-    const data = lista.data || [];
-    pedidos = {
-      total: data.length,
-      comTotalZero: data.filter(p => Number(p.total) === 0).length,
-      porLoja: data.reduce((acc, p) => {
+    const porLoja = {};
+    let totalPedidos = 0, zerados = 0, primeiroZerado = null, pedidosIncompleto = false;
+    for (let pagina = 1; ; pagina++) {
+      if (pagina > paginas) { pedidosIncompleto = true; break; }
+      const r = await fetchOrdersList(sinceISO, untilISO, { pagina, limite: 100 });
+      const lote = r.data || [];
+      for (const p of lote) {
+        totalPedidos++;
         const k = String(p.loja?.id ?? 'sem loja');
-        acc[k] = (acc[k] || 0) + 1;
-        return acc;
-      }, {}),
-      esqueletoDoPrimeiroZerado: esqueletoBling(data.find(p => Number(p.total) === 0) || null),
-    };
+        porLoja[k] = (porLoja[k] || 0) + 1;
+        if (Number(p.total) === 0) { zerados++; if (!primeiroZerado) primeiroZerado = p; }
+      }
+      if (lote.length < 100) break;
+    }
+    pedidos = { total: totalPedidos, incompleta: pedidosIncompleto, comTotalZero: zerados, porLoja,
+      esqueletoDoPrimeiroZerado: primeiroZerado ? esqueletoBling(primeiroZerado) : null };
   } catch (e) { erros.push(`pedidos: ${e.message}`); }
 
   return {
-    notas: notas
-      ? { chamada: notas.chamada, quantas: notas.lista.length, porNatureza, formato: esqueletoBling(notas.lista[0] || null) }
-      : null,
+    naturezasConhecidas: naturezas,
+    notas: { lidas, incompleta, porNatureza, deBonificacao: daBonificacao.length, detalhes },
+    canais,
     pedidos,
     erros,
   };
