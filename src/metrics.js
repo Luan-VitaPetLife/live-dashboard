@@ -1053,12 +1053,20 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 // Diferente do `recentOrders` do dashboard, que só traz os mais recentes do período/canal: aqui
 // varremos TODOS os pedidos do mercado (todos os canais, sem janela de data). Escopo por mercado
 // para não misturar BRL/USD. Devolve o mesmo formato normalizado do `recentOrders`.
-const CH_LABEL = {
-  shopify: 'Shopify - Coco and Luna BR', shopify_us: 'Shopify - Coco and Luna EUA',
-  shopee: 'Shopee', mercadolivre: 'Mercado Livre',
-  amazon: 'Amazon BR', amazon_us: 'Amazon EUA',
-  yucaloo_br: 'Shopify - Yucaloo BR', yucaloo_us: 'Shopify - Yucaloo EUA',
+// Catálogo de canais do BACKEND: rótulo e mercado na MESMA entrada. Manter as duas informações
+// em listas separadas é como elas passam a discordar (é o que já aconteceu no front, ver
+// "Catálogo de canais" no CLAUDE.md). O equivalente do front é DEFAULT_CH em js/colors.js.
+export const CANAIS = {
+  shopify:      { label: 'Shopify - Coco and Luna BR',  market: 'br' },
+  shopify_us:   { label: 'Shopify - Coco and Luna EUA', market: 'us' },
+  shopee:       { label: 'Shopee',                      market: 'br' },
+  mercadolivre: { label: 'Mercado Livre',               market: 'br' },
+  amazon:       { label: 'Amazon BR',                   market: 'br' },
+  amazon_us:    { label: 'Amazon EUA',                  market: 'us' },
+  yucaloo_br:   { label: 'Shopify - Yucaloo BR',        market: 'br' },
+  yucaloo_us:   { label: 'Shopify - Yucaloo EUA',       market: 'us' },
 };
+const CH_LABEL = Object.fromEntries(Object.entries(CANAIS).map(([k, v]) => [k, v.label]));
 // Mesmo vocabulário Bling (Autorizado/Em aberto/Cancelado) do statusTag() em index.html — mantido
 // em sincronia pra buscar "em aberto" ou "autorizado" no campo de busca encontrar os pedidos certos.
 function statusLabelPt(o) {

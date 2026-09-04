@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Histórico — Vita Pet Life</title>
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="stylesheet" href="css/anim.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" integrity="sha384-CK2SzKma4jA5H/MXDUU7i1TqZlCFaD4T01vtyDFvPlD97JQyS+IsSh1nI2EFbpyk" crossorigin="anonymous">
+<link rel="stylesheet" href="css/paginas/historico.css">
+</head>
+<body>
+
+<script src="js/escape.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/pill-switch.js"></script>
+<script src="js/confirm-modal.js"></script>
+<script src="js/jobs-widget.js"></script>
+<script src="js/periodo.js"></script>
+
+<div class="main">
+  <div class="topbar">
+    <div class="live-dot-wrap"><div class="ldot"></div><span id="lastUpdate">Carregando…</span></div>
+    <div style="position:relative" id="periodWrap">
+      <div class="filter-pill" id="periodPill" onclick="togglePeriodPop()">
+        <span class="lbl">Período</span>
+        <span class="val" id="periodValue">30 dias</span>
+        <span class="arr">▾</span>
+      </div>
+      <div class="period-pop" id="periodPop">
+        <div class="pp-presets">
+          <button data-preset="today" onclick="selectPreset(this,'Hoje')">Hoje</button>
+          <button data-preset="7d" onclick="selectPreset(this,'7 dias')">7 dias</button>
+          <button data-preset="30d" class="active" onclick="selectPreset(this,'30 dias')">30 dias</button>
+          <button data-preset="month" onclick="selectPreset(this,'Este mês')">Este mês</button>
+        </div>
+        <div class="pp-divider"></div>
+        <div class="pp-section-label">Intervalo personalizado</div>
+        <div class="pp-dates">
+          <div class="pp-field"><label>De</label><input type="date" id="dateFrom"></div>
+          <div class="pp-field"><label>Até</label><input type="date" id="dateTo"></div>
+        </div>
+        <div class="pp-err" id="ppErr"></div>
+        <button class="pp-apply" onclick="applyRange()">Aplicar intervalo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div>
+      <div class="page-title">Histórico</div>
+      <div class="page-sub">Quem mudou o quê, quando, e de quanto para quanto.</div>
+    </div>
+
+    <div class="hi-filtros">
+      <div>
+        <div class="hi-filtro-label">Página</div>
+        <div class="hi-paginas" id="hiPaginas"></div>
+      </div>
+      <div class="hi-paises" id="hiPaises" hidden>
+        <div class="hi-filtro-label">País</div>
+        <div class="pill-switch">
+          <span class="ps-pill" aria-hidden="true"></span>
+          <button class="ps-opt mkt-btn active" id="mktBtnAll" onclick="setMarket('')"><span>Todos</span></button>
+          <button class="ps-opt mkt-btn" id="mktBtnBr" onclick="setMarket('br')">
+            <img src="img/bandeiras/bandeira_brasil.webp" alt="" class="mkt-flag-img" width="18" height="13"><span>Brasil</span>
+          </button>
+          <button class="ps-opt mkt-btn" id="mktBtnUs" onclick="setMarket('us')">
+            <img src="img/bandeiras/bandeira_eua.svg" alt="" class="mkt-flag-img" width="18" height="13"><span>EUA</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hi-card" id="hiCard"></div>
+  </div>
+</div>
+
+<script src="js/paginas/historico.js"></script>
+</body>
+</html>

@@ -10,7 +10,7 @@ import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
 import * as shopifyYucaloo from './shopifyYucaloo.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, getMlAdCostsDaily, setMlAdCostsDaily, patchOrderItems, patchOrderState, patchOrderRefunds, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, getAmazonRetentionConfig } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, getMlAdCostsDaily, setMlAdCostsDaily, patchOrderItems, patchOrderState, patchOrderRefunds, getAmazonCursor, setAmazonCursor, pruneOrders, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, getAmazonRetentionConfig, podarHistorico } from './store.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -303,6 +303,10 @@ async function doSync() {
     }
     if (pruned) report.amazonPruned = pruned;
   } catch (e) { report.errors.push('amazon.prune: ' + e.message); }
+
+  // Histórico de edições: mesma ideia de retenção dos pedidos, mas aqui nunca há dúvida do que
+  // apagar (linha antiga é linha antiga), então não precisa de confirmação nenhuma.
+  try { podarHistorico(); } catch (e) { report.errors.push('historico.prune: ' + e.message); }
 
   setLastSync(new Date().toISOString());
   return report;

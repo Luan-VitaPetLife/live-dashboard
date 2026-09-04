@@ -6,8 +6,10 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeReturns, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
 import * as shopee from './src/shopee.js';
+import { comAutor } from './src/autor.js';
+import { PAGINAS as PAGINAS_HISTORICO, montar as montarHistorico } from './src/historico.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
 import * as meta from './src/meta.js';
@@ -135,12 +137,14 @@ function registerLoginSuccess(ip) { loginAttempts.delete(ip); }
 // ── Pipeline base (ordem importa) ──
 app.use(express.json());
 
-// Resolve o usuário do cookie de sessão em TODA requisição.
+// Resolve o usuário do cookie de sessão em TODA requisição, e deixa o nome dele disponível pra
+// qualquer gravação que aconteça durante o atendimento dela — é assim que o "Histórico" sabe
+// quem editou sem que cada rota precise passar o autor adiante (ver src/autor.js).
 app.use((req, _res, next) => {
   const t = auth.parseCookies(req)[auth.SESSION_COOKIE_NAME];
   req.authToken = t || null;
   req.authUser = t ? auth.userFromToken(t) : null;
-  next();
+  comAutor(req.authUser?.name || null, next);
 });
 
 // ── Rotas públicas de autenticação (antes do portão) ──
@@ -185,6 +189,7 @@ const SLUG_TO_FILE = {
   configuracoes: 'configuracoes.html',
   integracoes: 'integracoes.html',
   unificador: 'unificador.html',
+  historico: 'historico.html',
   login: 'login.html',
 };
 const FILE_TO_SLUG = Object.fromEntries(
@@ -237,7 +242,7 @@ app.use((req, res, next) => {
   // Controle de acesso por página (só quando a URL resolve pra uma página conhecida).
   const file = resolvePageFile(p);
   if (file) {
-    if ((file === 'configuracoes.html' || file === 'integracoes.html' || file === 'unificador.html') && user.role !== 'admin') return res.redirect('/');
+    if ((file === 'configuracoes.html' || file === 'integracoes.html' || file === 'unificador.html' || file === 'historico.html') && user.role !== 'admin') return res.redirect('/');
     if (auth.isManagedPage(file) && !auth.canAccessPage(user, file)) {
       const fp = auth.firstAllowedPage(user);
       if (fp) return res.redirect(FILE_TO_SLUG[fp] || '/');
@@ -1271,6 +1276,26 @@ app.get('/api/shopee/probe-returns', requireAdmin, async (req, res) => {
 app.post('/api/shopee/sync-returns', requireAdmin, async (req, res) => {
   try { res.json(await reconcileShopeeReturns()); }
   catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Histórico de edições ──
+// Quem mudou o quê, quando, e de quanto pra quanto. Admin, como as outras telas de sistema: ele
+// mostra o que cada pessoa fez, e isso não é informação pra qualquer usuário.
+app.get('/api/history/paginas', requireAdmin, (req, res) => res.json({ paginas: PAGINAS_HISTORICO }));
+
+app.get('/api/history', requireAdmin, async (req, res) => {
+  const { page, market, since, until } = req.query;
+  if (!page) return res.status(400).json({ error: 'page é obrigatório.' });
+  try {
+    // O período chega como data (AAAA-MM-DD) e vira instante: sem o fim do dia em "until", o
+    // último dia do período selecionado ficaria de fora inteiro.
+    const desde = since ? new Date(since + 'T00:00:00.000Z').toISOString() : new Date(0).toISOString();
+    const ate   = until ? new Date(until + 'T23:59:59.999Z').toISOString() : new Date().toISOString();
+    const linhas = await lerHistorico({ desde, ate });
+    res.json({ itens: montarHistorico(linhas, { pagina: page, market: market || null }) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Mercado Livre OAuth ──

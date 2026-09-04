@@ -1,0 +1,102 @@
+/* historico.css — tela "Histórico": quem editou o quê, quando, e de quanto pra quanto.
+ *
+ * A casca (:root, body, .main, .topbar, .content) segue repetida aqui em vez de centralizada, que
+ * é a decisão já registrada no CLAUDE.md: as 11 folhas divergiram ao longo do tempo e unificá-las
+ * seria mudança de aparência, não faxina. O que é COMPARTILHADO de verdade (sidebar, pill-switch,
+ * animação de abrir/fechar) continua vindo dos componentes.
+ */
+:root{ color-scheme:light;
+    --side-bg:#111110;--side-text:#f0ebe0;--side-muted:#6b6760;--side-hover:rgba(240,235,224,0.06);--side-active:#1e1e1c;
+    --bg:#ede8df;--surface:#faf8f4;--surface2:#f4f0e8;--border:rgba(30,28,24,0.10);--border2:rgba(30,28,24,0.16);
+    --text:#1a1916;--sub:#6b6760;--muted:#9c9790;--rust:#a05a3a;--sage:#6a8c6e;--ink:#2d2a26;
+    --green:#3d7a52;--red:#9b3a3a;--amber:#9b7a2a;--radius:10px;--radius-sm:6px; }
+*{box-sizing:border-box;margin:0;padding:0}
+body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5}
+/* min-width:0 evita rolagem horizontal da página inteira — ver CLAUDE.md, "Padrões de UI". */
+.main{margin-left:180px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
+body.sidebar-hidden .main{margin-left:64px}
+
+/* ── Topbar ── */
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:54px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+.live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-left:auto}
+.ldot{width:5px;height:5px;background:var(--sage);border-radius:50%;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.filter-pill{display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none;position:relative}
+.filter-pill:hover,.filter-pill.open{border-color:var(--ink);color:var(--text)}
+.filter-pill .lbl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+.filter-pill .val{font-weight:600;color:var(--text)}
+.filter-pill .arr{color:var(--muted);font-size:9px;transition:transform .15s}
+.filter-pill.open .arr{transform:rotate(180deg)}
+
+/* ── Seletor de período (mesmo desenho das outras 6 telas com período) ── */
+.period-pop{position:absolute;top:calc(100% + 6px);right:0;width:270px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 28px rgba(30,28,24,.18);padding:16px;z-index:500;display:none;flex-direction:column;gap:12px}
+.period-pop.open{display:flex}
+.pp-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pp-presets button{font-size:11px;font-weight:600;padding:8px 0;border:1px solid var(--border2);background:var(--surface2);color:var(--sub);border-radius:var(--radius-sm);cursor:pointer;transition:all .12s;font-family:inherit}
+.pp-presets button:hover{border-color:var(--ink);color:var(--text)}
+.pp-presets button.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+.pp-divider{height:1px;background:var(--border)}
+.pp-section-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+.pp-dates{display:flex;flex-direction:column;gap:8px}
+.pp-field{display:flex;align-items:center;gap:10px}
+.pp-field label{font-size:11px;font-weight:600;color:var(--sub);width:26px;flex-shrink:0}
+.pp-field input[type=date]{flex:1;font-size:12px;font-family:inherit;color:var(--text);padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);appearance:none;outline:none;transition:border-color .12s}
+.pp-field input[type=date]:focus{border-color:var(--ink)}
+.pp-err{font-size:10px;color:var(--red);min-height:12px}
+.pp-apply{font-size:12px;font-weight:600;padding:9px 0;background:var(--ink);color:var(--side-text);border:none;border-radius:var(--radius-sm);cursor:pointer;font-family:inherit}
+.pp-apply:hover{opacity:.85}
+
+/* ── Content ── */
+.content{padding:28px;display:flex;flex-direction:column;gap:20px;flex:1}
+.page-title{font-size:22px;font-weight:300;letter-spacing:-.5px;line-height:1.1}
+.page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+/* ── Filtros: página e país ── */
+.hi-filtros{display:flex;flex-direction:column;gap:12px}
+.hi-filtro-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+.hi-paginas{display:flex;flex-wrap:wrap;gap:6px}
+.hi-pag{display:flex;align-items:center;gap:6px;height:32px;padding:0 14px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;font-family:inherit;transition:all .15s}
+.hi-pag:hover{border-color:var(--ink);color:var(--text)}
+.hi-pag.active{background:var(--ink);border-color:var(--ink);color:var(--side-text)}
+.hi-pag i{font-size:13px}
+/* O seletor de país some quando a página escolhida não é por país (usuário e liga/desliga de
+   integração valem pra dashboard inteira). Filtro que não filtra nada só confunde. */
+.hi-paises{display:flex;align-items:center;gap:10px}
+.hi-paises[hidden]{display:none}
+
+/* ── Linha do tempo ── */
+.hi-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px}
+.hi-dia{margin-bottom:6px}
+.hi-dia+.hi-dia{margin-top:22px}
+.hi-dia-label{font-size:11px;font-weight:700;color:var(--sub);margin-bottom:10px}
+/* A linha vertical é uma borda do container, não um pseudo-elemento por item: assim ela é
+   contínua entre os eventos, como na referência, sem depender da altura de cada um. */
+.hi-lista{position:relative;border-left:1px solid var(--border2);margin-left:4px;padding-left:20px;display:flex;flex-direction:column;gap:14px}
+.hi-item{position:relative;display:flex;align-items:flex-start;gap:12px}
+.hi-item::before{content:'';position:absolute;left:-25px;top:6px;width:9px;height:9px;border-radius:50%;background:var(--surface);border:2px solid var(--muted)}
+.hi-item.hi-apagou::before{border-color:var(--red)}
+.hi-item.hi-criou::before{border-color:var(--green)}
+.hi-corpo{flex:1;min-width:0}
+.hi-texto{font-size:12.5px;color:var(--text);line-height:1.55}
+.hi-texto b{font-weight:600}
+/* Valor antigo e valor novo com peso diferente: o olho procura o número que passou a valer. */
+.hi-de{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px}
+.hi-para{color:var(--text);font-weight:600}
+.hi-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px}
+.hi-chip{font-size:10px;font-weight:600;color:var(--sub);background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:1px 8px;white-space:nowrap}
+.hi-hora{font-size:11px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums;padding-top:2px}
+
+/* ── Vazio e carregando ── */
+.hi-vazio{display:flex;flex-direction:column;align-items:center;gap:6px;padding:44px 20px;text-align:center}
+.hi-vazio i{font-size:26px;color:var(--muted)}
+.hi-vazio-titulo{font-size:13px;font-weight:600;color:var(--sub)}
+.hi-vazio-sub{font-size:12px;color:var(--muted);max-width:420px}
+
+@media(max-width:768px){
+  .main{margin-left:0}
+  .content{padding:18px}
+  .topbar{padding:0 16px}
+  .hi-card{padding:16px 14px}
+  .hi-item{flex-direction:column;gap:2px}
+  .hi-hora{padding-top:0}
+}

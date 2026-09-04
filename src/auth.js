@@ -10,6 +10,7 @@ import {
   setAuthConfig,
   getAuthSessions,
   setAuthSessions,
+  registrarEdicao,
 } from './store.js';
 
 // ---------------------------------------------------------------------------
@@ -310,6 +311,10 @@ export function createUser({ username, name, password, role, pages }) {
   const users = getUsers();
   users.push(user);
   setUsers(users);
+  // Senha NUNCA entra no histórico, nem no "de" nem no "para" — nem o hash. O que importa
+  // registrar é que a senha foi trocada, não qual ela é.
+  registrarEdicao({ pagina: 'configuracoes', acao: 'criou', alvo: user.name,
+    campo: 'Usuário', de: null, para: finalRole === 'admin' ? 'administrador' : 'padrão' });
   return publicUser(user);
 }
 
@@ -319,6 +324,7 @@ export function updateUser(id, patch = {}) {
   const users = getUsers();
   const user = users.find((u) => u.id === id);
   if (!user) throw new Error('Usuário não encontrado.');
+  const antes = { username: user.username, name: user.name, role: user.role, pages: [...(user.pages || [])] };
 
   if (patch.username != null) {
     const uname = String(patch.username).trim();
@@ -349,6 +355,19 @@ export function updateUser(id, patch = {}) {
   }
 
   setUsers(users);
+  for (const [campo, de, para] of [
+    ['Nome de usuário', antes.username, user.username],
+    ['Nome',            antes.name,     user.name],
+    ['Permissão',       antes.role,     user.role],
+    ['Páginas',         (antes.pages || []).join(', '), (user.pages || []).join(', ')],
+  ]) {
+    if (de === para) continue;
+    registrarEdicao({ pagina: 'configuracoes', acao: 'editou', alvo: user.name, campo, de, para });
+  }
+  if (patch.password) {
+    registrarEdicao({ pagina: 'configuracoes', acao: 'editou', alvo: user.name,
+      campo: 'Senha', de: null, para: null });
+  }
   return publicUser(user);
 }
 
@@ -368,6 +387,8 @@ export function deleteUser(id) {
 
   users.splice(idx, 1);
   setUsers(users);
+  registrarEdicao({ pagina: 'configuracoes', acao: 'apagou', alvo: target.name,
+    campo: 'Usuário', de: target.role === 'admin' ? 'administrador' : 'padrão', para: null });
 
   // Invalida qualquer sessão pendente do usuário removido.
   const sessions = getAuthSessions() || {};
@@ -392,6 +413,8 @@ export function changePassword(id, newPassword) {
   user.salt = salt;
   user.hash = hash;
   setUsers(users);
+  registrarEdicao({ pagina: 'configuracoes', acao: 'editou', alvo: user.name,
+    campo: 'Senha', de: null, para: null });
   return true;
 }
 

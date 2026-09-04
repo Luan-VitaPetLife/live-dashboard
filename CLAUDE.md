@@ -73,6 +73,8 @@ src/meta.js              Meta Marketing API: gasto diário + fetchCampaigns
 src/googleads.js         Google Ads API: OAuth + fetchCampaigns (só EUA)
 src/metrics.js           Calcula o payload da dashboard por mercado
 src/insights.js          Regras do card "Insights" (sem IA) — puro, testável sem banco
+src/historico.js         Frase de cada edição do "Histórico" — puro, testável sem banco
+src/autor.js             Quem está editando agora (AsyncLocalStorage), pro registro do Histórico
 src/us-states.js         normalizeUsState(): reduz grafias de estado dos EUA a 2 letras
 src/auth.js              Login: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página
 src/sync.js              Orquestra a busca de todos os canais e grava no store
@@ -87,6 +89,7 @@ public/estoque.html      Estoque + produção, híbrido real (vendas) + manual
 public/segmentos.html    Gato vs Cachorro, tipos de produto, geografia por produto
 public/geografia.html    Mapa por estado (Leaflet), seletor BR/EUA embutido
 public/unificador.html   Agrupamento manual de produtos entre canais (admin)
+public/historico.html    Quem editou o quê, quando, e de quanto pra quanto (admin)
 public/configuracoes.html Geral, login, gestão de usuários (admin)
 public/integracoes.html  Status + liga/desliga por integração (admin)
 public/login.html        Tela de login (standalone)
@@ -108,7 +111,7 @@ imagens estavam soltas no meio dos HTML e não dava pra ver o que era página e 
 
 ```
 public/
-  *.html                 as 11 páginas (raiz obrigatória)
+  *.html                 as 12 páginas (raiz obrigatória)
   favicon.png            convenção de raiz, fica onde está
   css/                   switch.css anim.css catalogo.css   (estilo compartilhado)
   css/paginas/           um .css por página, extraído do <style> dela
@@ -402,6 +405,58 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   não trazer comentário de comprador. `reason` continua (é código fixo, tipo `NOT_RECEIPT`).
 - `scripts/test/shopee-devolucoes.test.mjs` executa o agrupamento contra a resposta real e guarda
   cada uma dessas armadilhas.
+
+### Histórico de edições (`public/historico.html`, `src/historico.js`, `src/autor.js`)
+- Linha do tempo de tudo que uma PESSOA editou: quem, quando, e **de quanto pra quanto**. Pedido
+  do Luan (04/09/2026), com o cronograma de pedido do Shopify como referência visual. Escolhe-se a
+  página, depois o país, depois o período.
+- **O "de quanto pra quanto" é o recurso.** Um registro que só diz "alguém salvou o campo COG" não
+  serve pra nada na hora em que um número está errado e a pergunta é desde quando.
+- **O registro mora DENTRO das funções de gravação do store**, não nos handlers do servidor. Duas
+  razões, e as duas decidem: é ali que o valor ANTIGO ainda existe (o handler só conhece o novo), e
+  é por ali que passa obrigatoriamente qualquer tela que salve alguma coisa, inclusive uma que
+  ainda não existe. Registrar por rota significaria a próxima rota esquecer, sem erro nenhum.
+- **Quem editou chega por `AsyncLocalStorage`** (`src/autor.js`), marcado uma vez no middleware que
+  já resolve a sessão. Passar o autor como parâmetro obrigaria cada função de gravação a receber um
+  argumento a mais, que a próxima tela esqueceria de passar; e uma variável de módulo seria
+  sobrescrita pela requisição seguinte no meio de um `await`, gravando a edição de uma pessoa no
+  nome de outra. É biblioteca do Node, então não entra dependência nova.
+- Autor `null` é legítimo e quer dizer "não veio de pessoa nenhuma" (job, script). Aparece como
+  "O sistema", mesmo vocabulário do "automático" no card de processos.
+- **Só o que MUDOU de verdade vira linha.** Salvar um formulário sem alterar nada não pode virar
+  registro, senão "mudou" deixa de significar mudou e a lista vira ruído.
+- **Senha nunca entra**, nem no valor antigo nem no novo, nem o hash nem o salt. A troca de senha é
+  registrada como fato, sem valor nenhum junto.
+- **Tabela própria (`historico`), nunca uma chave do `kv`.** O kv reescreve o blob inteiro a cada
+  gravação — uma lista que só cresce ali faria cada edição reescrever o histórico completo. Só entra
+  linha nova; nada é editado depois. Retenção de `HISTORICO_DIAS` (padrão 180), podada pelo sync.
+- **A frase e os valores saem PRONTOS do servidor**, e vêm em PEDAÇOS (`partes`), com o valor antigo
+  e o novo já separados do texto. A tela só pinta. Se ela procurasse o valor dentro da frase pronta
+  pra destacar, o destaque embaralharia quando um valor fosse pedaço do outro: numa mudança "de 10
+  para 1", o "1" seria achado dentro do "10" recém-marcado.
+- **O filtro de país só descarta linha que TEM país e é de outro.** Edição de usuário não pertence a
+  país nenhum e não pode aparecer sob uma bandeira; já liga/desliga de integração TEM país (a Shopee
+  só existe no Brasil), e esconder isso do filtro esconderia justamente o que a pessoa foi procurar.
+- `INTEGRACOES` (historico.js) traduz a chave da integração pro nome que a tela de Integrações
+  mostra, e diz o país dela — sem isso o histórico diria "Luan desligou shopee". É cópia da lista de
+  `computeIntegrationsList` (server.js), e o teste compara as duas: cópia que diverge não dá erro,
+  só passa a chamar a integração por outro nome.
+- **Getter que devolve a referência viva do store esconde a edição.** O handler da retenção da
+  Amazon pega a config, mexe nela e devolve pro setter — com a referência viva, o setter recebe o
+  objeto JÁ alterado como se fosse o valor antigo, conclui que nada mudou e não registra nada, sem
+  erro em lugar nenhum. Por isso `getAmazonRetentionConfig` devolve cópia. Vale conferir isso em
+  qualquer getter novo cujo valor volte para o setter correspondente.
+- Uma página só entra no seletor se tem algo editável. Visão geral, Geografia e Campanhas não têm,
+  e oferecê-las seria prometer uma lista que nunca teria conteúdo.
+- **Admin nos dois lados** (rota da API e portão da página). Só no cliente seria decoração: quem
+  soubesse a URL veria o que todo mundo editou.
+- **O que fica de fora, e é limitação conhecida:** em Postgres o histórico não entra no cache em
+  memória nem, por consequência, no snapshot diário do B2 (`getFullSnapshot` devolve o cache). Numa
+  restauração de desastre o histórico não volta. Vale rever se ele passar a ser usado pra auditoria
+  de verdade, e não só pra "desde quando esse número está assim".
+- `scripts/test/historico.test.mjs` executa a montagem da frase, o "só o que mudou", o filtro de
+  país e a lista de funções de gravação que precisam registrar — uma que fique de fora não dá erro,
+  a edição só some do histórico.
 
 ### Insights (`src/insights.js`, card da Visão geral)
 - Frases curtas explicando O QUE mudou no período contra o período anterior comparável. Nasceu do
@@ -1772,6 +1827,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   própria),
   `sync-btn` (o botão avisa que está sincronizando, não aceita clique duplo, mostra o erro na tela
   e não recarrega depois de falhar),
+  `historico` (toda função de gravação editável registra quem mudou o quê, salvar sem mudar nada
+  não vira linha, senha nunca entra, e a tela não reformata valor por conta própria),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),
@@ -1817,6 +1874,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   "tag mãe" Tipo/Categoria de um grupo) · `GET/POST /api/product-types*` ·
   `GET/POST /api/product-hidden-tags*` (admin)
 - `GET /api/integrations` / `POST /api/integrations/:key/toggle` (admin)
+- `GET /api/history?page=&market=&since=&until=` (admin) · `GET /api/history/paginas` (admin) —
+  histórico de edições, ver tela Histórico
 - `GET /health`
 
 ## 8. Status das integrações
@@ -1896,9 +1955,9 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   Integrações não conta como falha. Painel em Integrações (mesmo padrão do card de Backup): status
   configurado/não + botão "Enviar teste" (`POST /api/alerts/test`), pra confirmar
   `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` sem esperar um canal ficar horas travado de verdade.
-- **Log de auditoria de edição:** login/permissão por página já existem (`src/auth.js`), mas não há
-  registro de QUEM mudou um valor (COG, estoque manual, grupo do Unificador, config de
-  integração) nem QUANDO. Hoje só o valor final fica salvo.
+- ~~Log de auditoria de edição~~ — feito (04/09/2026), virou a tela **Histórico**. Cobre campos
+  financeiros de Produtos, estoque manual, grupos e tags do Unificador, tipos de produto,
+  liga/desliga de integração, retenção da Amazon e cadastro de usuários. Ver "Histórico de edições".
 - ~~Rotina de backup do Postgres~~ — feito (18/08/2026). Confirmado com o Luan: sem plano Pro no
   Railway não existe backup/PITR automático (só um manual antigo, 1 mês). `src/backup.js`: snapshot
   diário do store inteiro (mesmo formato JSON do `data/db.json` local, gzip) pra **Backblaze B2**
