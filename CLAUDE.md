@@ -704,6 +704,15 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   "Vita Pet Life - São Paulo" (`206202176`, tipo LojaFisica); e **a doação NÃO é reconhecível pelos
   pedidos** (113 notas de bonificação contra 7 pedidos naquela loja no mesmo período), então a
   captura tem que vir da nota fiscal.
+- **Quem decide é a NATUREZA DE OPERAÇÃO, nunca a loja** (decisão do Luan, 04/09/2026). A loja hoje
+  é "Vita Pet Life - São Paulo", mas pode mudar, e uma regra presa à loja pararia de contar no dia
+  em que mudasse, sem nada acusar. A comparação é pelo NOME, resolvido em tempo de execução via
+  `/naturezas-operacoes` — não pelo id, que é identificador interno da conta e quebraria em
+  silêncio se a natureza fosse recriada.
+- **"Saída em", e não só "bonificação".** A conta tem AS DUAS: "Saída em bonificação" e "Entrada de
+  bonificação". Casar por "bonifica" contaria mercadoria ENTRANDO como doada, que é o número
+  exatamente ao contrário. `ehNaturezaDeBonificacao` (bling.js) é a única regra, e o teste a executa
+  contra as 25 naturezas reais da conta exigindo que exatamente uma case.
 - **Nota de bonificação COM valor existe.** A crença era "doação é sempre R$ 0", e a maioria é —
   mas a nota 000222 saiu com R$ 129,99 sendo doação confirmada. Duas consequências que não podem
   ser esquecidas: filtrar doação por "valor zero" PERDE essa nota, e somar o valor dela INVENTA

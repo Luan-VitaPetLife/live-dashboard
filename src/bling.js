@@ -281,6 +281,24 @@ export function esqueletoBling(valor, prof = 0) {
 }
 
 
+// Quem decide se a nota é doação é a NATUREZA DE OPERAÇÃO, não a loja de onde ela saiu (decisão
+// do Luan, 04/09/2026). A loja hoje é "Vita Pet Life - São Paulo", mas isso pode mudar, e no dia
+// em que mudar uma regra presa à loja pararia de contar sem nada acusar.
+//
+// A comparação é pelo NOME, resolvido em tempo de execução via /naturezas-operacoes, e não pelo id
+// numérico: id é identificador interno daquela conta, e prendê-lo no código quebraria em silêncio
+// se a natureza fosse recriada.
+//
+// "Saída em", e não só "bonificação": a conta tem AS DUAS, "Saída em bonificação" e "Entrada de
+// bonificação". Casar só por "bonifica" contaria mercadoria ENTRANDO como se tivesse sido doada,
+// que é o número exatamente ao contrário.
+export function ehNaturezaDeBonificacao(nome) {
+  const n = String(nome || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // "Saída" e "Saida" precisam casar igual
+    .toLowerCase().trim();
+  return /\bsaida\b/.test(n) && /\bbonificac/.test(n);
+}
+
 export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amostras = 5, maxDetalhes = 300 } = {}) {
   if (!isConfigured()) throw new Error('Bling não configurado.');
   if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
@@ -303,7 +321,7 @@ export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amost
   const porNatureza = {};
   const daBonificacao = [];
   let lidas = 0, incompleta = false;
-  const ehBonificacao = id => /bonifica/i.test(naturezas[String(id)] || '');
+  const ehBonificacao = id => ehNaturezaDeBonificacao(naturezas[String(id)]);
   for (let pagina = 1; ; pagina++) {
     if (pagina > paginas) { incompleta = true; break; }
     let lote = [];
