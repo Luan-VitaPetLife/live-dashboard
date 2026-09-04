@@ -214,8 +214,13 @@ if (typeof liquido === 'function') {
 const metrics = fs.readFileSync(path.join(ROOT, 'src', 'metrics.js'), 'utf8');
 t.eq((metrics.match(/lerPedidosBrutos/g) || []).length, 2,
   'metrics.js lê pedido cru num lugar só (o resto passa pelo desconto)');
-t.ok(/function getOrders\(args\)\s*\{\s*return lerPedidosBrutos\(args\)\.map\(pedidoLiquido\);/.test(metrics),
+t.ok(/const todos = lerPedidosBrutos\(args\)\.map\(pedidoLiquido\);/.test(metrics),
   'a porta de entrada de pedido aplica o desconto');
+// A mesma porta também é quem tira a doação da conta. Saída em bonificação é mercadoria que saiu
+// sem venda: deixá-la passar aqui a colocaria em receita, ticket médio e contagem de pedidos de
+// uma vez só, e sem erro nenhum.
+t.ok(/return incluirBonificacao \? todos : todos\.filter\(o => !o\.bonificacao\);/.test(metrics),
+  'e é ela também que tira a doação da conta, a não ser que peçam por ela');
 
 // O sync de 15 min não pode apagar a marca que a reconciliação de 12h gravou.
 const iUpsert = store.indexOf('export function upsertOrders(');

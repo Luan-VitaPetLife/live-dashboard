@@ -78,8 +78,15 @@ function pedidoLiquido(o) {
 }
 
 // A porta de entrada de pedido deste arquivo. Ver pedidoLiquido acima.
-function getOrders(args) {
-  return lerPedidosBrutos(args).map(pedidoLiquido);
+//
+// Ela também é o ÚNICO lugar que decide se doação entra na conta. Saída em bonificação é
+// mercadoria que saiu sem venda: ela não pode aparecer em receita, ticket médio, ROAS, funil nem
+// em contagem de pedidos. Filtrar aqui, e não em cada cálculo, é o que torna isso confiável — o
+// mesmo princípio que já vale pro desconto de devolução logo acima. Quem precisa delas pede
+// explicitamente, com `incluirBonificacao`.
+function getOrders({ incluirBonificacao = false, ...args } = {}) {
+  const todos = lerPedidosBrutos(args).map(pedidoLiquido);
+  return incluirBonificacao ? todos : todos.filter(o => !o.bonificacao);
 }
 
 const OFFSET = Number(process.env.STORE_OFFSET_MINUTES || -180);
@@ -604,7 +611,25 @@ const RECENT_MAX = 5000;
 // card Top produtos aplicadas: produto oculto de fora, agrupamento manual do Unificador junto.
 // Extraída de dentro do computeDashboard porque o card de Insights precisa rodar exatamente a
 // MESMA agregação no período anterior — se as duas pontas divergirem, a comparação mente.
-function productRevenueRows(validOrders, market, groups, catalogTagsIdx) {
+// Acrescenta a doação a cada linha de produto, e cria linha para o produto que SÓ foi doado.
+//
+// A areia da Yucaloo é esse caso: ela não vendeu nenhuma unidade no período e mesmo assim saíram
+// 18 doadas. Sem criar a linha, essas unidades sumiriam do card — e sumir é pior do que aparecer
+// com receita zero, porque a mercadoria saiu do estoque de verdade.
+//
+// A ordem continua sendo por receita: uma linha só de doação vale R$ 0 e cai pro fim, que é onde
+// ela deve ficar num card chamado "Top produtos por receita".
+function mesclarDoacao(vendas, linhasDoacao, doacaoPorTitulo) {
+  const out = vendas.map(p => ({ ...p, bonusQty: doacaoPorTitulo.get(p.title) || 0 }));
+  const jaTem = new Set(out.map(p => p.title));
+  for (const d of linhasDoacao) {
+    if (jaTem.has(d.title)) continue;
+    out.push({ ...d, revenue: 0, avulsoQty: 0, comboQty: 0, comboBySize: {}, bonusQty: d.avulsoQty + d.comboQty });
+  }
+  return out.sort((a, b) => (b.revenue - a.revenue) || (b.bonusQty - a.bonusQty));
+}
+
+function productRevenueRows(validOrders, market, groups, catalogTagsIdx, { exigirReceita = true } = {}) {
   const byCh = aggregateProductsByChannel(validOrders);
   let rows = Object.entries(byCh)
     .flatMap(([ch, c]) => Object.entries(c.products)
@@ -623,8 +648,10 @@ function productRevenueRows(validOrders, market, groups, catalogTagsIdx) {
   // jeito mais direto possível: a linha diz que o produto vendeu. As causas conhecidas estão
   // corrigidas na origem (ver shopify.js, `currentQuantity` 0), mas a rede fica: um canal novo
   // que mande valor sem quantidade não vai virar uma linha fantasma no ranking sem ninguém ver.
-  return rows.filter(p => p.revenue > 0 && (p.avulsoQty + p.comboQty) > 0)
-    .sort((a, b) => b.revenue - a.revenue);
+  // `exigirReceita: false` é só pra lista de DOAÇÃO, onde receita zero é o normal e não anomalia:
+  // ali a unidade é o dado, e exigir dinheiro apagaria a lista inteira.
+  return rows.filter(p => (exigirReceita ? p.revenue > 0 : true) && (p.avulsoQty + p.comboQty) > 0)
+    .sort((a, b) => (b.revenue - a.revenue) || ((b.avulsoQty + b.comboQty) - (a.avulsoQty + a.comboQty)));
 }
 
 // Receita/pedidos por estado de entrega. Mesma extração e mesmo motivo da função acima. US:
@@ -763,7 +790,15 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // isHiddenProduct prioriza a tag atual do catálogo Shopify sobre a tag presa no pedido (ver
   // isHiddenProduct).
   const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
-  const allProducts = productRevenueRows(valid, market, productGroupsMkt, catalogTagsIdx);
+  // Doação (saída em bonificação): unidade sim, dinheiro nunca. Passa pelas MESMAS funções de
+  // agregação e agrupamento das vendas, senão o mesmo produto viraria duas linhas com nomes
+  // ligeiramente diferentes e a coluna não somaria com a linha certa.
+  const doacoes = getOrders({ channel, since, until, market, incluirBonificacao: true }).filter(o => o.bonificacao);
+  const linhasDoacao = productRevenueRows(doacoes, market, productGroupsMkt, catalogTagsIdx, { exigirReceita: false });
+  const doacaoPorTitulo = new Map(linhasDoacao.map(p => [p.title, p.avulsoQty + p.comboQty]));
+
+  const allProducts = mesclarDoacao(
+    productRevenueRows(valid, market, productGroupsMkt, catalogTagsIdx), linhasDoacao, doacaoPorTitulo);
   const topProducts = allProducts.slice(0, 5);
 
   // por estado (endereço de entrega dos pedidos válidos) US: normaliza a grafia do estado
@@ -1089,6 +1124,10 @@ const CH_LABEL = Object.fromEntries(Object.entries(CANAIS).map(([k, v]) => [k, v
 // Mesmo vocabulário Bling (Autorizado/Em aberto/Cancelado) do statusTag() em index.html — mantido
 // em sincronia pra buscar "em aberto" ou "autorizado" no campo de busca encontrar os pedidos certos.
 function statusLabelPt(o) {
+  // Saída em bonificação (doação para UGC): mercadoria que saiu sem venda. Vem ANTES de tudo
+  // porque não é um estado do pagamento — não faz sentido perguntar se foi pago, cancelado ou
+  // devolvido algo que nunca foi cobrado.
+  if (o.bonificacao) return 'Bonificação';
   if (o.cancelled) {
     // "Em aberto" (Pending/PendingAvailability etc, ver UNPAID_STATUS_BY_CHANNEL em store.js)
     // não é cancelamento de verdade pela Amazon/canal — só ainda não conta como venda. Rótulo

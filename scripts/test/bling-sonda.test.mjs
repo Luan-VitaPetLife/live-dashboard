@@ -84,10 +84,11 @@ t.ok(/n\.naturezaOperacao\?\.id/.test(bling), 'e agrupa as notas pelo id da natu
 // Uma página é o tamanho da página, não o tamanho do período. Foi o que aconteceu na primeira
 // rodada: 100 notas e 100 pedidos, os dois truncados sem dizer.
 t.ok(/incompleta = true/.test(bling), 'a paginação declara quando parou antes do fim');
-// As DUAS listas paginam (notas e pedidos). Procurar a condição no arquivo inteiro passaria com
-// uma das duas parando na primeira página, porque a outra ainda casa com a busca.
+// TRÊS listas paginam: as notas e os pedidos da sonda, e as notas da captura de verdade. Procurar
+// a condição no arquivo inteiro passaria com uma delas parando na primeira página, porque as
+// outras ainda casam com a busca.
 const paginam = (bling.match(/if \(lote\.length < 100\) break/g) || []).length;
-t.eq(paginam, 2, 'as duas listas só terminam quando a página vem incompleta');
+t.eq(paginam, 3, 'as três listas paginadas só terminam quando a página vem incompleta');
 
 // ── A conta da bonificação precisa ser fechada, não amostrada ──
 // A pergunta aqui não é "qual a forma do dado" (isso já se sabe), é "quantas unidades sairam".

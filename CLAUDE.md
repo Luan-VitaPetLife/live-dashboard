@@ -465,6 +465,44 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   país e a lista de funções de gravação que precisam registrar — uma que fique de fora não dá erro,
   a edição só some do histórico.
 
+### Saída em bonificação (doação para UGC)
+- A empresa envia produto a criadores de conteúdo sem cobrar. No Bling isso sai como **nota fiscal**
+  com natureza de operação "Saída em bonificação". A dashboard conta as UNIDADES e **nunca o
+  dinheiro**. Pedido do Luan, 04/09/2026.
+- **Quem identifica é a NATUREZA, nunca o valor nem a loja.** O valor era zero e vai deixar de ser
+  (decisão do Luan, 04/09/2026), e uma nota de doação com R$ 129,99 já existia antes disso. A loja
+  hoje é "Vita Pet Life - São Paulo", mas pode mudar. `ehNaturezaDeBonificacao` (bling.js) é a
+  única regra, comparando o NOME resolvido em tempo de execução por `/naturezas-operacoes` — a nota
+  traz só o id da natureza.
+- **"Saída em", não só "bonificação".** A conta tem as duas, e "Entrada de bonificação" é
+  mercadoria ENTRANDO: contá-la seria o número ao contrário. O teste roda a regra contra as 25
+  naturezas reais da conta exigindo que exatamente uma case.
+- **Vem da NOTA, não do pedido**: no mesmo período havia 113 notas de bonificação contra 7 pedidos
+  naquela loja. E a listagem de notas não traz os itens, então cada nota custa um `GET /nfe/{id}` —
+  por isso o sync varre uma janela curta (`BLING_BONIFICACAO_DAYS`, padrão 7) e o histórico se
+  recupera de uma vez por `POST /api/bling/sync-bonificacao?days=N` (admin).
+- **Situação da nota é allowlist positiva** (5 Autorizada e 6 Emitida DANFE, confirmadas ao vivo):
+  só conta o que saiu. O que fica de fora volta contado e vira erro no relatório do sync — foi
+  assim que apareceram 2 notas numa situação ainda desconhecida.
+- **Uma porta só decide se a doação entra na conta**, e é a mesma que já desconta devolução:
+  `getOrders` em metrics.js filtra `bonificacao` por padrão, e quem precisa dela pede com
+  `incluirBonificacao`. Espalhar esse filtro por cálculo é como a doação viraria faturamento, ticket
+  médio e ROAS de uma vez — bastaria um lugar esquecer.
+- **Produto que só foi doado vira linha própria** no Top produtos, com receita zero e a coluna de
+  doação preenchida (é o caso das areias da Yucaloo). Some seria pior que aparecer zerado: a
+  mercadoria saiu do estoque de verdade. A ordenação por receita joga essas linhas pro fim, que é
+  onde elas devem ficar num card "por receita".
+- Rótulo próprio na busca e em "Pedidos recentes": **"Bonificação"**, com cor própria
+  (`.st-tag.boni`). Não é estado de pagamento — não faz sentido perguntar se foi pago, cancelado ou
+  devolvido algo que nunca foi cobrado, por isso ele é testado ANTES de tudo em `statusLabelPt` e
+  `statusTag`.
+- **Nada de dado de quem recebeu.** São criadores de conteúdo, não clientes, e a dashboard não
+  precisa do nome deles pra contar unidade.
+- A data do Bling vem sem fuso ("2026-09-04 16:13:11") e é horário de Brasília. O `-03:00` é
+  conferido NO TEXTO pelo teste, não só pelo resultado: numa máquina brasileira tirar o fuso não
+  muda resposta nenhuma, e mudaria em produção, que roda em UTC.
+- `scripts/test/bonificacao.test.mjs` guarda tudo isso.
+
 ### Insights (`src/insights.js`, card da Visão geral)
 - Frases curtas explicando O QUE mudou no período contra o período anterior comparável. Nasceu do
   card de Insights do Shopify que o Luan trouxe como referência (24/08/2026).
@@ -1907,6 +1945,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   no automático, e só barra de período leva data),
   `bling-sonda` (a sonda de bonificação mostra a natureza e o produto, e nunca o nome, CPF,
   endereço, e-mail ou telefone de quem recebeu),
+  `bonificacao` (doação conta unidade e nunca dinheiro, é identificada pela natureza de operação,
+  sai da conta numa porta só, e produto só doado não some do card),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),

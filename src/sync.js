@@ -304,6 +304,13 @@ async function doSync() {
     if (pruned) report.amazonPruned = pruned;
   } catch (e) { report.errors.push('amazon.prune: ' + e.message); }
 
+  // Saídas em bonificação do Bling (doação para UGC). Janela curta: cada nota custa uma chamada.
+  try {
+    const b = await syncBonificacoes();
+    report.bonificacao = b.gravadas;
+    for (const e of b.errors) report.errors.push(e);
+  } catch (e) { report.errors.push('bling.bonificacao: ' + e.message); }
+
   // Histórico de edições: mesma ideia de retenção dos pedidos, mas aqui nunca há dúvida do que
   // apagar (linha antiga é linha antiga), então não precisa de confirmação nenhuma.
   try { podarHistorico(); } catch (e) { report.errors.push('historico.prune: ' + e.message); }
@@ -485,6 +492,38 @@ export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = f
       out.errors.push(`amazon.returns.${market}: ${e.message}`);
     }
   }
+  return out;
+}
+
+// ── Saídas em bonificação (doação para UGC) ───────────────────────────────────
+// Vêm da NOTA FISCAL do Bling, não do pedido: a doação não aparece como pedido (113 notas contra
+// 7 pedidos naquela loja no mesmo período, conferido ao vivo). Quem identifica é a natureza de
+// operação "Saída em bonificação" — nunca o valor (que vai deixar de ser zero) nem a loja (que
+// pode mudar).
+//
+// Janela curta a cada ciclo, porque cada nota custa uma chamada de detalhe: o rolo de 7 dias
+// mantém tudo em dia sem pesar no sync, e o histórico se recupera de uma vez pelo disparo manual
+// (POST /api/bling/sync-bonificacao?days=N), mesmo desenho do backfill da Amazon.
+const BONIFICACAO_DAYS = Number(process.env.BLING_BONIFICACAO_DAYS || 7);
+
+export async function syncBonificacoes({ days = BONIFICACAO_DAYS } = {}) {
+  const out = { gravadas: 0, ignoradas: {}, incompleta: false, errors: [] };
+  if (!isIntegrationEnabled('bling')) { out.skipped = 'disabled'; return out; }
+  const hoje = new Date();
+  const desde = new Date(hoje); desde.setDate(desde.getDate() - days);
+  const iso = d => d.toISOString().slice(0, 10);
+  try {
+    const r = await bling.fetchBonificacoes(iso(desde), iso(hoje));
+    if (r.pedidos.length) upsertOrders(r.pedidos);
+    out.gravadas = r.pedidos.length;
+    out.ignoradas = r.porSituacaoIgnorada;
+    out.incompleta = r.incompleta;
+    // Situação de nota que a allowlist não conhece não pode sumir: ou é uma nota que não saiu
+    // (certo ignorar) ou é unidade enviada que a dashboard está deixando de contar.
+    const desconhecidas = Object.entries(r.porSituacaoIgnorada).map(([s, n]) => `${n} em situação ${s}`);
+    if (desconhecidas.length) out.errors.push('bling.bonificacao: notas fora da allowlist de situação (' + desconhecidas.join(', ') + ')');
+    if (r.incompleta) out.errors.push('bling.bonificacao: leitura incompleta (teto de páginas ou de notas)');
+  } catch (e) { out.errors.push('bling.bonificacao: ' + e.message); }
   return out;
 }
 

@@ -299,6 +299,95 @@ export function ehNaturezaDeBonificacao(nome) {
   return /\bsaida\b/.test(n) && /\bbonificac/.test(n);
 }
 
+// Situações de nota em que a MERCADORIA SAIU de verdade. Confirmadas ao vivo em 04/09/2026 contra
+// a tela do Bling: 5 é "Autorizada" e 6 é "Emitida DANFE". Allowlist positiva, mesmo motivo de
+// sempre: uma situação nova (rejeitada, denegada, bloqueada) não pode começar a contar unidade
+// enviada sozinha. O que fica de fora volta contado, pra aparecer no relatório do sync em vez de
+// sumir — foi assim que se descobriu que existem 2 notas numa situação ainda desconhecida (4).
+const SITUACOES_SAIU = new Set([5, 6]);
+
+// Data do Bling ("2026-09-04 16:13:11") pra ISO. Vem sem fuso e é horário de Brasília; sem o
+// -03:00 a nota da noite cairia no dia seguinte e mudaria de mês na virada.
+function dataBlingParaISO(s) {
+  if (!s || String(s).startsWith('0000')) return null;
+  const d = new Date(String(s).replace(' ', 'T') + '-03:00');
+  return isNaN(d) ? null : d.toISOString();
+}
+
+// Saídas em bonificação normalizadas no mesmo formato de pedido do resto do app.
+//
+// Três regras que não podem mudar:
+//   1. `total` é SEMPRE 0, e o item também. O valor da nota existe (e vai passar a existir sempre,
+//      decisão do Luan em 04/09/2026), mas doação não é receita — somar isso inflaria faturamento.
+//   2. Quem identifica é a NATUREZA, nunca o valor nem a loja: o valor vai deixar de ser zero e a
+//      loja pode mudar.
+//   3. Nada de dado de quem recebeu. São criadores de conteúdo, não clientes, e a dashboard não
+//      precisa do nome deles pra contar unidade.
+export async function fetchBonificacoes(sinceISO, untilISO, { paginas = 40, maxNotas = 500 } = {}) {
+  const vazio = { pedidos: [], porSituacaoIgnorada: {}, incompleta: false };
+  if (!isConfigured() || !getBlingTokens()) return vazio;
+
+  // Nome de cada natureza: a nota traz só o id dela.
+  const naturezas = {};
+  try {
+    const r = await apiGet('/naturezas-operacoes', { limite: 100, pagina: 1 });
+    for (const n of (r.data || [])) naturezas[String(n.id)] = n.descricao || n.nome || null;
+  } catch (e) {
+    // Sem a tabela de nomes não dá pra saber qual natureza é bonificação, e chutar aqui é contar
+    // venda como doação. Melhor não trazer nada e deixar o erro aparecer.
+    throw new Error('não deu pra ler as naturezas de operação: ' + e.message);
+  }
+
+  const daBonificacao = [];
+  let incompleta = false;
+  for (let pagina = 1; ; pagina++) {
+    if (pagina > paginas) { incompleta = true; break; }
+    const r = await apiGet('/nfe', { dataEmissaoInicial: sinceISO, dataEmissaoFinal: untilISO, limite: 100, pagina });
+    const lote = r.data || [];
+    for (const n of lote) {
+      if (ehNaturezaDeBonificacao(naturezas[String(n.naturezaOperacao?.id)])) daBonificacao.push(n);
+    }
+    if (lote.length < 100) break;
+  }
+
+  const pedidos = [];
+  const porSituacaoIgnorada = {};
+  for (const [i, n] of daBonificacao.entries()) {
+    if (i >= maxNotas) { incompleta = true; break; }
+    const d = await apiGet(`/nfe/${n.id}`);
+    const nota = d.data || d;
+    const situacao = Number(nota.situacao);
+    if (!SITUACOES_SAIU.has(situacao)) {
+      porSituacaoIgnorada[String(nota.situacao)] = (porSituacaoIgnorada[String(nota.situacao)] || 0) + 1;
+      continue;
+    }
+    const createdAt = dataBlingParaISO(nota.dataEmissao);
+    if (!createdAt) continue;
+    pedidos.push({
+      id:        'bonificacao:' + nota.id,
+      channel:   'bonificacao',
+      market:    'br',
+      name:      '#' + (nota.numero || nota.id),
+      createdAt,
+      status:    'Bonificação',
+      cancelled: false,
+      bonificacao: true,
+      total:     0,
+      source:    'Bonificação',
+      customer:  '',
+      state:     null,
+      items: (nota.itens || []).map(it => ({
+        title:  it.descricao || it.codigo || 'Sem nome',
+        sku:    it.codigo || null,
+        qty:    Number(it.quantidade) || 0,
+        amount: 0,
+      })).filter(it => it.qty > 0),
+    });
+  }
+
+  return { pedidos, porSituacaoIgnorada, incompleta };
+}
+
 export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amostras = 5, maxDetalhes = 300 } = {}) {
   if (!isConfigured()) throw new Error('Bling não configurado.');
   if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
