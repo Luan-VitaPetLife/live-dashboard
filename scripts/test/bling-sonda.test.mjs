@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { criarTeste, ROOT } from './_lib.mjs';
-import { esqueletoBling } from '../../src/bling.js';
+import { esqueletoBling, ehNaturezaDeBonificacao } from '../../src/bling.js';
 
 const t = criarTeste('Sonda de bonificação (Bling)');
 
@@ -88,6 +88,65 @@ t.ok(/incompleta = true/.test(bling), 'a paginação declara quando parou antes 
 // uma das duas parando na primeira página, porque a outra ainda casa com a busca.
 const paginam = (bling.match(/if \(lote\.length < 100\) break/g) || []).length;
 t.eq(paginam, 2, 'as duas listas só terminam quando a página vem incompleta');
+
+// ── A conta da bonificação precisa ser fechada, não amostrada ──
+// A pergunta aqui não é "qual a forma do dado" (isso já se sabe), é "quantas unidades sairam".
+// Uma amostra responderia a pergunta errada e pareceria uma resposta.
+t.ok(/for \(const \[i, n\] of daBonificacao\.entries\(\)\)/.test(bling),
+  'a sonda detalha todas as notas de bonificação, não uma amostra');
+t.ok(/detalhesIncompleto = true/.test(bling), 'e declara quando o teto interrompeu a leitura');
+
+// Nota de bonificação COM valor existe (confirmado ao vivo: a 000222 saiu com R$ 129,99). Filtrar
+// doação por "valor zero" perderia essa nota, e somar o valor dela inventaria receita.
+t.ok(/comValorNaoZero\+\+/.test(bling), 'a sonda conta as notas de doação que saíram com valor');
+
+// Cancelada não pode contar como doação enviada. Sem separar por situação, ela entraria na conta.
+t.ok(/porSituacao\[sit\]/.test(bling), 'e separa as notas por situação');
+t.ok(/p\.unidades \+= Number\(it\.quantidade\)/.test(bling), 'somando UNIDADES, não notas');
+
+// ── Quem decide é a NATUREZA, e ela precisa ser lida com precisão ──
+// A loja de onde a doação sai pode mudar (decisão do Luan: depender da natureza, não da loja).
+// E a conta tem AS DUAS bonificações: "Saída em bonificação" e "Entrada de bonificação". Casar por
+// "bonifica" contaria mercadoria ENTRANDO como doada — o número exatamente ao contrário.
+//
+// A lista abaixo são as 25 naturezas REAIS da conta, lidas ao vivo em 04/09/2026. Exatamente uma
+// pode casar.
+const NATUREZAS_REAIS = [
+  'Compra de mercadoria', 'Compra de mercadoria com ST', 'Devolução de compra',
+  'Devolução de Compra - Industrialização', 'Devolução de compra com ST', 'Devolução de venda',
+  'Devolução de venda com ST', 'Entrada de bonificação', 'Importação de mercadoria',
+  'Remessa de mercadoria para conserto', 'Remessa de mercadoria para demonstração',
+  'Remessa FBA (Mesmo Estado)', 'Remessa para armazém geral', 'Remessa simbólica',
+  'Retorno de Mercadoria', 'Retorno de mercadoria enviada para conserto',
+  'Retorno de mercadoria para demonstração', 'Saída em bonificação',
+  'Transferência de comercialização', 'Transferência para comercialização', 'Venda (teste)',
+  'Venda de mercadoria', 'Venda de mercadoria - Filial SP',
+  'Venda de mercadoria a não contribuinte', 'Venda de mercadoria com ST',
+];
+
+const casam = NATUREZAS_REAIS.filter(ehNaturezaDeBonificacao);
+t.eq(casam.length, 1, `exatamente uma das 25 naturezas da conta é doação (casaram: ${casam.join(', ') || 'nenhuma'})`);
+t.eq(casam[0], 'Saída em bonificação', 'e é a de SAÍDA');
+t.ok(!ehNaturezaDeBonificacao('Entrada de bonificação'), 'entrada de bonificação nunca conta como doação enviada');
+
+// Acento e caixa não podem decidir nada: o mesmo nome digitado "Saida" tem que casar igual.
+t.ok(ehNaturezaDeBonificacao('Saida em bonificacao'), 'sem acento casa igual');
+t.ok(ehNaturezaDeBonificacao('SAÍDA EM BONIFICAÇÃO'), 'em maiúsculas também');
+t.ok(!ehNaturezaDeBonificacao(''), 'nome vazio não casa');
+t.ok(!ehNaturezaDeBonificacao(null), 'e natureza desconhecida também não');
+
+// A regra não pode voltar a depender da loja: ela muda, e no dia em que mudar a contagem pararia
+// sem nada acusar.
+t.ok(!/206202176/.test(bling), 'a captura não fica presa ao id da loja de onde a doação sai hoje');
+
+// A função pode estar certa e ninguém usá-la: a sonda tinha o próprio /bonifica/i inline, que era
+// justamente o filtro que pegava a ENTRADA junto. Uma regra dessas precisa existir num lugar só.
+t.ok(/ehBonificacao = id => ehNaturezaDeBonificacao\(/.test(bling),
+  'a sonda decide pela função compartilhada, não por um filtro próprio');
+// A forma antiga era um literal "bonifica/i". Fora dos comentários, ela não pode voltar a existir.
+const semComentarios = bling.replace(/^\s*\/\/.*$/gm, '');
+t.ok(!semComentarios.includes('bonifica/i'),
+  'nenhum outro lugar decide bonificação com um filtro solto');
 
 // ── A sonda é de administrador ──
 // A resposta descreve a operação da empresa. `syncLimiter` sozinho não é controle de acesso.
