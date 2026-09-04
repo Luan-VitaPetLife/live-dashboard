@@ -82,8 +82,13 @@ body.sidebar-hidden .main{margin-left:64px}
 /* Valor antigo e valor novo com peso diferente: o olho procura o número que passou a valer. */
 .hi-de{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px}
 .hi-para{color:var(--text);font-weight:600}
+/* O nome do campo em negrito: numa lista de várias edições do mesmo produto, o que muda de uma
+   linha pra outra é qual campo foi mexido, e é isso que o olho procura primeiro. */
+.hi-campo{font-weight:600}
 .hi-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px}
 .hi-chip{font-size:10px;font-weight:600;color:var(--sub);background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:1px 8px;white-space:nowrap}
+.hi-chip-pais{display:inline-flex;align-items:center;gap:5px;padding-left:6px}
+.hi-chip-pais img{width:14px;height:10px;object-fit:cover;border-radius:2px;display:block}
 .hi-hora{font-size:11px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums;padding-top:2px}
 
 /* ── Vazio e carregando ── */

@@ -88,8 +88,11 @@ export function valor(v, formato, market) {
 export function partes(l, { de, para }) {
   const quem = l.autor || 'O sistema';
   const alvo = l.alvo || '';
-  const campo = l.campo || '';
   const t = v => ({ t: 'txt', v });
+  // O NOME do campo também sai separado, pra tela poder destacá-lo: numa lista de várias edições
+  // do mesmo produto, o que muda de uma linha pra outra é justamente qual campo foi mexido, e é
+  // isso que o olho procura primeiro. Pedido do Luan, 04/09/2026.
+  const campo = { t: 'campo', v: l.campo || '' };
   switch (l.acao) {
     case 'criou':    return para ? [t(`${quem} criou ${alvo} como `), { t: 'para', v: para }] : [t(`${quem} criou ${alvo}`)];
     case 'apagou':   return [t(`${quem} apagou ${alvo}`)];
@@ -97,10 +100,10 @@ export function partes(l, { de, para }) {
     case 'desligou': return [t(`${quem} desligou ${alvo}`)];
     case 'agrupou':  return [t(`${quem} adicionou `), { t: 'para', v: para || '' }, t(` ao grupo ${alvo}`)];
     default:
-      if (de && para) return [t(`${quem} mudou ${campo} em ${alvo}: de `), { t: 'de', v: de }, t(' para '), { t: 'para', v: para }];
-      if (para)       return [t(`${quem} definiu ${campo} em ${alvo} como `), { t: 'para', v: para }];
-      if (de)         return [t(`${quem} removeu `), { t: 'de', v: de }, t(` de ${campo} em ${alvo}`)];
-      return [t(`${quem} alterou ${campo} em ${alvo}`)];
+      if (de && para) return [t(`${quem} mudou `), campo, t(` em ${alvo}: de `), { t: 'de', v: de }, t(' para '), { t: 'para', v: para }];
+      if (para)       return [t(`${quem} definiu `), campo, t(` em ${alvo} como `), { t: 'para', v: para }];
+      if (de)         return [t(`${quem} removeu `), { t: 'de', v: de }, t(' de '), campo, t(` em ${alvo}`)];
+      return [t(`${quem} alterou `), campo, t(` em ${alvo}`)];
   }
 }
 
