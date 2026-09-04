@@ -690,6 +690,17 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   lojas entram pelo mesmo `loja.id`, esse campo sozinho não separa as marcas, e a dashboard
   distingue Yucaloo de Coco and Luna justamente pelo `channel`. A separação vai ter que sair de
   outro sinal do próprio pedido.
+- **Saída em bonificação (doação para UGC):** a empresa envia produto sem cobrar, e no Bling isso
+  sai com "Natureza de operação: Saída em bonificação", valor R$ 0. A dashboard precisa contar
+  essas UNIDADES sem que elas virem receita (pedido do Luan, 04/09/2026). O bloqueio é o mesmo de
+  sempre: "natureza de operação" é campo de NOTA FISCAL e o que lemos hoje é PEDIDO DE VENDA, então
+  não se sabe ainda onde a marca vive de forma legível pela API. `GET /api/bling/probe-bonificacao
+  ?since=&until=` (admin) tenta as variações da chamada e devolve o esqueleto da resposta mais as
+  naturezas encontradas, contadas — sondar primeiro, mapear depois.
+- **A sonda de bonificação nunca devolve dado de quem recebeu.** A nota fiscal carrega nome, CPF,
+  endereço, e-mail e telefone, e essa resposta é feita pra ser lida e colada numa conversa. O
+  mascaramento é allowlist POSITIVA (campo novo nasce mascarado) e é TESTADO, não só documentado:
+  a sonda da Shopee já vazou o texto livre do comprador contrariando o próprio comentário dela.
 - **A captura está bloqueada até chegar pedido de teste**, e é bloqueio deliberado: quem decide se
   um pedido conta como venda é o `situacao` do Bling, cujo vocabulário não foi observado ainda.
   Adivinhar isso quebraria a regra mais importante do projeto ("só pedido com pagamento de verdade
@@ -1250,6 +1261,40 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - `scripts/test/periodo.test.mjs` executa o módulo de verdade (em `node:vm`) e falha se uma
   tela voltar a montar o rótulo na mão ou deixar de carregar o script. Foi ele que achou uma
   sétima cópia escondida no seletor de período do Estoque, que a busca manual tinha deixado passar.
+
+### Período de comparação ("Trocar", card de Insights)
+- A dashboard sempre compara o período escolhido com **a janela imediatamente anterior, do mesmo
+  tamanho** (`janelaDeComparacao` em metrics.js). O botão **"Trocar"** no cabeçalho do card de
+  Insights deixa escolher outra janela. Pedido do Luan, 04/09/2026.
+- **A escolha vale pra comparação INTEIRA**, não só pros Insights: os deltas da faixa de
+  Indicadores leem o mesmo `prev`. Se só um dos dois mudasse, a faixa de cima e o card logo abaixo
+  diriam coisas diferentes sobre o mesmo período — que é exatamente o tipo de divergência que o
+  CLAUDE.md já proíbe em Campanhas.
+- **"Período anterior" agora vem com as datas entre parênteses**, na barra do insight e no rodapé
+  de cada indicador. O rótulo sozinho não diz com o quê o número está sendo comparado, e essa era
+  justamente a dúvida. O texto do intervalo sai do `CocoPeriodo` (ver "Rótulo de período"), não de
+  uma formatação nova: duas formatações do mesmo intervalo acabam discordando.
+- **Só as barras que comparam PERÍODO recebem a data.** Três regras usam as mesmas duas barras pra
+  comparar outra coisa (um produto contra "Todo o resto", uma etapa do funil contra a anterior,
+  receita atribuída contra o "Investido"). Quem decide é o `chart()` em insights.js: a linha só
+  ganha `periodo: 'cur'|'prev'` quando os rótulos são os padrão. Sem isso, a tela escreveria uma
+  data ao lado de "Todo o resto", que não é período nenhum.
+- **Escolhida a janela, o texto deixa de dizer "anterior"** e passa a "período escolhido": a pessoa
+  pode comparar com um intervalo que nem vem antes, e continuar chamando de anterior seria falso.
+- **Trocar o período ATUAL desfaz a comparação escolhida.** Sem isso, escolher "7 dias" depois de
+  ter fixado uma comparação de 90 dias mostraria uma queda enorme que é só a diferença de tamanho
+  das janelas, sem nada na tela explicando. Vale nas duas portas que mudam o período (presets e
+  intervalo personalizado), e o teste confere as duas separadamente — contar as chamadas no arquivo
+  não serve, porque sobra chamada suficiente pra conta bater com uma das portas furada.
+- **Meia escolha cai no automático.** Só uma das pontas compararia com um intervalo que ninguém
+  pediu. O servidor também valida o FORMATO da data e endireita um intervalo invertido, em vez de
+  deixar a tela inteira falhar por causa de um parâmetro.
+- A escolha vive em `sessionStorage` (`coco_comp_since`/`coco_comp_until`), não em
+  `localStorage`: precisa sobreviver ao refresh automático e à navegação na aba, mas não pra
+  sempre — uma comparação esquecida de semanas atrás faria a dashboard mentir sem ninguém lembrar
+  por quê. Mesmo raciocínio já usado no widget de processos.
+- `scripts/test/comparacao.test.mjs` executa a janela de verdade (inclusive virada de mês e de
+  ano, e o erro de um dia que faria os dois períodos se sobreporem) e guarda as armadilhas acima.
 
 ### Período sem dado nenhum (card de Insights)
 - `computeDashboard` devolve `historyStart`: a data do pedido mais antigo daquele mercado
@@ -1836,6 +1881,10 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   e não recarrega depois de falhar),
   `historico` (toda função de gravação editável registra quem mudou o quê, salvar sem mudar nada
   não vira linha, senha nunca entra, e a tela não reformata valor por conta própria),
+  `comparacao` (a janela comparada tem o mesmo tamanho e termina no dia anterior, meia escolha cai
+  no automático, e só barra de período leva data),
+  `bling-sonda` (a sonda de bonificação mostra a natureza e o produto, e nunca o nome, CPF,
+  endereço, e-mail ou telefone de quem recebeu),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
   reembolsos com a varredura funda ligada ao botão),
@@ -1852,7 +1901,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - Ao escrever um teste novo, conferir que ele FALHA com o defeito reintroduzido. Teste que nunca
   falha não protege nada — os seis atuais foram validados assim, um bug real de cada vez.
 
-- `GET /api/dashboard?channel=&metric=&since=&until=&market=br|us` — payload principal
+- `GET /api/dashboard?channel=&metric=&since=&until=&market=br|us` — payload principal.
+  `prevSince`/`prevUntil` (opcionais) trocam a janela de comparação, ver "Período de comparação"
 - `GET /api/campaigns?market=&since=&until=` — campanha a campanha, ao vivo, cache 5min
 - `GET /api/products?market=&since=&until=` / `GET /api/stock?market=&since=&until=`
 - `GET /api/orders/search?market=&q=` / `GET /api/orders/export?...`
@@ -1870,6 +1920,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   mercado (poda OU busca, decide sozinho), ver tela Integrações
 - `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
 - `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
+- `GET /api/bling/probe-bonificacao?since=&until=` (admin) — naturezas de operação encontradas e
+  o esqueleto da nota, pra mapear a saída em bonificação sobre dado real (sem dado do destinatário)
 - `GET /api/shopee/probe-returns?days=N` (admin) — esqueleto da resposta da API de devolução da
   Shopee, pra escrever o mapeamento em cima de dado real
 - `POST /api/shopee/sync-returns` (admin) — relê as devoluções da Shopee agora e marca os pedidos;

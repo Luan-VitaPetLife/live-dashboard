@@ -283,7 +283,14 @@ app.get('/api/dashboard', (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const { channel = 'todos', metric = 'receita', since = today, until = today, market = 'br', amazonRevenueMode = 'total' } = req.query;
-    res.json(computeDashboard({ channel, metric, since, until, market, amazonRevenueMode }));
+    // Período de comparação escolhido à mão (botão "Trocar" no card de Insights). Data fora do
+    // formato é ignorada em vez de virar erro: a comparação volta a ser a automática, que é o
+    // comportamento de sempre, em vez de a tela inteira falhar por causa de um parâmetro.
+    const dataOk = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+    let compSince = dataOk(req.query.prevSince) ? req.query.prevSince : null;
+    let compUntil = dataOk(req.query.prevUntil) ? req.query.prevUntil : null;
+    if (compSince && compUntil && compSince > compUntil) [compSince, compUntil] = [compUntil, compSince];
+    res.json(computeDashboard({ channel, metric, since, until, market, amazonRevenueMode, compSince, compUntil }));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1402,6 +1409,19 @@ app.get('/bling/callback', async (req, res) => {
 // completo (com bloco de transporte/transportadora) dos primeiros pedidos da página.
 // Sob o mesmo syncLimiter das rotas Amazon: dispara chamada real à API do Bling, que também
 // tem cota própria e apertada (3 req/s, 120k/dia, confirmado na documentação) — nunca martelar.
+// Sonda das saídas em bonificação (doação para UGC). Admin: a resposta descreve a operação da
+// empresa, e é feita pra ser lida e colada numa conversa — por isso ela já vem sem dado do
+// destinatário (ver esqueletoBling em src/bling.js).
+app.get('/api/bling/probe-bonificacao', requireAdmin, syncLimiter, async (req, res) => {
+  try {
+    const { since, until } = req.query;
+    if (!since || !until) return res.status(400).json({ error: 'Parâmetros since/until obrigatórios (YYYY-MM-DD).' });
+    res.json(await bling.probeBonificacao(since, until));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/bling/probe-orders', syncLimiter, async (req, res) => {
   try {
     const { since, until } = req.query;

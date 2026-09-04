@@ -229,6 +229,110 @@ export async function fetchOrderAddress(idPedidoVenda) {
   return data?.transporte?.etiqueta?.uf || null;
 }
 
+// ── Sonda das saídas em bonificação (doação para UGC) ────────────────────────
+// A dashboard precisa contar as unidades enviadas como doação sem que elas virem receita. No
+// Bling essas saídas aparecem com "Natureza de operação: Saída em bonificação" — mas isso é
+// campo de NOTA FISCAL, e o que a dashboard lê hoje é PEDIDO DE VENDA. Enquanto não se souber
+// onde a marca vive de verdade, escrever a captura é adivinhar, e adivinhação aqui vira
+// quantidade errada em produção (mesmo caminho já usado na Amazon e na Shopee: sondar, depois
+// mapear).
+//
+// Esta sonda tenta as variações plausíveis da chamada e devolve:
+//   - qual variação funcionou (nome do caminho e dos parâmetros de data);
+//   - o ESQUELETO da resposta, pra escrever o mapeamento em cima de campo real;
+//   - as naturezas de operação encontradas, contadas, pra saber o texto exato da que interessa;
+//   - o mesmo para os pedidos de venda do período, pra ver se dá pra reconhecer a doação por lá.
+//
+// NUNCA devolve dado de quem recebeu. A nota fiscal carrega nome, CPF, endereço, e-mail e
+// telefone do destinatário, e este retorno é feito pra ser lido e colado numa conversa.
+const BONI_CAMPOS_SEGUROS = new Set([
+  'id', 'numero', 'serie', 'tipo', 'situacao', 'dataEmissao', 'dataOperacao', 'dataSaida',
+  'naturezaOperacao', 'descricao', 'valorNota', 'total', 'totalProdutos',
+  'codigo', 'quantidade', 'valor', 'unidade', 'sku',
+  'numeroPedidoCompra', 'numeroLoja',
+]);
+
+// Tudo que não estiver na allowlist vira o TIPO do valor, não o valor. Allowlist positiva e não
+// lista de proibidos: um campo novo que o Bling passe a mandar nasce mascarado, em vez de nascer
+// exposto até alguém reparar.
+export function esqueletoBling(valor, prof = 0) {
+  if (Array.isArray(valor)) return prof > 3 ? '[…]' : valor.slice(0, 1).map(v => esqueletoBling(v, prof + 1));
+  if (valor && typeof valor === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(valor)) {
+      if (v && typeof v === 'object') out[k] = esqueletoBling(v, prof + 1);
+      else out[k] = BONI_CAMPOS_SEGUROS.has(k) ? v : `<${typeof v}>`;
+    }
+    return out;
+  }
+  return `<${typeof valor}>`;
+}
+
+// O texto da natureza pode vir solto ou dentro de um objeto ({ id, descricao }) — a sonda existe
+// justamente porque não se sabe qual. Esta leitura cobre as duas formas sem decidir nada.
+function naturezaDe(n) {
+  const v = n?.naturezaOperacao ?? n?.natureza ?? null;
+  if (!v) return null;
+  return typeof v === 'string' ? v : (v.descricao || v.nome || null);
+}
+
+export async function probeBonificacao(sinceISO, untilISO) {
+  if (!isConfigured()) throw new Error('Bling não configurado.');
+  if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
+
+  const tentativas = [
+    { rotulo: '/nfe com dataEmissao',  path: '/nfe',            params: { dataEmissaoInicial: sinceISO, dataEmissaoFinal: untilISO, limite: 100, pagina: 1 } },
+    { rotulo: '/nfe com dataInicial',  path: '/nfe',            params: { dataInicial: sinceISO, dataFinal: untilISO, limite: 100, pagina: 1 } },
+    { rotulo: '/nfe sem janela',       path: '/nfe',            params: { limite: 100, pagina: 1 } },
+    { rotulo: '/notas-fiscais',        path: '/notas-fiscais',  params: { limite: 100, pagina: 1 } },
+  ];
+
+  const erros = [];
+  let notas = null;
+  for (const t of tentativas) {
+    try {
+      const r = await apiGet(t.path, t.params);
+      notas = { chamada: t.rotulo, lista: r.data || [] };
+      break;
+    } catch (e) { erros.push(`${t.rotulo}: ${e.message}`); }
+  }
+
+  // Naturezas encontradas, contadas. É o que diz o TEXTO exato da que interessa ("Saída em
+  // bonificação") e se existem outras parecidas que não podem ser confundidas com ela.
+  const porNatureza = {};
+  for (const n of (notas?.lista || [])) {
+    const nat = naturezaDe(n) || '(sem natureza)';
+    porNatureza[nat] = (porNatureza[nat] || 0) + 1;
+  }
+
+  // E o mesmo período pelo lado dos PEDIDOS: se a doação for reconhecível já ali, a captura não
+  // precisa de um endpoint novo. Total 0 é o sinal mais óbvio, e por isso mesmo é o que precisa
+  // ser conferido contra a contagem de notas antes de virar regra.
+  let pedidos = null;
+  try {
+    const lista = await fetchOrdersList(sinceISO, untilISO, { pagina: 1, limite: 100 });
+    const data = lista.data || [];
+    pedidos = {
+      total: data.length,
+      comTotalZero: data.filter(p => Number(p.total) === 0).length,
+      porLoja: data.reduce((acc, p) => {
+        const k = String(p.loja?.id ?? 'sem loja');
+        acc[k] = (acc[k] || 0) + 1;
+        return acc;
+      }, {}),
+      esqueletoDoPrimeiroZerado: esqueletoBling(data.find(p => Number(p.total) === 0) || null),
+    };
+  } catch (e) { erros.push(`pedidos: ${e.message}`); }
+
+  return {
+    notas: notas
+      ? { chamada: notas.chamada, quantas: notas.lista.length, porNatureza, formato: esqueletoBling(notas.lista[0] || null) }
+      : null,
+    pedidos,
+    erros,
+  };
+}
+
 // Sonda de exploração: pega a 1ª página de pedidos do intervalo + o detalhe
 // completo dos primeiros `sampleSize` pedidos, pra inspecionar ao vivo o
 // formato real do dado (nomes de campo, se vem transportadora/rastreio, se dá

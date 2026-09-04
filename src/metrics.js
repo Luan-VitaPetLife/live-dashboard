@@ -665,13 +665,29 @@ function sumDailyRange(daily, since, until) {
   return t;
 }
 
-export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br', amazonRevenueMode = 'total' }) {
+// Qual janela a dashboard compara. O padrão é a imediatamente anterior, do MESMO tamanho; a tela
+// pode escolher outra (botão "Trocar" no card de Insights). Quando escolhe, a comparação INTEIRA
+// passa a ser contra ela — deltas dos Indicadores e Insights leem o mesmo `prev`, senão a faixa de
+// cima diria uma coisa e o card logo abaixo diria outra sobre o mesmo período.
+//
+// Meia escolha (só uma das pontas) cai no automático: uma janela pela metade compararia com um
+// intervalo que ninguém pediu, e sem nada na tela denunciando isso.
+//
+// Separada e pura pra ser testada sem banco.
+export function janelaDeComparacao({ since, span, compSince = null, compUntil = null }) {
+  const comparacaoManual = Boolean(compSince && compUntil);
+  return {
+    prevSince: comparacaoManual ? compSince : isoUTC(addDays(parseISO(since), -span)),
+    prevUntil: comparacaoManual ? compUntil : isoUTC(addDays(parseISO(since), -1)),
+    comparacaoManual,
+  };
+}
+
+export function computeDashboard({ channel = 'todos', since, until, metric = 'receita', market = 'br', amazonRevenueMode = 'total', compSince = null, compUntil = null }) {
   const span = daySpan(since, until);
   const grain = span <= 2 ? 'hour' : 'day';
 
-  // período anterior comparável
-  const prevUntil = isoUTC(addDays(parseISO(since), -1));
-  const prevSince = isoUTC(addDays(parseISO(since), -span));
+  const { prevSince, prevUntil, comparacaoManual } = janelaDeComparacao({ since, span, compSince, compUntil });
 
   const curAll = getOrders({ channel, since, until, market });
   const prevAll = getOrders({ channel, since: prevSince, until: prevUntil, market });
@@ -1016,7 +1032,10 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   });
 
   return {
-    period: { since, until, span, grain },
+    // A tela precisa das datas do período de comparação pra poder dizer, ao lado de "Período
+    // anterior", A QUE datas ela se refere — sem isso a barra compara com algo que ninguém sabe
+    // qual é. `comparacaoManual` diz se a comparação foi escolhida à mão ou é a automática.
+    period: { since, until, span, grain, prevSince, prevUntil, comparacaoManual },
     // Onde o histórico deste mercado começa. O sync guarda uma janela móvel, não a loja
     // inteira, então um período anterior a isso vem legitimamente zerado — e a tela precisa
     // desse dado pra explicar o zero em vez de deixar parecendo defeito.
