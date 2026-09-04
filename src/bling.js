@@ -182,11 +182,19 @@ export async function fetchSalesChannels() {
 // sem pedidos ainda) — e nenhum deles pode entrar na reconciliação de geografia por engano.
 // Confirmado ao vivo via GET /canais-venda (ver CLAUDE.md, seção Bling).
 //
-// O id do TikTok Shop estava anotado aqui como 206171502, que não aparece mais na listagem ao
-// vivo; o id acima é o que a conta devolveu em 04/09/2026 e é o único canal TikTok que existe
-// nela. As DUAS marcas (Yucaloo e Coco and Luna) vão vender por esse mesmo canal — decisão do
-// Luan. A consequência é que o `loja.id` sozinho não separa as marcas nos pedidos do TikTok;
-// quando a captura for escrita, a separação vai precisar de outro sinal do próprio pedido.
+// O id do TikTok Shop estava anotado aqui como 206171502. Ele EXISTE, mas está desativado
+// (situacao 2), junto de outros dois canais TikTok antigos também desativados — a listagem ao vivo
+// de 04/09/2026 mostrou os quatro. O ativo é o 206279174, e é o que vale.
+//
+// As DUAS marcas (Yucaloo e Coco and Luna) vão vender por esse mesmo canal — decisão do Luan. A
+// consequência é que o `loja.id` sozinho não separa as marcas nos pedidos do TikTok; quando a
+// captura for escrita, a separação vai precisar de outro sinal do próprio pedido.
+//
+// A mesma listagem revelou DOIS canais Mercado Livre novos e ATIVOS (206278047 "Mercado Livre -
+// Paraná NOVO" e 206278064 "Mercado Livre - SP") além do 205355406 já mapeado, que hoje está
+// desativado. Pedido vindo dos dois novos não é reconhecido pela reconciliação de geografia. Não
+// foram acrescentados aqui de propósito: mexer nisso é mexer numa integração de produção que hoje
+// está certa, e a decisão é do Luan.
 export const KNOWN_CHANNELS = {
   205761639: { channel: 'shopify',      market: 'br' }, // Coco and Luna - Brasil
   205370623: { channel: 'shopee',       market: 'br' },
@@ -273,7 +281,7 @@ export function esqueletoBling(valor, prof = 0) {
 }
 
 
-export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amostras = 5 } = {}) {
+export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amostras = 5, maxDetalhes = 300 } = {}) {
   if (!isConfigured()) throw new Error('Bling não configurado.');
   if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
   const erros = [];
@@ -313,15 +321,38 @@ export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amost
     if (lote.length < 100) break;
   }
 
-  // 3) O detalhe de algumas notas de bonificação: a LISTAGEM não traz os itens (confirmado ao
-  // vivo), e é o item que diz qual produto e quantas unidades saíram — o único número que
-  // interessa aqui.
+  // 3) O detalhe de CADA nota de bonificação. A listagem não traz os itens (confirmado ao vivo), e
+  // é o item que diz qual produto e quantas unidades saíram — o único número que interessa aqui.
+  //
+  // Todas, e não uma amostra: o objetivo é fechar a conta contra a planilha feita à mão antes de
+  // qualquer número entrar na dashboard. Uma amostra responderia "qual é a forma do dado", que já
+  // sabemos, e não "quantas unidades saíram", que é a pergunta.
   const detalhes = [];
-  for (const n of daBonificacao.slice(0, amostras)) {
+  const porSituacao = {};
+  const porProduto = {};   // { situacao: { codigo: { notas, unidades } } }
+  let comValorNaoZero = 0, detalhesIncompleto = false;
+  for (const [i, n] of daBonificacao.entries()) {
+    if (i >= maxDetalhes) { detalhesIncompleto = true; break; }
+    let nota = null;
     try {
       const d = await apiGet(`/nfe/${n.id}`);
-      detalhes.push(esqueletoBling(d.data || d));
-    } catch (e) { erros.push(`/nfe/${n.id}: ${e.message}`); }
+      nota = d.data || d;
+    } catch (e) { erros.push(`/nfe/${n.id}: ${e.message}`); continue; }
+
+    const sit = String(nota.situacao ?? 'sem situacao');
+    porSituacao[sit] = (porSituacao[sit] || 0) + 1;
+    // Nota de bonificação com valor: existe (confirmado ao vivo). O valor da nota NÃO pode virar
+    // receita, mas precisa ser contado aqui pra ficar claro quantas são assim.
+    if (Number(nota.valorNota) > 0) comValorNaoZero++;
+
+    const alvo = porProduto[sit] || (porProduto[sit] = {});
+    for (const it of (nota.itens || [])) {
+      const cod = it.codigo || '(sem código)';
+      const p = alvo[cod] || (alvo[cod] = { notas: 0, unidades: 0 });
+      p.notas++;
+      p.unidades += Number(it.quantidade) || 0;
+    }
+    if (detalhes.length < amostras) detalhes.push(esqueletoBling(nota));
   }
 
   // 4) Os canais cadastrados, pra dar nome aos loja.id que aparecem nos pedidos. A sonda anterior
@@ -358,6 +389,9 @@ export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amost
   return {
     naturezasConhecidas: naturezas,
     notas: { lidas, incompleta, porNatureza, deBonificacao: daBonificacao.length, detalhes },
+    // O que a bonificação tem dentro: por situação da nota (cancelada não pode contar), por
+    // produto, e quantas notas vêm com valor apesar de serem doação.
+    bonificacao: { porSituacao, porProduto, comValorNaoZero, detalhesIncompleto },
     canais,
     pedidos,
     erros,

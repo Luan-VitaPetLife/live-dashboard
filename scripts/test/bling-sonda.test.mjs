@@ -89,6 +89,21 @@ t.ok(/incompleta = true/.test(bling), 'a paginação declara quando parou antes 
 const paginam = (bling.match(/if \(lote\.length < 100\) break/g) || []).length;
 t.eq(paginam, 2, 'as duas listas só terminam quando a página vem incompleta');
 
+// ── A conta da bonificação precisa ser fechada, não amostrada ──
+// A pergunta aqui não é "qual a forma do dado" (isso já se sabe), é "quantas unidades sairam".
+// Uma amostra responderia a pergunta errada e pareceria uma resposta.
+t.ok(/for \(const \[i, n\] of daBonificacao\.entries\(\)\)/.test(bling),
+  'a sonda detalha todas as notas de bonificação, não uma amostra');
+t.ok(/detalhesIncompleto = true/.test(bling), 'e declara quando o teto interrompeu a leitura');
+
+// Nota de bonificação COM valor existe (confirmado ao vivo: a 000222 saiu com R$ 129,99). Filtrar
+// doação por "valor zero" perderia essa nota, e somar o valor dela inventaria receita.
+t.ok(/comValorNaoZero\+\+/.test(bling), 'a sonda conta as notas de doação que saíram com valor');
+
+// Cancelada não pode contar como doação enviada. Sem separar por situação, ela entraria na conta.
+t.ok(/porSituacao\[sit\]/.test(bling), 'e separa as notas por situação');
+t.ok(/p\.unidades \+= Number\(it\.quantidade\)/.test(bling), 'somando UNIDADES, não notas');
+
 // ── A sonda é de administrador ──
 // A resposta descreve a operação da empresa. `syncLimiter` sozinho não é controle de acesso.
 const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
