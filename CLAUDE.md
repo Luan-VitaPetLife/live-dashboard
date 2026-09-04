@@ -434,6 +434,13 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   e o novo já separados do texto. A tela só pinta. Se ela procurasse o valor dentro da frase pronta
   pra destacar, o destaque embaralharia quando um valor fosse pedaço do outro: numa mudança "de 10
   para 1", o "1" seria achado dentro do "10" recém-marcado.
+- **O NOME do campo sai como pedaço próprio e vai em negrito na tela.** Numa lista de várias
+  edições do mesmo produto, o que muda de uma linha pra outra é justamente qual campo foi mexido,
+  e é o que o olho procura primeiro. Pedido do Luan, 04/09/2026.
+- **Com o filtro em "Todos", cada linha mostra o país** (bandeira + nome). Escolhido um país, a
+  etiqueta some: repetir a mesma bandeira em toda linha não diz nada novo. Isso importa mais no
+  Estoque, onde o card agregado é por família e não tem canal nenhum pra mostrar, então sem a
+  etiqueta de país não havia como saber de qual mercado era a edição.
 - **O filtro de país só descarta linha que TEM país e é de outro.** Edição de usuário não pertence a
   país nenhum e não pode aparecer sob uma bandeira; já liga/desliga de integração TEM país (a Shopee
   só existe no Brasil), e esconder isso do filtro esconderia justamente o que a pessoa foi procurar.

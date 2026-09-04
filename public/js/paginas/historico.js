@@ -109,13 +109,33 @@ function hora(iso) {
 // A frase já vem do servidor em pedaços, com o valor antigo e o novo separados do texto. A tela
 // só pinta cada pedaço — nada de procurar o valor dentro da frase pronta, que embaralha quando um
 // valor é pedaço do outro (ver src/historico.js).
-const CLASSE = { de: 'hi-de', para: 'hi-para' };
+const CLASSE = { de: 'hi-de', para: 'hi-para', campo: 'hi-campo' };
 function destacar(item) {
   const partes = item.partes || [{ t: 'txt', v: item.texto || '' }];
   return partes.map(p => {
     const txt = escapeHtml(p.v);
     return CLASSE[p.t] ? `<span class="${CLASSE[p.t]}">${txt}</span>` : txt;
   }).join('');
+}
+
+const PAIS = {
+  br: { nome: 'Brasil', bandeira: 'img/bandeiras/bandeira_brasil.webp' },
+  us: { nome: 'EUA',    bandeira: 'img/bandeiras/bandeira_eua.svg' },
+};
+
+// Etiquetas embaixo da frase. O país só aparece com o filtro em "Todos": escolhido um país,
+// repetir a mesma bandeira em toda linha não diz nada novo. Pedido do Luan, 04/09/2026.
+// A bandeira leva width/height como ATRIBUTO, não só por CSS — ver "Imagem precisa declarar o
+// próprio tamanho" no CLAUDE.md.
+function meta(it) {
+  const chips = [];
+  if (!market && it.market && PAIS[it.market]) {
+    const p = PAIS[it.market];
+    chips.push(`<span class="hi-chip hi-chip-pais">`
+      + `<img src="${p.bandeira}" alt="" width="14" height="10">${escapeHtml(p.nome)}</span>`);
+  }
+  if (it.canal) chips.push(`<span class="hi-chip">${escapeHtml(it.canal)}</span>`);
+  return chips.length ? `<div class="hi-meta">${chips.join('')}</div>` : '';
 }
 
 function render(itens) {
@@ -139,7 +159,7 @@ function render(itens) {
       <div class="hi-item hi-${escapeHtml(it.acao || 'editou')}">
         <div class="hi-corpo">
           <div class="hi-texto">${destacar(it)}</div>
-          ${it.canal ? `<div class="hi-meta"><span class="hi-chip">${escapeHtml(it.canal)}</span></div>` : ''}
+          ${meta(it)}
         </div>
         <div class="hi-hora">${escapeHtml(hora(it.ts))}</div>
       </div>`).join('')}</div>

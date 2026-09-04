@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { criarTeste, ROOT, PUB } from './_lib.mjs';
-import { montar, frase, valor, mercadoDaLinha, PAGINAS, INTEGRACOES } from '../../src/historico.js';
+import { montar, frase, partes, valor, mercadoDaLinha, PAGINAS, INTEGRACOES } from '../../src/historico.js';
 
 const t = criarTeste('Histórico de edições');
 
@@ -126,6 +126,11 @@ t.eq(mercadoDaLinha({ canal: null }), null, 'edição que não é de país nenhu
   t.eq(br.partes.map(p => p.v).join(''), br.texto, 'os pedaços remontam a frase inteira');
   t.eq(br.partes.filter(p => p.t === 'de').length, 1, 'com o valor antigo separado');
   t.eq(br.partes.filter(p => p.t === 'para').length, 1, 'e o novo também');
+  // O NOME do campo também sai separado: numa lista de várias edições do mesmo produto, o que
+  // muda de uma linha pra outra é qual campo foi mexido, e é isso que o olho procura primeiro.
+  const pCampo = br.partes.filter(p => p.t === 'campo');
+  t.eq(pCampo.length, 1, 'e o nome do campo separado, pra tela poder destacá-lo');
+  t.eq(pCampo[0].v, 'COG', 'com o rótulo do campo, não a chave interna');
   t.eq(br.canal, 'Shopee', 'com o nome do canal, não a chave interna');
   const us = montar(linhas, { pagina: 'produtos', market: 'us' })[0];
   t.eq(semNbsp(us.para), '$4.00', 'e cada país com a sua moeda');
@@ -142,6 +147,12 @@ t.eq(mercadoDaLinha({ canal: null }), null, 'edição que não é de país nenhu
   const usuario = [{ ts: '2026-09-04T09:00:00.000Z', autor: 'Luan', pagina: 'configuracoes', acao: 'criou', alvo: 'Maria', campo: 'Usuário', para: 'padrão' }];
   t.eq(montar(usuario, { pagina: 'configuracoes', market: 'br' }).length, 0, 'edição sem país não aparece sob um país');
   t.eq(montar(usuario, { pagina: 'configuracoes' }).length, 1, 'mas aparece quando nenhum país está filtrado');
+}
+
+// O campo sai separado em toda forma de edição, não só na que tem valor antigo e novo.
+for (const [vals, oq] of [[{ para: '2500' }, 'definiu'], [{ de: '10' }, 'removeu'], [{}, 'alterou']]) {
+  const ps = partes({ autor: 'Luan', acao: 'editou', alvo: 'Areia', campo: 'Projetado' }, vals);
+  t.eq(ps.filter(p => p.t === 'campo').length, 1, `"${oq}" também separa o nome do campo`);
 }
 
 // ── 4b. A lista de integrações não pode envelhecer escondida ──────────────────
@@ -231,6 +242,19 @@ t.ok(/item\.partes/.test(telaJs), 'a tela usa a frase em pedaços que veio pront
 // ("de 10 para 1"): o "1" seria achado dentro do "10" que acabou de ser marcado.
 t.ok(!/texto\.replace|txt\.replace/.test(telaJs), 'e não vasculha o texto atrás dos valores');
 t.ok(!/toLocaleString\([^)]*currency/.test(telaJs), 'e não formata dinheiro por conta própria');
+// O nome do campo precisa de classe própria: sem ela o pedaço que o servidor separou chega na
+// tela e é desenhado igual ao resto do texto, como se nunca tivesse sido separado.
+t.ok(/campo: 'hi-campo'/.test(telaJs), 'a tela pinta o nome do campo');
+const telaCss = fs.readFileSync(path.join(PUB, 'css', 'paginas', 'historico.css'), 'utf8');
+t.ok(/\.hi-campo\{[^}]*font-weight/.test(telaCss), 'e o negrito existe de fato no CSS');
+// O país só aparece com o filtro em "Todos": escolhido um país, repetir a mesma bandeira em toda
+// linha não diz nada novo.
+t.ok(/if \(!market && it\.market/.test(telaJs), 'o país aparece só quando nenhum país está filtrado');
+// Imagem dimensionada só por CSS aparece no tamanho do ARQUIVO até o CSS chegar — a bandeira dos
+// EUA declara 1235x650 (ver CLAUDE.md, "Imagem precisa declarar o próprio tamanho").
+const flag = telaJs.match(/<img src="\$\{p\.bandeira\}"[^>]*>/);
+t.ok(flag && /width="\d+"/.test(flag[0]) && /height="\d+"/.test(flag[0]),
+  'e a bandeira declara o próprio tamanho como atributo');
 
 // Toda página oferecida tem que ter mesmo algo editável, senão o seletor promete lista vazia.
 for (const p of PAGINAS) {
