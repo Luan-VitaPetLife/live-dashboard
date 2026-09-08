@@ -412,6 +412,9 @@
      .tp-list-scroll (altura travada em 420px, não cresce) e a sobra precisa ir pra algum lugar. */
   .tp-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 0 0;font-size:11px;margin-top:auto}
   .tp-summary-label{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  /* Quantidade do resumo: total pedido e a separação entre o que foi vendido e o que foi doado.
+     Fica no meio da linha, entre o rótulo e o dinheiro, com peso menor que o valor. */
+  .tp-summary-qty{font-size:11px;color:var(--sub);margin-left:auto;white-space:nowrap}
   .tp-summary-val{font-weight:600}
   .tp-toggle-wrap{text-align:center;padding-top:8px}
   .tp-toggle-btn{background:none;border:none;color:var(--sub);font-size:11px;cursor:pointer;text-decoration:underline;padding:2px}

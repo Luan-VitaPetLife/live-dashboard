@@ -69,8 +69,15 @@ t.ok(/customer:  '',/.test(corpoFetch), 'e nada de dado de quem recebeu');
 // Espalhar esse filtro por cálculo é como a doação vira faturamento: basta um esquecer.
 t.ok(/return incluirBonificacao \? todos : todos\.filter\(o => !o\.bonificacao\);/.test(METRICS),
   'getOrders tira a doação por padrão');
+// São QUATRO usos legítimos, e nenhum é um filtro espalhado por cálculo:
+//   1. a porta (getOrders) que tira a doação de tudo por padrão;
+//   2. a lista de doações do card de produtos, que pede por elas explicitamente;
+//   3. o repasse do campo pra tela, em "Pedidos recentes" (a tela precisa dele pro rótulo);
+//   4. o rótulo "Bonificação" em statusLabelPt.
+// Um quinto uso é sinal de que alguém voltou a decidir isso caso a caso — que é como a doação
+// vira faturamento, ticket médio e ROAS de uma vez, bastando um lugar esquecer.
 const usosSoltos = (METRICS.match(/\.bonificacao/g) || []).length;
-t.ok(usosSoltos <= 3, `a checagem de doação vive em poucos lugares em metrics.js (achei ${usosSoltos})`);
+t.ok(usosSoltos <= 4, `a checagem de doação vive em poucos lugares em metrics.js (achei ${usosSoltos})`);
 
 // ── 4. Situação da nota: allowlist positiva ───────────────────────────────────
 // Só conta o que SAIU. Uma situação nova (rejeitada, denegada) não pode começar a contar unidade
@@ -128,6 +135,39 @@ t.ok(/bonus > 0/.test(TELA), 'e só aparece quando houve doação');
 t.ok(!/fmtMoney\(bonus\)/.test(TELA), 'a doação nunca é desenhada como dinheiro');
 const css = fs.readFileSync(path.join(PUB, 'css', 'paginas', 'index.css'), 'utf8');
 t.ok(/\.tp-bonus\{/.test(css), 'com estilo próprio');
+
+// ── 7b. O que o card NÃO pode mostrar numa linha de doação ────────────────────
+// Três coisas erradas apareceram juntas na primeira versão (relatado pelo Luan, 08/09/2026):
+// o badge com a chave interna ("bonificacao", sem acento e em minúscula) parecendo um canal de
+// venda, um "0 un" ao lado de uma coluna anunciando 2 unidades doadas, e "R$ 0,00" num produto
+// que não tem preço nenhum.
+t.ok(TELA.includes("c !== 'bonificacao'"), 'o canal interno da doação não vira badge de canal de venda');
+t.ok(TELA.includes('const soDoacao = total === 0;'), 'a tela reconhece a linha que só tem doação');
+// A linha de quantidade deixou de ser incondicional: antes ela vinha colada no fim do bloco do
+// nome e por isso saía sempre, inclusive como "0 un".
+t.ok(!TELA.includes('</div><div class="tp-qty">'), 'a linha de quantidade não é mais incondicional');
+t.ok(TELA.includes("const valorCol = soDoacao ? '' : fmtMoney(v);"), 'e o valor fica vazio: zero é um preço, doação não tem preço');
+
+// ── 7c. O resumo separa o que foi vendido do que foi doado ────────────────────
+// Pedido do Luan: a quantidade total primeiro, e depois a separação.
+t.ok(TELA.includes('const prodVendidas = prodList.reduce'), 'o resumo conta as unidades vendidas');
+t.ok(TELA.includes('vendidas · '), 'e separa vendidas de doadas');
+t.ok(TELA.includes('doadas'), 'nomeando as duas metades');
+// Sem doação no período, anunciar "· 0 doadas" seria anunciar uma divisão que não existe.
+t.ok(TELA.includes('const resumoQtd = prodBonus > 0'), 'e só separa quando houve doação');
+t.ok(css.includes('.tp-summary-qty{'), 'com estilo próprio no resumo');
+
+// ── 7d. Doação aparece em "Pedidos recentes", sem valor e fora do total ───────
+t.ok(METRICS.includes('const recent = getOrders({ channel, since, until, market, incluirBonificacao: true })'),
+  'a lista de pedidos recentes inclui a doação');
+// Sem a marca junto, a doação apareceria como "Em aberto" valendo R$ 0,00 — a mesma armadilha
+// já documentada pra devolução da Amazon: mandar o status sem ela não dá erro, só mente.
+t.ok(METRICS.includes('bonificacao: Boolean(o.bonificacao)'), 'levando a marca junto, pro rótulo sair certo');
+t.ok(TELA.includes("o.bonificacao ? '—' : fmtMoney(o.total, 2)"), 'o valor dela é um traço, não R$ 0,00');
+// Doação não é venda que deu certo: contá-la em "válidos" inflaria o rodapé sem mexer um centavo
+// no valor, que é o jeito mais silencioso de esse número ficar errado.
+t.ok(TELA.includes('const contaComoVenda = o => !o.cancelled && !o.bonificacao;'),
+  'e ela fica fora da contagem de válidos e do total do card');
 
 // ── 8. O rótulo concorda entre servidor e tela ────────────────────────────────
 // Os quatro rótulos existentes já são conferidos por status-pedido.test.mjs; este é o quinto.

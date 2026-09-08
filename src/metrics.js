@@ -967,9 +967,17 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   // e mostrava os últimos 100 de qualquer data, então "Hoje" trazia pedido de meses atrás).
   // O card pagina no front (10 por página), então devolvemos todos os do período; o teto
   // RECENT_MAX é só uma trava de segurança de payload para o amazon_us (~1000 pedidos/dia).
-  const recent = getOrders({ channel, since, until, market })
+  // A doação entra AQUI, e só aqui: o card é a lista do que saiu, não um cálculo. Ela continua
+  // fora de receita, ticket, contagem de pedidos e ROAS, porque quem decide isso é a porta única
+  // (getOrders sem `incluirBonificacao`) que todo o resto deste arquivo usa. Escolhido um canal
+  // específico, a doação não aparece — ela não é daquele canal.
+  //
+  // `bonificacao` PRECISA vir junto no objeto: a tela monta o rótulo a partir dele, e mandar o
+  // resto sem ele não dá erro nenhum — a doação apareceria como "Em aberto" valendo R$ 0,00, que é
+  // a pior combinação possível (mesma armadilha já documentada pra devolução da Amazon).
+  const recent = getOrders({ channel, since, until, market, incluirBonificacao: true })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, RECENT_MAX)
-    .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o), products: productTitles(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled, refunded: o.refunded || null }));
+    .map(o => ({ name: o.name, channel: o.channel, customer: o.customer, items: o.items.length, itemsQty: sumItemsQty(o), products: productTitles(o), createdAt: o.createdAt, total: o.total, status: o.status, cancelled: o.cancelled, refunded: o.refunded || null, bonificacao: Boolean(o.bonificacao) }));
 
   // conversão anterior
   const prevSess = hasSessionData ? aggregateSessions(prevSince, prevUntil, market, channel) : emptySess;

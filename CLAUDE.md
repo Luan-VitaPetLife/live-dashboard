@@ -492,6 +492,21 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   doação preenchida (é o caso das areias da Yucaloo). Some seria pior que aparecer zerado: a
   mercadoria saiu do estoque de verdade. A ordenação por receita joga essas linhas pro fim, que é
   onde elas devem ficar num card "por receita".
+- **O que a linha de doação NÃO pode mostrar** (três erros que apareceram juntos na primeira
+  versão, relatados pelo Luan em 08/09/2026): o badge do canal saía com a chave interna
+  ("bonificacao", sem acento e em minúscula) parecendo um canal de venda — `bonificacao` não está
+  no catálogo de canais e por isso `chBadgeHTML` caía na chave crua, e hoje esse canal é filtrado
+  fora do badge; o "0 un" da linha de quantidade aparecia ao lado de uma coluna anunciando 2
+  unidades doadas, e sem venda a linha simplesmente não existe mais; e o valor vinha "R$ 0,00",
+  quando **zero é um preço e doação não tem preço nenhum** — fica vazio.
+- **O resumo do card separa o que foi vendido do que foi doado**: quantidade total primeiro, depois
+  a divisão ("5 un total · 3 vendidas · 2 doadas"). Sem doação no período a divisão some, senão a
+  linha anunciaria uma separação que não existe.
+- **A doação aparece em "Pedidos recentes"** com o valor como traço, e **fora** da contagem de
+  "válidos" e do total do rodapé do card: ela não é venda que deu certo, e contá-la ali inflaria a
+  contagem sem mexer um centavo no valor — o jeito mais silencioso possível de esse número ficar
+  errado. É o único lugar onde a doação entra numa lista sem ser pedida por um cálculo, e é
+  legítimo porque o card é a lista do que saiu, não uma conta.
 - Rótulo próprio na busca e em "Pedidos recentes": **"Bonificação"**, com cor própria
   (`.st-tag.boni`). Não é estado de pagamento — não faz sentido perguntar se foi pago, cancelado ou
   devolvido algo que nunca foi cobrado, por isso ele é testado ANTES de tudo em `statusLabelPt` e
