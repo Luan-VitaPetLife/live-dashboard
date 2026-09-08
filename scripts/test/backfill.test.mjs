@@ -79,11 +79,15 @@ t.ok(/function retLinha\(/.test(tela), 'existe um único montador de linha pros 
 t.ok(/function retResumo\(/.test(tela), 'existe um único montador da frase de resumo');
 const MARKUP_DA_LINHA = /<div class="ret-row">/g;
 t.eq((tela.match(MARKUP_DA_LINHA) || []).length, 1, 'o markup da linha existe num lugar só (dentro de retLinha)');
-for (const painelNome of ['loadHistory', 'loadShopHistory']) {
-  const ini = tela.indexOf(`async function ${painelNome}(`);
-  const corpo = tela.slice(ini, tela.indexOf('}catch(e){', ini));
-  t.ok(/retLinha\(/.test(corpo), `${painelNome} monta as linhas pelo montador compartilhado`);
-  t.ok(!MARKUP_DA_LINHA.test(corpo), `${painelNome} não monta linha por conta própria`);
+// As quatro linhas (Amazon BR/EUA, Shopify BR/EUA) saem do MESMO montador e do mesmo painel.
+// Eram três painéis com três textos e dois botões chamados "Buscar" que faziam coisas diferentes.
+{
+  const ini = tela.indexOf('function renderHistorico(');
+  const corpo = tela.slice(ini, tela.indexOf('async function carregarHistorico', ini));
+  t.ok(/retLinha\(/.test(corpo), 'as linhas saem do montador compartilhado');
+  const linhas = tela.slice(tela.indexOf('const HIST_LINHAS'), tela.indexOf('let histInfo'));
+  t.eq((linhas.match(/slot:/g) || []).length, 4, 'são quatro linhas: Amazon e Shopify, Brasil e EUA');
+  t.ok(!MARKUP_DA_LINHA.test(corpo), 'e nenhuma delas monta linha por conta própria');
   MARKUP_DA_LINHA.lastIndex = 0;
 }
 
@@ -93,28 +97,14 @@ const shopResposta = server.slice(server.indexOf("app.get('/api/shopify/history'
 for (const campo of ['totalOrders', 'oldestOrderDate', 'oldestOrderDays']) {
   t.ok(new RegExp(campo).test(shopResposta), `/api/shopify/history devolve ${campo}`);
 }
-// TODO return do planAmazonHistory precisa levar os três: a tela usa um formato só, e um
-// return incompleto deixa a linha da Amazon com meia frase justamente nos casos de borda
-// (sem limite, poda, backfill) — que são os que ninguém testa a olho.
-const planoAmazon = server.slice(server.indexOf('function planAmazonHistory'), server.indexOf('\napp.get(\'/api/amazon/history\'') );
-const retornos = planoAmazon.match(/return \{ action:[^;]*\};/g) || [];
-t.ok(retornos.length >= 5, `achou os retornos do planAmazonHistory (${retornos.length})`);
-for (const r of retornos) {
-  const acao = (r.match(/action: '(\w+)'/) || [, '?'])[1];
-  const faltando = ['totalOrders', 'oldestOrderDate', 'oldestOrderDays'].filter(c => !r.includes(c));
-  t.ok(faltando.length === 0, `retorno '${acao}' leva os três campos${faltando.length ? ' (falta ' + faltando.join(', ') + ')' : ''}`);
+// O endpoint da Amazon devolve os MESMOS três campos que o da Shopify: a tela monta a frase com
+// um formato só, e um campo faltando deixa a linha da Amazon com meia frase.
+const amzResposta = server.slice(server.indexOf("app.get('/api/amazon/history'"), server.indexOf("app.post('/api/amazon/history'"));
+for (const campo of ['totalOrders', 'oldestOrderDate', 'oldestOrderDays']) {
+  t.ok(new RegExp(campo).test(amzResposta), `/api/amazon/history devolve ${campo}`);
 }
-
-// O painel da Shopify precisa medir as LOJAS SHOPIFY, não o mercado inteiro: com
-// getOldestOrderDate(market) ele mostrava a data do pedido mais antigo de qualquer canal — na
-// prática, a da Amazon BR — como se fosse o começo do histórico das lojas Shopify.
-const shopHist = server.slice(server.indexOf("app.get('/api/shopify/history'"), server.indexOf("app.post('/api/shopify/backfill'"));
-t.ok(/historicoDosCanais\(/.test(shopHist), 'mede por canal, com o mesmo helper dos dois painéis');
-t.ok(!/getOldestOrderDate\(/.test(shopHist), 'não usa a data do mercado inteiro');
-
-// ── O seletor de visualização controla a lista, então fica junto dela ──
-const html = fontePagina('integracoes.html').html;
-t.ok(html.indexOf('id="viewSwitch"') < html.indexOf('id="listArea"'), 'o seletor vem antes da lista');
-t.ok(html.indexOf('id="viewSwitch"') > html.indexOf('id="retPanel"'), 'e depois dos painéis de histórico, não no cabeçalho');
+// Ele deixou de decidir entre podar e buscar. Enquanto decidia, era preciso saber qual das duas ia
+// acontecer ANTES de clicar, e a tela tinha que perguntar antes de apagar.
+t.ok(!server.includes("action: 'prune'"), 'e não decide mais entre podar e buscar');
 
 t.fim();

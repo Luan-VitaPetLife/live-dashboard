@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeReturns, syncBonificacoes, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, countOrdersOlderThan, pruneOrders, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getAmazonRetentionConfig, setAmazonRetentionConfig, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import { comAutor } from './src/autor.js';
 import { PAGINAS as PAGINAS_HISTORICO, montar as montarHistorico } from './src/historico.js';
@@ -701,6 +701,10 @@ let backfillRunning = false;
 // Extraído do handler abaixo pra ser reaproveitado por /api/amazon/history (painel unificado de
 // retenção+histórico em Integrações) — mesmo job em background, mesma forma de acompanhar
 // progresso (GET /api/status → amazon.backfill).
+// Buscar histórico da Amazon é buscar os pedidos E os reembolsos daquele período: um pedido
+// recuperado sem a marca de devolução conta unidade que voltou como se tivesse sido vendida, que é
+// justamente o número que não pode estar errado. Eram dois botões e o segundo dava pra esquecer —
+// hoje o primeiro faz os dois (pedido do Luan, 08/09/2026).
 function startBackfillJob(market, days, startedBy) {
   backfillRunning = true;
   // Progresso aproximado: a Amazon exige relatório por janela de 30 dias (REPORT_CHUNK_DAYS em
@@ -727,7 +731,27 @@ function startBackfillJob(market, days, startedBy) {
           setAmazonBackfill({ status: 'running', market, days, orders, progressPct: Math.round(Math.min(chunksDone, totalChunks) / totalChunks * 100), message: `${orders} pedidos gravados`, startedBy, startedAt: new Date().toISOString() });
         },
       });
-      setAmazonBackfill({ status: 'done', market, days, orders, progressPct: 100, message: `concluído — ${orders} pedidos`, startedBy, finishedAt: new Date().toISOString() });
+      // Reembolsos do MESMO período, logo em seguida e dentro do mesmo job: o card de processos
+      // continua sendo um só, e quem clicou vê a coisa toda terminar. É lento de propósito (a
+      // Amazon libera cerca de um extrato de repasse por minuto), por isso o progresso é narrado.
+      let reembolsos = '';
+      try {
+        const rr = await reconcileAmazonReturns({
+          markets: [market], force: true, dias: days, docs: 25,
+          onProgress: m => {
+            checkCancelled('amazon-backfill');
+            setAmazonBackfill({ status: 'running', market, days, orders, progressPct: 100, message: 'reembolsos · ' + m, startedBy, startedAt: new Date().toISOString() });
+          },
+        });
+        reembolsos = ` · ${rr.patched} pedido(s) marcado(s) como reembolsado`;
+        if (rr.errors.length) reembolsos += ` (${rr.errors.length} aviso(s) na leitura de reembolso)`;
+      } catch (e) {
+        // A busca de reembolso não pode derrubar o resultado da busca de pedidos, que já está
+        // gravada. O aviso aparece na própria linha em vez de sumir.
+        reembolsos = ' · reembolsos falharam: ' + e.message;
+        console.error('Reembolsos após backfill Amazon:', e.message);
+      }
+      setAmazonBackfill({ status: 'done', market, days, orders, progressPct: 100, message: `concluído — ${orders} pedidos${reembolsos}`, startedBy, finishedAt: new Date().toISOString() });
     } catch (e) {
       if (e instanceof JobCancelledError) {
         setAmazonBackfill({ status: 'cancelled', market, days, orders, message: `cancelado — ${orders} pedidos já gravados até aqui`, startedBy, finishedAt: new Date().toISOString() });
@@ -996,61 +1020,44 @@ function historicoDosCanais(canais, market) {
 function oldestOrderAgeDays(channel, market) {
   return historicoDosCanais([channel], market).oldestDays;
 }
-function planAmazonHistory(market, days) {
-  const channel = AMAZON_RETENTION_CHANNEL[market];
-  const { orders: totalOrders, oldestDate: oldestOrderDate, oldestDays: oldestOrderDays } =
-    historicoDosCanais([channel], market);
-  if (days === 0) return { action: 'unlimited', totalOrders, oldestOrderDate, oldestOrderDays };
-  if (oldestOrderDays === null) return { action: 'backfill', missingDays: days, totalOrders, oldestOrderDate, oldestOrderDays };
-  if (oldestOrderDays > days) {
-    const cutoff = new Date(Date.now() - days * 864e5).toISOString();
-    return { action: 'prune', wouldDelete: countOrdersOlderThan({ channel, olderThanIso: cutoff }), totalOrders, oldestOrderDate, oldestOrderDays };
-  }
-  if (oldestOrderDays < days) return { action: 'backfill', missingDays: days - oldestOrderDays, totalOrders, oldestOrderDate, oldestOrderDays };
-  return { action: 'noop', totalOrders, oldestOrderDate, oldestOrderDays };
-}
-
+// Onde o histórico de cada mercado começa hoje. Não decide mais nada: enquanto o mesmo campo
+// podava OU buscava, era preciso saber qual das duas ia acontecer antes de clicar (e mostrar
+// "isso vai apagar N de M pedidos"). Hoje o botão só busca, então sobra a medida.
 app.get('/api/amazon/history', requireAdmin, (_req, res) => {
-  const cfg = getAmazonRetentionConfig();
-  const legacyDefault = Number(process.env.AMAZON_RETENTION_DAYS || 0);
   const out = {};
   for (const mkt of ['br', 'us']) {
-    const days = cfg[mkt] ?? legacyDefault;
-    out[mkt] = { days, ...planAmazonHistory(mkt, days) };
+    const { orders: totalOrders, oldestDate: oldestOrderDate, oldestDays: oldestOrderDays } =
+      historicoDosCanais([AMAZON_RETENTION_CHANNEL[mkt]], mkt);
+    out[mkt] = { totalOrders, oldestOrderDate, oldestOrderDays };
   }
   res.json(out);
 });
 
-app.get('/api/amazon/history/preview', requireAdmin, (req, res) => {
-  const market = req.query.market === 'br' ? 'br' : 'us';
-  const days = Number(req.query.days);
-  if (!(days >= 0)) return res.status(400).json({ error: 'days precisa ser um número ≥ 0.' });
-  res.json({ market, days, ...planAmazonHistory(market, days) });
-});
-
+// Busca o histórico da Amazon dos últimos N dias. O número é o ALCANCE DA BUSCA, e mudar ele
+// muda o alcance — sempre, inclusive pra menos (pedido do Luan, 08/09/2026: "se eu colocar 90
+// dias, ele muda o alcance da busca para os últimos 90 dias").
+//
+// Este botão NUNCA apaga pedido. Antes, um número menor que o histórico atual disparava uma poda —
+// duas ações opostas no mesmo campo, e a poda com padrão agressivo já quase apagou nove meses de
+// dado recém-recuperado uma vez. Hoje ele só soma, igual ao da Shopify, que era o pedido.
+//
+// A retenção sobe pra cobrir o que foi pedido e nunca desce: sem isso, buscar 365 dias com a
+// retenção em 180 faria a poda automática do sync apagar metade do que acabou de chegar, no ciclo
+// seguinte, sem nada na tela explicando.
 app.post('/api/amazon/history', requireAdmin, (req, res) => {
   const market = req.body?.market === 'br' ? 'br' : req.body?.market === 'us' ? 'us' : null;
   const days = Number(req.body?.days);
   if (!market) return res.status(400).json({ error: 'market precisa ser "br" ou "us".' });
-  if (!(days >= 0)) return res.status(400).json({ error: 'days precisa ser um número ≥ 0 (0 = sem limite).' });
+  if (!(days >= 1)) return res.status(400).json({ error: 'days precisa ser um número maior que zero.' });
+  if (backfillRunning) return res.status(409).json({ error: 'Já existe uma busca de histórico em andamento — espere terminar.' });
 
   const cfg = getAmazonRetentionConfig();
-  cfg[market] = days;
-  setAmazonRetentionConfig(cfg);
+  const atual = Number(cfg[market] ?? process.env.AMAZON_RETENTION_DAYS ?? 0);
+  // 0 quer dizer "sem limite": nada a subir, e baixar seria criar um limite que ninguém pediu.
+  if (atual !== 0 && days > atual) { cfg[market] = days; setAmazonRetentionConfig(cfg); }
 
-  const plan = planAmazonHistory(market, days);
-  if (plan.action === 'prune') {
-    const channel = AMAZON_RETENTION_CHANNEL[market];
-    const cutoff = new Date(Date.now() - days * 864e5).toISOString();
-    const deleted = pruneOrders({ channels: [channel], olderThanIso: cutoff });
-    return res.json({ ok: true, action: 'pruned', market, days, deleted });
-  }
-  if (plan.action === 'backfill') {
-    if (backfillRunning) return res.status(409).json({ error: 'Já existe uma busca de histórico em andamento — espere terminar e aplique de novo.' });
-    startBackfillJob(market, days, req.authUser?.name || req.authUser?.username || null);
-    return res.json({ ok: true, action: 'backfill_started', market, days });
-  }
-  res.json({ ok: true, action: plan.action, market, days });
+  startBackfillJob(market, days, req.authUser?.name || req.authUser?.username || null);
+  res.json({ ok: true, action: 'backfill_started', market, days });
 });
 
 // Backup diário do banco pra Backblaze B2 (ver src/backup.js) — sem plano Pro no Railway não

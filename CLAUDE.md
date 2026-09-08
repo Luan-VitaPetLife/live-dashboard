@@ -1450,30 +1450,42 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (chave separada do `amazonBackfill` de propósito: os dois podem rodar ao mesmo tempo, APIs e
   cotas diferentes, e um não pode sobrescrever o progresso do outro).
 
-### Os dois painéis de histórico em Integrações são um só desenho
-- Amazon e Shopify mostram o MESMO tipo de informação, então mostram a MESMA frase, montada por
-  `retResumo`/`retLinha` (integracoes.js): `N pedidos · desde DD/MM/AAAA (N dias)`. Antes cada
-  painel tinha o seu formato — um dizia "336 pedidos · cobre 136 dias hoje", o outro "começa em
-  17/04/2026 (137 dias) · Shopify Coco and Luna BR · Shopify Yucaloo BR" — e a tela parecia dois
-  painéis sem relação. O markup da linha existe num lugar só; o teste falha se um painel voltar
-  a montar linha por conta própria.
-- Os dois endpoints devolvem os mesmos campos (`totalOrders`, `oldestOrderDate`,
-  `oldestOrderDays`), medidos pelo mesmo `historicoDosCanais(canais, market)` em server.js. TODO
-  retorno de `planAmazonHistory` precisa levar os três: um return incompleto deixa a linha da
-  Amazon com meia frase justamente nos casos de borda (sem limite, poda, backfill).
-- **Medir por CANAL, nunca por mercado.** O painel da Shopify usava `getOldestOrderDate(market)`,
-  que devolve o pedido mais antigo de QUALQUER canal — na prática mostrava a data da Amazon BR
-  como se fosse o começo do histórico das lojas Shopify. `historicoDosCanais` recebe uma lista
-  de canais porque a Amazon tem um por mercado e a Shopify tem duas lojas (Coco and Luna e
-  Yucaloo).
-- O que continua diferente entre os dois é só o que a ação FAZ, e isso não pode ser padronizado:
-  o botão da Amazon é "Aplicar" (o campo é retenção, pode podar e pede confirmação) e o da
-  Shopify é "Buscar" (só soma, nunca apaga, e por isso não pede confirmação nenhuma).
-- As lojas que o backfill alcança viraram `title` do rótulo, em vez de texto na frase: a
-  informação continua acessível e a linha continua igual às outras.
-- Layout: `.ret-row-label` CRESCE (`flex:1;min-width:0`) em vez de ocupar uma coluna fixa de
-  170px. Com a largura travada sobravam pouco mais de 130px pro texto, que quebrava em quatro ou
-  cinco linhas e esticava a linha inteira, enquanto o resto da largura ficava vazio.
+### Um painel só de histórico em Integrações
+- **Quatro linhas (Amazon BR/EUA, Shopify BR/EUA) que fazem exatamente a MESMA coisa: buscar os
+  últimos N dias daquela loja.** O número é o ALCANCE DA BUSCA, e mudar ele muda o alcance, sempre.
+  Pedido do Luan (08/09/2026), junto de "essa tela está muito bagunçada".
+- Eram TRÊS painéis com três textos longos: histórico da Amazon, reembolsos da Amazon e histórico
+  da Shopify. Dois botões chamados "Buscar" que faziam coisas diferentes, e um campo que ora
+  buscava ora APAGAVA.
+- **Nenhum botão desta tela apaga pedido.** O campo da Amazon podava quando o número era menor que
+  o histórico atual — duas ações opostas no mesmo lugar, e a poda é a única coisa deste projeto que
+  apaga pedido de verdade (ela já quase apagou nove meses de dado recém-recuperado uma vez). A poda
+  automática do dia a dia continua existindo em `sync.js`, guiada pela retenção; o que sumiu foi a
+  porta destrutiva na tela.
+- **A retenção SOBE pra cobrir o que foi buscado, e nunca desce.** Sem isso, buscar 365 dias com a
+  retenção em 180 faria a poda automática apagar metade do que acabou de chegar, no ciclo seguinte,
+  sem nada na tela explicando. `0` (sem limite) fica como está: não há o que subir, e baixar seria
+  criar um limite que ninguém pediu.
+- **Buscar histórico da Amazon busca os reembolsos do MESMO período, dentro do mesmo job.** Eram
+  dois botões, e o segundo dava pra esquecer: pedido recuperado sem a marca de devolução conta como
+  vendida uma unidade que voltou, que é justamente o número que não pode estar errado. Uma falha na
+  parte de reembolso NÃO derruba o resultado da busca de pedidos, que já está gravada — ela vira
+  aviso na própria linha.
+- **O acompanhamento sempre devolve o botão.** A versão anterior desistia calada quando o job não
+  aparecia em `/api/jobs` (`if (!j) return`): o intervalo seguia rodando, o botão ficava travado e a
+  tela não dizia uma palavra. Foi assim que "cliquei e não funcionou" virou o relato, mesmo com a
+  busca tendo rodado. Hoje, sem notícia por três voltas, ele encerra dizendo isso; e erro de rede
+  aparece na linha em vez de ser engolido por um `catch(e){}`.
+- **O campo nasce com o último número digitado nele** (`localStorage`, por linha): quem ajusta o
+  alcance costuma repetir o mesmo ajuste, e reabrir a tela com outro número faria a próxima busca
+  ter um alcance que ninguém escolheu.
+- A frase de resumo (`N pedidos · desde DD/MM/AAAA (N dias)`) e o markup da linha existem num lugar
+  só: escritos quatro vezes, divergiriam na primeira mexida. **Medir por CANAL, nunca por mercado** —
+  `historicoDosCanais` recebe a lista de canais porque a Amazon tem um por mercado e a Shopify tem
+  duas lojas; com `getOldestOrderDate(market)` o painel da Shopify mostrava a data da Amazon BR.
+- Layout: `.ret-row-label` CRESCE (`flex:1;min-width:0`) em vez de ocupar uma coluna fixa de 170px.
+  Com a largura travada sobravam pouco mais de 130px pro texto, que quebrava em quatro ou cinco
+  linhas e esticava a linha inteira, enquanto o resto da largura ficava vazio.
 - **Lista de backups: três linhas, a quarta se apagando, e um botão pra abrir.** Ela cresce um
   arquivo por dia (retenção de 30 dias), então mostrar tudo deixava o painel enorme. A quarta
   linha apagada é o que diz "tem mais embaixo" sem precisar de texto.
@@ -2029,8 +2041,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `GET /api/amazon/settlement-probe` (admin) — diagnóstico do extrato de repasse (sem PII)
 - `POST /api/shopify/backfill?market=&days=` (admin) · `GET /api/shopify/history` (admin) —
   recupera histórico antigo das lojas Shopify, ver tela Integrações
-- `GET/POST /api/amazon/history` (admin) · `GET /api/amazon/history/preview` — histórico por
-  mercado (poda OU busca, decide sozinho), ver tela Integrações
+- `GET/POST /api/amazon/history` (admin) — GET mede onde o histórico começa; POST busca os últimos
+  N dias E os reembolsos do mesmo período. Nunca apaga, ver tela Integrações
 - `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
 - `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
 - `GET /api/bling/probe-bonificacao?since=&until=` (admin) — naturezas de operação encontradas e

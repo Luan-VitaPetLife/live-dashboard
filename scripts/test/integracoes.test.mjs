@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { criarTeste, PUB, fontePagina } from './_lib.mjs';
+import { criarTeste, ROOT, PUB, fontePagina } from './_lib.mjs';
 
 const t = criarTeste('Lista de backups em Integrações');
 
@@ -90,26 +90,44 @@ t.ok(/#backupFilesList\{[^}]*min-height:0/.test(tela),
   'a lista leva min-height:0 (item de coluna flex ignoraria o max-height sem isso)');
 t.ok(/onclick="alternarBackups\(\)"/.test(tela), 'o botão está ligado ao alternador');
 
-// ── Painel "Amazon — Reembolsos" ──
-// A rodada automática cobre só a janela recente. Sem este botão, reembolso mais antigo nunca é
-// marcado e a quantidade vendida daquele período fica errada pra sempre — e ninguém percebe,
-// porque não existe erro, existe um número a mais.
-t.ok(/id="refundsPanel"/.test(tela), 'o painel de reembolsos existe');
-t.ok(/id="refundsRows"/.test(tela), 'com o container onde as linhas são montadas');
-t.ok(/function renderReembolsos\(\)/.test(tela), 'e um montador próprio pras linhas');
-const montador = tela.slice(tela.indexOf('function renderReembolsos()'), tela.indexOf('async function loadHistory'));
-t.ok(/retLinha\(\{/.test(montador), 'que reaproveita o montador de linha compartilhado');
-t.ok(!/campo:/.test(montador), 'sem caixa de dias: aqui não há número pra escolher');
+// ── Painel único "Histórico de pedidos" ──
+// Eram TRÊS painéis: histórico da Amazon, reembolsos da Amazon e histórico da Shopify. Dois
+// botões chamados "Buscar" que faziam coisas diferentes, e um campo que ora buscava ora APAGAVA.
+t.ok(/id="histPanel"/.test(tela), 'existe um painel de histórico só');
+t.ok(/id="histRows"/.test(tela), 'com o container onde as quatro linhas são montadas');
+t.ok(!/id="refundsPanel"|id="shopHistPanel"|id="retPanel"/.test(tela), 'e os três painéis antigos não voltaram');
 
-const acao = tela.slice(tela.indexOf('async function buscarReembolsos'), tela.indexOf('// ── Alerta de sincronização'));
-t.ok(/\/api\/amazon\/sync-returns/.test(acao), 'o botão chama a busca de reembolsos');
-t.ok(/method:\s*'POST'/.test(acao), 'por POST');
-t.ok(/days=365/.test(acao), 'na janela funda de um ano, que é o que conserta período antigo');
-t.ok(/cocoConfirm/.test(acao), 'pede confirmação: a busca é longa e prende a cota da Amazon');
-// Montar as linhas e nunca chamar o montador deixa o painel vazio, sem erro nenhum.
-t.ok(/^\s*renderReembolsos\(\);/m.test(tela), 'o montador é chamado ao abrir a página');
-// A função do botão vem por parâmetro. Enquanto era um ternário em cima do `id`, só cabiam dois
-// painéis, e o terceiro apontaria para a ação de um dos outros.
-t.ok(/onclick="\$\{acao\}/.test(tela), 'o botão de cada linha chama a ação que a linha declarou');
+// O reembolso deixou de ser um botão separado. A garantia não mudou de valor, mudou de lugar:
+// pedido recuperado sem a marca de devolução conta como vendida uma unidade que voltou, e um
+// botão separado era um botão que dava pra esquecer.
+const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+const job = server.slice(server.indexOf('function startBackfillJob'), server.indexOf('function startShopifyBackfillJob'));
+// O literal completo, com o await: procurar só o nome da função passa com a chamada desligada
+// por um `if (false)` do lado, que foi exatamente a mutação que escapou.
+t.ok(job.includes('const rr = await reconcileAmazonReturns({'),
+  'buscar histórico da Amazon busca os reembolsos junto');
+t.ok(/dias: days/.test(job), 'na mesma janela de dias que a pessoa pediu');
+t.ok(/reembolsos falharam/.test(job), 'e uma falha no reembolso não apaga o resultado da busca de pedidos');
+
+// Nenhum botão desta tela apaga pedido. O campo da Amazon podava quando o número era menor que o
+// histórico atual, e a poda já quase apagou nove meses de dado recém-recuperado uma vez.
+const postHist = server.slice(server.indexOf("app.post('/api/amazon/history'"), server.indexOf("app.post('/api/backup/run'"));
+t.ok(!/pruneOrders\(/.test(postHist), 'buscar histórico nunca apaga pedido');
+t.ok(/days > atual/.test(postHist), 'e a retenção sobe pra cobrir o que foi buscado, senão a poda automática desfaria');
+
+// O botão precisa voltar a funcionar SEMPRE. Antes, se o job sumisse da lista, o acompanhamento
+// parava calado: intervalo rodando, botão travado e nenhuma palavra na tela — foi assim que
+// "cliquei e não funcionou" virou o relato.
+const acomp = tela.slice(tela.indexOf('function acompanharHistorico('), tela.indexOf('// Se uma busca já estava rodando'));
+t.ok(/if \(btn\) btn\.disabled = false;/.test(acomp), 'o acompanhamento sempre devolve o botão');
+// A contagem precisa CHEGAR ao encerramento: `semNoticia` declarado e nunca usado pra desistir
+// deixa o acompanhamento rodando pra sempre de novo.
+t.ok(acomp.includes('if (++semNoticia < 3) return;'), 'ele conta as voltas sem notícia');
+t.ok(acomp.includes("encerrar('Sem notícia do processo"), 'e desiste avisando quando o processo some da lista');
+t.ok(!/catch\(e\)\{\}/.test(acomp), 'sem engolir erro de rede');
+
+// O campo lembra o último número digitado (pedido do Luan).
+t.ok(/localStorage\.setItem\('coco_hist_dias_'/.test(tela), 'o número digitado fica guardado');
+t.ok(/localStorage\.getItem\('coco_hist_dias_'/.test(tela), 'e volta no campo quando a tela reabre');
 
 t.fim();
