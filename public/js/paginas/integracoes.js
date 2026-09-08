@@ -343,18 +343,32 @@ $('viewSwitch').addEventListener('click', e => {
   if (lastItems.length) render(lastItems);
 });
 
-// ── Histórico da Amazon (BR/EUA separados) — um campo só por mercado ────
-// "Dias de histórico desejado": se for menos do que já existe, poda (pede prévia + confirmação,
-// só essa ação apaga pedido de verdade); se for mais, busca automaticamente o que falta
-// (backfill, não precisa de confirmação — só soma). Nunca os dois separados, evita confundir
-// "isso soma com aquilo?" (pergunta real de quem usa a tela). Ver server.js /api/amazon/history.
+// ── Histórico de pedidos (Amazon e Shopify, BR e EUA) ───────────────────────
+// Um painel só, quatro linhas que fazem exatamente a MESMA coisa: buscar os últimos N dias
+// daquela loja. O número é o ALCANCE DA BUSCA e mudar ele muda o alcance, sempre — pedido do
+// Luan em 08/09/2026, junto de "essa tela está muito bagunçada".
+//
+// Eram três painéis com três textos longos. O da Amazon tinha um campo que PODAVA ou BUSCAVA
+// conforme o número fosse menor ou maior que o histórico atual: duas ações opostas no mesmo lugar,
+// e a poda é a única coisa neste projeto que apaga pedido de verdade. O de reembolsos era um botão
+// separado, e separado dava pra esquecer — esquecer significa pedido recuperado sem a marca de
+// devolução, contando como vendida uma unidade que voltou. Hoje a busca da Amazon traz os
+// reembolsos junto, e nenhum botão desta tela apaga nada.
 const RET_MARKET_LABEL = { br: 'Brasil', us: 'Estados Unidos' };
-let retBackfillPolling = null;
+const HIST_PADRAO_DIAS = 365;
 
-// Os dois painéis de histórico (Amazon e Shopify) mostram o MESMO tipo de informação, então
-// mostram a mesma frase, montada aqui. Antes cada um tinha a sua: um dizia "336 pedidos · cobre
-// 136 dias hoje" e o outro "começa em 17/04/2026 (137 dias) · Shopify Coco and Luna BR · ...".
-// Eram dois formatos para o mesmo dado, e o painel parecia dois painéis sem relação.
+const HIST_LINHAS = [
+  { slot: 'AmzBr',  loja: 'amazon',  nome: 'Amazon',  mkt: 'br', job: 'amazon-backfill',  max: 730,  logo: 'img/integracoes/Amazon_logo.png' },
+  { slot: 'AmzUs',  loja: 'amazon',  nome: 'Amazon',  mkt: 'us', job: 'amazon-backfill',  max: 730,  logo: 'img/integracoes/Amazon_logo.png' },
+  { slot: 'ShopBr', loja: 'shopify', nome: 'Shopify', mkt: 'br', job: 'shopify-backfill', max: 1825, logo: 'img/integracoes/Shopify_logo.png' },
+  { slot: 'ShopUs', loja: 'shopify', nome: 'Shopify', mkt: 'us', job: 'shopify-backfill', max: 1825, logo: 'img/integracoes/Shopify_logo.png' },
+];
+
+let histInfo = { amazon: {}, shopify: {} };
+let histPoll = null;
+
+// A mesma frase nas quatro linhas. Duas frases diferentes pro mesmo dado faziam o painel parecer
+// dois painéis sem relação, e foi o que essa função resolveu quando os painéis ainda eram dois.
 function retResumo(info){
   const pedidos = Number(info.totalOrders || 0);
   if (!pedidos || !info.oldestOrderDate) return 'nenhum pedido guardado ainda';
@@ -363,187 +377,141 @@ function retResumo(info){
   return `${pedidos.toLocaleString('pt-BR')} pedidos · desde ${desde} (${dias} dias)`;
 }
 
-// O markup das quatro linhas também é um só. `extra` vira o title do rótulo: é onde a linha da
-// Shopify diz quais lojas ela alcança, sem que isso desmonte a frase padrão.
-function retLinha({ mkt, id, logo, info, botao, extra, acao, campo, resumo }){
-  const cap = mkt === 'us' ? 'Us' : 'Br';
-  const titulo = extra ? ` title="${extra}"` : '';
-  // Sem `campo`, a linha não tem caixa de dias — é o caso do painel de reembolsos, onde não há
-  // número pra escolher (a busca é sempre do último ano).
-  const entrada = campo
-    ? `<div class="ret-row-input"><input type="number" id="${id}Days${cap}" min="${campo.min}"${campo.max ? ` max="${campo.max}"` : ''} value="${info.campo}"><span>dias</span></div>`
-    : '';
+// O markup da linha existe num lugar só: escrito quatro vezes, ele divergiria na primeira mexida.
+function retLinha({ slot, logo, nome, mkt, resumo, dica, valor, max, desabilitado }){
   return `<div class="ret-row">
     <div class="ret-row-main">
-      <div class="ret-row-label"${titulo}>
+      <div class="ret-row-label" title="${dica}">
         <img class="ret-row-logo" src="${logo}" alt="">
-        <span class="ret-row-label-text">${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${resumo || retResumo(info)}</span></span>
+        <span class="ret-row-label-text">${nome} · ${RET_MARKET_LABEL[mkt]}<span class="ret-row-sub">${resumo}</span></span>
       </div>
-      ${entrada}
-      <button class="ret-btn" id="${id}Apply${cap}" onclick="${acao}('${mkt}')"${info.desabilitado ? ' disabled' : ''}>${botao}</button>
+      <div class="ret-row-input"><input type="number" id="histDias${slot}" min="1" max="${max}" value="${valor}"><span>dias</span></div>
+      <button class="ret-btn" id="histBtn${slot}" onclick="buscarHistorico('${slot}')"${desabilitado ? ' disabled' : ''}>Buscar</button>
     </div>
-    <div class="ret-row-status" id="${id}Status${cap}"></div>
+    <div class="ret-row-status" id="histStatus${slot}"></div>
   </div>`;
 }
 
-// O painel de reembolsos não carrega nada do servidor: as duas linhas são só o botão de disparo.
-function renderReembolsos(){
-  $('refundsRows').innerHTML = ['br','us'].map(mkt => retLinha({
-    mkt, id: 'ref', logo: 'img/integracoes/Amazon_logo.png', botao: 'Buscar',
-    acao: 'buscarReembolsos', info: {}, resumo: 'busca no último ano',
-    extra: 'Lê o relatório de devoluções da FBA e o extrato de repasse',
-  })).join('');
+// O campo nasce com o ÚLTIMO número digitado nele (pedido do Luan): quem ajusta o alcance costuma
+// repetir o mesmo ajuste, e reabrir a tela com outro número faria a próxima busca ter um alcance
+// que ninguém escolheu.
+function histDiasSalvos(slot){
+  const v = Number(localStorage.getItem('coco_hist_dias_' + slot));
+  return v >= 1 ? v : HIST_PADRAO_DIAS;
 }
-async function loadHistory(){
-  try{
-    const r = await fetch('/api/amazon/history', { credentials:'same-origin' });
-    if (!r.ok) throw new Error('http ' + r.status);
-    const d = await r.json();
-    $('retPanelSub').textContent = 'Quantos dias de pedidos manter guardados em cada mercado. Um número menor apaga o excesso e pede confirmação antes; um número maior busca na Amazon o que estiver faltando. Zero significa sem limite.';
-    $('retRows').innerHTML = ['br','us'].map(mkt => retLinha({
-      mkt, id: 'ret', logo: 'img/integracoes/Amazon_logo.png', botao: 'Aplicar',
-      acao: 'applyHistory', campo: { min: 0 },
-      info: { ...(d[mkt] || { days: 0, totalOrders: 0, oldestOrderDate: null, oldestOrderDays: null }), campo: (d[mkt] || {}).days ?? 0 },
-    })).join('');
-  }catch(e){
-    $('retPanelSub').textContent = 'Não foi possível carregar o histórico da Amazon.';
-  }
-}
-async function applyHistory(market){
-  const cap = market === 'us' ? 'Us' : 'Br';
-  const input = $('retDays' + cap), btn = $('retApply' + cap), statusEl = $('retStatus' + cap);
-  const days = Number(input.value);
-  if (!(days >= 0)){ toast('Dias precisa ser um número válido.', true); return; }
-  btn.disabled = true;
-  try{
-    const pr = await fetch(`/api/amazon/history/preview?market=${market}&days=${days}`, { credentials:'same-origin' });
-    const plan = await pr.json();
-    if (!pr.ok) throw new Error(plan.error || 'falha ao calcular prévia');
 
-    if (plan.action === 'prune' && plan.wouldDelete > 0){
-      const ok = await cocoConfirm(
-        `Isso vai apagar ${plan.wouldDelete.toLocaleString('pt-BR')} de ${plan.totalOrders.toLocaleString('pt-BR')} pedidos da Amazon ${RET_MARKET_LABEL[market]}, mantendo só os últimos ${days} dias. Essa ação não tem volta.`,
-        { title: 'Apagar histórico antigo', confirmText: 'Apagar', danger: true }
-      );
-      if (!ok){ btn.disabled = false; return; }
-    }
-
-    const r = await fetch('/api/amazon/history', {
-      method:'POST', credentials:'same-origin',
-      headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ market, days }),
+function renderHistorico(){
+  const el = $('histRows');
+  if (!el) return;
+  el.innerHTML = HIST_LINHAS.map(l => {
+    const info = (histInfo[l.loja] || {})[l.mkt] || {};
+    const lojas = info.lojas || [];
+    const semLoja = l.loja === 'shopify' && info.lojas && !lojas.length;
+    return retLinha({
+      ...l,
+      resumo: retResumo(info),
+      dica: l.loja === 'amazon'
+        ? 'Busca os pedidos e também os reembolsos do período'
+        : (lojas.length ? lojas.join(' · ') : 'nenhuma loja ligada neste mercado'),
+      valor: histDiasSalvos(l.slot),
+      desabilitado: semLoja,
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
-
-    if (d.action === 'pruned'){
-      toast(`${d.deleted.toLocaleString('pt-BR')} pedidos apagados. Histórico agora: ${days === 0 ? 'sem limite' : days + ' dias'}.`);
-      btn.disabled = false;
-      loadHistory();
-    } else if (d.action === 'backfill_started'){
-      statusEl.textContent = 'Buscando o histórico que falta…';
-      toast(`Buscando mais histórico da Amazon ${RET_MARKET_LABEL[market]}.`);
-      pollHistoryBackfill(cap);
-    } else {
-      toast(`Configuração salva: ${days === 0 ? 'sem limite' : days + ' dias'}.`);
-      btn.disabled = false;
-    }
-  }catch(e){
-    toast('Erro: ' + (e.message || 'falha de rede'), true);
-    btn.disabled = false;
-  }
+  }).join('');
 }
-function pollHistoryBackfill(cap){
-  if (retBackfillPolling) clearInterval(retBackfillPolling);
-  const tick = async () => {
-    try{
-      const r = await fetch('/api/status', { credentials:'same-origin' });
-      const d = await r.json();
-      const b = d.amazon?.backfill;
-      const statusEl = $('retStatus' + cap);
-      if (!b || !statusEl) return;
-      statusEl.textContent = b.status === 'running' ? `Buscando… ${b.message || ''}`
-        : b.status === 'done' ? `Concluído: ${b.message || ''}`
-        : b.status === 'error' ? `Erro: ${b.message || ''}`
-        : '';
-      if (b.status !== 'running'){
-        clearInterval(retBackfillPolling);
-        retBackfillPolling = null;
-        $('retApply' + cap).disabled = false;
-        if (b.status === 'done') loadHistory();
-      }
-    }catch(e){}
+
+async function carregarHistorico(){
+  const pega = async (url) => {
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error(url + ': http ' + r.status);
+    return r.json();
   };
-  tick();
-  retBackfillPolling = setInterval(tick, 4000);
-}
-
-// ── Histórico das lojas Shopify (BR/EUA) ────
-// Só soma: busca pedido antigo que nunca entrou no banco porque o sync guarda uma janela móvel
-// de 60 dias. Diferente do painel da Amazon acima, aqui não existe poda, então também não existe
-// confirmação — nada é apagado em hipótese nenhuma.
-let shopHistPolling = null;
-async function loadShopHistory(){
-  try{
-    const r = await fetch('/api/shopify/history', { credentials:'same-origin' });
-    if (!r.ok) throw new Error('http ' + r.status);
-    const d = await r.json();
-    $('shopHistSub').textContent = 'Quantos dias de pedidos buscar nas lojas Shopify de cada mercado. Nada é apagado: o pedido que já existe é só atualizado e o que faltava entra. Pode demorar alguns minutos.';
-    $('shopHistRows').innerHTML = ['br','us'].map(mkt => {
-      const info = d[mkt] || { totalOrders: 0, oldestOrderDate: null, oldestOrderDays: null, lojas: [] };
-      return retLinha({
-        mkt, id: 'shop', logo: 'img/integracoes/Shopify_logo.png', botao: 'Buscar',
-        acao: 'applyShopHistory', campo: { min: 1, max: 1825 },
-        info: { ...info, campo: 365, desabilitado: !info.lojas.length },
-        extra: info.lojas.length ? info.lojas.join(' · ') : 'nenhuma loja ligada neste mercado',
-      });
-    }).join('');
-  }catch(e){
-    $('shopHistSub').textContent = 'Não foi possível carregar o histórico das lojas Shopify.';
+  // Uma das duas falhar não pode apagar a outra da tela: cada lado é independente, e o erro
+  // aparece no lugar do resumo daquelas linhas em vez de sumir no console.
+  const [amz, shop] = await Promise.allSettled([pega('/api/amazon/history'), pega('/api/shopify/history')]);
+  histInfo = {
+    amazon:  amz.status  === 'fulfilled' ? amz.value  : {},
+    shopify: shop.status === 'fulfilled' ? shop.value : {},
+  };
+  for (const r of [amz, shop]) if (r.status === 'rejected') console.error('histórico:', r.reason);
+  renderHistorico();
+  if (amz.status === 'rejected' || shop.status === 'rejected') {
+    toast('Não deu pra carregar o histórico de uma das lojas. As linhas dela ficam sem o resumo.', true);
   }
 }
-async function applyShopHistory(market){
-  const cap = market === 'us' ? 'Us' : 'Br';
-  const btn = $('shopApply' + cap), statusEl = $('shopStatus' + cap);
-  const days = Number($('shopDays' + cap).value);
-  if (!(days >= 1)){ toast('Dias precisa ser um número maior que zero.', true); return; }
+
+async function buscarHistorico(slot){
+  const l = HIST_LINHAS.find(x => x.slot === slot);
+  if (!l) return;
+  const btn = $('histBtn' + slot), st = $('histStatus' + slot);
+  const dias = Number($('histDias' + slot).value);
+  if (!(dias >= 1)){ toast('Dias precisa ser um número maior que zero.', true); return; }
+  localStorage.setItem('coco_hist_dias_' + slot, String(dias));
+
   btn.disabled = true;
+  st.textContent = 'Iniciando…';
   try{
-    const r = await fetch('/api/shopify/backfill?market=' + market + '&days=' + days, { method:'POST', credentials:'same-origin' });
-    const d = await r.json();
+    const r = l.loja === 'amazon'
+      ? await fetch('/api/amazon/history', { method:'POST', credentials:'same-origin',
+          headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ market: l.mkt, days: dias }) })
+      : await fetch(`/api/shopify/backfill?market=${l.mkt}&days=${dias}`, { method:'POST', credentials:'same-origin' });
+    const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || 'http ' + r.status);
-    statusEl.textContent = 'Buscando…';
-    toast('Buscando ' + days + ' dias de histórico Shopify ' + RET_MARKET_LABEL[market] + '.');
-    pollShopHistory(cap);
+    st.textContent = 'Buscando…';
+    toast(`Buscando ${dias} dias de ${l.nome} ${RET_MARKET_LABEL[l.mkt]}.`);
+    acompanharHistorico(slot);
   }catch(e){
+    st.textContent = 'Erro: ' + (e.message || 'falha de rede');
     toast('Erro: ' + (e.message || 'falha de rede'), true);
     btn.disabled = false;
   }
 }
-function pollShopHistory(cap){
-  if (shopHistPolling) clearInterval(shopHistPolling);
+
+// Acompanha o job e SEMPRE devolve o botão. A versão anterior desistia calada quando o job não
+// aparecia na lista (`if (!j) return`): o intervalo seguia rodando, o botão ficava travado e a
+// tela não dizia uma palavra — foi assim que "cliquei e não funcionou" virou o relato, mesmo
+// quando a busca tinha rodado. Agora, sem notícia por algumas voltas, ele encerra dizendo isso.
+function acompanharHistorico(slot){
+  const l = HIST_LINHAS.find(x => x.slot === slot);
+  if (!l) return;
+  if (histPoll) clearInterval(histPoll);
+  let semNoticia = 0;
+
+  const encerrar = (texto) => {
+    if (histPoll) clearInterval(histPoll);
+    histPoll = null;
+    const st = $('histStatus' + slot), btn = $('histBtn' + slot);
+    if (st) st.textContent = texto;
+    if (btn) btn.disabled = false;
+    carregarHistorico();
+  };
+
   const tick = async () => {
+    const st = $('histStatus' + slot);
     try{
       const r = await fetch('/api/jobs', { credentials:'same-origin' });
-      const d = await r.json();
-      const j = (d.jobs || []).find(x => x.id === 'shopify-backfill');
-      const statusEl = $('shopStatus' + cap);
-      if (!j || !statusEl) return;
-      statusEl.textContent = j.status === 'running' ? 'Buscando… ' + (j.message || '')
-        : j.status === 'done' ? 'Concluído: ' + (j.message || '')
-        : j.status === 'cancelled' ? 'Cancelado: ' + (j.message || '')
-        : j.status === 'error' ? 'Erro: ' + (j.message || '')
-        : '';
-      if (j.status !== 'running'){
-        clearInterval(shopHistPolling);
-        shopHistPolling = null;
-        $('shopApply' + cap).disabled = false;
-        if (j.status === 'done') loadShopHistory();
+      if (!r.ok) throw new Error('http ' + r.status);
+      const j = ((await r.json()).jobs || []).find(x => x.id === l.job);
+      if (!j){
+        // O servidor esquece job concluído 15 min depois de terminar, e um reinício no meio some
+        // com ele. Nos dois casos não há o que esperar.
+        if (++semNoticia < 3) return;
+        return encerrar('Sem notícia do processo. Confira o card de processos.');
       }
-    }catch(e){}
+      semNoticia = 0;
+      if (j.status === 'running'){
+        if (st) st.textContent = 'Buscando… ' + (j.message || '');
+        return;
+      }
+      encerrar((j.status === 'done' ? 'Concluído: ' : j.status === 'cancelled' ? 'Cancelado: ' : 'Erro: ') + (j.message || ''));
+    }catch(e){
+      // Rede fora não é "acabou": o botão continua travado de propósito, mas a tela diz o que está
+      // acontecendo em vez de ficar parada.
+      console.error('acompanhamento do histórico:', e);
+      if (st) st.textContent = 'Sem conexão com o servidor. Tentando de novo…';
+    }
   };
   tick();
-  shopHistPolling = setInterval(tick, 4000);
+  histPoll = setInterval(tick, 4000);
 }
 
 // ── Backup do banco (Backblaze B2) — ver src/backup.js ────
@@ -639,38 +607,6 @@ async function runBackupNow(){
   }
 }
 
-// ── Busca funda de reembolsos da Amazon ─────────────────────────────────────
-// A rodada automática cobre a janela recente. Este botão existe pro passado: reembolso mais antigo
-// que aquela janela nunca foi marcado, e enquanto não for, a quantidade vendida daquele período
-// segue contando a unidade que voltou. É lenta de propósito (a Amazon libera ~1 extrato de repasse
-// por minuto), então o resultado aparece no card de processos, não aqui.
-async function buscarReembolsos(mkt){
-  const cap = mkt === 'us' ? 'Us' : 'Br';
-  const btn = $('refApply' + cap);
-  const st  = $('refStatus' + cap);
-  const onde = mkt === 'us' ? 'Estados Unidos' : 'Brasil';
-
-  const ok = await cocoConfirm(
-    `Procurar reembolsos do último ano na Amazon ${onde} e descontar as unidades devolvidas. Leva vários minutos e o resultado aparece no card de processos.`,
-    { title: 'Buscar reembolsos', confirmText: 'Buscar' });
-  if (!ok) return;
-
-  btn.disabled = true;
-  st.textContent = 'Buscando…';
-  try{
-    const r = await fetch(`/api/amazon/sync-returns?market=${mkt}&days=365&docs=25`, { method:'POST', credentials:'same-origin' });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'http ' + r.status);
-    st.textContent = 'Rodando em segundo plano — acompanhe no card de processos.';
-    toast('Busca de reembolsos iniciada.');
-  }catch(e){
-    st.textContent = 'Erro: ' + (e.message || 'falha de rede');
-    toast('Erro ao buscar reembolsos: ' + (e.message || 'falha de rede'), true);
-  }finally{
-    btn.disabled = false;
-  }
-}
-
 // ── Alerta de sincronização (Telegram) — ver src/alerts.js. Reaproveita GET /api/status
 // (mesma checagem já usada pra Bling/Amazon/etc.) em vez de um endpoint só pra isso. ────
 async function loadAlertsStatus(){
@@ -705,32 +641,35 @@ async function testAlertNow(){
   }
 }
 
+// Se uma busca já estava rodando antes de a página ser recarregada (F5 no meio dela), a linha
+// correspondente volta acompanhando. Sem isso o botão apareceria livre, um segundo clique tomaria
+// 409 e a tela diria "já existe uma busca em andamento" sem mostrar qual.
+async function retomarBuscaEmAndamento(){
+  try{
+    const r = await fetch('/api/jobs', { credentials:'same-origin' });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const jobs = (await r.json()).jobs || [];
+    for (const l of HIST_LINHAS){
+      const j = jobs.find(x => x.id === l.job && x.status === 'running');
+      // O rótulo do job diz o mercado ("Buscar histórico Amazon EUA"): sem conferir, a busca do
+      // Brasil apareceria acompanhada também na linha dos EUA.
+      if (!j || (l.mkt === 'us') !== /EUA/.test(j.label || '')) continue;
+      const btn = $('histBtn' + l.slot);
+      if (btn) btn.disabled = true;
+      acompanharHistorico(l.slot);
+      return;
+    }
+  }catch(e){
+    console.error('retomar busca de histórico:', e);
+  }
+}
+
 (async function(){
   syncViewSwitch();
-  renderReembolsos();
   await loadMe();
   await load();
-  await loadHistory();
-  await loadShopHistory();
-  // Retoma o acompanhamento se uma busca de histórico já estava rodando antes de recarregar a
-  // página (ex.: deu F5 no meio de um backfill).
-  try{
-    const s = await fetch('/api/status', { credentials:'same-origin' }).then(r => r.json());
-    if (s.amazon?.backfill?.status === 'running'){
-      const cap = s.amazon.backfill.market === 'us' ? 'Us' : 'Br';
-      $('retApply' + cap).disabled = true;
-      pollHistoryBackfill(cap);
-    }
-  }catch(e){}
-  try{
-    const d = await fetch('/api/jobs', { credentials:'same-origin' }).then(r => r.json());
-    const j = (d.jobs || []).find(x => x.id === 'shopify-backfill' && x.status === 'running');
-    if (j){
-      const cap = /EUA/.test(j.label) ? 'Us' : 'Br';
-      $('shopApply' + cap).disabled = true;
-      pollShopHistory(cap);
-    }
-  }catch(e){}
+  await carregarHistorico();
+  await retomarBuscaEmAndamento();
   loadBackupStatus();
   loadAlertsStatus();
 })();
