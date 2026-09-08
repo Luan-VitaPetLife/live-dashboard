@@ -507,6 +507,13 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   contagem sem mexer um centavo no valor — o jeito mais silencioso possível de esse número ficar
   errado. É o único lugar onde a doação entra numa lista sem ser pedida por um cálculo, e é
   legítimo porque o card é a lista do que saiu, não uma conta.
+- **Origem que não é canal de venda tem rótulo próprio** (`NAO_CANAIS` em `js/colors.js`).
+  `bonificacao` fica FORA do catálogo de canais de propósito: ninguém pode escolhê-la no seletor,
+  porque a doação sai de todo cálculo por padrão e o filtro devolveria uma tela vazia. Mas ela
+  aparece em linha de produto e de pedido, e sem rótulo cadastrado `chLabel`/`chBadgeHTML` caíam na
+  CHAVE crua e a tela mostrava "bonificacao", minúsculo e sem cedilha (relatado pelo Luan,
+  08/09/2026). **O fallback pra chave é a porta por onde texto interno vaza pro usuário**: toda
+  chave nova que puder chegar na tela precisa nascer com rótulo.
 - Rótulo próprio na busca e em "Pedidos recentes": **"Bonificação"**, com cor própria
   (`.st-tag.boni`). Não é estado de pagamento — não faz sentido perguntar se foi pago, cancelado ou
   devolvido algo que nunca foi cobrado, por isso ele é testado ANTES de tudo em `statusLabelPt` e
@@ -682,6 +689,35 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   `computeStock.agg` (grupo manual tem prioridade sobre a família automática Lysine/Daily).
 - Também mostra produto do catálogo Shopify mesmo sem venda nenhuma (`listProductCatalog` mescla
   pedidos reais com `kv.shopifyProductCatalog`).
+
+### Variante da Shopify é produto diferente (`tituloDoItem`, src/shopify.js)
+- A Shopify manda o título do PRODUTO e o da VARIANTE separados, e um produto com quatro variantes
+  chega com o mesmo `title` nas quatro. Foi assim que o "Urinary Tract" da loja dos EUA apareceu
+  como UMA linha somando Soft Chews, Tablet, Powder e Liquid (relatado pelo Luan, 08/09/2026).
+  **Não era o Unificador juntando** — elas nunca chegaram separadas.
+- Variante é produto diferente pra tudo que importa aqui: tem estoque próprio, custo próprio e
+  venda própria. Somá-las esconde qual das quatro está vendendo e qual está parada.
+- `tituloDoItem(title, variantTitle)` compõe "Produto - Variante". **"Default Title"** é o nome que
+  a Shopify dá à variante única de um produto sem variação e nunca pode entrar no nome — se
+  entrasse, TODO produto sem variação seria renomeado, e nome é chave: `kv.productFinance` e
+  `kv.productStock` são indexados por `canal|||título`, e os grupos do Unificador guardam o título
+  exato. Variante com o mesmo nome do produto também não vira sufixo repetido.
+- **O catálogo passou a ser por VARIANTE junto** (`productVariants` na raiz, não `products`), e os
+  dois lados compõem o nome pela MESMA função. Sem isso o produto-pai viraria uma linha sem venda
+  nenhuma em Produtos/Estoque, e a tag e o Type ATUAIS do catálogo deixariam de ser encontrados pro
+  produto com variação — a decisão de ocultar voltaria a depender da tag presa no pedido antigo,
+  que é justamente o que o catálogo existe pra evitar.
+- `productVariants` na raiz e não variantes aninhadas em `products`: conexão dentro de conexão
+  multiplica o custo da consulta na Shopify, e 100 produtos × 100 variantes estoura o limite. Todo
+  produto tem pelo menos uma variante, então nada fica de fora.
+- **Consequência que precisa ser dita antes de rodar:** pedido já gravado continua com o nome
+  antigo até ser buscado de novo. O sync reescreve a janela móvel de 60 dias sozinho; o que for
+  mais antigo só se corrige por `POST /api/shopify/backfill`. E COG, frete, estoque manual e grupo
+  do Unificador salvos sob o nome antigo NÃO seguem pro nome novo — eles são indexados por título.
+  Nenhum número de venda muda com isso: só a quebra por linha fica mais fina.
+- `scripts/test/catalogo-loja.test.mjs` executa a composição de verdade e guarda as armadilhas,
+  inclusive a mais silenciosa: se a consulta de pedidos deixar de pedir `variantTitle`, tudo volta
+  a se somar sem erro nenhum.
 
 ### Só produto ATIVO da Shopify vira linha em Produtos/Estoque
 - A consulta de catálogo (`fetchProductCatalog`) não filtra status, então traz `ACTIVE`, `DRAFT` e

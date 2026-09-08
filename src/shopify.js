@@ -48,7 +48,7 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
             customerJourneySummary { lastVisit { source } }
             customer { displayName }
             shippingAddress { provinceCode }
-            lineItems(first: 20) { edges { node { id title currentQuantity discountedTotalSet { shopMoney { amount } } product { tags productType } lineItemGroup { id title quantity } image { url } } } }
+            lineItems(first: 20) { edges { node { id title variantTitle currentQuantity discountedTotalSet { shopMoney { amount } } product { tags productType } lineItemGroup { id title quantity } image { url } } } }
             refunds { refundLineItems(first: 20) { edges { node { lineItem { id } subtotalSet { shopMoney { amount } } } } } }
           } }
           pageInfo { hasNextPage endCursor }
@@ -80,7 +80,7 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
         customer:  n.customer?.displayName || '',
         state:     n.shippingAddress?.provinceCode || null,
         items:     (n.lineItems?.edges || []).map(x => ({
-          title:       x.node.title,
+          title:       tituloDoItem(x.node.title, x.node.variantTitle),
           qty:         x.node.currentQuantity,
           // `currentQuantity` 0 quer dizer que esta linha não faz mais parte do pedido (item
           // devolvido, removido numa edição, ou reposto no estoque ao cancelar). O
@@ -110,27 +110,55 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
 // Catálogo bruto de produtos cadastrados (vendidos ou não) — usado pelo Unificador pra
 // organizar produtos ANTES de terem qualquer venda. Diferente de fetchOrders/aggregateProductsByChannel,
 // que só enxergam produto que já apareceu em algum pedido.
+// Nome do produto como a dashboard conta.
+//
+// A Shopify manda o título do PRODUTO e o da VARIANTE separados, e um produto com quatro variantes
+// chega com o mesmo `title` nas quatro: foi assim que o "Urinary Tract" da loja dos EUA virou uma
+// linha só somando Soft Chews, Tablet, Powder e Liquid (relatado pelo Luan, 08/09/2026). Não era o
+// Unificador juntando: elas nunca chegaram separadas.
+//
+// Variante é produto diferente pra tudo que importa aqui: tem estoque próprio, custo próprio e
+// venda própria. Somá-las esconde qual das quatro está vendendo e qual está parada.
+//
+// "Default Title" é o nome que a Shopify dá à variante única de um produto sem variação — ele
+// jamais pode aparecer no nome. Variante com o mesmo nome do produto também não vira sufixo.
+export function tituloDoItem(title, variantTitle) {
+  const t = String(title || '').trim();
+  const v = String(variantTitle || '').trim();
+  if (!v || v.toLowerCase() === 'default title' || v === t) return t;
+  return `${t} - ${v}`;
+}
+
 export async function fetchProductCatalog(cfg = {}) {
   const store   = cfg.store   || STORE;
   const token   = cfg.token   || TOKEN;
   const version = cfg.version || VERSION;
 
+  // Por VARIANTE, não por produto. O item do pedido carrega o nome da variante (ver tituloDoItem),
+  // então um catálogo por produto deixaria de casar com ele em tudo que cruza os dois: o produto-pai
+  // viraria uma linha sem venda nenhuma em Produtos/Estoque, e a tag e o Type atuais do catálogo
+  // deixariam de ser encontrados pro produto com variação — a decisão de ocultar voltaria a depender
+  // da tag presa no pedido antigo, que é exatamente o que o catálogo existe pra evitar.
+  //
+  // `productVariants` na raiz em vez de variantes aninhadas em `products`: conexão dentro de
+  // conexão multiplica o custo da consulta na Shopify, e 100 produtos × 100 variantes estoura o
+  // limite. Todo produto tem pelo menos uma variante ("Default Title"), então nada fica de fora.
   let after = null, out = [], guard = 0;
   do {
     const data = await gqlFetch(store, token, version, `
       query($after: String) {
-        products(first: 100, after: $after) {
-          edges { node { title status productType tags featuredImage { url } } }
+        productVariants(first: 100, after: $after) {
+          edges { node { title product { title status productType tags featuredImage { url } } } }
           pageInfo { hasNextPage endCursor }
         }
       }`, { after });
-    const conn = data.products;
+    const conn = data.productVariants;
     for (const e of conn.edges) {
-      const n = e.node;
+      const v = e.node, n = v.product || {};
       // `status` é ACTIVE / DRAFT / ARCHIVED. A consulta traz os três, e é isso que queremos pros
       // índices de tag e tipo (produto arquivado que já vendeu continua precisando das tags atuais
       // pra decisão de ocultar). Quem separa é o mergeShopifyCatalog, que só LISTA produto ativo.
-      out.push({ title: n.title, status: n.status || null, image: n.featuredImage?.url || null, productType: n.productType || null, tags: n.tags || [] });
+      out.push({ title: tituloDoItem(n.title, v.title), status: n.status || null, image: n.featuredImage?.url || null, productType: n.productType || null, tags: n.tags || [] });
     }
     after = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
     guard++;

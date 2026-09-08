@@ -904,11 +904,10 @@ function render(d) {
       const {title:name, revenue:v, avulsoQty:avQty, comboBySize} = p;
       // Linha unificada pelo Unificador (Configurações): pode juntar o mesmo produto vendido em
       // canais diferentes — mostra um badge por canal presente, em vez de um único canal.
-      // "bonificacao" é o canal interno da doação, não uma loja: ele não está no catálogo de
-      // canais, então o badge saía com a chave crua ("bonificacao", sem acento e em minúscula) e
-      // parecendo um canal de venda. A linha já diz "doação" na coluna da direita.
-      const canaisDeVenda = (p.channels||[p.channel]).filter(c => c && c !== 'bonificacao');
-      const badge = isAllCh ? ' '+canaisDeVenda.map(c=>CocoColors.chBadgeHTML(c)).join(' ') : '';
+      // A doação também ganha badge, com o nome escrito certo ("Bonificação") e cor própria: ela
+      // não está no catálogo de canais, e quem dá nome a ela é NAO_CANAIS em colors.js. Antes o
+      // badge saía com a chave crua, minúscula e sem cedilha (relatado pelo Luan, 08/09/2026).
+      const badge = isAllCh ? ' '+(p.channels||[p.channel]).filter(Boolean).map(c=>CocoColors.chBadgeHTML(c)).join(' ') : '';
       const groupBadge = p._grouped ? ` <span class="tp-group-badge" title="${escapeHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>` : '';
       const comboParts = Object.entries(comboBySize||{})
         .sort((a,b)=>Number(a[0])-Number(b[0]))
