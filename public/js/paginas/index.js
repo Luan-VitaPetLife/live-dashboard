@@ -904,7 +904,11 @@ function render(d) {
       const {title:name, revenue:v, avulsoQty:avQty, comboBySize} = p;
       // Linha unificada pelo Unificador (Configurações): pode juntar o mesmo produto vendido em
       // canais diferentes — mostra um badge por canal presente, em vez de um único canal.
-      const badge = isAllCh ? ' '+(p.channels||[p.channel]).map(c=>CocoColors.chBadgeHTML(c)).join(' ') : '';
+      // "bonificacao" é o canal interno da doação, não uma loja: ele não está no catálogo de
+      // canais, então o badge saía com a chave crua ("bonificacao", sem acento e em minúscula) e
+      // parecendo um canal de venda. A linha já diz "doação" na coluna da direita.
+      const canaisDeVenda = (p.channels||[p.channel]).filter(c => c && c !== 'bonificacao');
+      const badge = isAllCh ? ' '+canaisDeVenda.map(c=>CocoColors.chBadgeHTML(c)).join(' ') : '';
       const groupBadge = p._grouped ? ` <span class="tp-group-badge" title="${escapeHtml(p._members.join(' + '))}"><i class="bi bi-link-45deg"></i>${p._members.length}</span>` : '';
       const comboParts = Object.entries(comboBySize||{})
         .sort((a,b)=>Number(a[0])-Number(b[0]))
@@ -921,6 +925,10 @@ function render(d) {
       const qtyLine = (bits.length && somaBits === total)
         ? `${fmtInt(total)} un total · ${bits.join(', ')}`
         : `${fmtInt(total)} un`;
+      // Produto que só foi DOADO não tem venda nenhuma pra descrever: a linha dizia "0 un" ao lado
+      // de uma coluna anunciando 2 unidades doadas, o que se lê como número errado. Sem venda, a
+      // linha de quantidade simplesmente não existe — quem conta a história ali é a coluna.
+      const soDoacao = total === 0;
       // Doação (saída em bonificação) fica numa COLUNA à parte, nunca somada ao dinheiro: a
       // mercadoria saiu, mas não foi vendida. A coluna só existe quando houve doação — um "0 un"
       // em toda linha só ocuparia espaço dizendo que nada aconteceu.
@@ -928,19 +936,22 @@ function render(d) {
       const bonusCol = bonus > 0
         ? `<div class="tp-bonus"><span class="tp-bonus-val">${fmtInt(bonus)} un</span><span class="tp-bonus-lbl">doação</span></div>`
         : '';
-      return `<div class="tp-row"><div class="tp-info"><div class="tp-name-row"><span>${i+1} · ${name}</span>${groupBadge}${badge}</div><div class="tp-qty">${qtyLine}</div></div>${bonusCol}<span class="tp-val">${fmtMoney(v)}</span></div>`;
+      // E o valor fica VAZIO, não "R$ 0,00": zero é um preço, e doação não tem preço nenhum.
+      const valorCol = soDoacao ? '' : fmtMoney(v);
+      return `<div class="tp-row"><div class="tp-info"><div class="tp-name-row"><span>${i+1} · ${name}</span>${groupBadge}${badge}</div>${soDoacao ? '' : `<div class="tp-qty">${qtyLine}</div>`}</div>${bonusCol}<span class="tp-val">${valorCol}</span></div>`;
     }).join('');
     const prodTotal = prodList.reduce((a,p)=>a+p.revenue, 0);
     const prodBonus = prodList.reduce((a,p)=>a+(Number(p.bonusQty)||0), 0);
+    const prodVendidas = prodList.reduce((a,p)=>a+(p.avulsoQty||0)+(p.comboQty||0), 0);
+    // A separação só aparece quando existe doação: sem ela, "3 un total · 3 vendidas · 0 doadas"
+    // anuncia uma divisão que não existe e só ocupa a linha.
+    const resumoQtd = prodBonus > 0
+      ? `${fmtInt(prodVendidas + prodBonus)} un total · ${fmtInt(prodVendidas)} vendidas · ${fmtInt(prodBonus)} doadas`
+      : `${fmtInt(prodVendidas)} un total`;
     const totalLabel = topProductsExpanded ? `Total geral (${prodList.length})` : `Total top ${prodList.length}`;
     const toggleLabel = topProductsExpanded ? 'Mostrar top 5' : `Ver todos (${allProds.length})`;
     const showToggle = allProds.length > d.topProducts.length;
-    // O total da coluna de doação some junto quando não houve doação nenhuma: a linha de total
-    // não pode anunciar uma coluna que as linhas acima não têm.
-    const bonusTotalCol = prodBonus > 0
-      ? `<div class="tp-bonus"><span class="tp-bonus-val">${fmtInt(prodBonus)} un</span><span class="tp-bonus-lbl">doação</span></div>`
-      : '';
-    const totalRow = `<div class="tp-summary"><span class="tp-summary-label">${totalLabel}</span>${bonusTotalCol}<span class="tp-summary-val">${fmtMoney(prodTotal)}</span></div>${showToggle?`<div class="tp-toggle-wrap"><button onclick="toggleTopProducts()" class="tp-toggle-btn">${toggleLabel}</button></div>`:''}`;
+    const totalRow = `<div class="tp-summary"><span class="tp-summary-label">${totalLabel}</span><span class="tp-summary-qty">${resumoQtd}</span><span class="tp-summary-val">${fmtMoney(prodTotal)}</span></div>${showToggle?`<div class="tp-toggle-wrap"><button onclick="toggleTopProducts()" class="tp-toggle-btn">${toggleLabel}</button></div>`:''}`;
     const listWrap = topProductsExpanded ? `<div class="tp-list-scroll">${prodRows}</div>` : prodRows;
     document.getElementById('topProducts').innerHTML = listWrap + totalRow;
   } else if (d.kpis.revenue > 0) {
@@ -1030,7 +1041,9 @@ const RO_COLUMNS = {
   customer:    { cls: 'dim',  html: o => escapeHtml(o.customer || '—') },
   statusLabel: { cls: '',     html: o => { const st = statusTag(o); return `<span class="st-tag ${st.cls}">${st.label}</span>`; } },
   itemsQty:    { cls: 'dim',  html: o => o.itemsQty ?? o.items ?? '—' },
-  total:       { cls: 'bold', html: o => fmtMoney(o.total, 2) },
+  // Doação não tem valor: ela saiu sem ser cobrada. "R$ 0,00" seria afirmar que o pedido valeu
+  // zero reais, e um traço diz o que é verdade — não há preço aqui.
+  total:       { cls: 'bold', html: o => o.bonificacao ? '—' : fmtMoney(o.total, 2) },
   channel:     { cls: '',     html: o => (_roMode === 'search' || _roIsAllCh) ? CocoColors.chBadgeHTML(o.channel) : `<span class="mc-meta">${escapeHtml(CocoColors.ch[o.channel]?.label || o.channel)}</span>` },
 };
 const RO_DEFAULT_COLS = ['name','createdAt','customer','statusLabel','itemsQty','total','channel'];
@@ -1221,8 +1234,12 @@ function renderOrdersPage() {
 
   const orderRows = pageItems.map(o => '<tr>' + cols.map(k => roCell(k, o)).join('') + '</tr>').join('');
   // Total de válidos considera TODOS os pedidos retornados (não só a página atual).
-  const roValidCount = ro.filter(o=>!o.cancelled).length;
-  const roValidTotal = ro.filter(o=>!o.cancelled).reduce((a,o)=>a+o.total, 0);
+  // Doação não entra em "válidos": ela não é uma venda que deu certo, é mercadoria que saiu sem
+  // ser cobrada. Contá-la aqui inflaria a contagem do rodapé sem mexer um centavo no valor, que é
+  // o jeito mais silencioso possível de esse número ficar errado.
+  const contaComoVenda = o => !o.cancelled && !o.bonificacao;
+  const roValidCount = ro.filter(contaComoVenda).length;
+  const roValidTotal = ro.filter(contaComoVenda).reduce((a,o)=>a+o.total, 0);
   body.innerHTML = orderRows + roSummaryRow(cols, roValidCount, roValidTotal);
 
   if (pages > 1) {
