@@ -77,9 +77,44 @@ t.ok(!!vazio.yucaloo_br, 'e o canal existe na resposta, pro card aparecer vazio 
 // ── A origem: os três status continuam vindo da Shopify ──
 const shopify = fs.readFileSync(path.join(ROOT, 'src', 'shopify.js'), 'utf8');
 const consulta = shopify.slice(shopify.indexOf('export async function fetchProductCatalog'));
-t.ok(/node \{ title status productType/.test(consulta), 'a consulta pede o status de cada produto');
+t.ok(/product \{ title status productType/.test(consulta), 'a consulta pede o status de cada produto');
+// Por VARIANTE, não por produto: o item do pedido carrega o nome da variante, e um catálogo por
+// produto deixaria o produto-pai virar uma linha sem venda nenhuma em Produtos/Estoque, além de
+// não casar mais com a tag e o Type atuais na hora de decidir o que ocultar.
+t.ok(/productVariants\(first: 100/.test(consulta), 'e percorre as variantes, que é como o pedido nomeia o produto');
+t.ok(/title: tituloDoItem\(n\.title, v\.title\)/.test(consulta), 'compondo o nome do mesmo jeito que o pedido');
 t.ok(!/query:\s*["'`]status:/.test(consulta),
   'e não filtra na consulta: os índices de tag e tipo precisam do arquivado que já vendeu');
 t.ok(/status: n\.status \|\| null/.test(consulta), 'o status é guardado junto do produto');
+
+// ── Variante é produto diferente ─────────────────────────────────────────────
+// A Shopify manda produto e variante separados, e um produto com quatro variantes chega com o
+// MESMO título nas quatro: foi assim que "Urinary Tract" virou uma linha só somando Soft Chews,
+// Tablet, Powder e Liquid (relatado pelo Luan, 08/09/2026). Não era o Unificador juntando — elas
+// nunca chegaram separadas.
+const { tituloDoItem } = await import('../../src/shopify.js');
+t.eq(tituloDoItem('Urinary Tract', 'Soft Chews'), 'Urinary Tract - Soft Chews', 'a variante entra no nome');
+t.eq(tituloDoItem('Urinary Tract', 'Tablet'), 'Urinary Tract - Tablet', 'e cada uma vira um produto próprio');
+// "Default Title" é o nome que a Shopify dá à variante única de um produto sem variação: ele nunca
+// pode aparecer na tela, e o produto sem variação não pode mudar de nome (o que renomearia produto
+// que já vende hoje, quebrando custo, estoque e grupo salvos por título).
+t.eq(tituloDoItem('Lisina para Gatos', 'Default Title'), 'Lisina para Gatos', '"Default Title" nunca entra no nome');
+t.eq(tituloDoItem('Lisina para Gatos', 'default title'), 'Lisina para Gatos', 'em qualquer caixa');
+t.eq(tituloDoItem('Lisina para Gatos', ''), 'Lisina para Gatos', 'variante vazia também não');
+t.eq(tituloDoItem('Lisina para Gatos', null), 'Lisina para Gatos', 'nem ausente');
+t.eq(tituloDoItem('Omega 3', 'Omega 3'), 'Omega 3', 'e variante com o mesmo nome do produto não vira sufixo repetido');
+t.eq(tituloDoItem('  Daily  ', '  120g  '), 'Daily - 120g', 'espaço em volta não vira parte do nome');
+
+// O pedido e o catálogo precisam compor o nome da MESMA forma, senão o produto do catálogo nunca
+// casa com o do pedido e vira uma linha sem venda ao lado da linha que vendeu.
+// A composição pode estar certa e a CONSULTA não trazer a variante: aí `variantTitle` chega
+// indefinido, todo item volta a se chamar pelo produto-pai e as quatro variantes se somam de novo,
+// sem erro nenhum em lugar nenhum.
+t.ok(shopify.includes('id title variantTitle currentQuantity'),
+  'a consulta de pedidos pede o nome da variante');
+
+const shopifySrc = shopify;
+t.eq((shopifySrc.match(/tituloDoItem\(/g) || []).length, 3,
+  'pedido e catálogo compõem o nome pela mesma função (mais a definição dela)');
 
 t.fim();

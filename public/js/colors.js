@@ -146,13 +146,25 @@
   }
   // Rótulo tolerante: canal desconhecido devolve a própria chave em vez de quebrar a tela.
   // 'todos' não está no catálogo (não é um canal, é a ausência de filtro) e cai aqui.
+  // Origem de pedido que NÃO é canal de venda. Fica fora do catálogo de propósito: ninguém pode
+  // escolher "Bonificação" no seletor de canal (a doação sai de todo cálculo por padrão, então o
+  // filtro devolveria uma tela vazia). Mas ela aparece em linha de produto e de pedido, e precisa
+  // de nome escrito como se escreve em português.
+  //
+  // Sem esta tabela, chLabel e chBadgeHTML caíam na CHAVE crua e a tela mostrava "bonificacao",
+  // minúsculo e sem cedilha. Toda chave nova que puder chegar na tela precisa nascer com rótulo:
+  // o fallback pra chave é a porta por onde texto interno vaza pro usuário.
+  const NAO_CANAIS = {
+    bonificacao: { label: 'Bonificação', bg: '#a05a3a', text: '#ffffff' },
+  };
+
   function chLabel(chKey) {
     if (chKey === 'todos') return 'Todos os canais';
-    return ch[chKey]?.label || chKey || '?';
+    return ch[chKey]?.label || NAO_CANAIS[chKey]?.label || chKey || '?';
   }
 
   function chBadgeHTML(chKey) {
-    const c = ch[chKey] || { bg: '#999', text: '#fff', label: chKey || '?' };
+    const c = ch[chKey] || NAO_CANAIS[chKey] || { bg: '#999', text: '#fff', label: chKey || '?' };
     return `<span style="background:${c.bg};color:${c.text};font-size:10px;padding:2px 7px;border-radius:3px;font-weight:600;white-space:nowrap">${c.label}</span>`;
   }
 

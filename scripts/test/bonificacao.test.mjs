@@ -141,7 +141,26 @@ t.ok(/\.tp-bonus\{/.test(css), 'com estilo próprio');
 // o badge com a chave interna ("bonificacao", sem acento e em minúscula) parecendo um canal de
 // venda, um "0 un" ao lado de uma coluna anunciando 2 unidades doadas, e "R$ 0,00" num produto
 // que não tem preço nenhum.
-t.ok(TELA.includes("c !== 'bonificacao'"), 'o canal interno da doação não vira badge de canal de venda');
+// O badge existe e mostra "Bonificação", escrito como se escreve em português. Ele NÃO vem do
+// catálogo de canais (ninguém pode filtrar vendas por doação): quem dá nome a ele é NAO_CANAIS em
+// colors.js. Sem esse rótulo, o componente cai na CHAVE crua e a tela mostra "bonificacao".
+const COLORS = fs.readFileSync(path.join(PUB, 'js', 'colors.js'), 'utf8');
+t.ok(/bonificacao: \{ label: 'Bonificação'/.test(COLORS), 'a doação tem rótulo escrito corretamente');
+t.ok(/NAO_CANAIS\[chKey\]\?\.label/.test(COLORS), 'e chLabel usa esse rótulo antes de cair na chave');
+t.ok(/ch\[chKey\] \|\| NAO_CANAIS\[chKey\]/.test(COLORS), 'o badge também');
+// Fora do CATÁLOGO de canais, e o recorte é o objeto DEFAULT_CH em si: dentro dele, a doação
+// viraria opção no seletor de canal — e escolhê-la devolveria uma tela vazia, porque a doação sai
+// de todo cálculo por padrão.
+const iCh = COLORS.indexOf('const DEFAULT_CH');
+const catalogo = COLORS.slice(iCh, COLORS.indexOf('};', iCh));
+t.ok(iCh > 0 && !catalogo.includes('bonificacao'),
+  'e ela fica FORA do catálogo de canais: filtrar vendas por doação devolveria tela vazia');
+// E o badge precisa mesmo SAIR na linha: o rótulo pode estar certo e a tela filtrar a doação fora
+// da lista de badges, que foi como ela ficou sem badge nenhum antes.
+t.ok(TELA.includes('.filter(Boolean).map(c=>CocoColors.chBadgeHTML(c))'),
+  'a linha desenha o badge de toda origem, sem tirar a doação da lista');
+t.ok(!TELA.includes("c !== 'bonificacao'"), 'e não volta a filtrar a doação fora do badge');
+
 t.ok(TELA.includes('const soDoacao = total === 0;'), 'a tela reconhece a linha que só tem doação');
 // A linha de quantidade deixou de ser incondicional: antes ela vinha colada no fim do bloco do
 // nome e por isso saía sempre, inclusive como "0 un".
