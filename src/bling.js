@@ -27,7 +27,7 @@
 //     .env (ou nas env vars do Railway em produção).
 //  3. Acessar GET /bling/connect → autoriza → troca o code por token
 //     automaticamente (salvo no store, mesmo padrão do Mercado Livre).
-//  Depois disso, fetchOrdersList/fetchOrderDetail/probeOrders funcionam e o
+//  Depois disso, fetchOrdersList/fetchOrderDetail funcionam e o
 //  token se renova sozinho (refresh_token, válido por 30 dias segundo a
 //  documentação — se ficar 30 dias sem nenhuma chamada, precisa reconectar).
 import 'dotenv/config';
@@ -650,35 +650,5 @@ export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amost
     canais,
     pedidos,
     erros,
-  };
-}
-
-// Sonda de exploração: pega a 1ª página de pedidos do intervalo + o detalhe
-// completo dos primeiros `sampleSize` pedidos, pra inspecionar ao vivo o
-// formato real do dado (nomes de campo, se vem transportadora/rastreio, se dá
-// pra casar com o pedido do canal original via numeroPedidoCompra/loja etc.)
-// antes de decidir o que vale a pena trazer pro dashboard. Nunca chamado pelo
-// sync automático — só sob demanda (ver GET /api/bling/probe-orders).
-export async function probeOrders(sinceISO, untilISO, sampleSize = 3) {
-  if (!isConfigured()) throw new Error('Bling não configurado (.env: BLING_CLIENT_ID / BLING_CLIENT_SECRET / BLING_REDIRECT_URL).');
-  if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
-
-  const list = await fetchOrdersList(sinceISO, untilISO, { pagina: 1, limite: 100 });
-  const orders = list.data || [];
-
-  const details = [];
-  for (const o of orders.slice(0, sampleSize)) {
-    try {
-      const d = await fetchOrderDetail(o.id);
-      details.push(d.data || d);
-    } catch (e) {
-      details.push({ id: o.id, error: e.message });
-    }
-  }
-
-  return {
-    totalNaPagina: orders.length,
-    listaResumo:   orders,
-    detalhesAmostra: details,
   };
 }

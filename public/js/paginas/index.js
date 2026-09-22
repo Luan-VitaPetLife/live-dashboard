@@ -618,7 +618,9 @@ function render(d) {
   }
   // Card de marketing — títulos e nota adaptados por canal
   { const ch = d.channel;
-    const isMkt = ['shopee','mercadolivre','amazon','amazon_us'].includes(ch);
+    // Marketplace = todo canal que não é loja própria na Shopify. Lista fixa deixava canal novo
+    // (o TikTok Shop) com o texto de loja própria, "Receita atribuída".
+    const isMkt = ch !== 'todos' && !/^(shopify|yucaloo)/.test(ch);
     document.getElementById('mktTitle').textContent = ch === 'mercadolivre' ? 'Distribuição por tipo' : 'Marketing por origem';
     document.getElementById('mktSub').textContent   = ch === 'mercadolivre' ? 'Clássico vs Destaque' : isMkt ? 'Receita do canal' : 'Receita atribuída';
     document.getElementById('mktCenterSub').textContent = ch === 'mercadolivre' ? 'Total ML' : isMkt ? 'Total' : 'Atribuída';
@@ -738,12 +740,9 @@ function render(d) {
 
   // Channel split
   const cs = d.channelSplit;
-  // Rótulo vem sempre de colors.js (CocoColors.ch) — fonte única, já traz "Shopify - Coco and
-  // Luna BR"/"Shopify - Yucaloo BR" etc. (ver colors.js DEFAULT_CH). chOrder só define QUAIS canais
-  // e em que ordem — não mais o texto do rótulo, pra não duplicar/desatualizar em relação às cores.
-  const chOrder = d.market === 'us'
-    ? ['shopify_us','yucaloo_us','amazon_us']
-    : ['shopify','yucaloo_br','shopee','mercadolivre','amazon'];
+  // Quais canais e em que ordem vêm do CATÁLOGO (colors.js), como o rótulo e a cor. Era uma lista
+  // fixa aqui, e o TikTok Shop ficou de fora do card sem erro nenhum quando entrou no catálogo.
+  const chOrder = CocoColors.channelsFor(d.market);
   const cTotal = chOrder.reduce((a,k) => a+(cs[k]||0), 0);
   drawDonut('channelChart', chOrder.map(k=>cs[k]||0), chOrder.map(k=>CocoColors.ch[k]?.bg||'#999'), chOrder.map(k=>CocoColors.chLabel(k)));
   document.getElementById('chCenter').textContent = fmtMoneyShort(cTotal);
@@ -768,7 +767,7 @@ function render(d) {
   const ssc = d.salesSplitByChannel || {};
   const ssIsAll = d.channel === 'todos';
   const ssChannels = ssIsAll
-    ? (d.market === 'us' ? ['shopify_us', 'yucaloo_us', 'amazon_us'] : ['shopify', 'yucaloo_br', 'shopee', 'mercadolivre', 'amazon'])
+    ? CocoColors.channelsFor(d.market) // do catálogo, pelo mesmo motivo do card Canais
     : [d.channel];
   document.getElementById('ssSub').textContent = ssIsAll ? 'Por canal' : `Canal: ${CocoColors.chLabel(d.channel)}`;
   const ssGridEl = document.getElementById('ssGrid');
@@ -1252,8 +1251,8 @@ function renderOrdersPage() {
   }
 }
 
-// Mesma lista de status "não pago" usada em store.js (UNPAID_STATUS_BY_CHANNEL/
-// fixUnpaidOrders) — pedido nesse status ainda pode virar venda (a Amazon demora a
+// Mesma lista de status "não pago" usada em store.js (UNPAID_STATUS_BY_CHANNEL)
+// — pedido nesse status ainda pode virar venda (a Amazon demora a
 // capturar pagamento, ver CLAUDE.md 4.7.2/4.7.10); não é cancelamento de verdade, então
 // merece um rótulo diferente de "Cancelado" pra não parecer que a venda foi perdida.
 const UNPAID_STATUS_BY_CHANNEL = {

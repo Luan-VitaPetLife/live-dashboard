@@ -211,7 +211,7 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   - `UNPAID_STATUS_BY_CHANNEL` (store.js) é só um subconjunto — mesmos status acima, mas
     separados por "não pago" (rótulo "Em aberto" na busca de pedidos) de cancelamento de verdade,
     cosmético (`statusLabelPt`), não afeta nenhum cálculo. `fixUnpaidOrders()`
-    (`POST /api/orders/fix-unpaid`) corrigiu o `cancelled` de pedidos já gravados ANTES dessa
+    (`POST /api/orders/fix-unpaid`, removidos em 22/09/2026 depois de cumprir o papel) corrigiu o `cancelled` de pedidos já gravados ANTES dessa
     decisão existir (sync incremental não retoca pedido que não mudou de status sozinho) — já
     rodou em produção, `fixed:0` (nenhum pedido pra corrigir), nada pendente aqui.
 - Quantidade/receita por produto usa `LineItem.currentQuantity` (não `quantity`, que inclui
@@ -240,7 +240,8 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Atribuição por origem (`order.customerJourneySummary.lastVisit.source`) é atribuição, não custo.
 
 ### Meta Ads (`src/meta.js`)
-- Graph API v20.0. `fetchInsights`/`fetchCampaigns` aceitam `accountId` (padrão BR) — mesma função
+- Graph API `v20.0` por padrão, trocável por `META_API_VERSION` sem deploy (a v20.0 é de maio de
+  2024 e a Meta mantém cada versão uns dois anos). `fetchInsights`/`fetchCampaigns` aceitam `accountId` (padrão BR) — mesma função
   serve qualquer conta nova, só passar outro ID.
 - Store: `metaInsightsDaily` (BR), `metaUSInsightsDaily` (US).
 - ROAS = receita de pedidos com source Instagram/Facebook ÷ gasto Meta.
@@ -1307,7 +1308,14 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 
 ### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
 - **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
-  aparece em todas as telas. Antes disso a mesma informação vivia em cinco tabelas
+  aparece em todas as telas — desde que nenhuma tela tenha lista própria. O card "Canais" e o
+  "Orgânico x Campanha" da Visão geral tinham, e o TikTok Shop ficou fora deles sem erro nenhum
+  (22/09/2026). Hoje as duas leem `CocoColors.channelsFor(market)`, e
+  `scripts/test/registro-canais.test.mjs` falha se uma tela voltar a ter lista de canal própria.
+- **O servidor tem a cópia dele**, `CANAIS` em metrics.js (a tela não importa módulo do servidor),
+  e ela alimenta o zero de cada canal em `channelSplit`. O mesmo teste exige que as duas tenham as
+  mesmas chaves, nomes e mercados, e que as duas listas de "não pago" (store.js e Visão geral)
+  sejam idênticas. Canal novo = uma linha em cada catálogo; o teste diz se faltou uma. Antes disso a mesma informação vivia em cinco tabelas
   (`CH_META` em Produtos e Estoque, `CHAN`/`MARKET_CHANNELS` na Visão geral,
   `CHAN_COLORS_MAP`/`CHAN_LABELS_MAP` na Geografia, `CH_BY_MARKET` em Segmentos) e as cópias já
   discordavam: Shopify verde numa tela e vermelha na outra, Amazon BR preta em quase tudo e
@@ -2041,6 +2049,7 @@ Railway — nunca colar valor aqui, só o nome da variável e pra que serve.
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | Precisa de aprovação "Basic access" |
 | `GOOGLE_ADS_CUSTOMER_ID` | Só EUA |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Só se o developer token foi gerado sob uma MCC |
+| `META_API_VERSION` | Versão da Graph API do Meta (padrão `v20.0`) |
 | `DATABASE_URL` | Postgres — Railway NÃO injeta sozinho, setar `${{Postgres.DATABASE_URL}}` |
 | `ADMIN_SEED_PASSWORD` | Senha do admin criado quando a lista de usuários está vazia (opcional; sem ela, é sorteada e sai no log) |
 | `SYNC_SECRET` | Token que deixa um agendador EXTERNO chamar `POST /api/sync` sem login (header `x-sync-token`). Opcional |
@@ -2102,6 +2111,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e que a tela não
   tem campo de dias de histórico),
+  `registro-canais` (catálogo da tela e do cálculo concordam, e nenhuma tela tem lista própria de
+  canal),
   `seguranca` (toda rota que grava diz quem pode chamá-la, conectar conta é só de admin, sync exige
   login, senha semente não está no código),
   `tiktok` (situação do Bling decide venda por allowlist, doação que passou por pedido não vira

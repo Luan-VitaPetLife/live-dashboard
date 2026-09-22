@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeReturns, syncBonificacoes, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import { comAutor } from './src/autor.js';
 import { PAGINAS as PAGINAS_HISTORICO, montar as montarHistorico } from './src/historico.js';
@@ -1034,20 +1034,6 @@ app.post('/api/alerts/test', requireAdmin, async (req, res) => {
   }
 });
 
-// Correção pontual: só pedido com pagamento de verdade conta como venda (CLAUDE.md 4.1) —
-// pedido já gravado com status "sem pagamento" (Pending/PendingAvailability na Amazon,
-// PENDING/AUTHORIZED no Shopify, confirmed/payment_required/payment_in_process no ML) ficou
-// marcado cancelled:false por engano. Corrige o flag local de quem já está no banco, sem chamar
-// nenhuma API de novo — ver UNPAID_STATUS_BY_CHANNEL em store.js.
-app.post('/api/orders/fix-unpaid', requireAdmin, (req, res) => {
-  try {
-    const fixed = fixUnpaidOrders();
-    res.json({ ok: true, fixed, message: `${fixed} pedidos sem pagamento confirmado corrigidos (não contam mais como venda).` });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // Busca nomes de produto da Amazon via getOrderItems (Orders API, por-pedido) — o caminho
 // que funciona pro BR, cujo relatório não traz pedidos BR reais (contas vinculadas, ver
 // 4.7.8). Roda em background (BR ~120 pedidos × 0,5 req/s ≈ 5 min). Progresso no log e em
@@ -1381,20 +1367,10 @@ app.get('/api/bling/probe-tiktok', requireAdmin, syncLimiter, async (req, res) =
   }
 });
 
-app.get('/api/bling/probe-orders', requireAdmin, syncLimiter, async (req, res) => {
-  try {
-    const { since, until } = req.query;
-    if (!since || !until) return res.status(400).json({ error: 'Parâmetros since/until obrigatórios (YYYY-MM-DD).' });
-    res.json(await bling.probeOrders(since, until));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // Sonda de exploração: lista os canais de venda cadastrados no Bling (nome/tipo de
 // cada integração de marketplace), pra traduzir o `loja.unidadeNegocio.id` dos
 // pedidos pro canal real (Shopee, Mercado Livre, Shopify, Amazon...). Mesmo cuidado
-// de cota do probe-orders acima (syncLimiter).
+// de cota das outras sondas (syncLimiter).
 app.get('/api/bling/canais-venda', requireAdmin, syncLimiter, async (req, res) => {
   try {
     res.json(await bling.fetchSalesChannels());

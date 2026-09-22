@@ -668,46 +668,6 @@ export const UNPAID_STATUS_BY_CHANNEL = {
   tiktok:        ['PENDING'],
 };
 
-export function fixUnpaidOrders() {
-  const db = load();
-  const toPersist = [];
-  for (const o of Object.values(db.orders)) {
-    const unpaidStatuses = UNPAID_STATUS_BY_CHANNEL[o.channel];
-    if (!unpaidStatuses) continue;
-    if (!o.cancelled && unpaidStatuses.includes(o.status)) {
-      o.cancelled = true;
-      toPersist.push(o);
-    }
-  }
-  if (toPersist.length) {
-    indexDirty = true;
-    saveJson();
-    if (USE_PG) pgUpsertOrders(toPersist);
-  }
-  return toPersist.length;
-}
-
-// Offset UTC do horário do Pacífico (fuso que a Amazon Seller Central usa nos relatórios da
-// conta US — confirmado ao vivo: Sales Snapshot mostra "taken at ... PDT") pra uma data
-// específica. Diferente do BR (fixo -03:00, sem horário de verão), os EUA trocam de fuso 2x por
-// ano (PDT -07:00 no verão, PST -08:00 no resto) — calculado por data em vez de fixo. Bug
-// corrigido: antes usava 'Z' (UTC puro) pra cortar o dia da Amazon US — UTC fica até 8h à
-// frente do Pacífico, então "hoje" no nosso sistema pegava um pedaço da noite anterior (horário
-// local) e perdia um pedaço do fim do dia atual, fazendo receita/pedidos "diários" da Amazon US
-// não baterem com o Seller Central (confirmado comparando um dia real: nossa dashboard vinha
-// ~5% acima do Seller Central nesse dia). Ref ao meio-dia UTC daquele dia — sempre depois da 1h
-// da manhã (o horário em que a troca de horário de verão acontece), então nunca cai do lado
-// errado da transição.
-function usOffsetForDate(dateStr) {
-  const ref = new Date(dateStr + 'T12:00:00Z');
-  const part = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', timeZoneName: 'shortOffset' })
-    .formatToParts(ref).find(p => p.type === 'timeZoneName')?.value || 'GMT-8';
-  const m = part.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
-  const h = m ? parseInt(m[1], 10) : -8;
-  const mm = m && m[2] ? parseInt(m[2], 10) : 0;
-  return (h < 0 ? '-' : '+') + String(Math.abs(h)).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
-}
-
 export function getOrders({ channel = 'todos', since = null, until = null, market = null } = {}) {
   load();
   if (indexDirty) rebuildOrdersIndex();
