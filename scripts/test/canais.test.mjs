@@ -32,7 +32,7 @@ if (bloco) {
 }
 
 const chaves = Object.keys(canais);
-t.ok(chaves.length === 8, `oito canais no catálogo (achei ${chaves.length}: ${chaves.join(', ')})`);
+t.ok(chaves.length === 9, `nove canais no catálogo (achei ${chaves.length}: ${chaves.join(', ')})`);
 
 for (const [k, c] of Object.entries(canais)) {
   t.ok(/^#[0-9A-Fa-f]{6}$/.test(c.bg || ''), `${k}: cor em hex de 6 dígitos (${c.bg})`);
@@ -100,7 +100,7 @@ const C = janela.CocoColors;
 if (t.ok(!!C, 'colors.js expõe window.CocoColors')) {
   const br = C.channelsFor('br');
   const us = C.channelsFor('us');
-  t.ok(br.length === 5 && us.length === 3, `5 canais no BR e 3 nos EUA (veio ${br.length} e ${us.length})`);
+  t.ok(br.length === 6 && us.length === 3, `6 canais no BR (o TikTok Shop é o sexto) e 3 nos EUA (veio ${br.length} e ${us.length})`);
   t.ok(!br.includes('todos'), '"todos" não entra na lista sem ser pedido');
   t.ok(C.channelsFor('br', { comTodos: true })[0] === 'todos', 'com comTodos, "todos" vem primeiro');
   t.ok(br.every(k => C.ch[k].market === 'br'), 'nenhum canal dos EUA vaza pra lista do BR');

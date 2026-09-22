@@ -10,7 +10,9 @@ import * as meta from './meta.js';
 import * as amazon from './amazon.js';
 import * as bling from './bling.js';
 import * as shopifyYucaloo from './shopifyYucaloo.js';
-import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, getMlAdCostsDaily, setMlAdCostsDaily, patchOrderItems, patchOrderState, patchOrderRefunds, getAmazonCursor, setAmazonCursor, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, podarHistorico, podarPedidosAntigos } from './store.js';
+import { upsertOrders, upsertSessionsDaily, setLastSync, getMetaInsightsDaily, setMetaInsightsDaily, getMetaUSInsightsDaily, setMetaUSInsightsDaily, getMlAdCostsDaily, setMlAdCostsDaily, patchOrderItems, patchOrderState, patchOrderRefunds, getAmazonCursor, setAmazonCursor, getOrders, isIntegrationEnabled, setShopifyProductCatalog, getYucalooSessionsDaily, setYucalooSessionsDaily, podarHistorico, podarPedidosAntigos, getTiktokCursor, setTiktokCursor, removerPedidos, getBlingTokens } from './store.js';
+import { TIKTOK_LOJA_ID, pedidoDoTiktok } from './tiktok.js';
+import { RETENCAO_DIAS } from './retencao.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -286,6 +288,14 @@ async function doSync() {
     for (const e of b.errors) report.errors.push(e);
   } catch (e) { report.errors.push('bling.bonificacao: ' + e.message); }
 
+  // TikTok Shop, pelo Bling. DEPOIS da bonificação de propósito: o pedido cuja nota é de doação
+  // não pode contar como venda, e é a lista de notas de doação que diz quais são.
+  try {
+    const t = await syncTiktok();
+    if (!t.skipped) report.tiktok = t.gravados;
+    for (const e of t.errors) report.errors.push(e);
+  } catch (e) { report.errors.push('tiktok.pedidos: ' + e.message); }
+
   // Janela de histórico: todo canal, nos dois mercados, guarda só os últimos 90 dias, e a cada dia
   // o mais antigo sai (decisão do Luan, 22/09/2026, ver src/retencao.js). Era uma poda só da
   // Amazon, com o número escolhido na tela de Integrações; hoje é regra fixa e a tela não tem mais
@@ -490,6 +500,8 @@ export async function reconcileAmazonReturns({ markets = ['us', 'br'], force = f
 // mantém tudo em dia sem pesar no sync, e o histórico se recupera de uma vez pelo disparo manual
 // (POST /api/bling/sync-bonificacao?days=N), mesmo desenho do backfill da Amazon.
 const BONIFICACAO_DAYS = Number(process.env.BLING_BONIFICACAO_DAYS || 7);
+// Teto de notas conferidas uma a uma por rodada. Cinto de segurança: o normal é zero ou uma.
+const BONIFICACAO_CONFERE_MAX = 20;
 
 export async function syncBonificacoes({ days = BONIFICACAO_DAYS } = {}) {
   const out = { gravadas: 0, ignoradas: {}, incompleta: false, errors: [] };
@@ -501,6 +513,26 @@ export async function syncBonificacoes({ days = BONIFICACAO_DAYS } = {}) {
     const r = await bling.fetchBonificacoes(iso(desde), iso(hoje));
     if (r.pedidos.length) upsertOrders(r.pedidos);
     out.gravadas = r.pedidos.length;
+    out.porLoja = r.porLoja;
+
+    // Doação que foi capturada como Autorizada e CANCELADA depois. A listagem de notas esconde a
+    // cancelada, então ela só para de vir — e sem esta volta ficaria contada como unidade enviada
+    // pra sempre, porque ninguém mais escreve nela. Só se confere o que a listagem DEVERIA ter
+    // trazido: nota dentro da janela (com um dia de folga na borda, onde o fuso pode deixar uma
+    // nota de fora sem ela ter mudado) e só com leitura completa, senão ausência não significa nada.
+    if (!r.incompleta) {
+      const borda = new Date(desde.getTime() + 864e5).toISOString();
+      const suspeitas = getOrders({ channel: 'bonificacao', market: 'br' })
+        .filter(o => o.createdAt >= borda && !r.listadas.has(o.id.replace('bonificacao:', '')));
+      const retirar = [];
+      for (const o of suspeitas.slice(0, BONIFICACAO_CONFERE_MAX)) {
+        try {
+          const situacao = await bling.situacaoDaNota(o.id.replace('bonificacao:', ''));
+          if (situacao != null && !bling.notaSaiu(situacao)) retirar.push(o.id);
+        } catch (e) { out.errors.push('bling.bonificacao: conferir nota ' + o.name + ': ' + e.message); }
+      }
+      out.retiradas = removerPedidos(retirar);
+    }
     out.ignoradas = r.porSituacaoIgnorada;
     out.incompleta = r.incompleta;
     // Situação de nota que a allowlist não conhece não pode sumir: ou é uma nota que não saiu
@@ -509,6 +541,90 @@ export async function syncBonificacoes({ days = BONIFICACAO_DAYS } = {}) {
     if (desconhecidas.length) out.errors.push('bling.bonificacao: notas fora da allowlist de situação (' + desconhecidas.join(', ') + ')');
     if (r.incompleta) out.errors.push('bling.bonificacao: leitura incompleta (teto de páginas ou de notas)');
   } catch (e) { out.errors.push('bling.bonificacao: ' + e.message); }
+  return out;
+}
+
+// ── TikTok Shop (pelo Bling) ─────────────────────────────────────────────────
+// Lê só o que MUDOU desde a última leitura (cursor por data de alteração no Bling), e na primeira
+// vez os últimos 90 dias. A listagem traz todos os canais; só o do TikTok é lido a fundo. Ver
+// src/tiktok.js pra regra de venda e CLAUDE.md, "TikTok Shop".
+//
+// Cada pedido lido a fundo custa uma chamada (o item só existe no detalhe), então um pedido que já
+// está gravado com a MESMA situação e o mesmo total não é relido. É isso que deixa a primeira carga
+// grande terminar em algumas rodadas, em vez de reler do zero sempre que bate no teto.
+const TIKTOK_DETALHES_MAX = Number(process.env.TIKTOK_DETALHES_POR_RODADA || 150);
+const TIKTOK_MARGEM_MS = 10 * 60 * 1000; // sobreposição com a leitura anterior; upsert não duplica
+
+function diaEmSaoPaulo(d) { return bling.momentoNoBling(d).slice(0, 10); }
+
+export async function syncTiktok({ cargaInicial = false } = {}) {
+  const out = { lidos: 0, gravados: 0, retirados: 0, pulados: 0, porSituacaoIgnorada: {}, completa: false, errors: [] };
+  if (!isIntegrationEnabled('tiktok_shop') || !isIntegrationEnabled('bling')) { out.skipped = 'disabled'; return out; }
+  if (!bling.isConfigured() || !getBlingTokens()) { out.skipped = 'bling não autorizado'; return out; }
+
+  const inicio = new Date();
+  const cursor = cargaInicial ? null : getTiktokCursor();
+  const lista = cursor
+    ? await bling.fetchPedidosVenda({ alteradosDesde: bling.momentoNoBling(new Date(Date.parse(cursor) - TIKTOK_MARGEM_MS)) })
+    // A primeira carga lista 90 dias de TODOS os canais (a listagem não filtra canal), então o teto
+    // é bem maior: se ela batesse no teto sempre, o cursor nunca andaria e a carga se repetiria.
+    : await bling.fetchPedidosVenda({ dataDe: diaEmSaoPaulo(new Date(inicio.getTime() - RETENCAO_DIAS * 864e5)), dataAte: diaEmSaoPaulo(inicio), maxPaginas: 300 });
+  const doTiktok = lista.pedidos.filter(p => String(p.loja?.id) === TIKTOK_LOJA_ID);
+
+  const situacoes = await bling.fetchSituacoesVenda();
+  if (!Object.keys(situacoes).length) throw new Error('não deu pra ler as situações de venda do Bling');
+  const notasBonificacao = new Set(getOrders({ channel: 'bonificacao', market: 'br' }).map(o => o.id.replace('bonificacao:', '')));
+  const gravados = new Map(getOrders({ channel: 'tiktok', market: 'br' }).map(o => [o.id, o]));
+
+  const gravar = [], retirar = [];
+  let detalhes = 0, faltou = false;
+  for (const p of doTiktok) {
+    const id = 'tiktok:' + p.id;
+    const atual = gravados.get(id);
+    if (atual && String(atual.situacaoBlingId) === String(p.situacao?.id) && Number(atual.total) === Math.round(Number(p.total) * 100) / 100) {
+      out.pulados++;
+      continue;
+    }
+    if (detalhes >= TIKTOK_DETALHES_MAX) { faltou = true; break; }
+    detalhes++;
+    try {
+      const det = await bling.fetchOrderDetail(p.id);
+      const d = det.data || det;
+      const r = pedidoDoTiktok(d, { situacoes, notasBonificacao });
+      out.lidos++;
+      if (r.pular === 'bonificacao') { retirar.push(id); continue; }
+      if (r.pular) continue;
+      r.pedido.situacaoBlingId = d.situacao?.id ?? null;
+      if (r.pedido.status === 'PENDING') {
+        const k = r.pedido.situacaoBling || ('id ' + (d.situacao?.id ?? '?'));
+        out.porSituacaoIgnorada[k] = (out.porSituacaoIgnorada[k] || 0) + 1;
+      }
+      gravar.push(r.pedido);
+    } catch (e) {
+      faltou = true;
+      out.errors.push('tiktok.pedido ' + (p.numeroLoja || p.numero || p.id) + ': ' + e.message);
+    }
+  }
+
+  // Pedido gravado ANTES de a nota dele sair como bonificação: a nota chega depois, e o pedido pode
+  // nem mudar mais no Bling. Conferido aqui, em memória, a cada rodada.
+  for (const o of gravados.values()) {
+    if (o.notaFiscalId && notasBonificacao.has(String(o.notaFiscalId))) retirar.push(o.id);
+  }
+
+  if (gravar.length) upsertOrders(gravar);
+  out.gravados = gravar.length;
+  out.retirados = removerPedidos([...new Set(retirar)]);
+
+  // O cursor só anda com a leitura INTEIRA: listagem que bateu no teto, detalhe que falhou ou
+  // pedido que ficou pra próxima rodada fariam a lista curta parecer completa, e o que faltou
+  // nunca mais seria lido (ele só volta a aparecer se mudar de novo no Bling).
+  out.completa = !lista.incompleta && !faltou;
+  if (out.completa) setTiktokCursor(inicio.toISOString());
+  if (lista.incompleta) out.errors.push('tiktok.pedidos: listagem incompleta (teto de páginas); o cursor não andou');
+
+  const desconhecidas = Object.entries(out.porSituacaoIgnorada).map(([s, n]) => `${n} em "${s}"`);
+  if (desconhecidas.length) out.errors.push('tiktok.situacao: pedidos numa situação que não conta como venda ainda (' + desconhecidas.join(', ') + ')');
   return out;
 }
 

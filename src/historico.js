@@ -38,6 +38,7 @@ export const INTEGRACOES = {
   amazon_br:        { label: 'Amazon BR',                   market: 'br' },
   shopee:           { label: 'Shopee',                      market: 'br' },
   bling:            { label: 'Bling',                       market: 'br' },
+  tiktok_shop:      { label: 'TikTok Shop',                 market: 'br' },
   mercadolivre_ads: { label: 'Mercado Ads',                 market: 'br' },
   meta_br:          { label: 'Meta Ads BR',                 market: 'br' },
   shopify_us:       { label: 'Shopify - Coco and Luna EUA', market: 'us' },

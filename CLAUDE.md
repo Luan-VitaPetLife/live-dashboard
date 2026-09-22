@@ -78,6 +78,7 @@ src/retencao.js          Janela de histórico de 90 dias (o corte) — puro
 src/comparar.js          "Esse pedido mudou?" — decide se o sync grava no banco, puro
 src/cache.js             Cache em memória com prazo e teto (Campanhas), puro
 src/snapshot.js          Monta o backup em partes, sem o banco virar um texto só
+src/tiktok.js            TikTok Shop lido pelo Bling: situação → venda, pedido normalizado — puro
 src/autor.js             Quem está editando agora (AsyncLocalStorage), pro registro do Histórico
 src/us-states.js         normalizeUsState(): reduz grafias de estado dos EUA a 2 letras
 src/auth.js              Login: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página
@@ -758,20 +759,14 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   (`deleteProductGroup`), senão um grupo novo com nome repetido herdaria o tipo do antigo.
 
 ### Bling ERP (`src/bling.js`)
-- O Bling recebe pedido de TODOS os canais e é usado hoje para UMA coisa só: preencher o `state`
-  de pedido da Shopee, que mascara o endereço (ver "Shopee"). Ele **nunca cria pedido** — só
-  completa campo de pedido que já existe.
+- O Bling recebe pedido de TODOS os canais. Ele completa campo de pedido que já existe (o `state`
+  da Shopee, que mascara o endereço) e só vira FONTE de pedido em dois casos, os dois estritamente
+  restritos: o canal do TikTok Shop (ver "TikTok Shop") e as notas de "Saída em bonificação". Ler
+  qualquer outro canal daqui duplicaria venda que a API dele já traz.
 - `KNOWN_CHANNELS` (loja.id do Bling → nosso channel/market) é **hardcoded de propósito**, não
   descoberto em runtime: a conta tem canais que não são venda nossa (PETLOVE descontinuado,
   Yucaloo, TikTok Shop), e nenhum deles pode entrar na reconciliação por engano.
-- **TikTok Shop:** a integração vai ser captada pelo Bling, não pela API da TikTok — o cadastro de
-  desenvolvedor da TikTok Shop exige gerente de conta designado, que a conta não tem. O canal já
-  existe no Bling e ainda não tem pedido nenhum. Decisão do Luan (03/09/2026): **as duas marcas
-  (Yucaloo e Coco and Luna) vão usar esse mesmo canal**, em vez de um canal por marca.
-- **A consequência dessa decisão precisa ficar clara antes de escrever a captura:** se as duas
-  lojas entram pelo mesmo `loja.id`, esse campo sozinho não separa as marcas, e a dashboard
-  distingue Yucaloo de Coco and Luna justamente pelo `channel`. A separação vai ter que sair de
-  outro sinal do próprio pedido.
+- **TikTok Shop:** captado pelo Bling, ver a seção "TikTok Shop (pelo Bling)".
 - **Saída em bonificação (doação para UGC):** a empresa envia produto sem cobrar, e no Bling isso
   sai com "Natureza de operação: Saída em bonificação", valor R$ 0. A dashboard precisa contar
   essas UNIDADES sem que elas virem receita (pedido do Luan, 04/09/2026). O bloqueio é o mesmo de
@@ -799,20 +794,65 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   mas a nota 000222 saiu com R$ 129,99 sendo doação confirmada. Duas consequências que não podem
   ser esquecidas: filtrar doação por "valor zero" PERDE essa nota, e somar o valor dela INVENTA
   receita. Quem decide é a natureza de operação, e o valor da nota é sempre descartado.
-- **Nota cancelada não é doação enviada.** A listagem mistura Autorizada, Cancelada e Emitida
-  DANFE; a mercadoria só saiu nas autorizadas.
+- **Nota cancelada não é doação enviada**, e a mercadoria só saiu nas autorizadas. Cuidado com um
+  detalhe que o quadro de pedidos mediu: **a listagem de `/nfe` ESCONDE nota cancelada e
+  rejeitada** (a cancelada só aparece pedindo por ela). Então uma doação capturada como Autorizada
+  e cancelada depois simplesmente PARA DE VIR, e ficaria contada pra sempre. `syncBonificacoes`
+  compara o que está gravado com o que a listagem trouxe (`listadas`), pergunta uma a uma pela
+  nota que sumiu (`situacaoDaNota`, teto de 20 por rodada) e retira a que não saiu mais. Só com
+  leitura completa, e com um dia de folga na borda da janela, senão ausência não significa nada.
+- **Contada por LOJA no relatório** (`porLoja`, e com nome na sonda do TikTok). Doação normal sai
+  sem canal (loja 0) ou da loja física; doação ligada a um canal que a dashboard já conta como
+  venda é a mesma unidade chegando por dois caminhos. A loja só é CONTADA: quem decide continua
+  sendo a natureza.
 - **A sonda de bonificação nunca devolve dado de quem recebeu.** A nota fiscal carrega nome, CPF,
   endereço, e-mail e telefone, e essa resposta é feita pra ser lida e colada numa conversa. O
   mascaramento é allowlist POSITIVA (campo novo nasce mascarado) e é TESTADO, não só documentado:
   a sonda da Shopee já vazou o texto livre do comprador contrariando o próprio comentário dela.
-- **A captura está bloqueada até chegar pedido de teste**, e é bloqueio deliberado: quem decide se
-  um pedido conta como venda é o `situacao` do Bling, cujo vocabulário não foi observado ainda.
-  Adivinhar isso quebraria a regra mais importante do projeto ("só pedido com pagamento de verdade
-  recebido conta como venda"). `GET /api/bling/probe-channel?since=&until=&lojaId=` existe pra ler
-  a forma real de um pedido antes de mapear — mesmo caminho da Amazon e da Shopee.
-- Bling virar FONTE de pedido (e não só remendo de campo) é mudança de arquitetura de verdade:
-  precisa ficar estritamente restrita ao canal do TikTok, senão passa a duplicar pedido que os
-  canais já trazem sozinhos.
+
+### TikTok Shop (pelo Bling) (`src/tiktok.js`, `syncTiktok` em `src/sync.js`)
+- **Lido do Bling, igual ao quadro de pedidos** (projeto irmão, que já recebe o TikTok assim —
+  decisão do Luan, 22/09/2026). A API do TikTok exige gerente de conta designado, que a conta não
+  tem. O canal do TikTok no Bling é o `206279174` (`TIKTOK_LOJA_ID`); os outros três ids de
+  TikTok da conta estão desativados.
+- **Um canal só, "TikTok Shop" (`tiktok`), pras duas marcas.** As duas vendem pelo mesmo canal do
+  Bling (decisão de 03/09/2026), e a dashboard já mostra as duas marcas juntas em Shopee e Mercado
+  Livre. O que separa marca aqui é só a loja Shopify.
+- **Situação do Bling decide se é venda, pelo NOME** (`classificarSituacao`). Os nomes vêm de
+  `/situacoes/modulos/98310` (a conta tem situações próprias, "Aguardando Coleta", "Em
+  devolução"). Venda é ALLOWLIST positiva: o pedido do TikTok só chega no Bling depois de pago, então
+  as situações de trabalho do dia a dia contam. Cancelado e devolvido são testados ANTES da lista.
+  **Situação que ninguém decidiu NÃO conta** e aparece "Em aberto" (`tiktok: ['PENDING']` em
+  `UNPAID_STATUS_BY_CHANNEL`, nos DOIS lugares), e volta no relatório do sync
+  (`tiktok.situacao`). A allowlist foi escrita sem amostra real: **conferir com a sonda** depois
+  dos primeiros dias.
+- **Traduzido pro vocabulário que as telas já conhecem**: venda → `PAID`, cancelado →
+  `CANCELLED`, devolvido → `REFUNDED` com `refunded:'total'` (a unidade e o dinheiro saem pelo
+  mesmo `pedidoLiquido` de todo canal), desconhecida → `PENDING`. O nome original fica em
+  `situacaoBling`. Assim nenhuma tela precisou aprender nome de situação do Bling.
+- **Pedido cuja nota é "Saída em bonificação" não é venda** (amostra pra criador pelo próprio
+  TikTok, por exemplo): a nota já conta a unidade como doação, e contar o pedido também seria a
+  mesma unidade duas vezes, uma delas como venda. Por isso o TikTok roda DEPOIS da bonificação no
+  sync, e um pedido já gravado cuja nota virou doação depois é retirado (`removerPedidos`).
+- **O filtro de alteração vai no horário de SÃO PAULO** (`momentoNoBling`). Lição do quadro: o
+  servidor roda em UTC, e o filtro escrito com `toISOString()` cai três horas no futuro — o Bling
+  responde 200 com lista VAZIA, e a leitura parece funcionar sem trazer nada.
+- **Incremental por cursor** (`kv.tiktokCursor`): lê só o que mudou desde a última leitura, com 10
+  min de sobreposição; sem cursor, os últimos 90 dias (a janela de histórico). **O cursor só anda
+  com a leitura INTEIRA**: listagem no teto, detalhe que falhou ou pedido deixado pra próxima rodada
+  seguram o cursor, senão o que faltou nunca mais seria lido.
+- Cada pedido lido a fundo custa uma chamada (o item só existe no detalhe, ~3 por segundo). Pedido
+  já gravado com a mesma situação e o mesmo total não é relido, e há teto de 150 detalhes por rodada
+  (`TIKTOK_DETALHES_POR_RODADA`): a primeira carga grande termina em algumas rodadas.
+- Data do pedido: o Bling dá só o DIA, então o pedido aparece à meia-noite de Brasília. Receita por
+  item é preço × unidades, e o `itemRevFactor` escala pro total do pedido (desconto e frete).
+- Comissão padrão em Produtos: 0% (`DEFAULT_COMMISSION_PCT` não tem o canal). Editável na tela.
+- Liga/desliga em Integrações (`tiktok_shop`); precisa do Bling autorizado.
+- **Sonda:** `GET /api/bling/probe-tiktok?since=&until=` (admin, padrão 30 dias) mostra quantos
+  pedidos do TikTok há, cada situação encontrada e como ela foi classificada, uma amostra já no
+  formato da dashboard (sem cliente), o detalhe cru mascarado e as notas de doação por loja.
+- `scripts/test/tiktok.test.mjs` executa a regra (situações, datas, itens, devolução, doação que
+  passou por pedido, outro canal) e guarda cursor, horário de SP, ordem no sync e a sonda sem cliente.
 
 ### Segmentos de público — "Gato vs Cachorro" (`public/segmentos.html`)
 - Rótulo é **"Cachorro"**, não "Cão" (pedido do Luan, 25/08/2026). As CHAVES internas seguem
@@ -2035,6 +2075,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e que a tela não
   tem campo de dias de histórico),
+  `tiktok` (situação do Bling decide venda por allowlist, doação que passou por pedido não vira
+  venda, cursor só anda com leitura inteira, filtro no horário de São Paulo),
   `economia` (aba escondida não consulta, cache que esvazia, sync que só grava o que mudou sem
   perder gravação, e backup em partes idêntico ao de antes),
   `retencao` (a janela de 90 dias: corte, folga de fuso, pedido sem data, e leitura, `DELETE` e
@@ -2071,6 +2113,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 - `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
 - `GET /api/bling/probe-bonificacao?since=&until=` (admin) — naturezas de operação encontradas e
   o esqueleto da nota, pra mapear a saída em bonificação sobre dado real (sem dado do destinatário)
+- `GET /api/bling/probe-tiktok?since=&until=` (admin) — o que a captura do TikTok decide sobre os
+  pedidos reais, e as notas de doação por loja (sem dado de cliente)
 - `GET /api/shopee/probe-returns?days=N` (admin) — esqueleto da resposta da API de devolução da
   Shopee, pra escrever o mapeamento em cima de dado real
 - `POST /api/shopee/sync-returns` (admin) — relê as devoluções da Shopee agora e marca os pedidos;
@@ -2098,7 +2142,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
 | Amazon US | Ativo — cursor incremental + backfill via Reports API |
 | Meta Ads BR/US | Ativo |
 | Google Ads | Ativo, só EUA |
-| Amazon Ads, TikTok Shop | Planejado, sem código ainda |
+| TikTok Shop | Ativo — pedidos pelo Bling; conferir a allowlist de situação com a sonda |
+| Amazon Ads | Planejado, sem código ainda |
 
 ## 9. A fazer
 
@@ -2108,8 +2153,12 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   tem o role "Product Listing". Habilitar no portal + re-autorizar (novo refresh token). O app do
   BR já nasceu com esse role, então BR já não tem esse problema.
   Código pronto (`POST /api/amazon/images`).
-- **Amazon Ads e TikTok Shop:** integrações ainda não construídas, aparecem só como "Planejadas"
-  na tela de Integrações.
+- **Amazon Ads:** integração ainda não construída, aparece só como "Planejada" na tela de
+  Integrações.
+- **TikTok Shop — conferir a sonda** (`GET /api/bling/probe-tiktok`) depois dos primeiros dias em
+  produção: se aparecer situação "NÃO CONTA (desconhecida)" que na prática é venda, ela entra na
+  allowlist de `src/tiktok.js`; e se a doação aparecer ligada a um canal de venda que não seja o
+  TikTok, a mesma unidade está sendo contada duas vezes.
 - ~~Toggle "Incluir Mercado Ads" no dashboard principal não respeita o período selecionado~~ —
   feito (19/08/2026). O toggle em si já não existia mais (virou obrigatório a pedido do Luan, ver
   Marketing abaixo); o que sobrava era a causa raiz: `mlBreakdown.adCost` lia um valor único preso

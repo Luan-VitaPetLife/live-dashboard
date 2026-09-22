@@ -1127,6 +1127,7 @@ export const CANAIS = {
   amazon_us:    { label: 'Amazon EUA',                  market: 'us' },
   yucaloo_br:   { label: 'Shopify - Yucaloo BR',        market: 'br' },
   yucaloo_us:   { label: 'Shopify - Yucaloo EUA',       market: 'us' },
+  tiktok:       { label: 'TikTok Shop',                 market: 'br' },
 };
 const CH_LABEL = Object.fromEntries(Object.entries(CANAIS).map(([k, v]) => [k, v.label]));
 // Mesmo vocabulário Bling (Autorizado/Em aberto/Cancelado) do statusTag() em index.html — mantido

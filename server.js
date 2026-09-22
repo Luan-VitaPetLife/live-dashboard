@@ -1338,6 +1338,19 @@ app.get('/api/bling/probe-bonificacao', requireAdmin, syncLimiter, async (req, r
   }
 });
 
+// O que a captura do TikTok decide sobre os pedidos reais do período, e de quais lojas saem as
+// notas de doação. Sem dado de cliente. Padrão: últimos 30 dias. Ver src/tiktok.js.
+app.get('/api/bling/probe-tiktok', requireAdmin, syncLimiter, async (req, res) => {
+  try {
+    const dia = d => d.toISOString().slice(0, 10);
+    const until = /^\d{4}-\d{2}-\d{2}$/.test(req.query.until || '') ? req.query.until : dia(new Date());
+    const since = /^\d{4}-\d{2}-\d{2}$/.test(req.query.since || '') ? req.query.since : dia(new Date(Date.now() - 30 * 864e5));
+    res.json(await bling.probeTiktok(since, until));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/bling/probe-orders', syncLimiter, async (req, res) => {
   try {
     const { since, until } = req.query;
@@ -1536,7 +1549,7 @@ app.post('/api/jobs/:id/cancel', (req, res) => {
 const TOGGLEABLE_KEYS = new Set([
   'shopify_br', 'shopify_us', 'shopee', 'mercadolivre', 'mercadolivre_ads',
   'amazon_br', 'amazon_us', 'meta_br', 'meta_us', 'google_ads', 'bling',
-  'yucaloo_br', 'yucaloo_us',
+  'yucaloo_br', 'yucaloo_us', 'tiktok_shop',
 ]);
 
 function integrationStatus({ key, configured, authorized = true, paused = false, pausedNote = '' }) {
@@ -1578,6 +1591,9 @@ function computeIntegrationsList() {
       ...integrationStatus({ key: 'shopee', configured: shopee.isConfigured(), authorized: Boolean(getShopeeTokens()) }) },
     { key: 'bling', label: 'Bling', country: 'br', category: 'geral', group: 'bling', logo: 'logo-bling1.png', detail: 'Informações de ERP para complementar dados dos outros canais',
       ...integrationStatus({ key: 'bling', configured: bling.isConfigured(), authorized: Boolean(db.blingTokens) }) },
+    // Pedidos do TikTok chegam PELO Bling (src/tiktok.js): sem o Bling autorizado, não há de onde ler.
+    { key: 'tiktok_shop', label: 'TikTok Shop', country: 'br', category: 'geral', group: 'tiktok', logo: 'logo-tiktok-shop.png', detail: 'Pedidos recebidos pelo Bling',
+      ...integrationStatus({ key: 'tiktok_shop', configured: bling.isConfigured(), authorized: Boolean(db.blingTokens) }) },
 
     // ── Brasil · Marketing ──
     { key: 'mercadolivre_ads', label: 'Mercado Ads', country: 'br', category: 'marketing', group: 'mercadolivre', logo: 'Mercado-ADS.png', detail: 'Product Ads do Mercado Livre',
@@ -1587,7 +1603,6 @@ function computeIntegrationsList() {
 
     // ── Brasil · Planejadas ──
     { key: null, label: 'Amazon Ads BR', country: 'br', category: 'planned', group: 'amazon', logo: 'Amazon_Ads_Horizontal_SquidInk.png', detail: 'Ainda não conectada', state: 'planned', note: '' },
-    { key: null, label: 'TikTok Shop', country: 'br', category: 'planned', group: 'tiktok', logo: 'logo-tiktok-shop.png', detail: 'Loja em configuração, sem pedidos ainda', state: 'planned', note: '' },
 
     // ── Estados Unidos · Geral ──
     { key: 'shopify_us', label: 'Shopify - Coco and Luna EUA', country: 'us', category: 'geral', group: 'shopify', logo: '/img/marca/Logo2.png', detail: has('SHOPIFY_US_STORE') ? process.env.SHOPIFY_US_STORE : '',
