@@ -69,10 +69,9 @@ let state = rangeForPreset('30d');
 
 // ── Refresh interval ──
 let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
-let refreshTimer = null;
+// Pausa com a aba escondida e atualiza ao voltar, ver js/visivel.js.
 function applyRefresh() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  if (refreshMin > 0) refreshTimer = setInterval(load, refreshMin * 60 * 1000);
+  CocoVisivel.agendar('dados', () => load(), refreshMin > 0 ? refreshMin * 60 * 1000 : 0);
 }
 
 // ── Market ────────────────────────────────────────────────

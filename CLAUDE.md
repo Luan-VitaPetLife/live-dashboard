@@ -74,6 +74,10 @@ src/googleads.js         Google Ads API: OAuth + fetchCampaigns (só EUA)
 src/metrics.js           Calcula o payload da dashboard por mercado
 src/insights.js          Regras do card "Insights" (sem IA) — puro, testável sem banco
 src/historico.js         Frase de cada edição do "Histórico" — puro, testável sem banco
+src/retencao.js          Janela de histórico de 90 dias (o corte) — puro
+src/comparar.js          "Esse pedido mudou?" — decide se o sync grava no banco, puro
+src/cache.js             Cache em memória com prazo e teto (Campanhas), puro
+src/snapshot.js          Monta o backup em partes, sem o banco virar um texto só
 src/autor.js             Quem está editando agora (AsyncLocalStorage), pro registro do Histórico
 src/us-states.js         normalizeUsState(): reduz grafias de estado dos EUA a 2 letras
 src/auth.js              Login: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página
@@ -100,6 +104,7 @@ public/js/jobs-widget.js   Card flutuante de processos em segundo plano (IIFE), 
 public/js/confirm-modal.js Pop-up de confirmação (substitui confirm() nativo, IIFE), toda página
 public/js/periodo.js       Rótulo do período selecionado (IIFE), fonte única das 6 telas com seletor
 public/js/escape.js        Escapa texto de fora pra HTML (IIFE) — a única implementação do app
+public/js/visivel.js       Atualização periódica que pausa com a aba escondida (IIFE)
 public/css/switch.css      Toggle .ios-switch, padrão único do app
 public/css/catalogo.css    O que Produtos e Estoque desenham igual
 ```
@@ -1431,6 +1436,36 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - `scripts/test/retencao.test.mjs` executa a regra (corte, folga, virada de ano, pedido sem data,
   chave dos EUA) e confere que leitura, `DELETE` e memória usam a mesma condição.
 
+### Consumo do servidor (o que a conta do Railway cobra)
+- A conta é quase toda MEMÓRIA (97%, medido em 22/09/2026). CPU, rede e disco somados dão centavos.
+  O que reduz a conta é a janela de 90 dias (acima). Os quatro ajustes abaixo são cuidado com o
+  sistema, não economia visível, e cada um guarda uma armadilha:
+- **Aba escondida não consulta o servidor** (`js/visivel.js`, `CocoVisivel.agendar`). As cinco telas
+  com "Atualizar a cada N min" e o card de processos (que consultava a cada 3s em toda aba) pulam a
+  rodada com a aba em segundo plano. Ao voltar, atualizam NA HORA se perderam alguma rodada: sem
+  isso a pessoa veria número de uma hora atrás até o próximo intervalo, sem nada avisando.
+- **O cache de Campanhas esvazia** (`src/cache.js`): era um `Map` que só crescia, cada período
+  consultado ficava até o próximo deploy. Era o único vazamento real de memória do servidor. Agora
+  cada gravação varre o vencido, com teto de 50.
+- **O sync só grava no banco o pedido que MUDOU** (`mesmoPedido`, `src/comparar.js`). Ele baixa a
+  janela inteira a cada 15 min e quase tudo volta igual; regravar enchia o Postgres de versões
+  mortas e refazia o índice em memória do zero várias vezes por ciclo. Três cuidados que não podem
+  sair:
+  - a comparação **ignora a ordem das chaves e chave `undefined`**: o Postgres reordena as chaves do
+    JSONB e descarta `undefined`, e comparar texto marcaria todo pedido como mudado depois de cada
+    reinício;
+  - **o MESMO objeto da memória nunca é pulado** (`existing !== o`): quem altera um pedido no lugar e
+    o manda gravar teria a comparação "igual consigo mesmo", e a alteração nunca chegaria ao banco;
+  - **gravação que falha é repescada** (`pendentesNoBanco`): antes, regravar tudo curava sozinho uma
+    falha no ciclo seguinte. Sem a repescagem, um pedido que não muda mais ficaria com a versão velha
+    no banco pra sempre, e só se descobriria no próximo reinício.
+- **O backup é montado em partes** (`src/snapshot.js`): cada pedido vai sozinho pro compressor, e o
+  servidor volta a atender a cada lote. Antes o banco inteiro virava um texto só (três cópias ao
+  mesmo tempo) com o servidor parado ~1s. O texto gerado é IDÊNTICO ao `JSON.stringify` de antes,
+  e o teste compara caractere a caractere, inclusive com os dados locais reais: a restauração só faz
+  `JSON.parse`, e um backup que não restaura só é descoberto no dia em que se precisa dele.
+- `scripts/test/economia.test.mjs` executa os quatro (comparação, backup, cache, pausa da aba).
+
 ### Período sem dado nenhum (card de Insights)
 - `computeDashboard` devolve `historyStart`: a data do pedido mais antigo daquele mercado
   (`getOldestOrderDate` em store.js, O(1) em cima do índice por mercado que já existia).
@@ -2000,6 +2035,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e que a tela não
   tem campo de dias de histórico),
+  `economia` (aba escondida não consulta, cache que esvazia, sync que só grava o que mudou sem
+  perder gravação, e backup em partes idêntico ao de antes),
   `retencao` (a janela de 90 dias: corte, folga de fuso, pedido sem data, e leitura, `DELETE` e
   memória cortando no mesmo ponto),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela

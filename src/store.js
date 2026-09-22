@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import pg from 'pg';
 import { autorAtual } from './autor.js';
 import { corteDaRetencao, foraDaJanela, diasForaDaJanela } from './retencao.js';
+import { mesmoPedido } from './comparar.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '..', 'data', 'db.json');
@@ -211,21 +212,39 @@ function pgKv(key, value) {
 // 65535 (2 por linha).
 const PG_BATCH = 500;
 
+// Pedidos cuja gravação no banco FALHOU, pra entrar de novo na próxima. Enquanto o sync regravava
+// todo pedido a cada 15 min, uma falha se curava sozinha no ciclo seguinte. Gravando só o que mudou,
+// um pedido que não muda mais nunca seria regravado, e o banco ficaria pra sempre com a versão
+// velha (ou sem o pedido), só descoberto no próximo reinício, quando a memória recarrega do banco.
+const pendentesNoBanco = new Set();
+
 function pgUpsertOrders(orders) {
-  for (let i = 0; i < orders.length; i += PG_BATCH) {
-    const batch  = orders.slice(i, i + PG_BATCH);
+  // Junta os que falharam antes, pegando a versão ATUAL da memória (pode ter mudado de lá pra cá).
+  const porId = new Map(orders.map(o => [o.id, o]));
+  for (const id of pendentesNoBanco) {
+    const atual = cache.orders[id];
+    if (atual && !porId.has(id)) porId.set(id, atual);
+  }
+  pendentesNoBanco.clear();
+  const lista = [...porId.values()];
+  for (let i = 0; i < lista.length; i += PG_BATCH) {
+    const batch  = lista.slice(i, i + PG_BATCH);
     const values = batch.map((_, j) => `($${j * 2 + 1},$${j * 2 + 2})`).join(',');
     const params = [];
     for (const o of batch) params.push(o.id, o);
     pool.query(
       `INSERT INTO orders(id,data) VALUES ${values} ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data`,
       params
-    ).catch(e => console.error('PG orders batch error:', e.message));
+    ).catch(e => {
+      console.error('PG orders batch error:', e.message);
+      for (const o of batch) pendentesNoBanco.add(o.id);
+    });
   }
 }
 
 export function upsertOrders(orders) {
   const db = load();
+  const mudaram = [];
   for (const o of orders) {
     const existing = db.orders[o.id];
     // Preserva os títulos de item já preenchidos (backfill / Reports API) quando o
@@ -275,11 +294,19 @@ export function upsertOrders(orders) {
         if (velho && velho.refundedQty != null) novo.refundedQty = velho.refundedQty;
       }
     }
+    // Só o que MUDOU vai pro banco e mexe no índice. O sync baixa a janela inteira a cada 15 min
+    // e quase tudo volta idêntico; regravar isso enchia o Postgres de versões mortas e refazia o
+    // índice em memória do zero (varrer e ordenar todo pedido) várias vezes por ciclo. A
+    // comparação é feita DEPOIS das guardas acima, que copiam pro pedido novo o que ele não traz.
+    // O MESMO objeto da memória nunca é pulado: quem o alterou no lugar e o manda gravar faria a
+    // comparação dar "igual" consigo mesmo, e a alteração nunca chegaria no banco.
+    if (existing && existing !== o && mesmoPedido(existing, o)) continue;
     db.orders[o.id] = o;
+    mudaram.push(o);
   }
-  indexDirty = true;
-  saveJson();
-  if (USE_PG) pgUpsertOrders(orders);
+  if (mudaram.length) { indexDirty = true; saveJson(); }
+  if (USE_PG && (mudaram.length || pendentesNoBanco.size)) pgUpsertOrders(mudaram);
+  return mudaram.length;
 }
 
 // Poda da janela de histórico: apaga TODO pedido criado antes do corte, de qualquer canal e dos
