@@ -84,11 +84,15 @@ t.ok(/n\.naturezaOperacao\?\.id/.test(bling), 'e agrupa as notas pelo id da natu
 // Uma página é o tamanho da página, não o tamanho do período. Foi o que aconteceu na primeira
 // rodada: 100 notas e 100 pedidos, os dois truncados sem dizer.
 t.ok(/incompleta = true/.test(bling), 'a paginação declara quando parou antes do fim');
-// TRÊS listas paginam: as notas e os pedidos da sonda, e as notas da captura de verdade. Procurar
-// a condição no arquivo inteiro passaria com uma delas parando na primeira página, porque as
-// outras ainda casam com a busca.
+// QUATRO listas de notas/pedidos paginam com `break`: as notas e os pedidos da sonda de
+// bonificação, as notas da captura de verdade e as notas por loja da sonda do TikTok. Procurar a
+// condição no arquivo inteiro passaria com uma delas parando na primeira página, porque as outras
+// ainda casam com a busca.
 const paginam = (bling.match(/if \(lote\.length < 100\) break/g) || []).length;
-t.eq(paginam, 3, 'as três listas paginadas só terminam quando a página vem incompleta');
+t.eq(paginam, 4, 'as quatro listas paginadas só terminam quando a página vem incompleta');
+// A dos pedidos de venda (TikTok) devolve em vez de quebrar, e diz quando parou no teto.
+t.ok(/if \(lote\.length < 100\) return \{ pedidos: todos, incompleta: false \};[\s\S]{0,200}return \{ pedidos: todos, incompleta: true \};/.test(bling),
+  'a lista de pedidos de venda também lê até o fim, e declara quando parou no teto');
 
 // ── A conta da bonificação precisa ser fechada, não amostrada ──
 // A pergunta aqui não é "qual a forma do dado" (isso já se sabe), é "quantas unidades sairam".

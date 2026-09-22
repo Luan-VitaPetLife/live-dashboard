@@ -56,6 +56,7 @@ const EMPTY = {
   integrationsConfig: {}, // { [chave]: { enabled: bool } } — liga/desliga por integração, ver tela Integrações
   backupStatus: null, // último resultado do backup pra Backblaze B2 — ver src/backup.js
   channelHealth: {}, // { [canal]: { failingSince, alerted, lastError } } — ver src/alerts.js
+  tiktokCursor: null, // momento (horário de SP, formato do Bling) da última leitura completa do TikTok — ver syncTiktok
 };
 
 let cache = null;
@@ -171,6 +172,7 @@ export async function initStore() {
       if (r.key === 'integrationsConfig')    cache.integrationsConfig    = r.value;
       if (r.key === 'backupStatus')          cache.backupStatus          = r.value;
       if (r.key === 'channelHealth')         cache.channelHealth         = r.value;
+      if (r.key === 'tiktokCursor')          cache.tiktokCursor          = r.value;
     }
     console.log(`Store: Postgres (${ord.rows.length} pedidos, ${sess.rows.length} sessões)`);
   } else {
@@ -387,6 +389,31 @@ export function getFullSnapshot() { return load(); }
 export function getBackupStatus() { return load().backupStatus; }
 
 // Saúde por canal (alerta de sync travado) — ver src/alerts.js.
+// Cursor do TikTok (src/sync.js, syncTiktok). Só anda depois de uma leitura COMPLETA: lista que
+// bateu no teto de páginas parece inteira e não é, e avançar o cursor nela perderia pedido pra sempre.
+export function getTiktokCursor() { return load().tiktokCursor || null; }
+export function setTiktokCursor(momento) {
+  const db = load(); db.tiktokCursor = momento; saveJson();
+  if (USE_PG) pgKv('tiktokCursor', momento);
+}
+
+// Retira pedidos pelo id, da memória e do banco. Hoje serve a dois casos, os dois de algo que NÃO
+// aconteceu: a nota de doação que foi cancelada depois de capturada, e o pedido do TikTok que era,
+// na verdade, uma doação (a nota dele é de bonificação e já conta a unidade).
+export function removerPedidos(ids) {
+  const db = load();
+  const existentes = (ids || []).filter(id => db.orders[id]);
+  if (!existentes.length) return 0;
+  for (const id of existentes) delete db.orders[id];
+  indexDirty = true;
+  saveJson();
+  if (USE_PG) {
+    pool.query('DELETE FROM orders WHERE id = ANY($1)', [existentes])
+      .catch(e => console.error('PG remover pedidos:', e.message));
+  }
+  return existentes.length;
+}
+
 export function getChannelHealth() { return load().channelHealth || {}; }
 export function setChannelHealth(health) {
   const db = load(); db.channelHealth = health; saveJson();
@@ -636,6 +663,9 @@ export const UNPAID_STATUS_BY_CHANNEL = {
   shopify:       ['PENDING', 'AUTHORIZED'],
   shopify_us:    ['PENDING', 'AUTHORIZED'],
   mercadolivre:  ['confirmed', 'payment_required', 'payment_in_process'],
+  // Situação do Bling que a allowlist de venda não conhece (src/tiktok.js): não conta, e aparece
+  // como "Em aberto" em vez de "Cancelado", porque ninguém disse que foi cancelado.
+  tiktok:        ['PENDING'],
 };
 
 export function fixUnpaidOrders() {

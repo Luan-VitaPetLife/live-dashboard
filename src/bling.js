@@ -1,11 +1,12 @@
-// bling.js — integração exploratória com o Bling ERP (API v3)
+// bling.js — integração com o Bling ERP (API v3)
 //
-// Diferente das demais integrações deste arquivo, o Bling NÃO é um canal de
-// venda — é o ERP que já recebe (via importação própria) os pedidos de todos
-// os canais (Shopify, Shopee, Mercado Livre, Amazon). Por isso, por enquanto,
-// isso aqui é só uma sonda de leitura (probeOrders) para ver o formato real do
-// dado — nunca usado para montar receita/pedido no dashboard, pra não contar
-// a mesma venda duas vezes (uma via canal, outra via Bling).
+// O Bling NÃO é um canal de venda — é o ERP que já recebe (via importação própria) os pedidos de
+// todos os canais (Shopify, Shopee, Mercado Livre, Amazon). Por isso ele só vira FONTE de pedido
+// em dois casos, os dois estritamente restritos:
+//   - TikTok Shop: só pedido do canal do TikTok (TIKTOK_LOJA_ID, src/tiktok.js), que não tem
+//     outra fonte. Qualquer outro canal lido daqui duplicaria venda que a API dele já traz.
+//   - Saída em bonificação: só nota com essa natureza de operação, que não é venda.
+// Fora isso ele só COMPLETA campo de pedido que já existe (estado da Shopee).
 //
 // OAuth 2.0 (authorization_code), confirmado via documentação/implementações
 // de referência do Bling (developer.bling.com.br não expõe a URL completa em
@@ -174,6 +175,129 @@ export async function fetchSalesChannels() {
   return apiGet('/canais-venda');
 }
 
+// ── TikTok Shop ──────────────────────────────────────────────────────────────
+// O relógio do Bling é o de SÃO PAULO, não o UTC. Lição do quadro de pedidos: o servidor roda em
+// UTC, e um filtro de data-hora escrito com toISOString() cai três horas no futuro pro Bling — ele
+// aceita, responde 200 e devolve lista VAZIA. A leitura incremental pareceria funcionar e nunca
+// traria pedido nenhum.
+export function momentoNoBling(quando = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(quando).map(x => [x.type, x.value]));
+  const hora = p.hour === '24' ? '00' : p.hour; // alguns ambientes escrevem meia-noite como 24
+  return `${p.year}-${p.month}-${p.day} ${hora}:${p.minute}:${p.second}`;
+}
+
+// Nome de cada situação do módulo de Vendas (98310 nesta conta), por id. Além das situações de
+// fábrica, a conta tem as próprias ("Aguardando Coleta", "Em devolução"), e perguntar é mais barato
+// que manter uma cópia desatualizada. Resposta vazia ou com erro NÃO fica guardada: sem os nomes
+// todo pedido viraria "situação desconhecida" até o próximo deploy.
+let situacoesVenda = null;
+export async function fetchSituacoesVenda() {
+  if (situacoesVenda) return situacoesVenda;
+  const r = await apiGet('/situacoes/modulos/98310', { limite: 100 });
+  const mapa = {};
+  for (const s of (r.data || [])) if (s.id != null) mapa[String(s.id)] = s.nome || '';
+  if (Object.keys(mapa).length) situacoesVenda = mapa;
+  return mapa;
+}
+
+// Pedidos de venda, por DATA DE ALTERAÇÃO (o que mudou desde a última leitura — tipicamente
+// poucos) ou por intervalo de criação (a primeira carga). O filtro de alteração foi confirmado pelo
+// quadro de pedidos contra a API: uma janela de 2019 devolve zero, então o zero é resposta, e não
+// parâmetro ignorado. A listagem traz todos os canais; quem filtra o TikTok é quem chama.
+export async function fetchPedidosVenda({ alteradosDesde = null, dataDe = null, dataAte = null, maxPaginas = 60 } = {}) {
+  const filtro = alteradosDesde
+    ? { dataAlteracaoInicial: alteradosDesde }
+    : { dataInicial: dataDe, dataFinal: dataAte };
+  const todos = [];
+  for (let pagina = 1; pagina <= maxPaginas; pagina++) {
+    const r = await apiGet('/pedidos/vendas', { ...filtro, pagina, limite: 100 });
+    const lote = r.data || [];
+    todos.push(...lote);
+    if (lote.length < 100) return { pedidos: todos, incompleta: false };
+  }
+  // Bateu no teto: a lista parece inteira e não é. Quem chama não pode avançar o cursor.
+  return { pedidos: todos, incompleta: true };
+}
+
+// Sonda do TikTok: mostra, sobre os pedidos REAIS do período, o que a captura decidiria. É por ela
+// que se confere a allowlist de situação de venda (src/tiktok.js) e o formato do item — escrito em
+// cima do formato documentado da API v3, sem amostra real na mão quando foi feito.
+//
+// Também conta as notas de bonificação POR LOJA, com o nome da loja: doação ligada a um canal de
+// venda é a mesma unidade chegando por dois caminhos, e é aqui que isso aparece.
+//
+// Nunca devolve dado de cliente: sem nome, sem endereço, sem contato. O estado (UF) fica, que é o
+// que a Geografia usa e não identifica ninguém.
+export async function probeTiktok(sinceISO, untilISO, { amostras = 8 } = {}) {
+  if (!isConfigured()) throw new Error('Bling não configurado.');
+  if (!getBlingTokens()) throw new Error('Bling ainda não autorizado (use /bling/connect primeiro).');
+  const { TIKTOK_LOJA_ID, pedidoDoTiktok, classificarSituacao } = await import('./tiktok.js');
+
+  const situacoes = await fetchSituacoesVenda();
+  const lista = await fetchPedidosVenda({ dataDe: sinceISO, dataAte: untilISO, maxPaginas: 100 });
+  const doTiktok = lista.pedidos.filter(p => String(p.loja?.id) === TIKTOK_LOJA_ID);
+
+  const porSituacao = {};
+  for (const p of doTiktok) {
+    const nome = situacoes[String(p.situacao?.id)] || `id ${p.situacao?.id}`;
+    const k = `${nome} → ${classificarSituacao(nome) || 'NÃO CONTA (desconhecida)'}`;
+    porSituacao[k] = (porSituacao[k] || 0) + 1;
+  }
+
+  const amostra = [];
+  let esqueleto = null;
+  for (const p of doTiktok.slice(0, amostras)) {
+    try {
+      const det = await fetchOrderDetail(p.id);
+      const d = det.data || det;
+      if (!esqueleto) esqueleto = esqueletoBling(d);
+      const r = pedidoDoTiktok(d, { situacoes });
+      if (r.pular) { amostra.push({ numero: d.numero, pulado: r.pular }); continue; }
+      const { customer, ...semCliente } = r.pedido;
+      amostra.push(semCliente);
+    } catch (e) {
+      amostra.push({ id: p.id, erro: e.message });
+    }
+  }
+
+  // Notas de bonificação por loja, só pela LISTAGEM (barata: sem o detalhe de cada nota).
+  const naturezas = {};
+  const nat = await apiGet('/naturezas-operacoes', { limite: 100, pagina: 1 });
+  for (const n of (nat.data || [])) naturezas[String(n.id)] = n.descricao || n.nome || null;
+  const nomesLoja = { 0: 'sem canal de venda (loja 0)' };
+  try {
+    const c = await apiGet('/canais-venda', { limite: 100, pagina: 1 });
+    for (const x of (c.data || [])) nomesLoja[String(x.id)] = x.descricao || x.nome || x.tipo || String(x.id);
+  } catch { /* nome de loja é enfeite: segue com o id */ }
+  const bonificacaoPorLoja = {};
+  for (let pagina = 1; pagina <= 40; pagina++) {
+    const r = await apiGet('/nfe', { dataEmissaoInicial: sinceISO, dataEmissaoFinal: untilISO, limite: 100, pagina });
+    const lote = r.data || [];
+    for (const n of lote) {
+      if (!ehNaturezaDeBonificacao(naturezas[String(n.naturezaOperacao?.id)])) continue;
+      const id = String(n.loja?.id ?? 0);
+      const k = `${nomesLoja[id] || 'loja ' + id} (${id})`;
+      bonificacaoPorLoja[k] = (bonificacaoPorLoja[k] || 0) + 1;
+    }
+    if (lote.length < 100) break;
+  }
+
+  return {
+    periodo: { since: sinceISO, until: untilISO },
+    pedidosNoPeriodo: lista.pedidos.length,
+    listagemIncompleta: lista.incompleta,
+    pedidosDoTiktok: doTiktok.length,
+    porSituacao,
+    situacoesDaConta: situacoes,
+    amostra,
+    esqueletoDoDetalhe: esqueleto,
+    bonificacaoPorLoja,
+  };
+}
+
 // ── Canais de venda conhecidos (BR) ───────────────────────────────────────
 // Mapeia loja.id (Bling) → nosso channel/market. Hardcoded de propósito, NÃO descoberto em
 // runtime via /canais-venda: a conta Bling tem canais que não são pedido Coco and Luna —
@@ -324,7 +448,7 @@ function dataBlingParaISO(s) {
 //   3. Nada de dado de quem recebeu. São criadores de conteúdo, não clientes, e a dashboard não
 //      precisa do nome deles pra contar unidade.
 export async function fetchBonificacoes(sinceISO, untilISO, { paginas = 40, maxNotas = 500 } = {}) {
-  const vazio = { pedidos: [], porSituacaoIgnorada: {}, incompleta: false };
+  const vazio = { pedidos: [], porSituacaoIgnorada: {}, incompleta: false, listadas: new Set(), porLoja: {} };
   if (!isConfigured() || !getBlingTokens()) return vazio;
 
   // Nome de cada natureza: a nota traz só o id dela.
@@ -348,6 +472,21 @@ export async function fetchBonificacoes(sinceISO, untilISO, { paginas = 40, maxN
       if (ehNaturezaDeBonificacao(naturezas[String(n.naturezaOperacao?.id)])) daBonificacao.push(n);
     }
     if (lote.length < 100) break;
+  }
+
+  // Quais notas de bonificação a listagem TROUXE. A listagem de /nfe esconde nota cancelada e
+  // rejeitada (medido pelo quadro de pedidos: a cancelada só aparece pedindo por ela), então uma
+  // doação capturada como Autorizada e cancelada depois simplesmente para de vir — e ficaria
+  // contada pra sempre. Quem chama compara esta lista com o que já está gravado.
+  const listadas = new Set(daBonificacao.map(n => String(n.id)));
+
+  // Por LOJA (canal de venda do Bling). Doação normal sai sem canal (loja 0) ou da loja física.
+  // Doação ligada a um canal que a dashboard já conta como venda (o TikTok, por exemplo) é a
+  // mesma unidade chegando por dois caminhos, e o relatório precisa mostrar isso.
+  const porLoja = {};
+  for (const n of daBonificacao) {
+    const loja = String(n.loja?.id ?? 0);
+    porLoja[loja] = (porLoja[loja] || 0) + 1;
   }
 
   const pedidos = [];
@@ -385,8 +524,17 @@ export async function fetchBonificacoes(sinceISO, untilISO, { paginas = 40, maxN
     });
   }
 
-  return { pedidos, porSituacaoIgnorada, incompleta };
+  return { pedidos, porSituacaoIgnorada, incompleta, listadas, porLoja };
 }
+
+// Situação atual de UMA nota, perguntando por ela (a listagem não mostra as canceladas).
+export async function situacaoDaNota(idNota) {
+  const d = await apiGet(`/nfe/${idNota}`);
+  const nota = d.data || d;
+  return nota?.situacao != null ? Number(nota.situacao) : null;
+}
+
+export function notaSaiu(situacao) { return SITUACOES_SAIU.has(Number(situacao)); }
 
 export async function probeBonificacao(sinceISO, untilISO, { paginas = 20, amostras = 5, maxDetalhes = 300 } = {}) {
   if (!isConfigured()) throw new Error('Bling não configurado.');

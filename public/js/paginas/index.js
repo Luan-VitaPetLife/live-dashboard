@@ -1262,6 +1262,7 @@ const UNPAID_STATUS_BY_CHANNEL = {
   shopify:       ['PENDING', 'AUTHORIZED'],
   shopify_us:    ['PENDING', 'AUTHORIZED'],
   mercadolivre:  ['confirmed', 'payment_required', 'payment_in_process'],
+  tiktok:        ['PENDING'],
 };
 // Vocabulário de status inspirado no Bling (Autorizada/Em aberto/Cancelada) — em vez do genérico
 // "OK", os pedidos válidos aparecem como "Autorizado" e qualquer coisa ainda não concluída (inclusive

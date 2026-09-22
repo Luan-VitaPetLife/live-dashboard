@@ -33,6 +33,8 @@
     shopee:       { bg: '#EE4D2D', label: 'Shopee',                      market: 'br', logo: 'img/canais/logo_shopee.svg' },
     mercadolivre: { bg: '#FFE600', label: 'Mercado Livre',               market: 'br', logo: 'img/canais/logo_mercadolivre.png', logoFill: true },
     amazon:       { bg: '#111111', label: 'Amazon BR',                   market: 'br', logo: 'img/canais/logo_amazon.webp' },
+    // Pedidos pelo Bling (src/tiktok.js). As duas marcas vendem pelo mesmo canal do TikTok.
+    tiktok:       { bg: '#FE2C55', label: 'TikTok Shop',                 market: 'br', logo: 'img/integracoes/logo-tiktok-shop.png' },
     shopify_us:   { bg: '#7EAD3C', label: 'Shopify - Coco and Luna EUA', market: 'us', logo: 'img/marca/Logo2.png', logoFill: true },
     yucaloo_us:   { bg: '#4466FF', label: 'Shopify - Yucaloo EUA',       market: 'us', logo: 'img/integracoes/Yucaloo2.png' },
     amazon_us:    { bg: '#FF9900', label: 'Amazon EUA',                  market: 'us', logo: 'img/canais/logo_amazon.webp' },

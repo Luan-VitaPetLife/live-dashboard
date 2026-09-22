@@ -56,7 +56,11 @@ t.ok(iFetch > 0, 'bling.js expõe fetchBonificacoes');
 const corpoFetch = corpoDaFuncao(BLING, iFetch);
 t.ok(/ehNaturezaDeBonificacao\(/.test(corpoFetch), 'a captura decide pela natureza');
 t.ok(!/valorNota/.test(corpoFetch), 'e nunca olha o valor da nota pra decidir nem pra somar');
-t.ok(!/206202176|loja\?\.id/.test(corpoFetch), 'nem a loja de onde a nota saiu');
+// A loja aparece num lugar só, e é pra CONTAR no relatório (doação ligada a canal de venda é a
+// mesma unidade chegando por dois caminhos). Tirado esse bloco, ela não pode aparecer mais.
+const blocoPorLoja = /  const porLoja = \{\};\n  for \(const n of daBonificacao\) \{\n    const loja = String\(n\.loja\?\.id \?\? 0\);\n    porLoja\[loja\] = \(porLoja\[loja\] \|\| 0\) \+ 1;\n  \}\n/;
+t.ok(blocoPorLoja.test(corpoFetch), 'a loja só é CONTADA, pro relatório, depois de a natureza já ter decidido');
+t.ok(!/206202176|loja\?\.id/.test(corpoFetch.replace(blocoPorLoja, '')), 'e nunca decide se a nota é doação');
 
 // ── 2. O dinheiro da doação nunca entra ───────────────────────────────────────
 t.ok(/total:     0,/.test(corpoFetch), 'o pedido de doação nasce com total zero');
