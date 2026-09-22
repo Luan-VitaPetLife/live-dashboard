@@ -333,23 +333,11 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   generalizada pra qualquer canal: se `total === 0` mas algum item tem preço de catálogo (ex.
   pedido de atacado/fulfillment onde quem cobra é o parceiro, não a loja), o fator também é 0 —
   zera a receita fantasma, preserva a unidade vendida.
-- Histórico por mercado (BR/EUA separados, `kv.amazonRetentionConfig`) — painel único em
-  Integrações → "Amazon — Histórico", **um campo só**: "dias de histórico desejado". Duas telas
-  separadas (retenção que apaga + busca que soma) confundiam — "isso soma com aquilo?" (pergunta
-  real do Luan, 18/08/2026) — unificado num único número que decide sozinho a ação certa
-  (`GET/POST /api/amazon/history`, `planAmazonHistory()` em server.js):
-  - pedido mais antigo hoje é MAIS VELHO que o número → sobra dado → **poda** (mostra prévia,
-    "isso vai apagar N de M pedidos", só aplica com confirmação explícita — é a única ação que
-    apaga pedido de verdade; poda com padrão agressivo já quase apagou 9 meses de dado
-    recém-recuperado, 10/07/2026, daí o cuidado);
-  - pedido mais antigo é MAIS NOVO que o número (ou não existe nenhum ainda) → falta dado →
-    **backfill automático** (reaproveita `POST /api/amazon/backfill?days=N&market=`, que já
-    existia só como endpoint sem tela; não precisa de confirmação, só soma). Refaz a janela
-    inteira em vez de só o trecho novo — mais simples, upsert por id não duplica.
-  Mercado sem config salva ainda cai no legado `AMAZON_RETENTION_DAYS` (produção: 365) — preserva
-  o comportamento de antes até o usuário mudar algo pela tela. A config salva também é o que
-  `sync.js` usa pra poda incremental automática do dia-a-dia (mesmo mecanismo de sempre,
-  `pruneOrders`) — uma fonte de verdade só.
+- Histórico: janela fixa de 90 dias, igual a todo canal (ver "Janela de histórico de 90 dias"). A
+  antiga retenção por mercado (`kv.amazonRetentionConfig`, `AMAZON_RETENTION_DAYS`, painel
+  "Amazon — Histórico") não existe mais. `POST /api/amazon/backfill?days=N&market=` continua, só
+  por API e com teto de 90 dias, pra recuperar buraco DENTRO da janela (ex.: o cursor que andou no
+  vazio com um token errado).
 - Mistura de mercado: o relatório de backfill/reconciliação pode trazer linhas dos dois mercados
   juntas (as contas são vinculadas) — `ordersFromRows()` valida o mercado real por linha via
   `ship-country` (não moeda, não `ship-state` — siglas de UF BR colidem com estados US). Limpeza
@@ -1168,16 +1156,12 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   janela padrão nunca foi marcado, e enquanto não for, a quantidade vendida daquele período segue
   contando a unidade que voltou. A varredura funda é lenta de propósito (cada repasse é um
   download, ~1/min), então ela não entra no automático — é uma corrida manual, uma vez.
-- **Botão em Integrações → "Amazon — Reembolsos"**, uma linha por mercado, disparando a varredura
-  funda de 365 dias. Ele aparece como job `amazon-returns` no card de processos: sem isso, quem
-  clicasse não saberia se achou reembolso, se deu erro ou se ainda está rodando — e aqui isso
-  importa mais que o normal, porque o resultado mexe em quantidade vendida. O `STALE_AFTER_MS`
-  dele é o maior de todos (90 min) justamente porque esperar a cota da Amazon **é** o trabalho:
-  com o padrão de 30 min, o job apareceria como "interrompido" no meio de uma varredura saudável.
-- As linhas desse painel saem do MESMO `retLinha` dos painéis de histórico. Pra isso ele deixou de
-  decidir a caixa de dias e a função do botão por um ternário em cima do `id` (o que só funcionava
-  enquanto existissem exatamente dois painéis) e passou a receber `acao`, `campo` e `resumo` por
-  parâmetro. Linha sem `campo` não tem caixa de dias, que é o caso dos reembolsos.
+- A varredura funda não tem mais botão na tela: a busca de histórico da Amazon (que a trazia junto)
+  saiu de Integrações com a janela de 90 dias. Disparo manual só por
+  `POST /api/amazon/sync-returns`, que aparece como job `amazon-returns` no card de processos. O
+  `STALE_AFTER_MS` dele é o maior de todos (90 min) porque esperar a cota da Amazon **é** o
+  trabalho: com o padrão de 30 min, o job apareceria como "interrompido" no meio de uma varredura
+  saudável.
 - O extrato **não derruba o job** se falhar: a fonte mais frágil é ele (cota apertada, e pode
   simplesmente não haver repasse novo). Falhou, segue com o que o relatório de devoluções trouxe e
   o erro aparece em `errors` em vez de sumir.
@@ -1407,6 +1391,46 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - `scripts/test/comparacao.test.mjs` executa a janela de verdade (inclusive virada de mês e de
   ano, e o erro de um dia que faria os dois períodos se sobreporem) e guarda as armadilhas acima.
 
+### Janela de histórico de 90 dias (`src/retencao.js`)
+- **Todo canal, nos dois mercados, guarda só os últimos 90 dias, e a cada dia o mais antigo sai.**
+  Decisão do Luan (22/09/2026), pela conta do Railway: 97% dela era MEMÓRIA (medido no painel de uso,
+  ~470 MB no servidor e ~430 MB no Postgres, linha plana, sem vazamento), e o servidor guarda todo
+  pedido na memória o tempo inteiro. CPU, rede e disco somados davam centavos.
+- **Regra fixa, não número na tela.** Os campos de "dias de histórico" da Amazon e da Shopify saíram
+  de Integrações junto (pedido explícito). Um campo prometeria um alcance que o sync desfaria no
+  ciclo seguinte.
+- **Um dia de folga além dos 90.** O corte é meia-noite UTC e o dia da loja não é (03:00 UTC no
+  Brasil, 04:00 a 08:00 nos EUA). Sem a folga, "últimos 90 dias" abriria com o primeiro dia pela
+  metade, e o que faltasse pareceria venda que não aconteceu.
+- **O corte é o mesmo o dia inteiro** (meia-noite, não "agora menos 90 dias"): senão cada sync de
+  15 min apagaria um pedaço diferente do dia da beira.
+- **Pedido antigo nem entra na memória.** O `SELECT` do `initStore` já filtra pelo corte; ler tudo
+  pra descartar depois faria o servidor subir com o pico que a regra existe pra evitar.
+- **Memória e banco cortam no MESMO ponto**, por comparação de TEXTO do `createdAt` nos dois lados
+  (`foraDaJanela` e o `DELETE`). Se cada lado comparasse de um jeito, um pedido da beira sairia de
+  um e ficaria no outro, e a tela mudaria sozinha depois de um reinício.
+- **Pedido sem data não é apagado**: sem data não há como saber se é velho.
+- **O banco apaga em lotes de 2000, um de cada vez** (`pgPodarPedidos`). A primeira poda apaga a
+  maior parte da tabela, e escrita gigante num comando só já encheu o disco do Postgres uma vez.
+  Quem escolhe o que apagar é o próprio banco, pela condição oposta à da leitura: os pedidos antigos
+  não estão na memória, então não daria pra listar por id daqui. Roda a cada sync, depois da última
+  busca do ciclo.
+- **As séries diárias seguem a mesma janela**: sessões (inclusive as chaves `us:AAAA-MM-DD`),
+  sessões da Yucaloo, gasto de Meta BR/EUA e de Mercado Ads. Senão o card de tráfego mostraria visita
+  num período em que a dashboard diz que não houve venda. Cada blob do kv só é regravado se algum dia
+  saiu dele.
+- **Backfill manual continua, com teto de 90 dias** (`POST /api/amazon/backfill` e
+  `POST /api/shopify/backfill`, só por API): serve pra consertar buraco dentro da janela. Buscar
+  além disso traria pedido que o sync seguinte apagaria.
+- **O que se perde, e foi aceito:** período personalizado anterior a 90 dias abre vazio (o card de
+  Insights já diz "período anterior ao histórico", ver abaixo), e comparação com o mesmo mês do ano
+  passado deixa de existir. Os atalhos das telas (hoje, 7 dias, 30 dias, mês) cabem todos na
+  janela. O backup diário do B2 guarda 30 dias, então pedido mais velho que 90 dias some de vez
+  quando o último backup que o contém expira.
+- `PEDIDOS_RETENCAO_DIAS` troca o 90 sem mexer em código.
+- `scripts/test/retencao.test.mjs` executa a regra (corte, folga, virada de ano, pedido sem data,
+  chave dos EUA) e confere que leitura, `DELETE` e memória usam a mesma condição.
+
 ### Período sem dado nenhum (card de Insights)
 - `computeDashboard` devolve `historyStart`: a data do pedido mais antigo daquele mercado
   (`getOldestOrderDate` em store.js, O(1) em cima do índice por mercado que já existia).
@@ -1415,23 +1439,16 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   é enganoso, porque não é que nada mudou, é que não há o que comparar. Agora são três textos:
   período anterior ao histórico (diz qual é a data do primeiro pedido registrado), período sem
   pedido, e período de fato estável.
-- **O histórico começa quando o sync começou, não na primeira venda da empresa.** Cada ciclo
-  busca uma janela móvel de 60 dias (`defaultWindow()` em sync.js) e faz upsert, então nada
-  anterior à primeira sincronização jamais entrou no banco. Em 28/08/2026 o mercado BR começa
-  em 17/04/2026 (Amazon BR, que é a única com backfill via Reports API), e as lojas Shopify/ML/
-  Shopee só a partir do fim de abril.
-- Recuperar o que ficou pra trás depende de um backfill POR CANAL, porque cada API tem o seu
-  jeito. Amazon (Reports API) e as lojas Shopify (Admin API, ver abaixo) já têm. Mercado Livre e
-  Shopee ainda não.
+- **O histórico começa 90 dias atrás**, em todo canal (ver "Janela de histórico de 90 dias"). Antes
+  disso ele começava quando o sync começou, e a mensagem de "período anterior ao histórico" existia
+  por isso; hoje ela aparece pra qualquer período personalizado mais antigo que a janela.
 
 ### Backfill histórico das lojas Shopify (`src/backfill.js`)
 - Recupera pedido anterior à primeira sincronização, nas quatro lojas Shopify (Coco and Luna
   BR/EUA + Yucaloo BR/EUA). A Admin API serve o histórico inteiro; o que faltava era alguém pedir
   fora da janela móvel de 60 dias.
-- **Só soma, nunca apaga.** É a diferença central pro painel "Amazon — Histórico", que é um campo
-  de retenção e por isso poda quando o número diminui. Aqui não existe poda, então também não
-  existe confirmação: um aviso de "isso não tem volta" seria mentira. Painel próprio em
-  Integrações → "Shopify — Buscar histórico antigo", com um campo de dias por mercado.
+- **Só soma, nunca apaga.** Não tem mais painel na tela: com o histórico fixo em 90 dias ele virou
+  ferramenta pra recuperar buraco DENTRO da janela, disparada por API.
 - Percorre a janela em blocos de 30 dias (`CHUNK_DAYS`), do mais antigo pro mais novo, e grava
   bloco a bloco (`onChunk` → `upsertOrders`) em vez de tudo no fim — uma interrupção no meio
   preserva o que já veio, e como o upsert é por id, repetir um bloco não duplica. Mesmo princípio
@@ -1442,50 +1459,20 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   desfazer.
 - `lojasDoMercado(market)` respeita `isIntegrationEnabled`, e a Yucaloo devolve `[]` sozinha
   quando a loja ainda não foi conectada (mesmo comportamento do sync normal).
-- Endpoints: `POST /api/shopify/backfill?market=br|us&days=N` (admin, máx. 1825 dias) e
-  `GET /api/shopify/history` (admin) — este último é só leitura: diz onde o histórico de cada
-  mercado começa hoje e quais lojas o backfill alcançaria, pra tela não pedir um número sem dizer
-  contra o que ele está sendo comparado.
+- Endpoint: `POST /api/shopify/backfill?market=br|us&days=N` (admin, máx. 90 dias). O
+  `GET /api/shopify/history` servia só ao painel e saiu com ele.
 - Job `shopify-backfill` no widget de processos, cancelável, com estado em `kv.shopifyBackfill`
   (chave separada do `amazonBackfill` de propósito: os dois podem rodar ao mesmo tempo, APIs e
   cotas diferentes, e um não pode sobrescrever o progresso do outro).
 
-### Um painel só de histórico em Integrações
-- **Quatro linhas (Amazon BR/EUA, Shopify BR/EUA) que fazem exatamente a MESMA coisa: buscar os
-  últimos N dias daquela loja.** O número é o ALCANCE DA BUSCA, e mudar ele muda o alcance, sempre.
-  Pedido do Luan (08/09/2026), junto de "essa tela está muito bagunçada".
-- Eram TRÊS painéis com três textos longos: histórico da Amazon, reembolsos da Amazon e histórico
-  da Shopify. Dois botões chamados "Buscar" que faziam coisas diferentes, e um campo que ora
-  buscava ora APAGAVA.
-- **Nenhum botão desta tela apaga pedido.** O campo da Amazon podava quando o número era menor que
-  o histórico atual — duas ações opostas no mesmo lugar, e a poda é a única coisa deste projeto que
-  apaga pedido de verdade (ela já quase apagou nove meses de dado recém-recuperado uma vez). A poda
-  automática do dia a dia continua existindo em `sync.js`, guiada pela retenção; o que sumiu foi a
-  porta destrutiva na tela.
-- **A retenção SOBE pra cobrir o que foi buscado, e nunca desce.** Sem isso, buscar 365 dias com a
-  retenção em 180 faria a poda automática apagar metade do que acabou de chegar, no ciclo seguinte,
-  sem nada na tela explicando. `0` (sem limite) fica como está: não há o que subir, e baixar seria
-  criar um limite que ninguém pediu.
-- **Buscar histórico da Amazon busca os reembolsos do MESMO período, dentro do mesmo job.** Eram
-  dois botões, e o segundo dava pra esquecer: pedido recuperado sem a marca de devolução conta como
-  vendida uma unidade que voltou, que é justamente o número que não pode estar errado. Uma falha na
-  parte de reembolso NÃO derruba o resultado da busca de pedidos, que já está gravada — ela vira
-  aviso na própria linha.
-- **O acompanhamento sempre devolve o botão.** A versão anterior desistia calada quando o job não
-  aparecia em `/api/jobs` (`if (!j) return`): o intervalo seguia rodando, o botão ficava travado e a
-  tela não dizia uma palavra. Foi assim que "cliquei e não funcionou" virou o relato, mesmo com a
-  busca tendo rodado. Hoje, sem notícia por três voltas, ele encerra dizendo isso; e erro de rede
-  aparece na linha em vez de ser engolido por um `catch(e){}`.
-- **O campo nasce com o último número digitado nele** (`localStorage`, por linha): quem ajusta o
-  alcance costuma repetir o mesmo ajuste, e reabrir a tela com outro número faria a próxima busca
-  ter um alcance que ninguém escolheu.
-- A frase de resumo (`N pedidos · desde DD/MM/AAAA (N dias)`) e o markup da linha existem num lugar
-  só: escritos quatro vezes, divergiriam na primeira mexida. **Medir por CANAL, nunca por mercado** —
-  `historicoDosCanais` recebe a lista de canais porque a Amazon tem um por mercado e a Shopify tem
-  duas lojas; com `getOldestOrderDate(market)` o painel da Shopify mostrava a data da Amazon BR.
-- Layout: `.ret-row-label` CRESCE (`flex:1;min-width:0`) em vez de ocupar uma coluna fixa de 170px.
-  Com a largura travada sobravam pouco mais de 130px pro texto, que quebrava em quatro ou cinco
-  linhas e esticava a linha inteira, enquanto o resto da largura ficava vazio.
+### Tela de Integrações sem histórico
+- **Não há campo de "dias de histórico" nem botão de buscar histórico.** O histórico é a janela fixa
+  de 90 dias. Houve um painel com quatro linhas (Amazon BR/EUA, Shopify BR/EUA) que buscavam os
+  últimos N dias; ele saiu em 22/09/2026 junto da decisão da janela, com as rotas que só serviam a
+  ele (`GET/POST /api/amazon/history`, `GET /api/shopify/history`).
+- O que ficou de lição dele e vale pra qualquer acompanhamento de job novo: o poll **sempre devolve
+  o botão**. A versão que desistia calada quando o job sumia de `/api/jobs` (`if (!j) return`)
+  deixava o botão travado sem uma palavra, e virou o relato "cliquei e não funcionou".
 - **Lista de backups: três linhas, a quarta se apagando, e um botão pra abrir.** Ela cresce um
   arquivo por dia (retenção de 30 dias), então mostrar tudo deixava o painel enorme. A quarta
   linha apagada é o que diz "tem mais embaixo" sem precisar de texto.
@@ -1948,7 +1935,7 @@ Railway — nunca colar valor aqui, só o nome da variável e pra que serve.
 | `AMAZON_NAMES_EVERY_HOURS` / `AMAZON_NAMES_DAYS` | Reconciliação de nome de produto (padrão 12h / 2 dias) |
 | `AMAZON_RETURNS_EVERY_HOURS` / `AMAZON_RETURNS_DAYS` | Devoluções da Amazon (padrão 12h / 60 dias) — janela longa de propósito, a devolução chega semanas depois da venda |
 | `AMAZON_SETTLEMENT_DOCS` | Quantos extratos de repasse baixar por rodada (padrão 6) — baixar documento tem cota de ~1/min |
-| `AMAZON_RETENTION_DAYS` | Poda de pedidos Amazon antigos, opt-in (padrão 0 = desligado; produção usa 365) |
+| `PEDIDOS_RETENCAO_DIAS` | Janela de histórico de TODO canal, nos dois mercados (padrão 90). `AMAZON_RETENTION_DAYS` não é mais lida |
 | `AMAZON_ROLE_ARN` / `AMAZON_AWS_ACCESS_KEY` / `_SECRET_KEY` | IAM Role + credenciais do IAM User (compartilhados BR/US) |
 | `GOOGLE_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URL` | OAuth do projeto Google Cloud |
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | Precisa de aprovação "Basic access" |
@@ -2011,10 +1998,12 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   `bonificacao` (doação conta unidade e nunca dinheiro, é identificada pela natureza de operação,
   sai da conta numa porta só, e produto só doado não some do card),
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
-  `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e o painel de
-  reembolsos com a varredura funda ligada ao botão),
+  `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e que a tela não
+  tem campo de dias de histórico),
+  `retencao` (a janela de 90 dias: corte, folga de fuso, pedido sem data, e leitura, `DELETE` e
+  memória cortando no mesmo ponto),
   `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
-  em blocos, sem buraco nem dia repetido, mais a ligação com servidor e tela) e `periodo` (o ano aparece no
+  em blocos, sem buraco nem dia repetido, mais o teto de 90 dias dos disparos por API) e `periodo` (o ano aparece no
   rótulo quando o período é de outro ano, e nenhuma tela remonta esse texto por conta própria).
 - **Nenhum teste sobe o `server.js` nem toca no banco.** `geojson.test.mjs` levanta só um
   `express.static` sobre `public/`. Isso é regra, não detalhe: subir o servidor de verdade dispara
@@ -2039,10 +2028,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   reembolso da Amazon e marca os pedidos; roda sozinho a cada 12h, ver "Devoluções da Amazon".
   `days`/`docs` servem pra varredura funda (consertar quantidade de período antigo)
 - `GET /api/amazon/settlement-probe` (admin) — diagnóstico do extrato de repasse (sem PII)
-- `POST /api/shopify/backfill?market=&days=` (admin) · `GET /api/shopify/history` (admin) —
-  recupera histórico antigo das lojas Shopify, ver tela Integrações
-- `GET/POST /api/amazon/history` (admin) — GET mede onde o histórico começa; POST busca os últimos
-  N dias E os reembolsos do mesmo período. Nunca apaga, ver tela Integrações
+- `POST /api/shopify/backfill?market=&days=` (admin) — recupera buraco das lojas Shopify dentro da
+  janela de 90 dias (teto), só por API
 - `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
 - `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
 - `GET /api/bling/probe-bonificacao?since=&until=` (admin) — naturezas de operação encontradas e

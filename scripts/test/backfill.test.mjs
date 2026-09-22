@@ -41,7 +41,6 @@ t.ok(b365.every((x, i) => i === 0 || x.since > b365[i - 1].since), 'blocos saem 
 const server = ler('server.js');
 t.ok(/from '\.\/src\/backfill\.js'/.test(server), 'server.js importa o módulo de backfill');
 t.ok(server.includes("app.post('/api/shopify/backfill', requireAdmin"), 'o endpoint de disparo exige admin');
-t.ok(server.includes("app.get('/api/shopify/history', requireAdmin"), 'o endpoint de leitura exige admin');
 t.ok(/shopifyBackfillRunning/.test(server), 'existe trava contra duas execuções ao mesmo tempo');
 t.ok(/CANCELABLE_JOB_IDS = new Set\(\[[^\]]*'shopify-backfill'/.test(server), 'o job aparece como cancelável');
 t.ok(/STALE_AFTER_MS = \{[^}]*'shopify-backfill'/.test(server), 'o job tem prazo de "travado" próprio');
@@ -52,7 +51,7 @@ const semComentario = txt => txt.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.t
 const listaDeJobs = semComentario(server.slice(server.indexOf("app.get('/api/jobs'"), server.indexOf("app.post('/api/jobs/:id/cancel'")));
 t.ok(/normalizeJob\('shopify-backfill'/.test(listaDeJobs), 'o job aparece no widget de processos (GET /api/jobs)');
 
-const jobShopify = semComentario(server.slice(server.indexOf('function startShopifyBackfillJob'), server.indexOf("app.get('/api/shopify/history'")));
+const jobShopify = semComentario(server.slice(server.indexOf('function startShopifyBackfillJob'), server.indexOf("app.post('/api/shopify/backfill'")));
 
 // As duas callbacks precisam checar: só no onProgress, um backfill que já está baixando um bloco
 // grande ignora o clique em cancelar até o bloco terminar.
@@ -62,49 +61,14 @@ t.eq((jobShopify.match(/checkCancelled\('shopify-backfill'\)/g) || []).length, 2
 // por um upsert único no fim, um backfill de um ano interrompido no meio perde tudo.
 t.ok(/onChunk:[\s\S]*upsertOrders\(/.test(jobShopify), 'grava bloco a bloco, dentro do onChunk');
 
-// ── Ligação com a tela ──
-const tela = fontePagina('integracoes.html').tudo;
-t.ok(tela.includes('/api/shopify/backfill'), 'a tela de Integrações dispara o backfill');
-t.ok(tela.includes('/api/shopify/history'), 'a tela lê onde o histórico começa hoje');
-t.ok(tela.includes('js/periodo.js'), 'a tela carrega periodo.js, que formata a data mostrada');
-
-// O painel da Amazon poda pedido e por isso pede confirmação. Este só soma, então não pode
-// herdar aquele texto por engano: um aviso de "isso não tem volta" aqui seria mentira.
-const painel = tela.slice(tela.indexOf('function loadShopHistory'), tela.indexOf('function pollShopHistory'));
-t.ok(!/cocoConfirm/.test(painel), 'não pede confirmação: este painel não apaga nada');
-
-// ── Os dois painéis de histórico mostram o mesmo tipo de dado, então mostram a mesma frase ──
-// Cada um tinha o seu formato, e o resultado era um painel que parecia dois sem relação.
-t.ok(/function retLinha\(/.test(tela), 'existe um único montador de linha pros dois painéis');
-t.ok(/function retResumo\(/.test(tela), 'existe um único montador da frase de resumo');
-const MARKUP_DA_LINHA = /<div class="ret-row">/g;
-t.eq((tela.match(MARKUP_DA_LINHA) || []).length, 1, 'o markup da linha existe num lugar só (dentro de retLinha)');
-// As quatro linhas (Amazon BR/EUA, Shopify BR/EUA) saem do MESMO montador e do mesmo painel.
-// Eram três painéis com três textos e dois botões chamados "Buscar" que faziam coisas diferentes.
-{
-  const ini = tela.indexOf('function renderHistorico(');
-  const corpo = tela.slice(ini, tela.indexOf('async function carregarHistorico', ini));
-  t.ok(/retLinha\(/.test(corpo), 'as linhas saem do montador compartilhado');
-  const linhas = tela.slice(tela.indexOf('const HIST_LINHAS'), tela.indexOf('let histInfo'));
-  t.eq((linhas.match(/slot:/g) || []).length, 4, 'são quatro linhas: Amazon e Shopify, Brasil e EUA');
-  t.ok(!MARKUP_DA_LINHA.test(corpo), 'e nenhuma delas monta linha por conta própria');
-  MARKUP_DA_LINHA.lastIndex = 0;
+// ── Nunca além da janela de histórico ──
+// Buscar mais que 90 dias traria pedido que o sync seguinte apagaria: trabalho e cota da Amazon
+// gastos pra nada, e um número na tela que some sozinho 15 minutos depois.
+for (const rota of ["app.post('/api/amazon/backfill'", "app.post('/api/shopify/backfill'"]) {
+  const i = server.indexOf(rota);
+  const corpo = server.slice(i, server.indexOf('\n});', i));
+  t.ok(/Math\.min\([^;]*RETENCAO_DIAS\)/.test(corpo), `${rota.slice(10, -1)} tem teto na janela de histórico`);
 }
-
-// A frase precisa dos mesmos campos vindos dos DOIS endpoints, senão um dos painéis mostra
-// meia frase. É o tipo de divergência que só aparece na tela, nunca num erro.
-const shopResposta = server.slice(server.indexOf("app.get('/api/shopify/history'"), server.indexOf("app.post('/api/shopify/backfill'"));
-for (const campo of ['totalOrders', 'oldestOrderDate', 'oldestOrderDays']) {
-  t.ok(new RegExp(campo).test(shopResposta), `/api/shopify/history devolve ${campo}`);
-}
-// O endpoint da Amazon devolve os MESMOS três campos que o da Shopify: a tela monta a frase com
-// um formato só, e um campo faltando deixa a linha da Amazon com meia frase.
-const amzResposta = server.slice(server.indexOf("app.get('/api/amazon/history'"), server.indexOf("app.post('/api/amazon/history'"));
-for (const campo of ['totalOrders', 'oldestOrderDate', 'oldestOrderDays']) {
-  t.ok(new RegExp(campo).test(amzResposta), `/api/amazon/history devolve ${campo}`);
-}
-// Ele deixou de decidir entre podar e buscar. Enquanto decidia, era preciso saber qual das duas ia
-// acontecer ANTES de clicar, e a tela tinha que perguntar antes de apagar.
-t.ok(!server.includes("action: 'prune'"), 'e não decide mais entre podar e buscar');
+t.ok(/import \{ RETENCAO_DIAS \} from '\.\/src\/retencao\.js'/.test(server), 'e o teto vem da mesma regra do sync, não de um número repetido');
 
 t.fim();

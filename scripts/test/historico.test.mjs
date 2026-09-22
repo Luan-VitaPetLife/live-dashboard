@@ -192,7 +192,7 @@ const EDITAVEIS = [
   'upsertProductGroup', 'deleteProductGroup', 'removeFromProductGroup', 'setProductGroupsEnabled',
   'setProductGroupType', 'upsertProductTypeGroup', 'removeProductTypeKeyword', 'deleteProductTypeGroup',
   'upsertProductHiddenTags', 'removeProductHiddenTag',
-  'setIntegrationEnabled', 'setAmazonRetentionConfig',
+  'setIntegrationEnabled',
 ];
 for (const fn of EDITAVEIS) {
   const i = STORE.indexOf(`export function ${fn}(`);
@@ -200,13 +200,6 @@ for (const fn of EDITAVEIS) {
   const corpo = corpoDaFuncao(STORE, i);
   t.ok(/registrarEdicao\(|registrarCampos\(/.test(corpo), `${fn} registra a edição no histórico`);
 }
-
-// ── 6b. Getter que devolve referência viva esconde a edição ───────────────────
-// O handler da retenção da Amazon pega a config, mexe nela e devolve pro setter. Com a referência
-// viva do store, o setter recebe o objeto JÁ alterado como se fosse o valor antigo, conclui que
-// nada mudou e não registra nada — sem erro em lugar nenhum.
-t.ok(/getAmazonRetentionConfig\(\) \{ return \{ \.\.\.\(load\(\)\.amazonRetentionConfig/.test(STORE),
-  'a config de retenção volta como cópia, senão a edição some do histórico');
 
 // ── 7. Onde o histórico é guardado ────────────────────────────────────────────
 // Tabela própria. No kv, uma lista que só cresce faria cada edição reescrever o histórico inteiro.
