@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
 import { autorAtual } from './autor.js';
+import { corteDaRetencao, foraDaJanela, diasForaDaJanela } from './retencao.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '..', 'data', 'db.json');
@@ -52,7 +53,6 @@ const EMPTY = {
   authConfig: null,   // { enabled: bool } — null = ainda não inicializado (initAuth semeia)
   authSessions: {},   // { token: { userId, createdAt, expiresAt } }
   integrationsConfig: {}, // { [chave]: { enabled: bool } } — liga/desliga por integração, ver tela Integrações
-  amazonRetentionConfig: {}, // { br: dias|undefined, us: dias|undefined } — janela de retenção por mercado, ver tela Integrações. Mercado ausente cai no legado AMAZON_RETENTION_DAYS (env var), ver sync.js.
   backupStatus: null, // último resultado do backup pra Backblaze B2 — ver src/backup.js
   channelHealth: {}, // { [canal]: { failingSince, alerted, lastError } } — ver src/alerts.js
 };
@@ -122,8 +122,15 @@ export async function initStore() {
       CREATE INDEX IF NOT EXISTS historico_ts_idx ON historico (ts DESC);
     `);
     cache = structuredClone(EMPTY);
+    // Só entra na memória o que está dentro da janela de histórico (src/retencao.js). O que ficou
+    // de fora é apagado do banco pelo sync logo em seguida (podarPedidosAntigos); ler tudo pra
+    // descartar depois faria o servidor subir com o pico de memória que esta regra existe pra
+    // evitar. A condição é a MESMA do DELETE, senão memória e banco discordariam na beira do corte.
     const [ord, sess, kv] = await Promise.all([
-      pool.query('SELECT id, data FROM orders'),
+      pool.query(
+        `SELECT id, data FROM orders WHERE data->>'createdAt' IS NULL OR data->>'createdAt' = '' OR data->>'createdAt' >= $1`,
+        [corteDaRetencao()]
+      ),
       pool.query('SELECT date, data FROM sessions_daily'),
       pool.query('SELECT key, value FROM kv'),
     ]);
@@ -161,7 +168,6 @@ export async function initStore() {
       if (r.key === 'authConfig')            cache.authConfig            = r.value;
       if (r.key === 'authSessions')          cache.authSessions          = r.value;
       if (r.key === 'integrationsConfig')    cache.integrationsConfig    = r.value;
-      if (r.key === 'amazonRetentionConfig') cache.amazonRetentionConfig = r.value;
       if (r.key === 'backupStatus')          cache.backupStatus          = r.value;
       if (r.key === 'channelHealth')         cache.channelHealth         = r.value;
     }
@@ -276,66 +282,74 @@ export function upsertOrders(orders) {
   if (USE_PG) pgUpsertOrders(orders);
 }
 
-// Poda de retenção: remove pedidos dos canais informados mais antigos que olderThanIso.
-// Usada só para a Amazon (canal de maior volume, ~1000 pedidos/dia US) — sem isso o
-// banco cresce ~30 mil/mês e volta a encher o disco do Hobby. Os outros canais são de
-// baixo volume e ficam completos. Autovacuum reaproveita o espaço liberado, então o
-// tamanho da tabela estabiliza na janela de retenção. Ver CLAUDE.md 4.7.7.
-export function pruneOrders({ channels, olderThanIso }) {
+// Poda da janela de histórico: apaga TODO pedido criado antes do corte, de qualquer canal e dos
+// dois mercados, e as séries diárias junto (sessões e gasto de anúncio). Ver src/retencao.js.
+// Roda a cada sync, então todo dia o dia mais antigo sai.
+//
+// No banco o DELETE vai em LOTES, um depois do outro, e não num comando só. A primeira poda depois
+// desta regra apaga a maior parte da tabela de uma vez, e uma escrita gigante num comando só já
+// encheu o disco do Postgres uma vez (ver pgUpsertOrders). O banco decide o que apagar por conta
+// própria, pela mesma condição do SELECT do initStore: os pedidos antigos nem chegam a entrar na
+// memória, então não daria pra listar por id a partir daqui.
+const PODA_LOTE = 2000;
+let podaNoBancoRodando = false;
+
+async function pgPodarPedidos(corteIso) {
+  if (podaNoBancoRodando) return;
+  podaNoBancoRodando = true;
+  let total = 0;
+  try {
+    for (;;) {
+      const r = await pool.query(
+        `DELETE FROM orders WHERE id IN (
+           SELECT id FROM orders WHERE data->>'createdAt' <> '' AND data->>'createdAt' < $1 LIMIT ${PODA_LOTE})`,
+        [corteIso]
+      );
+      total += r.rowCount;
+      if (r.rowCount < PODA_LOTE) break;
+    }
+    await pool.query(`DELETE FROM sessions_daily WHERE right(date, 10) < $1`, [corteIso.slice(0, 10)]);
+    if (total) console.log(`Histórico: ${total} pedido(s) anteriores a ${corteIso.slice(0, 10)} apagados do banco.`);
+  } catch (e) {
+    // Não é silêncio: volta a tentar no próximo sync, e o erro fica no log.
+    console.error('PG poda do histórico:', e.message);
+  } finally {
+    podaNoBancoRodando = false;
+  }
+}
+
+export function podarPedidosAntigos(corteIso = corteDaRetencao()) {
   const db = load();
-  const chSet = new Set(channels);
-  let removed = 0;
+  let removidos = 0;
   for (const [id, o] of Object.entries(db.orders)) {
-    if (chSet.has(o.channel) && o.createdAt && o.createdAt < olderThanIso) {
-      delete db.orders[id];
-      removed++;
+    if (foraDaJanela(o, corteIso)) { delete db.orders[id]; removidos++; }
+  }
+  if (removidos) indexDirty = true;
+
+  // Séries diárias. Cada uma só é regravada se algum dia saiu dela: regravar o blob inteiro a cada
+  // ciclo sem nada ter mudado seria escrita à toa no banco, a cada 15 minutos.
+  for (const d of diasForaDaJanela(db.sessionsDaily, corteIso)) delete db.sessionsDaily[d];
+  const kvDiarios = ['metaInsightsDaily', 'metaUSInsightsDaily', 'mlAdCostsDaily'];
+  for (const chave of kvDiarios) {
+    const velhos = diasForaDaJanela(db[chave], corteIso);
+    if (!velhos.length) continue;
+    for (const d of velhos) delete db[chave][d];
+    if (USE_PG) pgKv(chave, db[chave]);
+  }
+  // A da Yucaloo é uma série por mercado ({ br: {dia:...}, us: {...} }).
+  let yucMudou = false;
+  for (const mkt of Object.keys(db.yucalooSessionsDaily || {})) {
+    for (const d of diasForaDaJanela(db.yucalooSessionsDaily[mkt], corteIso)) {
+      delete db.yucalooSessionsDaily[mkt][d]; yucMudou = true;
     }
   }
-  if (removed) {
-    indexDirty = true;
-    saveJson();
-    if (USE_PG) {
-      pool.query(
-        `DELETE FROM orders WHERE data->>'channel' = ANY($1) AND data->>'createdAt' < $2`,
-        [channels, olderThanIso]
-      ).catch(e => console.error('PG prune error:', e.message));
-    }
-  }
-  return removed;
-}
+  if (yucMudou && USE_PG) pgKv('yucalooSessionsDaily', db.yucalooSessionsDaily);
 
-// Prévia (sem apagar nada) de quanto uma poda removeria — usado pela tela de Integrações antes
-// de aplicar uma janela de retenção nova, pra mostrar "isso vai apagar N pedidos" e pedir
-// confirmação explícita em vez de deixar a primeira poda de um valor novo acontecer sozinha no
-// próximo sync (ver CLAUDE.md — poda agressiva quase apagou 9 meses).
-export function countOrdersOlderThan({ channel, olderThanIso }) {
-  const db = load();
-  let count = 0;
-  for (const o of Object.values(db.orders)) {
-    if (o.channel === channel && o.createdAt && o.createdAt < olderThanIso) count++;
-  }
-  return count;
-}
-
-// Janela de retenção da Amazon por mercado — ver tela Integrações. Mercado sem chave própria
-// aqui cai no legado AMAZON_RETENTION_DAYS (env var), ver sync.js: preserva o comportamento já
-// ativo em produção (365 dias, BR+US juntos) até o usuário mudar algo pela tela.
-// Devolve uma CÓPIA. Quem chama isto costuma mexer no objeto e devolvê-lo pro setter
-// (`cfg[market] = days; setAmazonRetentionConfig(cfg)`), e com a referência viva o setter
-// receberia o objeto JÁ alterado como se fosse o valor antigo: a comparação daria "não mudou
-// nada" e a edição sumiria do Histórico, sem erro nenhum.
-export function getAmazonRetentionConfig() { return { ...(load().amazonRetentionConfig || {}) }; }
-export function setAmazonRetentionConfig(cfg) {
-  const db = load();
-  const antes = db.amazonRetentionConfig || {};
-  for (const mkt of Object.keys(cfg || {})) {
-    const de = antes[mkt] ?? null, para = cfg[mkt] ?? null;
-    if (de === para) continue;
-    registrarEdicao({ pagina: 'integracoes', market: mkt, acao: 'editou',
-      alvo: 'Amazon — Histórico', campo: 'Dias de histórico', de, para });
-  }
-  db.amazonRetentionConfig = cfg; saveJson();
-  if (USE_PG) pgKv('amazonRetentionConfig', cfg);
+  saveJson();
+  // No banco roda SEMPRE, mesmo com zero removidos da memória: os pedidos antigos já ficaram de
+  // fora na leitura do initStore, e é só aqui que eles saem do disco.
+  if (USE_PG) pgPodarPedidos(corteIso);
+  return removidos;
 }
 
 // Snapshot completo do store pra backup — mesmo formato do data/db.json usado no dev local (JSON
