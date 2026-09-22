@@ -21,6 +21,7 @@ import { runBackup, runBackupIfDue, isConfigured as isBackupConfigured, listBack
 import { checkSyncHealth, isConfigured as isAlertsConfigured, sendTelegramMessage } from './src/alerts.js';
 import { backfillShopify } from './src/backfill.js';
 import { RETENCAO_DIAS } from './src/retencao.js';
+import { lerDoCache, guardarNoCache } from './src/cache.js';
 import rateLimit from 'express-rate-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -578,15 +579,17 @@ app.post('/api/stock/agg-finance', (req, res) => {
 
 // Campanhas por canal (ao vivo, com cache de 5 min). Usado pelo detalhamento da tela de Campanhas.
 // Meta (BR/US) e Mercado Ads retornam campanha a campanha; Shopee/Amazon não têm API de gasto.
+// O cache esvazia sozinho (src/cache.js): antes cada período consultado ficava guardado até o deploy.
 const campaignCache = new Map();
+const CAMPANHAS_VALIDADE_MS = 5 * 60 * 1000;
 app.get('/api/campaigns', async (req, res) => {
   const market = req.query.market === 'us' ? 'us' : 'br';
   const { since, until } = req.query;
   if (!since || !until) return res.status(400).json({ error: 'Parâmetros since/until obrigatórios.' });
 
   const key = `${market}|${since}|${until}`;
-  const cached = campaignCache.get(key);
-  if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
+  const cached = lerDoCache(campaignCache, key, { validadeMs: CAMPANHAS_VALIDADE_MS });
+  if (cached) return res.json(cached);
 
   const channels = {};
   try {
@@ -615,7 +618,7 @@ app.get('/api/campaigns', async (req, res) => {
   }
 
   const data = { market, since, until, channels };
-  campaignCache.set(key, { ts: Date.now(), data });
+  guardarNoCache(campaignCache, key, data, { validadeMs: CAMPANHAS_VALIDADE_MS });
   res.json(data);
 });
 

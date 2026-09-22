@@ -39,10 +39,9 @@ let state = rangeForPreset('30d');
 // exibimos o resultado (badge 🔗 na linha já agrupada, ver aggRowHTML), sem toggle nem criação de
 // grupo. Os 3 campos de ordem (Projetada/Nova/Andamento) continuam editáveis por linha, como sempre
 // — o nome do grupo funciona como família própria pra eles (ver groupOrders no backend).
-let refreshTimer = null;
+// Pausa com a aba escondida e atualiza ao voltar, ver js/visivel.js.
 function applyRefresh() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  if (refreshMin > 0) refreshTimer = setInterval(load, refreshMin * 60 * 1000);
+  CocoVisivel.agendar('dados', () => load(), refreshMin > 0 ? refreshMin * 60 * 1000 : 0);
 }
 // Cards sempre abrem só com o primeiro expandido — não persiste entre recarregamentos (proposital).
 let collapsedState = {};

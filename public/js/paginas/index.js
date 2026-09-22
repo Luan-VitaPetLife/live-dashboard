@@ -1635,10 +1635,9 @@ document.getElementById('cardBankToggle').addEventListener('click', () => docume
 document.getElementById('layoutResetBtn').addEventListener('click', resetLayout);
 
 // ── Refresh interval ──
-let refreshTimer = null;
+// Pausa com a aba escondida e atualiza ao voltar, ver js/visivel.js.
 function applyRefresh() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  if (refreshMin > 0) refreshTimer = setInterval(loadData, refreshMin * 60 * 1000);
+  CocoVisivel.agendar('dados', () => loadData(), refreshMin > 0 ? refreshMin * 60 * 1000 : 0);
 }
 
 // ── Channel dropdown dinâmico ──

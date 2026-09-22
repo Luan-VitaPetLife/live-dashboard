@@ -410,10 +410,15 @@
     } catch (e) { /* silencioso — não é crítico, só um indicador */ }
   }
 
+  // Com a aba escondida a consulta é pulada. Era a chamada mais frequente do app (a cada 3s, em
+  // toda aba aberta de toda página): uma aba esquecida fazia quase 29 mil consultas por dia pra
+  // desenhar um card que ninguém estava vendo. Ao voltar, consulta na hora, senão o card
+  // mostraria o estado de quando a aba foi escondida por até 3s.
   function init() {
     mount();
     poll();
-    setInterval(poll, POLL_MS);
+    setInterval(() => { if (!document.hidden) poll(); }, POLL_MS);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

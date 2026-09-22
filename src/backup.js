@@ -5,9 +5,9 @@
 // Motivo: sem plano Pro no Railway, não existe backup automático do Postgres (só um manual
 // antigo).
 import 'dotenv/config';
-import zlib from 'zlib';
 import crypto from 'crypto';
 import { getFullSnapshot, getBackupStatus, setBackupStatus } from './store.js';
+import { snapshotGzip } from './snapshot.js';
 
 const KEY_ID      = process.env.B2_KEY_ID;
 const APP_KEY     = process.env.B2_APPLICATION_KEY;
@@ -114,11 +114,11 @@ async function deleteFile(apiUrl, token, fileName, fileId) {
 // authSessions fica de fora do snapshot de propósito — token de sessão é efêmero (expira em 30
 // dias, ver auth.js) e não deveria persistir em armazenamento frio; restaurar um backup antigo
 // simplesmente exige login de novo, o que já é o comportamento esperado.
+// Montado em partes, sem o banco inteiro virar um texto só na memória (ver src/snapshot.js).
 function buildSnapshotBuffer() {
   const full = getFullSnapshot();
   const { authSessions, ...rest } = full;
-  const json = JSON.stringify(rest);
-  return zlib.gzipSync(Buffer.from(json, 'utf8'));
+  return snapshotGzip(rest);
 }
 
 export async function runBackup(startedBy = null) {
@@ -126,7 +126,7 @@ export async function runBackup(startedBy = null) {
   const startedAt = new Date().toISOString();
   try {
     const { apiUrl, token, bucketId } = await authorize();
-    const gz = buildSnapshotBuffer();
+    const gz = await buildSnapshotBuffer();
     const stamp = startedAt.slice(0, 19).replace(/[:T]/g, '-'); // 2026-08-18-14-30-00
     const fileName = `${PREFIX}${stamp}.json.gz`;
 

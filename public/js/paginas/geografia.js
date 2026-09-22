@@ -747,10 +747,9 @@ CocoSync.ligar(loadData, { aoIniciar: () => setLive('loading', 'Sincronizando…
 
 // ── Refresh pill ──
 let refreshMin = Number(localStorage.getItem('coco_refresh') ?? 5);
-let refreshTimer = null;
+// Pausa com a aba escondida e atualiza ao voltar, ver js/visivel.js.
 function scheduleRefresh() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  if (refreshMin > 0) refreshTimer = setInterval(loadData, refreshMin * 60000);
+  CocoVisivel.agendar('dados', () => loadData(), refreshMin > 0 ? refreshMin * 60000 : 0);
 }
 function syncRefreshUI() {
   const labels = { '0':'Desligar','1':'1 min','5':'5 min','15':'15 min','30':'30 min' };
