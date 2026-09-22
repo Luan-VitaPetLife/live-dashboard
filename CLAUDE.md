@@ -628,13 +628,38 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
 - Senha: scrypt+salt, comparação em tempo constante. Sessão: cookie `coco_session` (HttpOnly,
   SameSite=Lax, Secure sob HTTPS), 30 dias, em `kv.authSessions`.
 - Dois níveis: `admin` (tudo) e `padrao` (só páginas liberadas em `pages[]`).
-- Portão de acesso em `server.js`, antes do `express.static`: libera sempre `/health`,
-  `/login.html`, rotas de API de auth, assets estáticos e callbacks OAuth; sem sessão → 401/redirect;
-  com sessão mas sem permissão na página → redirect pra primeira página permitida.
-- `initAuth()` no boot semeia um usuário admin se `kv.users` estiver vazio (senha padrão trocada
-  em produção) e liga o login por padrão (`authConfig.enabled = true`).
+- Portão de acesso em `server.js`, antes do `express.static`: libera sempre `/health`, `/login`,
+  rotas de API de auth, assets estáticos e o fluxo da Yucaloo; sem sessão → 401/redirect; com sessão
+  mas sem permissão na página → redirect pra primeira página permitida.
+- `initAuth()` no boot semeia um usuário admin se `kv.users` estiver vazio e liga o login por
+  padrão (`authConfig.enabled = true`). **A senha semente não é fixa**: vem de
+  `ADMIN_SEED_PASSWORD` ou é sorteada e aparece UMA vez no log do servidor. Era "123456" escrita no
+  código, num repositório público, e a lista vazia é justamente o caminho de recuperação abaixo.
 - Recuperação se travar: editar `kv` direto no Postgres (`UPDATE kv SET value='{"enabled":false}'
-  WHERE key='authConfig'` reabre sem login; apagar a linha `key='users'` re-semeia o admin).
+  WHERE key='authConfig'` reabre sem login; apagar a linha `key='users'` re-semeia o admin, e a
+  senha nova sai no log do Railway, ou é a de `ADMIN_SEED_PASSWORD`).
+
+### Quem pode chamar o quê (revisão de 22/09/2026, `scripts/test/seguranca.test.mjs`)
+- **Toda rota que GRAVA diz quem pode chamá-la**: `requireAdmin` ou `requirePage('<pagina>.html')`.
+  As únicas exceções são login, logout, troca da própria senha e `/api/sync`, e o teste as lista
+  pelo nome. Rota nova sem dono quebra o teste — é assim que uma porta esquecida vira erro em vez de
+  ficar aberta.
+- **`requirePage`** existe porque o portão só controla quem ABRE a tela. Sem ele, um usuário sem
+  acesso a Produtos gravava custo de produto chamando a rota direto. Gravação de Produtos, Estoque e
+  Segmentos (tipos de produto) passa por ele. Admin sempre passa.
+- **Conectar conta (Bling, Shopee, Mercado Livre, Google Ads) é só de admin**, e a volta do
+  provedor também. Eram rotas públicas, e o `state` no cookie (double-submit) só impede alguém de
+  ENGANAR o administrador: não impede um estranho de abrir o /connect no próprio navegador,
+  autorizar com a conta DELE e fazer a dashboard gravar o token dele no lugar do nosso. A Yucaloo
+  fica de fora de propósito: quem chama o /connect dela é a Shopify, com requisição assinada (HMAC),
+  muitas vezes num iframe onde o cookie da dashboard nem chega.
+- **`/api/sync` exige login**, ou o token de `SYNC_SECRET` (pra um agendador externo). Antes ele
+  passava sempre ("tem token próprio"), mas o botão nunca manda o token, então a variável não estava
+  configurada e qualquer pessoa disparava a sincronização inteira, gastando a cota da Amazon.
+- **Sonda e rota de manutenção são só de admin.** Várias devolvem pedido CRU com nome e endereço de
+  cliente, e uma delas apaga pedido.
+- O × do card de processos (cancelar) é só de admin e agora MOSTRA a recusa; antes ele nem lia a
+  resposta, e o botão ficava travado sem dizer por quê.
 
 ### Cabeçalhos de segurança (`server.js`, topo)
 - CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` e HSTS
@@ -2017,6 +2042,8 @@ Railway — nunca colar valor aqui, só o nome da variável e pra que serve.
 | `GOOGLE_ADS_CUSTOMER_ID` | Só EUA |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Só se o developer token foi gerado sob uma MCC |
 | `DATABASE_URL` | Postgres — Railway NÃO injeta sozinho, setar `${{Postgres.DATABASE_URL}}` |
+| `ADMIN_SEED_PASSWORD` | Senha do admin criado quando a lista de usuários está vazia (opcional; sem ela, é sorteada e sai no log) |
+| `SYNC_SECRET` | Token que deixa um agendador EXTERNO chamar `POST /api/sync` sem login (header `x-sync-token`). Opcional |
 | `B2_KEY_ID` / `B2_APPLICATION_KEY` / `B2_BUCKET_NAME` | Backup diário do banco (Backblaze B2) — ver `src/backup.js` |
 | `BACKUP_RETENTION_DAYS` | Quantos backups diários manter no B2 (padrão 30) |
 | `BACKUP_EVERY_HOURS` | Intervalo mínimo entre backups automáticos (padrão 24) |
@@ -2075,6 +2102,8 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
   `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e que a tela não
   tem campo de dias de histórico),
+  `seguranca` (toda rota que grava diz quem pode chamá-la, conectar conta é só de admin, sync exige
+  login, senha semente não está no código),
   `tiktok` (situação do Bling decide venda por allowlist, doação que passou por pedido não vira
   venda, cursor só anda com leitura inteira, filtro no horário de São Paulo),
   `economia` (aba escondida não consulta, cache que esvazia, sync que só grava o que mudou sem

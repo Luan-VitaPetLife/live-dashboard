@@ -257,9 +257,21 @@
         });
         if (!ok) return;
         cancelBtn.disabled = true;
+        // Recusa do servidor precisa aparecer: cancelar é só de administrador, e antes a resposta
+        // nem era lida, então o botão ficava travado sem dizer por quê.
         fetch('/api/jobs/' + id + '/cancel', { method: 'POST', credentials: 'same-origin' })
-          .then(poll)
-          .catch(() => { cancelBtn.disabled = false; });
+          .then(async r => {
+            if (r.ok) return poll();
+            const d = await r.json().catch(() => ({}));
+            cancelBtn.disabled = false;
+            window.cocoConfirm(d.error || 'O servidor recusou o cancelamento.', {
+              title: 'Não deu pra cancelar', confirmText: 'Entendi', cancelText: 'Fechar',
+            });
+          })
+          .catch(e => {
+            cancelBtn.disabled = false;
+            console.error('cancelar processo:', e);
+          });
         return;
       }
       const dismissBtn = e.target.closest('.jw-job-dismiss[data-dismiss-id]');

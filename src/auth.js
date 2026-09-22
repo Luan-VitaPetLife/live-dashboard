@@ -69,7 +69,12 @@ export function initAuth() {
   }
   const users = getUsers();
   if (!users || users.length === 0) {
-    const { salt, hash } = hashPassword('123456');
+    // A senha NÃO é fixa. Era "123456" escrita aqui, num repositório público, e a lista de usuários
+    // vazia é justamente o caminho de recuperação documentado: no dia em que alguém esvaziasse a
+    // lista, a produção ficaria com um usuário e uma senha que qualquer um conhece. Agora vem de
+    // ADMIN_SEED_PASSWORD, ou é sorteada e aparece UMA vez no log do servidor.
+    const senha = process.env.ADMIN_SEED_PASSWORD || crypto.randomBytes(12).toString('base64url');
+    const { salt, hash } = hashPassword(senha);
     const admin = {
       id: genId(),
       username: 'admin',
@@ -82,7 +87,9 @@ export function initAuth() {
     };
     setUsers([admin]);
     console.log(
-      '[auth] Admin semente criado (usuário "admin", senha "123456") — troque a senha em Configurações.'
+      process.env.ADMIN_SEED_PASSWORD
+        ? '[auth] Admin semente criado (usuário "admin", senha de ADMIN_SEED_PASSWORD). Troque a senha em Configurações.'
+        : `[auth] Admin semente criado (usuário "admin", senha "${senha}"). Troque a senha em Configurações.`
     );
   }
 }
