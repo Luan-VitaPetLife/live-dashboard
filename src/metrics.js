@@ -760,9 +760,9 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
   }
 
   // split por canal (receita real por canal; canais sem dados ficam 0)
-  const byChannel = market === 'us'
-    ? { shopify_us: 0, amazon_us: 0 }
-    : { shopify: 0, shopee: 0, amazon: 0, mercadolivre: 0 };
+  // Todo canal do mercado nasce com 0, a partir do catálogo (CANAIS): canal sem venda no período
+  // aparece zerado em vez de sumir. Era uma lista fixa que já tinha deixado Yucaloo e TikTok de fora.
+  const byChannel = Object.fromEntries(Object.entries(CANAIS).filter(([, c]) => c.market === market).map(([k]) => [k, 0]));
   getOrders({ channel: 'todos', since, until, market }).filter(o => !isCancelled(o)).forEach(o => { byChannel[o.channel] = (byChannel[o.channel] || 0) + orderRevenue(o, amazonRevenueMode); });
 
   // marketing por origem (apenas pedidos válidos do recorte atual)

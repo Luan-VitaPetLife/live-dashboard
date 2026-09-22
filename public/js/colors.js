@@ -59,6 +59,7 @@
     Shopee:          '#EE4D2D',
     'Mercado Livre': '#FFE600',
     Amazon:          '#4a90c4',
+    'TikTok Shop':   '#FE2C55',
     Clássico:        '#4a9e6e',
     Destaque:        '#e8a225',
     Direto:          '#c4b49a',

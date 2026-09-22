@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { computeDashboard, computeProducts, computeStock, searchOrders, exportOrdersList, listProductCatalog } from './src/metrics.js';
 import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeReturns, syncBonificacoes, enrichAmazonItems, reconcileGeoFromBling } from './src/sync.js';
-import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, fixUnpaidOrders, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
+import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import { comAutor } from './src/autor.js';
 import { PAGINAS as PAGINAS_HISTORICO, montar as montarHistorico } from './src/historico.js';
@@ -227,18 +227,38 @@ app.use((req, res, next) => {
 
   const p = req.path;
 
-  // Sempre liberados: health, tela de login, rotas de auth, sync (tem token próprio), assets estáticos e OAuth.
+  // Sempre liberados: health, tela de login, rotas de auth, assets estáticos e o fluxo da Yucaloo.
+  //
+  // O fluxo da Yucaloo é a única conexão que fica aberta, e com motivo: quem abre o /connect dela é
+  // a PRÓPRIA Shopify, com a requisição assinada (HMAC, verifyRequest), muitas vezes dentro de um
+  // iframe do admin da loja, onde o cookie de sessão da dashboard nem chega. Não dá pra forjar.
+  //
+  // /api/sync só passa sem login com o token de SYNC_SECRET, pra um agendador externo. Antes ele
+  // passava SEMPRE ("tem token próprio"), mas o botão Sincronizar nunca manda o token, então a
+  // variável não estava configurada, e qualquer pessoa na internet disparava a sincronização
+  // inteira, gastando a cota da Amazon, que é da conta.
+  const tokenDeSync = process.env.SYNC_SECRET;
+  const syncComToken = p === '/api/sync' && tokenDeSync && req.headers['x-sync-token'] === tokenDeSync;
   if (
     p === '/health' || p === '/login' ||
-    p === '/api/login' || p === '/api/logout' || p === '/api/me' || p === '/api/sync' ||
+    p === '/api/login' || p === '/api/logout' || p === '/api/me' || syncComToken ||
     STATIC_ASSET_RE.test(p) ||
-    p.startsWith('/shopee/') || p.startsWith('/mercadolivre/') || p.startsWith('/googleads/') || p.startsWith('/bling/') || p.startsWith('/shopify-yucaloo/')
+    p.startsWith('/shopify-yucaloo/')
   ) return next();
 
   const user = req.authUser;
   if (!user) {
     if (p.startsWith('/api/')) return res.status(401).json({ error: 'Não autenticado.' });
     return res.redirect('/login');
+  }
+
+  // CONECTAR uma conta (Bling, Shopee, Mercado Livre, Google Ads) é coisa de administrador, e a
+  // volta do provedor também. Essas rotas eram abertas, e a proteção de `state` no cookie só impede
+  // alguém de enganar o administrador: não impede um estranho de abrir o /connect no PRÓPRIO
+  // navegador, autorizar com a conta DELE e fazer a dashboard gravar o token dele no lugar do nosso
+  // (no Bling, isso passaria a alimentar os pedidos do TikTok e as doações).
+  if (/^\/(shopee|mercadolivre|googleads|bling)\//.test(p) && user.role !== 'admin') {
+    return res.status(403).send('<h2>Sem permissão</h2><p>Só um administrador pode conectar uma conta.</p>');
   }
 
   // Controle de acesso por página (só quando a URL resolve pra uma página conhecida).
@@ -278,6 +298,17 @@ function requireAdmin(req, res, next) {
   if (!auth.isEnabled()) return next();
   if (req.authUser && req.authUser.role === 'admin') return next();
   return res.status(403).json({ error: 'Apenas administradores.' });
+}
+
+// Gravação que pertence a uma PÁGINA exige acesso àquela página. O portão só controla quem ABRE a
+// tela; sem isto, um usuário sem acesso a Produtos gravava custo de produto chamando a rota direto.
+function requirePage(file) {
+  return (req, res, next) => {
+    if (!auth.isEnabled()) return next();
+    const u = req.authUser;
+    if (u && (u.role === 'admin' || auth.canAccessPage(u, file))) return next();
+    return res.status(403).json({ error: 'Seu usuário não tem acesso a essa página.' });
+  };
 }
 
 // Dados da dashboard
@@ -481,7 +512,7 @@ app.get('/api/product-types', (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.post('/api/product-types', (req, res) => {
+app.post('/api/product-types', requirePage('segmentos.html'), (req, res) => {
   const { market, name, keywords } = req.body || {};
   if (!market || !name || !Array.isArray(keywords) || !keywords.length) {
     return res.status(400).json({ error: 'market, name e keywords (array não vazio) são obrigatórios.' });
@@ -489,13 +520,13 @@ app.post('/api/product-types', (req, res) => {
   const types = upsertProductTypeGroup(market, name, keywords);
   res.json({ types });
 });
-app.post('/api/product-types/remove-keyword', (req, res) => {
+app.post('/api/product-types/remove-keyword', requirePage('segmentos.html'), (req, res) => {
   const { market, name, keyword } = req.body || {};
   if (!market || !name || !keyword) return res.status(400).json({ error: 'market, name e keyword são obrigatórios.' });
   const types = removeProductTypeKeyword(market, name, keyword);
   res.json({ types });
 });
-app.delete('/api/product-types', (req, res) => {
+app.delete('/api/product-types', requirePage('segmentos.html'), (req, res) => {
   const { market, name } = req.query;
   if (!market || !name) return res.status(400).json({ error: 'market e name são obrigatórios.' });
   const types = deleteProductTypeGroup(market, name);
@@ -529,7 +560,7 @@ app.post('/api/product-hidden-tags/remove', requireAdmin, (req, res) => {
 });
 
 // Salva/edita dados financeiros de um produto (COG, frete, % imposto, % comissão) — usado pela tela de Produtos.
-app.post('/api/products/finance', (req, res) => {
+app.post('/api/products/finance', requirePage('produtos.html'), (req, res) => {
   const { channel, title, cog, shipping, taxPct, commissionPct } = req.body || {};
   if (!channel || !title) return res.status(400).json({ error: 'channel e title são obrigatórios.' });
   const patch = {};
@@ -554,7 +585,7 @@ app.get('/api/stock', (req, res) => {
 
 // Salva/edita dados de estoque físico/recebendo de um produto POR CANAL — usado pela tela de Estoque.
 // Ordem Projetada/Nova/Em Andamento não são mais por canal, ver /api/stock/agg-finance abaixo.
-app.post('/api/stock/finance', (req, res) => {
+app.post('/api/stock/finance', requirePage('estoque.html'), (req, res) => {
   const { channel, title, stock, incoming } = req.body || {};
   if (!channel || !title) return res.status(400).json({ error: 'channel e title são obrigatórios.' });
   const patch = {};
@@ -566,7 +597,7 @@ app.post('/api/stock/finance', (req, res) => {
 
 // Salva/edita ordem projetada/nova/em andamento de uma FAMÍLIA de produto (soma de todos os
 // canais) — usado pelo card "Estoque" (panorama geral) da tela de Estoque.
-app.post('/api/stock/agg-finance', (req, res) => {
+app.post('/api/stock/agg-finance', requirePage('estoque.html'), (req, res) => {
   const { market, title, orderInProgress, orderNew, projected } = req.body || {};
   if (!market || !title) return res.status(400).json({ error: 'market e title são obrigatórios.' });
   const patch = {};
@@ -629,7 +660,7 @@ app.get('/api/campaigns', async (req, res) => {
 app.use(['/api/amazon', '/api/amazon-br'], syncLimiter);
 
 // Reset do backoff da Amazon. ?delay=N define um novo backoff de N minutos a partir de agora.
-app.post('/api/amazon/reset-backoff', (req, res) => {
+app.post('/api/amazon/reset-backoff', requireAdmin, (req, res) => {
   const delay = Number(req.query.delay || 0);
   const until = delay > 0 ? Date.now() + delay * 60 * 1000 : 0;
   setAmazonBackoff(until);
@@ -638,7 +669,7 @@ app.post('/api/amazon/reset-backoff', (req, res) => {
 });
 
 // Force-sync da Amazon: zera backoff + contador exponencial e sincroniza imediatamente (sem race com o timer)
-app.post('/api/amazon/force-sync', async (_req, res) => {
+app.post('/api/amazon/force-sync', requireAdmin, async (_req, res) => {
   setAmazonBackoff(0);
   setAmazonBackoffCount(0);
   const report = await runSync();
@@ -648,7 +679,7 @@ app.post('/api/amazon/force-sync', async (_req, res) => {
 
 // Reset do backoff da Amazon BR. (US e BR compartilham o mesmo balde de cota desde
 // a chamada combinada — então reseta os dois para destravar de fato.)
-app.post('/api/amazon-br/reset-backoff', (req, res) => {
+app.post('/api/amazon-br/reset-backoff', requireAdmin, (req, res) => {
   const delay = Number(req.query.delay || 0);
   const until = delay > 0 ? Date.now() + delay * 60 * 1000 : 0;
   setAmazonBRBackoff(until);
@@ -658,7 +689,7 @@ app.post('/api/amazon-br/reset-backoff', (req, res) => {
 });
 
 // Force-sync da Amazon BR: zera backoff + contador exponencial e sincroniza imediatamente.
-app.post('/api/amazon-br/force-sync', async (_req, res) => {
+app.post('/api/amazon-br/force-sync', requireAdmin, async (_req, res) => {
   setAmazonBRBackoff(0);
   setAmazonBRBackoffCount(0);
   setAmazonBackoff(0);
@@ -766,7 +797,7 @@ function startBackfillJob(market, days, startedBy) {
   })();
 }
 
-app.post('/api/amazon/backfill', (req, res) => {
+app.post('/api/amazon/backfill', requireAdmin, (req, res) => {
   if (backfillRunning) return res.status(409).json({ error: 'Backfill já em andamento.' });
 
   // Nunca além da janela de histórico: o que viesse de mais antigo seria apagado no sync seguinte.
@@ -840,7 +871,7 @@ app.post('/api/shopify/backfill', requireAdmin, (req, res) => {
 // pedidos só do sync contínuo não têm asin/título e continuam sem imagem até serem
 // reconciliados por um novo backfill.
 let imagesJobRunning = false;
-app.post('/api/amazon/images', (req, res) => {
+app.post('/api/amazon/images', requireAdmin, (req, res) => {
   if (imagesJobRunning) return res.status(409).json({ error: 'Busca de imagens já em andamento.' });
 
   const market = req.query.market === 'br' ? 'br' : 'us';
@@ -888,7 +919,7 @@ app.post('/api/amazon/images', (req, res) => {
 // Forçar a reconciliação de nomes de produto da Amazon (Reports API). Ignora o
 // throttle (force) e roda em background — o relatório leva ~1-2 min. Resultado no
 // log do servidor; confirme na tela de Produtos. Ver CLAUDE.md 4.7.6 / backlog item 8.
-app.post('/api/amazon/sync-names', (req, res) => {
+app.post('/api/amazon/sync-names', requireAdmin, (req, res) => {
   if (backfillRunning) return res.status(409).json({ error: 'Backfill em andamento — tente depois que terminar.' });
   const markets = req.query.market === 'br' ? ['br'] : req.query.market === 'us' ? ['us'] : ['us', 'br'];
   reconcileAmazonNames({ markets, force: true })
@@ -952,7 +983,7 @@ app.get('/api/amazon/settlement-probe', requireAdmin, async (req, res) => {
 // Limpeza pontual do vazamento de mercado da Amazon: remove pedidos US que foram gravados
 // como Amazon BR por um relatório cego-tagueado (ver CLAUDE.md 4.7.8). Rodar UMA vez após o
 // deploy da correção. Idempotente — pode rodar de novo sem efeito se já estiver limpo.
-app.post('/api/amazon/cleanup-market-leak', (req, res) => {
+app.post('/api/amazon/cleanup-market-leak', requireAdmin, (req, res) => {
   try {
     const removed = removeAmazonMarketLeak();
     res.json({ ok: true, removed, message: `${removed} pedidos US vazados no mercado BR removidos.` });
@@ -1003,20 +1034,6 @@ app.post('/api/alerts/test', requireAdmin, async (req, res) => {
   }
 });
 
-// Correção pontual: só pedido com pagamento de verdade conta como venda (CLAUDE.md 4.1) —
-// pedido já gravado com status "sem pagamento" (Pending/PendingAvailability na Amazon,
-// PENDING/AUTHORIZED no Shopify, confirmed/payment_required/payment_in_process no ML) ficou
-// marcado cancelled:false por engano. Corrige o flag local de quem já está no banco, sem chamar
-// nenhuma API de novo — ver UNPAID_STATUS_BY_CHANNEL em store.js.
-app.post('/api/orders/fix-unpaid', (req, res) => {
-  try {
-    const fixed = fixUnpaidOrders();
-    res.json({ ok: true, fixed, message: `${fixed} pedidos sem pagamento confirmado corrigidos (não contam mais como venda).` });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // Busca nomes de produto da Amazon via getOrderItems (Orders API, por-pedido) — o caminho
 // que funciona pro BR, cujo relatório não traz pedidos BR reais (contas vinculadas, ver
 // 4.7.8). Roda em background (BR ~120 pedidos × 0,5 req/s ≈ 5 min). Progresso no log e em
@@ -1031,7 +1048,7 @@ let returnsRunning = false;
 
 let geoRunning = false;
 let geoStatus  = null; // último resultado de reconcileGeoFromBling, ver GET /api/status → bling.geo
-app.post('/api/amazon/fetch-items', (req, res) => {
+app.post('/api/amazon/fetch-items', requireAdmin, (req, res) => {
   if (itemsRunning) return res.status(409).json({ error: 'Busca de itens já em andamento.' });
   const market = req.query.market === 'us' ? 'us' : 'br';
   const limit  = Math.min(Number(req.query.limit || 1000), 5000);
@@ -1057,7 +1074,7 @@ app.post('/api/amazon/fetch-items', (req, res) => {
 
 // Diagnóstico: quais marketplaces cada token da Amazon enxerga (getMarketplaceParticipations).
 // Prova definitiva de qual conta de vendedor cada refresh token autoriza. Ver 4.7.9.
-app.get('/api/amazon/whoami', async (_req, res) => {
+app.get('/api/amazon/whoami', requireAdmin, async (_req, res) => {
   try {
     const [us, br] = await Promise.allSettled([amazon.whoAmI('us'), amazon.whoAmI('br')]);
     res.json({
@@ -1070,7 +1087,7 @@ app.get('/api/amazon/whoami', async (_req, res) => {
 });
 
 // Diagnóstico: lista crua de pedidos da Amazon (MarketplaceId + SalesChannel reais). Ver 4.7.9.
-app.get('/api/amazon/list-orders', async (req, res) => {
+app.get('/api/amazon/list-orders', requireAdmin, async (req, res) => {
   const market = req.query.market === 'us' ? 'us' : 'br';
   const days   = Math.min(Number(req.query.days || 14), 60);
   try { res.json(await amazon.listOrdersDiag({ market, days })); }
@@ -1078,7 +1095,7 @@ app.get('/api/amazon/list-orders', async (req, res) => {
 });
 
 // Diagnóstico: inspeciona UM pedido (getOrder + getOrderItems) para entender o 400. Ver 4.7.9.
-app.get('/api/amazon/probe-order', async (req, res) => {
+app.get('/api/amazon/probe-order', requireAdmin, async (req, res) => {
   const id = req.query.id;
   const market = req.query.market === 'us' ? 'us' : 'br';
   if (!id) return res.status(400).json({ error: 'passe ?id=<AmazonOrderId>' });
@@ -1087,7 +1104,7 @@ app.get('/api/amazon/probe-order', async (req, res) => {
 });
 
 // Diagnóstico: resposta CRUA do Catalog Items API pra um ASIN (por que a imagem volta vazia).
-app.get('/api/amazon/probe-image', async (req, res) => {
+app.get('/api/amazon/probe-image', requireAdmin, async (req, res) => {
   const market = req.query.market === 'us' ? 'us' : 'br';
   try { res.json(await amazon.probeImage(req.query.asin || null, market)); }
   catch (e) { res.status(500).json({ error: e.message }); }
@@ -1096,7 +1113,7 @@ app.get('/api/amazon/probe-image', async (req, res) => {
 // Diagnóstico: colunas reais do relatório da Amazon + amostra dos campos que decidem o
 // mercado (order-status/currency/sales-channel/ship-country/ship-state) e a proporção de
 // contaminação. Usado para confirmar o discriminador correto do rowMarket. Ver 4.7.8.
-app.get('/api/amazon/report-columns', async (req, res) => {
+app.get('/api/amazon/report-columns', requireAdmin, async (req, res) => {
   const market = req.query.market === 'us' ? 'us' : 'br';
   const days   = Math.min(Number(req.query.days || 1), 7);
   try {
@@ -1107,9 +1124,8 @@ app.get('/api/amazon/report-columns', async (req, res) => {
 });
 
 // Forçar uma sincronização manual (protegido por token)
+// Quem chega aqui já passou pelo portão: está logado, ou mandou o token de SYNC_SECRET.
 app.post('/api/sync', syncLimiter, async (req, res) => {
-  const secret = process.env.SYNC_SECRET;
-  if (secret && req.headers['x-sync-token'] !== secret) return res.status(401).json({ error: 'Não autorizado.' });
   try { res.json(await runSync()); }
   catch (e) { res.status(500).json({ error: 'Sync falhou.' }); }
 });
@@ -1170,7 +1186,7 @@ app.get('/shopee/callback', async (req, res) => {
 
 // Diagnóstico: mostra o recipient_address cru de pedidos recentes da Shopee (sem normalizar),
 // pra confirmar se a API está mandando o estado ou mascarando por privacidade. Ver CLAUDE.md 4.5.
-app.get('/api/shopee/probe-order', async (req, res) => {
+app.get('/api/shopee/probe-order', requireAdmin, async (req, res) => {
   try { res.json(await shopee.probeOrder()); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1351,21 +1367,11 @@ app.get('/api/bling/probe-tiktok', requireAdmin, syncLimiter, async (req, res) =
   }
 });
 
-app.get('/api/bling/probe-orders', syncLimiter, async (req, res) => {
-  try {
-    const { since, until } = req.query;
-    if (!since || !until) return res.status(400).json({ error: 'Parâmetros since/until obrigatórios (YYYY-MM-DD).' });
-    res.json(await bling.probeOrders(since, until));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // Sonda de exploração: lista os canais de venda cadastrados no Bling (nome/tipo de
 // cada integração de marketplace), pra traduzir o `loja.unidadeNegocio.id` dos
 // pedidos pro canal real (Shopee, Mercado Livre, Shopify, Amazon...). Mesmo cuidado
-// de cota do probe-orders acima (syncLimiter).
-app.get('/api/bling/canais-venda', syncLimiter, async (req, res) => {
+// de cota das outras sondas (syncLimiter).
+app.get('/api/bling/canais-venda', requireAdmin, syncLimiter, async (req, res) => {
   try {
     res.json(await bling.fetchSalesChannels());
   } catch (e) {
@@ -1376,7 +1382,7 @@ app.get('/api/bling/canais-venda', syncLimiter, async (req, res) => {
 // Sonda: procura pedidos de um loja.id específico numa janela (barato, só lista, sem
 // detalhe por pedido) — usado pra confirmar o formato do numeroLoja de um canal antes de
 // habilitá-lo em bling.KNOWN_CHANNELS (ex.: Amazon Brasil).
-app.get('/api/bling/probe-channel', syncLimiter, async (req, res) => {
+app.get('/api/bling/probe-channel', requireAdmin, syncLimiter, async (req, res) => {
   try {
     const { since, until, lojaId } = req.query;
     if (!since || !until || !lojaId) return res.status(400).json({ error: 'Parâmetros since/until/lojaId obrigatórios.' });
@@ -1390,7 +1396,7 @@ app.get('/api/bling/probe-channel', syncLimiter, async (req, res) => {
 // pedido Mercado Livre é o order.id de verdade ou o pack_id de um envio agrupado (ver
 // ml.probeOrderOrPack) — usado pra investigar por que alguns pedidos ML não casam na
 // reconciliação de geografia do Bling. Não é chamado por nenhum sync automático.
-app.get('/api/ml/probe-order', syncLimiter, async (req, res) => {
+app.get('/api/ml/probe-order', requireAdmin, syncLimiter, async (req, res) => {
   try {
     const { numero } = req.query;
     if (!numero) return res.status(400).json({ error: 'Parâmetro numero obrigatório.' });
@@ -1404,7 +1410,7 @@ app.get('/api/ml/probe-order', syncLimiter, async (req, res) => {
 // endereço do Bling) manualmente, ignorando o throttle — mesmo padrão de
 // /api/amazon/sync-names. Progresso em GET /api/status → bling.geo. Nunca cria pedido,
 // só enriquece state vazio (ver src/sync.js reconcileGeoFromBling).
-app.post('/api/bling/sync-geo', syncLimiter, async (req, res) => {
+app.post('/api/bling/sync-geo', requireAdmin, syncLimiter, async (req, res) => {
   if (geoRunning) return res.status(409).json({ error: 'Reconciliação de geografia já em andamento.' });
   const startedBy = req.authUser?.name || req.authUser?.username || null;
   geoRunning = true;
@@ -1535,7 +1541,7 @@ app.get('/api/jobs', (_req, res) => {
 });
 
 // Cancelamento cooperativo (botão × no widget) — só os jobs em CANCELABLE_JOB_IDS aceitam.
-app.post('/api/jobs/:id/cancel', (req, res) => {
+app.post('/api/jobs/:id/cancel', requireAdmin, (req, res) => {
   const id = req.params.id;
   if (!CANCELABLE_JOB_IDS.has(id)) return res.status(400).json({ error: 'Esse processo não pode ser cancelado (termina sozinho em segundos).' });
   cancelFlags[id] = true;

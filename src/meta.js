@@ -6,7 +6,11 @@ import 'dotenv/config';
 const ACCESS_TOKEN     = process.env.META_ACCESS_TOKEN;
 const AD_ACCOUNT_ID    = process.env.META_AD_ACCOUNT_ID;
 const AD_ACCOUNT_ID_US = process.env.META_US_AD_ACCOUNT_ID;
-const API_VERSION      = 'v20.0';
+// Configurável como a da Shopify (SHOPIFY_API_VERSION). A v20.0 é de maio de 2024 e a Meta mantém
+// cada versão por cerca de dois anos: trocar por uma mais nova é mudar a variável no Railway e
+// conferir Campanhas, sem deploy. Chamada numa versão já desligada costuma ser atendida pela mais
+// antiga ainda ativa, então o risco de ficar parado é mudança silenciosa, não erro.
+const API_VERSION      = process.env.META_API_VERSION || 'v20.0';
 const BASE             = `https://graph.facebook.com/${API_VERSION}`;
 
 export function isConfigured(accountId = AD_ACCOUNT_ID) {
