@@ -798,8 +798,8 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
   padrão; https://developer.bling.com.br/migracao-jwt). Quem pede JWT é o header `enable-jwt: 1`
   (`JWT_HEADER`), e ele vai nos DOIS únicos pontos de rede do projeto com o Bling: `tokenRequest`
   (troca do code e renovação) e `apiGet` (toda leitura). Nenhum outro arquivo chama o Bling direto,
-  e `scripts/test/bling-jwt.test.mjs` falha se alguém passar a chamar. O token JWT tem 1.500 a 3.000
-  caracteres e mora em `kv.blingTokens` (JSONB, sem limite de tamanho): nada a migrar no banco.
+  e `scripts/test/bling-jwt.test.mjs` falha se alguém passar a chamar. O token JWT é bem maior que o opaco
+  (959 caracteres o primeiro, em produção; o Bling avisa que pode chegar a ~3.000) e mora em `kv.blingTokens` (JSONB, sem limite de tamanho): nada a migrar no banco.
   - **Não precisa reconectar**: a primeira renovação automática depois do deploy (no máximo 6h) já
     devolve JWT. `GET /api/bling/token` (admin) mostra formato, tamanho e validade, NUNCA o token;
     `POST /api/bling/token/renovar` (admin) adianta a renovação. Renovar é POST de propósito: troca o
@@ -811,7 +811,8 @@ devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shop
     chega no meio de uma renovação espera ela e recebe o mesmo resultado.
   - **Não testar a renovação da máquina local com o token de produção**: ela invalida o refresh token
     que a produção está usando, e a dashboard para de ler o Bling até alguém reconectar.
-  - O **quadro de pedidos** (projeto irmão) também fala com o Bling e precisa da mesma migração.
+  - **Confirmado em produção em 23/09/2026**: `GET /api/bling/token` respondeu `"formato": "JWT"`
+    depois de uma renovação manual. O quadro de pedidos (projeto irmão) faz a própria migração.
 - **Saída em bonificação (doação para UGC):** a empresa envia produto sem cobrar, e no Bling isso
   sai com "Natureza de operação: Saída em bonificação", valor R$ 0. A dashboard precisa contar
   essas UNIDADES sem que elas virem receita (pedido do Luan, 04/09/2026). O bloqueio é o mesmo de
@@ -2216,8 +2217,6 @@ no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
   tem o role "Product Listing". Habilitar no portal + re-autorizar (novo refresh token). O app do
   BR já nasceu com esse role, então BR já não tem esse problema.
   Código pronto (`POST /api/amazon/images`).
-- **Bling JWT — conferir depois do deploy** (prazo do Bling: 15/10/2026): `GET /api/bling/token`
-  precisa mostrar `"formato": "JWT"` em até 6h. E migrar também o quadro de pedidos.
 - **Amazon Ads:** integração ainda não construída, aparece só como "Planejada" na tela de
   Integrações.
 - **TikTok Shop — conferir a sonda** (`GET /api/bling/probe-tiktok`) depois dos primeiros dias em
