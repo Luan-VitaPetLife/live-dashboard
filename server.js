@@ -1354,6 +1354,15 @@ app.get('/api/bling/probe-bonificacao', requireAdmin, syncLimiter, async (req, r
   }
 });
 
+// Migração JWT do Bling: formato e tamanho do token guardado (nunca o token) e renovação manual.
+// Renovar é POST de propósito: troca o token, e ação que troca coisa não pode ser disparada por um
+// link. A renovação automática (a cada ~6h) já traz o JWT sozinha; esta rota só adianta.
+app.get('/api/bling/token', requireAdmin, (_req, res) => res.json(bling.formatoDoToken()));
+app.post('/api/bling/token/renovar', requireAdmin, syncLimiter, async (_req, res) => {
+  try { res.json(await bling.renovarAgora()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // O que a captura do TikTok decide sobre os pedidos reais do período, e de quais lojas saem as
 // notas de doação. Sem dado de cliente. Padrão: últimos 30 dias. Ver src/tiktok.js.
 app.get('/api/bling/probe-tiktok', requireAdmin, syncLimiter, async (req, res) => {

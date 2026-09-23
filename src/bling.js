@@ -32,6 +32,7 @@
 //  documentação — se ficar 30 dias sem nenhuma chamada, precisa reconectar).
 import 'dotenv/config';
 import { getBlingTokens, setBlingTokens } from './store.js';
+import { umaPorVez } from './umaPorVez.js';
 
 const CLIENT_ID     = process.env.BLING_CLIENT_ID;
 const CLIENT_SECRET = process.env.BLING_CLIENT_SECRET;
@@ -61,6 +62,13 @@ function basicAuthHeader() {
   return 'Basic ' + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
 }
 
+// Formato JWT dos tokens do Bling (obrigatório a partir de 15/10/2026; depois disso o Bling
+// recusa requisição fora do padrão). Quem pede JWT é este header: na troca do code, na
+// renovação e, segundo a documentação da migração, em toda chamada seguinte à API. Os dois
+// únicos pontos de rede deste arquivo (tokenRequest e apiGet) o levam, e nenhum outro arquivo do
+// projeto fala com o Bling. https://developer.bling.com.br/migracao-jwt
+const JWT_HEADER = { 'enable-jwt': '1' };
+
 async function tokenRequest(body) {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
@@ -68,6 +76,7 @@ async function tokenRequest(body) {
       'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json',
       Authorization: basicAuthHeader(),
+      ...JWT_HEADER,
     },
     body: new URLSearchParams(body).toString(),
   });
@@ -96,7 +105,14 @@ export async function exchangeCode(code) {
 }
 
 // Renova o access_token usando o refresh_token.
-async function refreshToken() {
+//
+// UMA renovação por vez. O Bling troca o refresh token a cada renovação e invalida o anterior:
+// se duas leituras encontrassem o token vencido ao mesmo tempo, as duas renovariam com o MESMO
+// refresh token, a segunda seria recusada e, dependendo da ordem, o token guardado poderia acabar
+// sendo o que já foi invalidado. Aí a única saída é reautorizar pelo navegador (/bling/connect) —
+// e depois da migração pro JWT não há volta pro token antigo. Quem chega no meio de uma renovação
+// espera ela e recebe o mesmo resultado, em vez de disparar outra.
+const refreshToken = umaPorVez(async () => {
   const tk = getBlingTokens();
   if (!tk) throw new Error('Bling ainda não autorizado (use /bling/connect).');
   const json = await tokenRequest({
@@ -105,13 +121,35 @@ async function refreshToken() {
   });
   saveTokens(json);
   return getBlingTokens();
-}
+});
 
 async function validToken() {
   let tk = getBlingTokens();
   if (!tk) throw new Error('Bling ainda não autorizado (use /bling/connect).');
   if (now() >= tk.expires_at) tk = await refreshToken();
   return tk;
+}
+
+// Formato e tamanho do token guardado, SEM o token (repositório público, e a resposta é feita pra
+// ser lida e colada numa conversa). É como se confere a migração: JWT tem três partes separadas
+// por ponto e começa com "eyJ"; o opaco antigo é bem mais curto.
+export function formatoDoToken() {
+  const tk = getBlingTokens();
+  if (!tk?.access_token) return { autorizado: false };
+  const t = String(tk.access_token);
+  return {
+    autorizado: true,
+    formato: /^eyJ[\w-]*\.[\w-]+\.[\w-]*$/.test(t) ? 'JWT' : 'opaco (antigo)',
+    tamanho: t.length,
+    expiraEm: tk.expires_at ? new Date(tk.expires_at * 1000).toISOString() : null,
+  };
+}
+
+// Renova agora, sem esperar o vencimento de 6h: testa a renovação e já sai com o token novo. É a
+// mesma renovação do uso normal, pela mesma trava, então não disputa com uma leitura em andamento.
+export async function renovarAgora() {
+  await refreshToken();
+  return formatoDoToken();
 }
 
 // Limite real da API (confirmado em developer.bling.com.br/limites): 3 req/s e
@@ -134,7 +172,7 @@ async function apiGet(path, params = {}, _isRetry = false) {
   lastCallAt = Date.now();
 
   const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${tk.access_token}`, Accept: 'application/json' },
+    headers: { Authorization: `Bearer ${tk.access_token}`, Accept: 'application/json', ...JWT_HEADER },
   });
   const json = await res.json();
   if (json.error) {
