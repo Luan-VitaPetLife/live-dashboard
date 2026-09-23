@@ -1,2303 +1,470 @@
-# CLAUDE.md — Contexto do projeto
+# CLAUDE.md — Manual da dashboard
 
-> Lido automaticamente pelo Claude Code ao abrir o projeto. Resume o que já foi decidido,
-> para não repetir investigação. Histórico de mudanças fica no `git log`, não aqui.
->
-> Este repositório é PÚBLICO no GitHub. Nunca colar aqui token, secret, chave, ARN completo,
-> ID de conta AWS, ou qualquer identificador exato de conta externa — só nomes de variável
-> de ambiente. Os valores reais vivem só no `.env` local (git-ignored) e no Railway.
+> Lido automaticamente pelo Claude Code. Diz **o que está decidido, por quê, e onde já se errou**.
+> Histórico de mudança fica no `git log`, não aqui. Quase toda regra tem um teste em `scripts/test/`
+> que falha se ela for quebrada — ao mudar uma regra, mude o teste junto.
+
+## 0. Regras de ouro
+
+1. **Repositório PÚBLICO.** Nunca colar token, secret, chave, ARN, ID de conta AWS ou identificador
+   de conta externa — aqui, no código ou em commit. Só nome de variável de ambiente. Valores reais
+   vivem no `.env` local (ignorado pelo git) e no Railway.
+2. **Trabalho no branch `dev`.** Nunca commitar nem dar push em `master`: `master` faz deploy
+   automático em produção, e quem mescla é o Luan.
+3. **Nenhum teste sobe o `server.js` nem toca no banco.** Subir o servidor dispara o sync, e a cota
+   da Amazon é da CONTA, não do processo: teste local disputando com produção já derrubou o BR.
+   Pelo mesmo motivo, **não renovar token (Bling, ML, Shopee…) da máquina local com a credencial de
+   produção**: a renovação invalida o token que a produção está usando.
+4. **Nunca engolir erro de integração** (`.catch(() => [])`, `catch(e){}`). Erro vai pro log e pro
+   relatório do sync. Um erro engolido já escondeu a Amazon EUA zerada por semanas.
+5. **Allowlist positiva, nunca lista negativa**, pra tudo que decide se algo conta (status de venda,
+   de devolução, de nota fiscal, tipo de anúncio). Valor novo que ninguém decidiu NÃO conta e
+   aparece contado num relatório — nunca some calado e nunca passa a contar sozinho.
+6. **Sondar antes de mapear.** API sem documentação dos campos: primeiro uma sonda de admin que
+   devolve o ESQUELETO da resposta real (sem dado pessoal), depois o mapeamento em cima dela.
+7. **Número errado é pior que número faltando.** Regra do Luan: "não podemos falar que vendeu 5 se
+   vendeu 3". Na dúvida, não conte e avise.
+8. Interface e textos em **pt-BR**, com acento certo (a chave interna pode ser ASCII, o rótulo não).
+   Dono do produto: Luan, perfil de negócio — explicar em linguagem de negócio.
+9. Ao escrever teste novo, **plantar o defeito e ver o teste falhar**. Teste que nunca falhou não
+   protege nada.
 
 ## 1. O que é
 
-Dashboard de vendas multi-mercado e multicanal da marca **Coco and Luna** (suplementos para
-pets) e da sua 2ª marca **Yucaloo**. A empresa por trás das duas é a **Vita Pet Life** — isso é
-só o nome legal/administrativo (aparece no domínio da loja Shopify US e na conta Meta EUA por
-motivo histórico); não tratar "Vita Pet Life" como nome de loja em textos de UI (ex.: não rotular
-um canal Shopify específico como "Vita Pet Life", isso é sempre "Coco and Luna" ou "Yucaloo",
-ver `colors.js`). Já o rodapé (`#footerDate`, 6 páginas: Visão geral/Produtos/Estoque/Campanhas/
-Segmentos/Geografia) usa "Vita Pet Life" DE PROPÓSITO desde 21/08/2026 — é o resumo de rodapé da
-dashboard inteira, que hoje cobre duas marcas (e mais devem vir), então "Coco and Luna" sozinho
-ficou impreciso ali; o nome da empresa como identificador de "de quem é essa dashboard" é
-exatamente o uso correto do nome legal. As duas regras não se contradizem: uma é sobre não
-inventar uma "loja Vita Pet Life" que não existe, a outra é sobre o rótulo correto pra dashboard
-como um todo.
+Dashboard de vendas ao vivo das marcas **Coco and Luna** e **Yucaloo** (suplementos para pets),
+empresa **Vita Pet Life**. "Vita Pet Life" é nome legal: nunca rótulo de loja/canal na tela (a loja
+é sempre "Coco and Luna" ou "Yucaloo"); só aparece no rodapé, como dona da dashboard.
 
-- **Brasil:** Shopify BR (`cocoandluna.com.br`) + Shopify Yucaloo BR + Shopee + Mercado Livre + Amazon BR
-- **EUA:** Shopify US (`vita-pet-life.myshopify.com`) + Shopify Yucaloo EUA + Amazon US
+| Mercado | Canais | Moeda |
+|---|---|---|
+| Brasil (`br`) | Shopify Coco and Luna, Shopify Yucaloo, Shopee, Mercado Livre, Amazon BR, TikTok Shop | BRL, fuso -03 |
+| EUA (`us`) | Shopify Coco and Luna, Shopify Yucaloo, Amazon EUA | USD |
 
-Dono do produto: Luan, perfil de negócio (não-dev) — quer uma tela única, ao vivo, com todos os
-canais. Interface em pt-BR. Valores BR em BRL, valores US em USD.
+- Produção: `https://live-dashboard-vitapetlife.up.railway.app` (Railway, deploy do `master`).
+- Yucaloo NÃO é um mercado: usa o mesmo `market` da Coco and Luna (decisão do Luan: ver o país
+  inteiro junto). O que a separa é só o `channel` (`yucaloo_br`/`yucaloo_us`).
+- Mercado Livre: domínio da API é `api.mercadolibre.com` ("libre"). Já quebrou quando "corrigiram".
+- Google Ads só existe nos EUA e só aparece na tela de Campanhas.
 
-Produção: `https://live-dashboard-vitapetlife.up.railway.app` (Railway, auto-deploy do branch
-`master` de `https://github.com/Luan-VitaPetLife/live-dashboard.git`). Trabalho normal acontece
-no branch `dev`; nunca commitar/pushar direto em `master`.
-
-## 2. Contas e domínios
-
-**Shopify BR:** `cocoandluna.com.br`, admin `ebb5cd.myshopify.com`. BRL, fuso -03
-(`STORE_OFFSET_MINUTES=-180`). Admin API `2026-04` (não usar versão anterior a 2025-10).
-
-**Shopify US:** `vita-pet-life.myshopify.com`.
-
-**Shopify Yucaloo BR:** `pii90z-nz.myshopify.com` (nome de exibição `yucaloo.com.br`). App
-criado via Dev Dashboard da Shopify (fluxo diferente do app clássico — ver seção Yucaloo).
-
-**Amazon BR:** marketplace `A2Q3Y263D00KWC` (ID público da Amazon, igual pra qualquer vendedor
-no Brasil), conta de vendedor CocoandLuna, app SP-API próprio
-(`AMAZON_BR_CLIENT_ID/SECRET/REFRESH_TOKEN`).
-
-**Amazon US:** marketplace `ATVPDKIKX0DER` (idem, público), conta de vendedor VITA PET LIFE.
-Autenticação via IAM User + IAM Role (SigV4 + STS AssumeRole) — nomes/ARNs exatos só no
-Railway, nunca aqui. Role/chaves AWS compartilhados entre BR e US; client_id/secret/refresh_token
-são separados por conta.
-
-**Meta Ads:** BR = conta Coco and Luna (`META_AD_ACCOUNT_ID`). US = conta Vita Pet Life
-(`META_US_AD_ACCOUNT_ID`). Mesmo `META_ACCESS_TOKEN` (System User) pros dois.
-
-**Mercado Livre:** domínio da API é `api.mercadolibre.com` — "libre" em espanhol, NÃO "livre".
-Nunca reverter isso, já causou bug.
-
-**Google Ads:** conta "Coco and Luna", só roda campanhas dos EUA (`GOOGLE_ADS_CUSTOMER_ID`).
-
-## 3. Arquitetura
+## 2. Como funciona
 
 ```
-server.js               Express: serve public/ + API + agendador de sync
-src/store.js             Postgres em produção (DATABASE_URL), JSON local (data/db.json) no dev
-src/shopify.js           Pedidos via GraphQL Admin API + sessões via ShopifyQL (multi-loja via cfg)
-src/shopifyYucaloo.js    OAuth da Yucaloo (Dev Dashboard) + fetchOrders/fetchProductCatalog
-src/shopee.js            Shopee Open API v2: HMAC, OAuth, refresh de token
-src/mercadolivre.js      Mercado Livre OAuth + pedidos + Mercado Ads (fetchAdCosts/fetchCampaigns)
-src/amazon.js            Amazon SP-API (BR+US): LWA + SigV4 + STS AssumeRole
-src/meta.js              Meta Marketing API: gasto diário + fetchCampaigns
-src/googleads.js         Google Ads API: OAuth + fetchCampaigns (só EUA)
-src/metrics.js           Calcula o payload da dashboard por mercado
-src/insights.js          Regras do card "Insights" (sem IA) — puro, testável sem banco
-src/historico.js         Frase de cada edição do "Histórico" — puro, testável sem banco
-src/retencao.js          Janela de histórico de 90 dias (o corte) — puro
-src/comparar.js          "Esse pedido mudou?" — decide se o sync grava no banco, puro
-src/cache.js             Cache em memória com prazo e teto (Campanhas), puro
-src/snapshot.js          Monta o backup em partes, sem o banco virar um texto só
-src/tiktok.js            TikTok Shop lido pelo Bling: situação → venda, pedido normalizado — puro
-src/umaPorVez.js         Só uma execução por vez (renovação do token do Bling) — puro
-src/autor.js             Quem está editando agora (AsyncLocalStorage), pro registro do Histórico
-src/us-states.js         normalizeUsState(): reduz grafias de estado dos EUA a 2 letras
-src/auth.js              Login: hash scrypt+salt, sessão por cookie, CRUD de usuários, permissão por página
-src/sync.js              Orquestra a busca de todos os canais e grava no store
-src/backfill.js          Recupera pedido antigo das lojas Shopify (o que a janela móvel não pegou)
-src/backup.js            Backup diário do banco pra Backblaze B2 (API nativa, sem SDK)
-src/alerts.js            Alerta no Telegram quando um canal fica travado sem sincronizar
-scripts/restore-backup.mjs  Restaura o banco a partir de um backup do B2 (destrutivo, pede confirmação)
-public/index.html        Dashboard principal (Revenue)
-public/campanhas.html    Gastos reais por canal + campanhas
-public/produtos.html     Catálogo completo por canal
-public/estoque.html      Estoque + produção, híbrido real (vendas) + manual
-public/segmentos.html    Gato vs Cachorro, tipos de produto, geografia por produto
-public/geografia.html    Mapa por estado (Leaflet), seletor BR/EUA embutido
-public/unificador.html   Agrupamento manual de produtos entre canais (admin)
-public/historico.html    Quem editou o quê, quando, e de quanto pra quanto (admin)
-public/configuracoes.html Geral, login, gestão de usuários (admin)
-public/integracoes.html  Status + liga/desliga por integração (admin)
-public/login.html        Tela de login (standalone)
-public/404.html          Página de erro 404 (rota desconhecida)
-public/js/sidebar.js       Sidebar compartilhada (IIFE, injeta markup + CSS + comportamento)
-public/js/colors.js        Sistema de cores compartilhado (IIFE) + color picker
-public/js/jobs-widget.js   Card flutuante de processos em segundo plano (IIFE), toda página
-public/js/confirm-modal.js Pop-up de confirmação (substitui confirm() nativo, IIFE), toda página
-public/js/periodo.js       Rótulo do período selecionado (IIFE), fonte única das 6 telas com seletor
-public/js/escape.js        Escapa texto de fora pra HTML (IIFE) — a única implementação do app
-public/js/visivel.js       Atualização periódica que pausa com a aba escondida (IIFE)
-public/css/switch.css      Toggle .ios-switch, padrão único do app
-public/css/catalogo.css    O que Produtos e Estoque desenham igual
+sync.js busca os canais → store.js grava → metrics.js calcula → /api/* devolve JSON → public/ desenha
 ```
+As telas nunca falam com Shopify/Shopee/ML/Amazon/Bling direto.
 
-### Organização de `public/` (25/08/2026)
-Só `.html` e `favicon.png` ficam na raiz — a raiz é o que o `express.static` serve, e as páginas
-precisam estar lá pras URLs limpas (`/produtos` etc., ver `SLUG_TO_FILE` em server.js). Antes as
-imagens estavam soltas no meio dos HTML e não dava pra ver o que era página e o que era asset.
-
-```
-public/
-  *.html                 as 12 páginas (raiz obrigatória)
-  favicon.png            convenção de raiz, fica onde está
-  css/                   switch.css anim.css catalogo.css   (estilo compartilhado)
-  css/paginas/           um .css por página, extraído do <style> dela
-  js/                    sidebar.js colors.js geo.js periodo.js moeda.js sync-btn.js
-                         pill-switch.js confirm-modal.js jobs-widget.js escape.js
-                         (componentes compartilhados)
-  js/paginas/            um .js por página, extraído do <script> dela
-  img/marca/             Logo2.png (ícone "CC" da Coco and Luna)
-  img/bandeiras/         bandeira_brasil.webp bandeira_eua.svg
-  img/canais/            logo_* usados nos cards de canal (Campanhas/Produtos/Estoque)
-  img/integracoes/       antiga logos-integracao/ — logos da tela de Integrações (LOGO_BASE)
-  img/mascotes/          coco.svg (cachorro) luna.svg (gata)
-  img/ilustracoes/       404.png
-  geo/                   us-states.json (contorno dos estados dos EUA, ver Geografia)
-```
-
-### O código das telas não mora mais dentro do HTML
-- Cada página tem UM `public/js/paginas/<pagina>.js` e UM `public/css/paginas/<pagina>.css`.
-  Eram 7.172 linhas de JS e 2.323 de CSS dentro dos `.html`; o markup caiu de 11.231 para 1.757
-  linhas. `index.html` sozinho tinha 2.638 linhas e hoje tem 368.
-- **A extração foi um movimento puro**: nenhum caractere mudou de lugar dentro do bloco. O script
-  que fez isso remontava cada página a partir dos arquivos gerados e comparava byte a byte com o
-  original, abortando sem gravar nada se sobrasse qualquer diferença.
-- **O script continua clássico, não módulo.** É o que preserva o comportamento: `function foo(){}`
-  num `<script src>` clássico continua virando global, então os `onclick="foo()"` do markup
-  continuam achando a função. Trocar por `type="module"` quebraria todos eles de uma vez, em
-  silêncio. Pela mesma razão não leva `defer` nem `async`: a tag está na mesma posição do bloco
-  antigo (fim do `<body>`), e script clássico sem esses atributos executa exatamente na ordem em
-  que aparece, igual ao inline.
-- **Isso NÃO liberou a CSP.** Tirar `'unsafe-inline'` de `script-src` ainda esbarra em 66
-  atributos de evento (`onclick=` e afins, contando o markup que os próprios scripts geram em
-  tempo de execução), e de `style-src` em 55 atributos `style=`. Enquanto existir um só deles,
-  tirar `'unsafe-inline'` quebra a página sem erro visível. Fechar de verdade é trocar cada
-  atributo por `addEventListener` e por classe de CSS, que é outro trabalho.
-- **Teste que lê tela precisa usar `fontePagina(nome).tudo`** (`scripts/test/_lib.mjs`), que
-  devolve o markup junto com o `.js` e o `.css` daquela página. Um teste que lesse só o `.html`
-  continuaria passando e não estaria mais checando nada — foi o que aconteceu com quatro deles no
-  instante seguinte à extração, antes de serem religados. Só quem confere estrutura de markup usa
-  `.html` puro.
-
-Duas armadilhas ao mexer nisso:
-- **Caminho relativo dentro de um `.js` resolve pela PÁGINA, não pelo arquivo do script.**
-  `sidebar.js` mora em `public/js/` mas injeta `<img src="favicon.png">`, e isso continua certo
-  porque quem resolve é o documento (`/produtos`), que está na raiz. Não "consertar" pra `../`.
-- `LOGO_BASE` (integracoes.html) prefixa os nomes de logo que o `server.js` devolve em
-  `computeIntegrationsList` — lá os valores são nome pelado (`Amazon_logo.png`), não caminho.
-  Logo começando com `/` escapa do `LOGO_BASE` e é caminho absoluto (`/img/marca/Logo2.png`).
-
-Removidos por não serem referenciados em lugar nenhum: `Feno_no_deserto.svg` (substituída pela
-`404.png` em 18/08/2026), `Logo1.svg`, `logo_shopify.png`, `logos-integracao/TikTok_logo.png`,
-`img/integracoes/meta_logo_horizontal.png` (a que a tela usa é `logo-meta.png`).
-
-Fluxo: `sync.js` busca pedidos/sessões → grava no `store` → `metrics.js` calcula → `/api/*`
-devolve JSON → `public/*.html` desenham. As telas nunca falam com Shopify/Shopee/ML/Amazon direto.
-
-### Store
-- `DATABASE_URL` presente → Postgres. Ausente → JSON em `data/db.json`.
-- `initStore()` é async, precisa de `await` antes de `app.listen()`.
-- Tabelas: `orders` (id, data JSONB), `sessions_daily` (date, data JSONB), `kv` (key, value JSONB).
-- `getOrders({ channel, since, until, market })`: pedido legado sem `market` é inferido `'br'`
-  (exceto canal `shopify_us`/`amazon_us` → `'us'`). Mantém índice em memória por mercado
-  (array ordenado por timestamp + busca binária) em vez de `Object.values().filter()` a cada
-  chamada — necessário pra aguentar centenas de milhares de pedidos. Índice reconstrói
-  preguiçosamente (`indexDirty`, só na próxima leitura). Interface pública é síncrona.
-- Escrita em lote: `pgUpsertOrders` faz INSERT multi-linha (lotes de 500) em vez de um INSERT por
-  pedido — um backfill grande gerando um INSERT por linha já encheu o disco do Postgres uma vez
-  (WAL bloat). Não reverter para insert-por-linha.
-
-## 4. Domínio — decisões que não devem ser reinventadas
-
-### Receita
-- ShopifyQL (`FROM sales`) conta pedidos cancelados/expirados e não tem como filtrar por status —
-  por isso receita/pedidos/ticket/tendência/top-produtos vêm da API GraphQL de pedidos, não do
-  ShopifyQL. `isCancelled` (metrics.js) é só `o.cancelled` — cada canal já decide isso na origem
-  (ver abaixo), não recalculado aqui.
-- **Só pedido com pagamento de verdade recebido conta como venda** (decisão de negócio,
-  28/07/2026 — resolve a antiga "decisão em aberto" sobre `PENDING`). `cancelled: true` em TODOS
-  os canais cobre tanto cancelamento de verdade quanto "nunca foi pago" — os dois saem juntos de
-  receita/pedidos/ticket/produtos/geografia (mesmo flag, filtrado em todo lugar por
-  `isCancelled`). Por canal:
-  - Shopify (BR/US/Yucaloo, `shopify.js`, `CANCELLED` set): `EXPIRED`, `VOIDED`, `CANCELLED`,
-    `PENDING` (Pix/boleto aguardando, pode falhar), `AUTHORIZED` (cartão autorizado mas NÃO
-    capturado, dinheiro ainda não foi cobrado) — `cancelledAt` também conta.
-    `PAID`/`PARTIALLY_PAID`/`PARTIALLY_REFUNDED`/`REFUNDED` continuam contando (teve pagamento
-    real; devolução já se ajusta sozinha, ver mais abaixo).
-  - Shopee (`shopee.js`): `CANCELLED`, `UNPAID`, `INVOICE_PENDING`.
-  - Mercado Livre (`mercadolivre.js`): `cancelled`, `invalid`, `confirmed`, `payment_required`,
-    `payment_in_process`.
-  - Amazon (`amazon.js`, Orders API e Reports API): `Canceled`/`Cancelled`, `Pending`,
-    `PendingAvailability`.
-  - `UNPAID_STATUS_BY_CHANNEL` (store.js) é só um subconjunto — mesmos status acima, mas
-    separados por "não pago" (rótulo "Em aberto" na busca de pedidos) de cancelamento de verdade,
-    cosmético (`statusLabelPt`), não afeta nenhum cálculo. `fixUnpaidOrders()`
-    (`POST /api/orders/fix-unpaid`, removidos em 22/09/2026 depois de cumprir o papel) corrigiu o `cancelled` de pedidos já gravados ANTES dessa
-    decisão existir (sync incremental não retoca pedido que não mudou de status sozinho) — já
-    rodou em produção, `fixed:0` (nenhum pedido pra corrigir), nada pendente aqui.
-- Quantidade/receita por produto usa `LineItem.currentQuantity` (não `quantity`, que inclui
-  devolvido) e desconta reembolso do `discountedTotalSet` via `order.refunds`.
-
-### Sessões / funil (só lojas Shopify — Coco and Luna + Yucaloo)
-- ShopifyQL: `FROM sessions SHOW sessions, online_store_visitors, sessions_with_cart_additions,
-  sessions_that_reached_checkout, sessions_that_completed_checkout TIMESERIES day`.
-- Resposta vem em `shopifyqlQuery.tableData.rows`; `parseErrors` pode ser `[]` (truthy) — checar
-  `.length`, não truthiness.
-- Precisa dos escopos `read_analytics` + `read_reports`. Sem `read_analytics`, `shopifyqlQuery`
-  simplesmente some do schema, sem erro.
-- Yucaloo tem loja Shopify própria, então também tem sessão real (o app dela já pede
-  `read_analytics`/`read_reports` no SCOPE, ver shopifyYucaloo.js) — gravada num balde **separado**
-  (`kv.yucalooSessionsDaily`, `{[market]:{[date]:row}}`, `setYucalooSessionsDaily`/
-  `getYucalooSessionsDaily` em store.js), não na tabela `sessions_daily` (que tem `date` como chave
-  primária SEM dimensão de canal — gravar ali por cima misturaria/sobrescreveria os dias da Coco
-  and Luna). `aggregateSessions()` (metrics.js) soma os dois baldes por canal selecionado: canal
-  `shopify`/`shopify_us` → só Coco and Luna; `yucaloo_br`/`yucaloo_us` → só Yucaloo; `todos` → soma
-  as duas lojas do mercado. Cards "Tráfego & conversão" e "Funil de conversão" (index.html) ficam
-  visíveis pra Yucaloo também (`isYucaloo` em `updateCardVisibility`), com a logo da loja
-  (`logos-integracao/cocoandluna.webp`/`Yucaloo1.png`) no subtítulo do card de tráfego pra deixar
-  claro de qual loja é o número. Pedido do Luan, 18/08/2026.
-
-### Marketing
-- Atribuição por origem (`order.customerJourneySummary.lastVisit.source`) é atribuição, não custo.
-
-### Meta Ads (`src/meta.js`)
-- Graph API `v20.0` por padrão, trocável por `META_API_VERSION` sem deploy (a v20.0 é de maio de
-  2024 e a Meta mantém cada versão uns dois anos). `fetchInsights`/`fetchCampaigns` aceitam `accountId` (padrão BR) — mesma função
-  serve qualquer conta nova, só passar outro ID.
-- Store: `metaInsightsDaily` (BR), `metaUSInsightsDaily` (US).
-- ROAS = receita de pedidos com source Instagram/Facebook ÷ gasto Meta.
-- `salesSplit`: separa receita de campanha (source Meta OU `listingType==='premium'`) de orgânica.
-
-### Shopee (`src/shopee.js`)
-- Open Platform API v2 direto. Assinatura HMAC-SHA256(partner_key, partner_id+path+timestamp[+token+shop_id]).
-- Sem analytics via API (só no Seller Center).
-- **Devolução é descontada** desde 04/09/2026, via `/api/v2/returns/get_return_list`
-  (`fetchReturns`). A documentação pública não expõe os nomes de campo da resposta, então o
-  mapeamento foi escrito em cima do ESQUELETO que `GET /api/shopee/probe-returns?days=N` (admin)
-  leu da API de verdade — sondar primeiro, mapear depois, o mesmo caminho da Amazon. Detalhes em
-  "Devoluções da Shopee".
-- A Shopee mascara todos os campos de endereço do pedido como `"****"` — não tem correção via
-  código, é política da plataforma. O Bling ERP (recebe pedidos de todos os canais) traz o
-  endereço sem máscara; `reconcileGeoFromBling` (`sync.js`) preenche `state` a partir de lá,
-  contornando a limitação sem depender da Shopee. `POST /api/bling/sync-geo?market=br` recupera histórico.
-
-### Mercado Livre (`src/mercadolivre.js`)
-- Cancelado = status `cancelled`/`invalid`. Sem tokens → `[]`, canal fica 0, nada quebra.
-- **Reembolso vem no próprio pedido**, em `payments[].transaction_amount_refunded` — um pedido
-  reembolsado costuma continuar `paid`, então sem olhar os pagamentos ele contaria como venda
-  cheia. Ver "Devoluções descontam da quantidade E da receita".
-- Estado do pedido via `/shipments/{id}` → `receiver_address.state.id`.
-- `listingType`: só `gold_pro`/`gold_premium` = `'premium'` (Destaque/Diamante, exposição paga de
-  verdade). Qualquer outro (`gold_special` "Clássico", `free`, tipo legado desconhecido) =
-  `'organic'`. Allowlist positiva, não negativa — inflar atribuição por engano é pior que
-  subestimar. Resolvido via `/items?ids=...` multiget (o campo não existe em `/orders/search`).
-- Mercado Ads exige header `Api-Version: 1`. Fluxo: `GET /advertising/advertisers?product_id=PADS`
-  → advertiser_id/site_id → `GET /marketplace/advertising/{site}/advertisers/{adv}/product_ads/campaigns/search`.
-  Precisa da permissão "Mercado Ads" no app + token re-autorizado; sem isso, 403 → zeros graciosos.
-- `mlBreakdown`: `{ organic, premium, adCost, adClicks, roas }`.
-- Re-autorizar via `/mercadolivre/connect` depois de cada novo deploy (token não sobrevive sozinho).
-- **Gasto do Mercado Ads por dia** (`fetchAdCostsForDays(days)`, sync.js `syncMlAdCostsDaily()`):
-  resolve o advertiser UMA vez e chama `campaigns/search` com `date_from=date_to=o mesmo dia`, um
-  dia por vez — reaproveita o parser já testado (`c.metrics || c`) em vez de arriscar
-  `aggregation_type=DAILY` (a API tem esse parâmetro, confirmado por busca, mas sem formato de
-  resposta documentado publicamente; adivinhar errado deturparia histórico de gasto sem ninguém
-  perceber, então preferimos o caminho mais lento e verificável). Guardado em
-  `kv.mlAdCostsDaily` (`{ [data]: {spend,clicks,impressions} }`, mesmo padrão do
-  `metaInsightsDaily`). Cada sync sempre reconfirma os últimos `ML_ADS_RECENT_DAYS` (2 — o dia de
-  hoje ainda está em andamento) e preenche até `ML_ADS_MAX_BACKFILL` (10) dias que ainda faltam na
-  janela de 60 dias, um pouco a cada ciclo em vez de tudo de uma vez (evita estourar chamadas na
-  primeira vez que isso roda). `mlBreakdown.adCost`/`.adClicks` (metrics.js) somam esse balde
-  dentro do período `since..until` selecionado na tela — antes vinha de um valor único
-  (`kv.mlAdCosts`, removido) preso na janela fixa do sync, então o ROAS/ACOS da Visão geral não
-  mudava com o período escolhido (bug do backlog "toggle Mercado Ads", corrigido 19/08/2026 — o
-  toggle em si já tinha sido removido antes, só a causa raiz ficou pra trás).
-
-### Amazon SP-API (`src/amazon.js`)
-- Endpoint único `sellingpartnerapi-na.amazon.com` (região NA) serve BR e US. Auth: LWA token →
-  STS AssumeRole (IAM user compartilhado) → SigV4 + `x-amz-access-token`.
-- **Duas contas de vendedor, dois apps separados.** CocoandLuna (BR) e VITA PET LIFE (US) são
-  contas vinculadas mas distintas — cada uma com seu próprio app SP-API
-  (`AMAZON_CLIENT_ID/SECRET/REFRESH_TOKEN` para US, `AMAZON_BR_*` para BR). Role/chaves AWS
-  continuam compartilhados. **Nunca usar o mesmo refresh token nos dois** — ativa `SAME_TOKEN`
-  (chamada combinada) e um dos dois para de receber pedidos silenciosamente. Já aconteceu uma vez
-  com o token BR apontando pra conta errada — sintoma foi "Amazon BR sem pedidos" mesmo com vendas
-  reais; diagnosticar com `GET /api/amazon/whoami` (compara os marketplaces que cada token enxerga).
-- `/orders/v0/orders` tem cota de 1 req/min (burst 20). A conta US passa de 100 pedidos por janela
-  e sempre pagina — por isso a paginação dispara páginas em sequência aproveitando o burst e só
-  espera 61s quando toma 429 de verdade (`RateLimitError`, até 3 tentativas/página); página já
-  lida vira upsert parcial, cursor não avança em caso de erro (o sync seguinte completa o resto).
-  A cota é da CONTA, não do processo — não rodar teste local e sync de produção ao mesmo tempo.
-- Sync incremental por cursor (`kv.amazonCursors`, por mercado): com cursor usa
-  `LastUpdatedAfter/Before` (pega mudança de status que `CreatedAfter` não pegaria); sem cursor
-  (1ª carga) usa `CreatedAfter/Before`, janela de `AMAZON_BACKFILL_DAYS` (padrão 2).
-  `CreatedBefore` precisa ficar ≥2min no passado — código aplica 3min de margem. O cursor avança
-  mesmo com 0 resultados — se um token ficar errado por um tempo, o cursor "anda no vazio" e o
-  gap não se recupera sozinho quando o token é corrigido; precisa de um backfill manual pra
-  recuperar o período perdido.
-- Pedido `Pending` vem com `total: 0` (SP-API omite o valor até a captura) — entra sozinho num
-  sync incremental seguinte.
-- RDT (nome do comprador) desativado por padrão — app sem papel PII aprovado, 403. Ligar com
-  `AMAZON_FETCH_PII=1` só se aprovado.
-- Backoff só em 429 que esgotou tentativas: degraus crescentes, zera no sucesso. Reset/force:
-  `POST /api/amazon/{reset-backoff,force-sync}`.
-- `byState` da Amazon vem com grafia de estado inconsistente ("California"/"CA"/"CA.") —
-  `src/us-states.js` (`normalizeUsState`) resolve, aplicado na leitura e na gravação.
-- **Backfill histórico** via Reports API (`GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL`),
-  balde de cota próprio (não disputa com `/orders`). Janelas de 30 dias, `POST /api/amazon/backfill
-  ?days=N&market=us|br`, progresso em `GET /api/status`. É a única fonte de título de produto
-  (a Orders API nunca devolve). Linha com `product-name === '-'` é frete/ajuste, descartada.
-  Roda no processo do servidor (não é worker separado) — um deploy no meio mata a execução; é
-  idempotente (upsert por id), só re-disparar.
-- **Reconciliação de nome de produto**: job próprio (`reconcileAmazonNames`, roda periodicamente)
-  busca um relatório curto e faz PATCH só em `items[]` via `patchOrderItems()` — nunca mexe em
-  `total/status/state`. `patchOrderItems` não insere pedido novo (só corrige título de pedido que
-  a Orders API já gravou — evita contaminar um mercado com pedido do outro, já aconteceu). `upsertOrders()`
-  tem uma guarda: se o pedido que chega vier com todos os itens sem título mas o existente já
-  tinha título, preserva os títulos antigos — sem isso, o sync normal de pedidos (que não traz
-  título) apagava os nomes preenchidos pelo backfill. Manual: `POST /api/amazon/sync-names?market=us|br`.
-- `itemRevFactor` (`metrics.js`): os itens da Amazon vêm com preço bruto do relatório mesmo que o
-  pedido ainda esteja `Pending` (total 0) — a receita por item é escalada pro `total` real do
-  pedido (capturado → soma o total; pendente → 0), sem afetar a contagem de unidades. Regra
-  generalizada pra qualquer canal: se `total === 0` mas algum item tem preço de catálogo (ex.
-  pedido de atacado/fulfillment onde quem cobra é o parceiro, não a loja), o fator também é 0 —
-  zera a receita fantasma, preserva a unidade vendida.
-- Histórico: janela fixa de 90 dias, igual a todo canal (ver "Janela de histórico de 90 dias"). A
-  antiga retenção por mercado (`kv.amazonRetentionConfig`, `AMAZON_RETENTION_DAYS`, painel
-  "Amazon — Histórico") não existe mais. `POST /api/amazon/backfill?days=N&market=` continua, só
-  por API e com teto de 90 dias, pra recuperar buraco DENTRO da janela (ex.: o cursor que andou no
-  vazio com um token errado).
-- Mistura de mercado: o relatório de backfill/reconciliação pode trazer linhas dos dois mercados
-  juntas (as contas são vinculadas) — `ordersFromRows()` valida o mercado real por linha via
-  `ship-country` (não moeda, não `ship-state` — siglas de UF BR colidem com estados US). Limpeza
-  de dado já vazado: `POST /api/amazon/cleanup-market-leak` (idempotente).
-- Toggle "Receita da Amazon" (Configurações): "Total cobrado" (`order.total`, padrão, igual aos
-  outros canais) × "Vendas de produto" (`order.productSales`, métrica "Ordered Product Sales" da
-  Amazon, só populada em pedido que passou pela Reports API). Limitação conhecida, não é bug:
-  "Vendas de produto" pode ficar bem abaixo do real porque o relatório frequentemente vem sem
-  imposto/frete detalhado por pedido — aviso já fica na própria tela.
-- **Devolução** não vem em pedido nenhum (nem Orders API nem relatório de pedidos): sai do
-  relatório `GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA`, ver "Devoluções da Amazon".
-- Diagnóstico: `GET /api/amazon/{whoami,probe-order,report-columns,probe-image}`.
-- Portal atual: `solutionproviderportal.amazon.com`. Criar app novo exige verificação de
-  identidade + revisão de "Solution Provider Account Profile" antes de liberar app de produção
-  (sem revisão, só Sandbox — não vê pedido real). Roles renomeados: usar "Inventory and Order
-  Tracking" (equivalente ao antigo "Orders") + "Product Listing" (exigido pela Catalog Items API —
-  imagem de produto; o app US não tem esse role hoje, o app BR já nasceu com ele).
-
-### Devoluções da Shopee (`fetchReturns` em src/shopee.js, `reconcileShopeeReturns` em src/sync.js)
-- Fecha o último canal em que a unidade devolvida ainda contava como vendida. O mapeamento foi
-  escrito em cima da resposta REAL da API (a sonda `GET /api/shopee/probe-returns`, rodada em
-  produção em 04/09/2026), e não da documentação — que não publica os nomes de campo.
-- **`item[].amount` é QUANTIDADE, não dinheiro.** O dinheiro do item é `refund_amount`, que existe
-  nos dois níveis (no pedido de devolução e dentro de cada item). Ler o campo errado transformaria
-  um reembolso de R$ 101,15 em 101 unidades devolvidas num pedido de uma.
-- **`status` é ALLOWLIST POSITIVA, hoje só `ACCEPTED`.** Um pedido de devolução que o comprador
-  abriu e ainda está em análise (ou que foi recusado) não pode tirar a unidade da venda. Lista
-  negativa erraria no sentido pior: qualquer status novo que a Shopee criasse passaria a descontar
-  venda sozinho, sem ninguém decidir isso.
-- **O que fica de fora NÃO some calado**: volta contado em `porStatus`, que aparece no retorno do
-  sync e do endpoint manual. É assim que um status novo (ou um `CLOSED` que na prática seja
-  reembolso) aparece pra ser decidido, em vez de virar número errado em silêncio. Vale conferir
-  esse resumo depois das primeiras devoluções reais.
-- **A chamada COM janela de tempo falhou na sonda** e a sem janela funcionou, então não dá pra
-  filtrar por data no servidor deles: lê-se a lista inteira e o cruzamento por pedido decide o que
-  interessa (devolução de pedido que não temos cai fora sozinha). Por isso a paginação tem teto
-  (`RETURNS_MAX_PAGES`) e, ao atingi-lo, declara a leitura INCOMPLETA em vez de passar por
-  completa — lista curta que parece inteira é o erro que já custou caro na Amazon.
-- Roda a cada ciclo de sync, não num job separado: é uma chamada só (a conta inteira cabe numa
-  página hoje). A devolução chega DEPOIS da venda, então ler a lista toda todo ciclo é o que faz a
-  marca aparecer sem esperar. Falha vira `shopee.returns` em `report.errors`, nunca silêncio.
-- **Patch-only**, igual à Amazon: `patchOrderRefunds` só marca pedido que já existe, nunca insere
-  e nunca toca em `total`/`status`/`items`.
-- O item do PEDIDO passou a guardar `sku` (`item_sku`) porque é por ele que a baixa acha a LINHA
-  certa: num pedido com areia e suplemento em que só a areia voltou, sem o SKU a unidade poderia
-  sair do produto errado. Pedido antigo sem `sku` gravado ainda casa por título exato.
-- Total × parcial sai de `classificarReembolsoShopee`: com unidade conhecida vale a contagem de
-  unidades; sem ela (devolução só em dinheiro) quem decide é o valor, senão um estorno do pedido
-  inteiro apareceria como "parcial".
-- Disparo manual: `POST /api/shopee/sync-returns` (admin), síncrono — diferente da Amazon, não
-  precisa de job em segundo plano.
-- A sonda deixou de expor `text_reason`: é o texto livre que o comprador escreve, e ela promete
-  não trazer comentário de comprador. `reason` continua (é código fixo, tipo `NOT_RECEIPT`).
-- `scripts/test/shopee-devolucoes.test.mjs` executa o agrupamento contra a resposta real e guarda
-  cada uma dessas armadilhas.
-
-### Histórico de edições (`public/historico.html`, `src/historico.js`, `src/autor.js`)
-- Linha do tempo de tudo que uma PESSOA editou: quem, quando, e **de quanto pra quanto**. Pedido
-  do Luan (04/09/2026), com o cronograma de pedido do Shopify como referência visual. Escolhe-se a
-  página, depois o país, depois o período.
-- **O "de quanto pra quanto" é o recurso.** Um registro que só diz "alguém salvou o campo COG" não
-  serve pra nada na hora em que um número está errado e a pergunta é desde quando.
-- **O registro mora DENTRO das funções de gravação do store**, não nos handlers do servidor. Duas
-  razões, e as duas decidem: é ali que o valor ANTIGO ainda existe (o handler só conhece o novo), e
-  é por ali que passa obrigatoriamente qualquer tela que salve alguma coisa, inclusive uma que
-  ainda não existe. Registrar por rota significaria a próxima rota esquecer, sem erro nenhum.
-- **Quem editou chega por `AsyncLocalStorage`** (`src/autor.js`), marcado uma vez no middleware que
-  já resolve a sessão. Passar o autor como parâmetro obrigaria cada função de gravação a receber um
-  argumento a mais, que a próxima tela esqueceria de passar; e uma variável de módulo seria
-  sobrescrita pela requisição seguinte no meio de um `await`, gravando a edição de uma pessoa no
-  nome de outra. É biblioteca do Node, então não entra dependência nova.
-- Autor `null` é legítimo e quer dizer "não veio de pessoa nenhuma" (job, script). Aparece como
-  "O sistema", mesmo vocabulário do "automático" no card de processos.
-- **Só o que MUDOU de verdade vira linha.** Salvar um formulário sem alterar nada não pode virar
-  registro, senão "mudou" deixa de significar mudou e a lista vira ruído.
-- **Senha nunca entra**, nem no valor antigo nem no novo, nem o hash nem o salt. A troca de senha é
-  registrada como fato, sem valor nenhum junto.
-- **Tabela própria (`historico`), nunca uma chave do `kv`.** O kv reescreve o blob inteiro a cada
-  gravação — uma lista que só cresce ali faria cada edição reescrever o histórico completo. Só entra
-  linha nova; nada é editado depois. Retenção de `HISTORICO_DIAS` (padrão 180), podada pelo sync.
-- **A frase e os valores saem PRONTOS do servidor**, e vêm em PEDAÇOS (`partes`), com o valor antigo
-  e o novo já separados do texto. A tela só pinta. Se ela procurasse o valor dentro da frase pronta
-  pra destacar, o destaque embaralharia quando um valor fosse pedaço do outro: numa mudança "de 10
-  para 1", o "1" seria achado dentro do "10" recém-marcado.
-- **O NOME do campo sai como pedaço próprio e vai em negrito na tela.** Numa lista de várias
-  edições do mesmo produto, o que muda de uma linha pra outra é justamente qual campo foi mexido,
-  e é o que o olho procura primeiro. Pedido do Luan, 04/09/2026.
-- **Com o filtro em "Todos", cada linha mostra o país** (bandeira + nome). Escolhido um país, a
-  etiqueta some: repetir a mesma bandeira em toda linha não diz nada novo. Isso importa mais no
-  Estoque, onde o card agregado é por família e não tem canal nenhum pra mostrar, então sem a
-  etiqueta de país não havia como saber de qual mercado era a edição.
-- **O filtro de país só descarta linha que TEM país e é de outro.** Edição de usuário não pertence a
-  país nenhum e não pode aparecer sob uma bandeira; já liga/desliga de integração TEM país (a Shopee
-  só existe no Brasil), e esconder isso do filtro esconderia justamente o que a pessoa foi procurar.
-- `INTEGRACOES` (historico.js) traduz a chave da integração pro nome que a tela de Integrações
-  mostra, e diz o país dela — sem isso o histórico diria "Luan desligou shopee". É cópia da lista de
-  `computeIntegrationsList` (server.js), e o teste compara as duas: cópia que diverge não dá erro,
-  só passa a chamar a integração por outro nome.
-- **Getter que devolve a referência viva do store esconde a edição.** O handler da retenção da
-  Amazon pega a config, mexe nela e devolve pro setter — com a referência viva, o setter recebe o
-  objeto JÁ alterado como se fosse o valor antigo, conclui que nada mudou e não registra nada, sem
-  erro em lugar nenhum. Por isso `getAmazonRetentionConfig` devolve cópia. Vale conferir isso em
-  qualquer getter novo cujo valor volte para o setter correspondente.
-- Uma página só entra no seletor se tem algo editável. Visão geral, Geografia e Campanhas não têm,
-  e oferecê-las seria prometer uma lista que nunca teria conteúdo.
-- **Admin nos dois lados** (rota da API e portão da página). Só no cliente seria decoração: quem
-  soubesse a URL veria o que todo mundo editou.
-- **O que fica de fora, e é limitação conhecida:** em Postgres o histórico não entra no cache em
-  memória nem, por consequência, no snapshot diário do B2 (`getFullSnapshot` devolve o cache). Numa
-  restauração de desastre o histórico não volta. Vale rever se ele passar a ser usado pra auditoria
-  de verdade, e não só pra "desde quando esse número está assim".
-- `scripts/test/historico.test.mjs` executa a montagem da frase, o "só o que mudou", o filtro de
-  país e a lista de funções de gravação que precisam registrar — uma que fique de fora não dá erro,
-  a edição só some do histórico.
-
-### Saída em bonificação (doação para UGC)
-- A empresa envia produto a criadores de conteúdo sem cobrar. No Bling isso sai como **nota fiscal**
-  com natureza de operação "Saída em bonificação". A dashboard conta as UNIDADES e **nunca o
-  dinheiro**. Pedido do Luan, 04/09/2026.
-- **Quem identifica é a NATUREZA, nunca o valor nem a loja.** O valor era zero e vai deixar de ser
-  (decisão do Luan, 04/09/2026), e uma nota de doação com R$ 129,99 já existia antes disso. A loja
-  hoje é "Vita Pet Life - São Paulo", mas pode mudar. `ehNaturezaDeBonificacao` (bling.js) é a
-  única regra, comparando o NOME resolvido em tempo de execução por `/naturezas-operacoes` — a nota
-  traz só o id da natureza.
-- **"Saída em", não só "bonificação".** A conta tem as duas, e "Entrada de bonificação" é
-  mercadoria ENTRANDO: contá-la seria o número ao contrário. O teste roda a regra contra as 25
-  naturezas reais da conta exigindo que exatamente uma case.
-- **Vem da NOTA, não do pedido**: no mesmo período havia 113 notas de bonificação contra 7 pedidos
-  naquela loja. E a listagem de notas não traz os itens, então cada nota custa um `GET /nfe/{id}` —
-  por isso o sync varre uma janela curta (`BLING_BONIFICACAO_DAYS`, padrão 7) e o histórico se
-  recupera de uma vez por `POST /api/bling/sync-bonificacao?days=N` (admin).
-- **Situação da nota é allowlist positiva** (5 Autorizada e 6 Emitida DANFE, confirmadas ao vivo):
-  só conta o que saiu. O que fica de fora volta contado e vira erro no relatório do sync — foi
-  assim que apareceram 2 notas numa situação ainda desconhecida.
-- **Uma porta só decide se a doação entra na conta**, e é a mesma que já desconta devolução:
-  `getOrders` em metrics.js filtra `bonificacao` por padrão, e quem precisa dela pede com
-  `incluirBonificacao`. Espalhar esse filtro por cálculo é como a doação viraria faturamento, ticket
-  médio e ROAS de uma vez — bastaria um lugar esquecer.
-- **Produto que só foi doado vira linha própria** no Top produtos, com receita zero e a coluna de
-  doação preenchida (é o caso das areias da Yucaloo). Some seria pior que aparecer zerado: a
-  mercadoria saiu do estoque de verdade. A ordenação por receita joga essas linhas pro fim, que é
-  onde elas devem ficar num card "por receita".
-- **O que a linha de doação NÃO pode mostrar** (três erros que apareceram juntos na primeira
-  versão, relatados pelo Luan em 08/09/2026): o badge do canal saía com a chave interna
-  ("bonificacao", sem acento e em minúscula) parecendo um canal de venda — `bonificacao` não está
-  no catálogo de canais e por isso `chBadgeHTML` caía na chave crua, e hoje esse canal é filtrado
-  fora do badge; o "0 un" da linha de quantidade aparecia ao lado de uma coluna anunciando 2
-  unidades doadas, e sem venda a linha simplesmente não existe mais; e o valor vinha "R$ 0,00",
-  quando **zero é um preço e doação não tem preço nenhum** — fica vazio.
-- **O resumo do card separa o que foi vendido do que foi doado**: quantidade total primeiro, depois
-  a divisão ("5 un total · 3 vendidas · 2 doadas"). Sem doação no período a divisão some, senão a
-  linha anunciaria uma separação que não existe.
-- **A doação aparece em "Pedidos recentes"** com o valor como traço, e **fora** da contagem de
-  "válidos" e do total do rodapé do card: ela não é venda que deu certo, e contá-la ali inflaria a
-  contagem sem mexer um centavo no valor — o jeito mais silencioso possível de esse número ficar
-  errado. É o único lugar onde a doação entra numa lista sem ser pedida por um cálculo, e é
-  legítimo porque o card é a lista do que saiu, não uma conta.
-- **Origem que não é canal de venda tem rótulo próprio** (`NAO_CANAIS` em `js/colors.js`).
-  `bonificacao` fica FORA do catálogo de canais de propósito: ninguém pode escolhê-la no seletor,
-  porque a doação sai de todo cálculo por padrão e o filtro devolveria uma tela vazia. Mas ela
-  aparece em linha de produto e de pedido, e sem rótulo cadastrado `chLabel`/`chBadgeHTML` caíam na
-  CHAVE crua e a tela mostrava "bonificacao", minúsculo e sem cedilha (relatado pelo Luan,
-  08/09/2026). **O fallback pra chave é a porta por onde texto interno vaza pro usuário**: toda
-  chave nova que puder chegar na tela precisa nascer com rótulo.
-- Rótulo próprio na busca e em "Pedidos recentes": **"Bonificação"**, com cor própria
-  (`.st-tag.boni`). Não é estado de pagamento — não faz sentido perguntar se foi pago, cancelado ou
-  devolvido algo que nunca foi cobrado, por isso ele é testado ANTES de tudo em `statusLabelPt` e
-  `statusTag`.
-- **Nada de dado de quem recebeu.** São criadores de conteúdo, não clientes, e a dashboard não
-  precisa do nome deles pra contar unidade.
-- A data do Bling vem sem fuso ("2026-09-04 16:13:11") e é horário de Brasília. O `-03:00` é
-  conferido NO TEXTO pelo teste, não só pelo resultado: numa máquina brasileira tirar o fuso não
-  muda resposta nenhuma, e mudaria em produção, que roda em UTC.
-- `scripts/test/bonificacao.test.mjs` guarda tudo isso.
-
-### Insights (`src/insights.js`, card da Visão geral)
-- Frases curtas explicando O QUE mudou no período contra o período anterior comparável. Nasceu do
-  card de Insights do Shopify que o Luan trouxe como referência (24/08/2026).
-- **Não usa IA, e é decisão deliberada, não falta de vontade.** O insight do Shopify também não
-  usa: é estatística encaixada num molde de frase. Motivos de manter assim: número exibido é o
-  número calculado (LLM erra conta e inventa com convicção); `/api/dashboard` nunca chama serviço
-  externo na hora de responder e chamar IA a cada carregamento quebraria isso além de custar por
-  acesso; dado de faturamento não sai daqui; e o mesmo dado gera sempre a mesma frase, então dá
-  pra testar. Se um dia quiser IA, o lugar certo é SÓ um botão "ver o motivo" sob demanda, nunca
-  no caminho do carregamento.
-- Papel do card, e a razão dele ficar logo abaixo da faixa de Indicadores: a faixa diz "receita
-  subiu 53%", o card diz POR CAUSA DE QUÊ (qual canal/produto/estado/etapa puxou).
-- `insights.js` é **puro**: recebe dois retratos já calculados (atual e anterior) e devolve a
-  lista. Não lê store, não faz I/O e NÃO importa `metrics.js` (evitar import circular — os rótulos
-  de canal e nomes de estado chegam por parâmetro). É o que permite testar as regras sem banco.
-- Regras hoje: canal parado (prioridade máxima, quase sempre é integração quebrada e não queda de
-  vendas), canal que mais subiu/caiu, produto que mais mexeu, concentração num produto só, queda/
-  ganho de conversão, maior vazamento do funil, ticket médio, eficiência de anúncio (inclui o caso
-  "gastou e não veio nenhuma venda atribuída") e estado que mais mexeu.
-- **Anti-ruído é o que faz o card prestar.** Com algumas dezenas de pedidos por dia, percentual
-  isolado é ruído: um estado que foi de 1 pra 4 vendas vira "+300%" e não significa nada. Toda
-  regra de variação em dinheiro exige TRÊS pisos ao mesmo tempo — valor absoluto (`MIN_ABS`, R$200
-  no BR / US$50 nos EUA), peso no total do período (`MIN_SHARE`, 8%) e variação relativa
-  (`MIN_PCT`, 15%) — e a ordenação final é por impacto em dinheiro, nunca por percentual.
-  Conversão/funil exigem `MIN_SESSIONS`, ticket exige `MIN_ORDERS`. Lista limitada a 6, no máximo
-  2 por dimensão (senão um dia em que tudo mexeu no mesmo eixo enche as vagas só com "Canal"), e
-  insights com os mesmos dois números são deduplicados (num canal que vende um produto só,
-  "Shopify caiu de X pra Y" e "Lisina caiu de X pra Y" são a mesma frase duas vezes).
-- Frases e números vêm PRONTOS do servidor; o front (`renderInsights` em `index.html`) só desenha,
-  nunca recalcula nem reformata. É o mesmo princípio de "uma fonte de verdade só" já documentado
-  em Campanhas — duas pontas formatando o mesmo número acabam discordando.
-- **Semáforo de três cores** (pedido do Luan, 24/08/2026): campo `kind` = `'bom'` (verde) /
-  `'medio'` (amarelo) / `'ruim'` (vermelho). Quem classifica é a REGRA no servidor, nunca o sinal
-  do número no front: ACOS caindo é bom, custo subindo é ruim, e "concentração de 80% num produto"
-  não tem sinal nenhum. O ícone acompanha a cor (`bi-check-circle-fill`/`bi-exclamation-circle-fill`/
-  `bi-exclamation-triangle-fill`) pra não depender só dela. A regra do funil é `'medio'` de
-  propósito mesmo perdendo 90%+ entre sessão e carrinho: isso é o normal de qualquer loja, e um
-  vermelho fixo em todo período treinaria o olho a ignorar o vermelho do card inteiro — só vira
-  `'ruim'` quando o vazamento é no fim (quem chegou no checkout e desistiu de pagar).
-- **Tira horizontal com carrossel finito**, não coluna vertical (pedido do Luan, 24/08/2026: em
-  linha "cabe mais insights sem deixar o card gigantesco na vertical"). Por isso cada insight tem
-  DOIS textos: `label` (sintagma curto, "Conversão em queda", que é o que cabe na aba de ~200px) e
-  `title` (frase inteira, que aparece no detalhe embaixo). Regra nova que esquecer o `label` não
-  quebra — o front cai no `title` — mas fica feia na tira.
-  - As abas usam `flex:1 1 200px` + `min-width:200px`: com poucas elas crescem e preenchem a linha
-    toda; passando do que cabe, param de encolher e a tira rola. É o que faz o carrossel aparecer
-    sozinho só "quando tem muito", sem contar itens no JS.
-  - Navegação **finita** de propósito (pedido explícito): as setas desabilitam nos extremos em vez
-    de dar a volta — carrossel infinito faria o mesmo insight reaparecer e confundir.
-  - `MAX_INSIGHTS` subiu de 6 pra 10 junto com essa mudança: o que limitava era altura de card, e
-    não limita mais. Os pisos anti-ruído é que decidem quantos aparecem de verdade.
-  - Trocar de aba NÃO remonta a tira (só troca a classe ativa e redesenha o detalhe), e o
-    `scrollLeft` é salvo/restaurado ao redor de cada remontagem — senão o refresh periódico de
-    dados jogava o carrossel de volta pro começo enquanto a pessoa lia um insight do fim.
-  - **`behavior:'smooth'` pode ser ignorado SILENCIOSAMENTE** (movimento reduzido no sistema, ou
-    rolagem suave desligada no Chrome): a chamada não dá erro e o elemento não sai do lugar.
-    Confirmado ao vivo aqui — `scrollTo`/`scrollBy` com `'auto'` funcionam e com `'smooth'` ficam
-    em zero, então o clique na seta não fazia NADA. `insScroll()` tenta suave e, se em 250ms não
-    andou, aplica direto. Vale como regra pra qualquer rolagem programática nova neste app. Pelo
-    mesmo motivo `.ins-list` NÃO leva `scroll-behavior:smooth` no CSS: ele se aplicaria também à
-    atribuição direta de `scrollLeft`, que aqui precisa ser instantânea.
-- `productRevenueRows()`/`revenueByState()`/`sumDailyRange()` (metrics.js) foram extraídos de dentro
-  do `computeDashboard` justamente pra que o período anterior use EXATAMENTE a mesma agregação do
-  atual. Se as duas pontas divergirem, a comparação mente.
-- `BR_STATE_NAMES`/`US_STATE_NAMES` (br-states.js/us-states.js) existem porque a frase é montada no
-  servidor e precisa de "Minas Gerais", não "MG" — as telas de Geografia/Segmentos têm as próprias
-  tabelas de nome por motivo histórico, mas texto gerado no backend precisa de fonte no backend.
-
-### Multi-mercado
-- Campo `market: 'br'|'us'` em todo pedido. `computeDashboard({market})` separa tudo:
-  byChannel, sessões, pedidos recentes. Canal `shopify_us`/`amazon_us` sempre implica `market: 'us'`.
-
-### Yucaloo (2ª marca)
-- Loja Shopify própria por mercado, mas **o `market` é o mesmo da Coco and Luna** (`'br'`/`'us'`)
-  — decisão deliberada do Luan: no Brasil a Yucaloo vende junto com os mesmos marketplaces da Coco
-  and Luna, e ele quer ver tudo junto ao escolher só "Brasil"/"EUA", sem uma dimensão de marca
-  separada. O que distingue a Yucaloo é só o `channel` (`yucaloo_br`/`yucaloo_us`). Uma dimensão de
-  marca de verdade só faria sentido com mais marcas — não é um problema a resolver agora.
-- App Shopify criado via **Dev Dashboard** (`dev.shopify.com`), não o app clássico da Coco and
-  Luna — exige handshake OAuth de verdade (o app clássico dá token estático direto). Fluxo:
-  Shopify chama a "URL do app" com parâmetros assinados (HMAC) → nosso servidor valida e redireciona
-  pro `/admin/oauth/authorize` da loja → Shopify chama o `redirect_uri` com `code` → trocamos por
-  token permanente. `src/shopifyYucaloo.js`: `verifyRequest` reconstrói a query a partir de
-  `req.originalUrl` (não `req.query`, porque o parser do Express trata `+` do base64 do parâmetro
-  `host` como espaço). Rotas: `GET /shopify-yucaloo/:mkt(br|us)/{connect,callback}`.
-- Tokens em `kv.yucalooTokens[mkt]`. Catálogo de produto sincronizado à parte
-  (`fetchProductCatalog`, `kv.shopifyProductCatalog`) — permite um produto cadastrado mas nunca
-  vendido aparecer no Unificador mesmo sem pedido nenhum.
-- Como o `market` é compartilhado, os pedidos da Yucaloo entram automaticamente em todos os
-  agregados por mercado (KPI, channelSplit, catálogo, Segmentos, Produtos) sem mudança de código
-  nesses lugares. As telas com lista fixa de canais precisavam de uma entrada própria pra Yucaloo
-  aparecer, e eram cinco tabelas espalhadas (`MARKET_CHANNELS`, `CH_META`, `CHANNELS_BR/US`,
-  `CH_BY_MARKET`, `CHAN_BR/US`); **nenhuma existe mais** — hoje canal é UMA linha em `DEFAULT_CH`
-  (`public/js/colors.js`, ver "Catálogo de canais"), e as telas leem de lá. `campanhas.html` fica
-  de fora de propósito: não tem lista genérica de canais Shopify, só cards fixos por conta de Ads,
-  e a Yucaloo ainda não tem conta de Ads própria.
-- Cor padrão da marca: `#4466FF`. Badge de canal: "Shopify - Yucaloo BR"/"EUA" (e os da Coco and
-  Luna viraram "Shopify - Coco and Luna BR"/"EUA" pra desambiguar, já que as duas rodam no Shopify).
-
-### Google Ads (`src/googleads.js`)
-- Só EUA — apesar do nome da conta ser "Coco and Luna". GAQL via REST
-  (`POST /customers/{id}/googleAds:search`), agregado no período, sem granularidade diária.
-- Não entra no payload de `/api/dashboard` nem no ROAS do dashboard principal — só na tela de
-  Campanhas, decisão deliberada de escopo.
-
-### Autenticação (`src/auth.js`)
-- Senha: scrypt+salt, comparação em tempo constante. Sessão: cookie `coco_session` (HttpOnly,
-  SameSite=Lax, Secure sob HTTPS), 30 dias, em `kv.authSessions`.
-- Dois níveis: `admin` (tudo) e `padrao` (só páginas liberadas em `pages[]`).
-- Portão de acesso em `server.js`, antes do `express.static`: libera sempre `/health`, `/login`,
-  rotas de API de auth, assets estáticos e o fluxo da Yucaloo; sem sessão → 401/redirect; com sessão
-  mas sem permissão na página → redirect pra primeira página permitida.
-- `initAuth()` no boot semeia um usuário admin se `kv.users` estiver vazio e liga o login por
-  padrão (`authConfig.enabled = true`). **A senha semente não é fixa**: vem de
-  `ADMIN_SEED_PASSWORD` ou é sorteada e aparece UMA vez no log do servidor. Era "123456" escrita no
-  código, num repositório público, e a lista vazia é justamente o caminho de recuperação abaixo.
-- Recuperação se travar: editar `kv` direto no Postgres (`UPDATE kv SET value='{"enabled":false}'
-  WHERE key='authConfig'` reabre sem login; apagar a linha `key='users'` re-semeia o admin, e a
-  senha nova sai no log do Railway, ou é a de `ADMIN_SEED_PASSWORD`).
-
-### Quem pode chamar o quê (revisão de 22/09/2026, `scripts/test/seguranca.test.mjs`)
-- **Toda rota que GRAVA diz quem pode chamá-la**: `requireAdmin` ou `requirePage('<pagina>.html')`.
-  As únicas exceções são login, logout, troca da própria senha e `/api/sync`, e o teste as lista
-  pelo nome. Rota nova sem dono quebra o teste — é assim que uma porta esquecida vira erro em vez de
-  ficar aberta.
-- **`requirePage`** existe porque o portão só controla quem ABRE a tela. Sem ele, um usuário sem
-  acesso a Produtos gravava custo de produto chamando a rota direto. Gravação de Produtos, Estoque e
-  Segmentos (tipos de produto) passa por ele. Admin sempre passa.
-- **Conectar conta (Bling, Shopee, Mercado Livre, Google Ads) é só de admin**, e a volta do
-  provedor também. Eram rotas públicas, e o `state` no cookie (double-submit) só impede alguém de
-  ENGANAR o administrador: não impede um estranho de abrir o /connect no próprio navegador,
-  autorizar com a conta DELE e fazer a dashboard gravar o token dele no lugar do nosso. A Yucaloo
-  fica de fora de propósito: quem chama o /connect dela é a Shopify, com requisição assinada (HMAC),
-  muitas vezes num iframe onde o cookie da dashboard nem chega.
-- **`/api/sync` exige login**, ou o token de `SYNC_SECRET` (pra um agendador externo). Antes ele
-  passava sempre ("tem token próprio"), mas o botão nunca manda o token, então a variável não estava
-  configurada e qualquer pessoa disparava a sincronização inteira, gastando a cota da Amazon.
-- **Sonda e rota de manutenção são só de admin.** Várias devolvem pedido CRU com nome e endereço de
-  cliente, e uma delas apaga pedido.
-- O × do card de processos (cancelar) é só de admin e agora MOSTRA a recusa; antes ele nem lia a
-  resposta, e o botão ficava travado sem dizer por quê.
-
-### Cabeçalhos de segurança (`server.js`, topo)
-- CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` e HSTS
-  (só sob HTTPS), tudo à mão, sem helmet. Rate limit geral em `/api` e um específico de login.
-- **A CSP é a armadilha: domínio que falta nela é bloqueado SEM erro visível.** A página abre
-  normalmente, só falta o recurso, e ninguém percebe. Foi o que aconteceu com a fonte Inter: as 11
-  páginas pediam ela ao Google Fonts, a CSP não liberava nem `fonts.googleapis.com` (a folha) nem
-  `fonts.gstatic.com` (os `.woff2`), e a dashboard inteira rodou na fonte do sistema até
-  27/08/2026 sem ninguém entender por que "estava um pouco diferente". Corrigido.
-- Ao adicionar QUALQUER recurso externo novo (script, folha de estilo, fonte, `fetch`), conferir a
-  diretiva certa: script → `script-src`, folha → `style-src`, fonte → `font-src`, `fetch` →
-  `connect-src`. Uma folha do Google Fonts precisa de DOIS domínios, um em cada diretiva.
-  `preconnect` não conta, ele não carrega nada.
-- `'unsafe-inline'` em `script-src`/`style-src` continua exigido, mas não mais pelo motivo
-  antigo: a lógica e o estilo já saíram do HTML. O que ainda o exige são os ATRIBUTOS —
-  `onclick=` e afins (inclusive no markup gerado em tempo de execução pelos scripts) e `style=`
-  direto na tag. Fechar isso é trocar cada um por `addEventListener` e por classe de CSS.
-- **Todo recurso de CDN carrega com `integrity` + `crossorigin="anonymous"`** (SRI): ECharts,
-  Leaflet e Bootstrap Icons. Sem isso, um pacote adulterado na origem roda dentro da dashboard
-  já logada. Os dois atributos são indivisíveis — sem `crossorigin` o navegador não consegue
-  verificar recurso de outro domínio e bloqueia igual.
-  - Ao trocar a VERSÃO de qualquer um deles, recalcular o hash:
-    `sha384-` + sha384 do arquivo em base64. `scripts/test/sri.test.mjs` baixa cada recurso e
-    compara, então um hash esquecido falha no teste em vez de sumir com o gráfico em produção.
-  - A folha do **Google Fonts fica de fora de propósito**: o CSS que ela devolve varia conforme
-    o navegador que pede, então o hash nunca bateria e a fonte ficaria bloqueada pra sempre.
-
-### Integrações (`public/integracoes.html`)
-- Admin only. `GET /api/integrations` monta status ao vivo por canal; `POST
-  /api/integrations/:key/toggle` liga/desliga, persistido em `kv.integrationsConfig`
-  (`TOGGLEABLE_KEYS` define o que pode ser alternado). Opt-out por padrão — sem registro salvo,
-  a integração conta como ligada.
-- O switch tem efeito real: `sync.js`/`/api/campaigns` checam `isIntegrationEnabled()` antes de
-  buscar/gravar cada canal. Exceção: `fetchOrders()` da Amazon busca os dois mercados numa
-  chamada só — desligar um mercado filtra o que é GRAVADO, não reduz a chamada de rede em si.
-
-### Unificador (`public/unificador.html`)
-- Agrupamento manual global de produtos entre canais/nomes — substitui versões antigas que
-  existiam separadas em Segmentos/Estoque. Admin only.
-- Modelo: `kv.productGroups` = `{ [market]: { [nomeDoGrupo]: [tituloBruto,...] } }`. Um título
-  pertence a no máximo um grupo por mercado. Liga/desliga global em `kv.productGroupsConfig`
-  (padrão ligado).
-- Aplicado no backend (`metrics.js`, `applyProductGroups()`), não client-side: em
-  `topProducts`/`topProductsAll` (merge entre canais), `productGeo` (Segmentos), `computeProducts`
-  (merge dentro do mesmo canal — campos financeiros editáveis ficam "—" na linha agrupada) e
-  `computeStock.agg` (grupo manual tem prioridade sobre a família automática Lysine/Daily).
-- Também mostra produto do catálogo Shopify mesmo sem venda nenhuma (`listProductCatalog` mescla
-  pedidos reais com `kv.shopifyProductCatalog`).
-
-### Variante da Shopify é produto diferente (`tituloDoItem`, src/shopify.js)
-- A Shopify manda o título do PRODUTO e o da VARIANTE separados, e um produto com quatro variantes
-  chega com o mesmo `title` nas quatro. Foi assim que o "Urinary Tract" da loja dos EUA apareceu
-  como UMA linha somando Soft Chews, Tablet, Powder e Liquid (relatado pelo Luan, 08/09/2026).
-  **Não era o Unificador juntando** — elas nunca chegaram separadas.
-- Variante é produto diferente pra tudo que importa aqui: tem estoque próprio, custo próprio e
-  venda própria. Somá-las esconde qual das quatro está vendendo e qual está parada.
-- `tituloDoItem(title, variantTitle)` compõe "Produto - Variante". **"Default Title"** é o nome que
-  a Shopify dá à variante única de um produto sem variação e nunca pode entrar no nome — se
-  entrasse, TODO produto sem variação seria renomeado, e nome é chave: `kv.productFinance` e
-  `kv.productStock` são indexados por `canal|||título`, e os grupos do Unificador guardam o título
-  exato. Variante com o mesmo nome do produto também não vira sufixo repetido.
-- **O catálogo passou a ser por VARIANTE junto** (`productVariants` na raiz, não `products`), e os
-  dois lados compõem o nome pela MESMA função. Sem isso o produto-pai viraria uma linha sem venda
-  nenhuma em Produtos/Estoque, e a tag e o Type ATUAIS do catálogo deixariam de ser encontrados pro
-  produto com variação — a decisão de ocultar voltaria a depender da tag presa no pedido antigo,
-  que é justamente o que o catálogo existe pra evitar.
-- `productVariants` na raiz e não variantes aninhadas em `products`: conexão dentro de conexão
-  multiplica o custo da consulta na Shopify, e 100 produtos × 100 variantes estoura o limite. Todo
-  produto tem pelo menos uma variante, então nada fica de fora.
-- **Consequência que precisa ser dita antes de rodar:** pedido já gravado continua com o nome
-  antigo até ser buscado de novo. O sync reescreve a janela móvel de 60 dias sozinho; o que for
-  mais antigo só se corrige por `POST /api/shopify/backfill`. E COG, frete, estoque manual e grupo
-  do Unificador salvos sob o nome antigo NÃO seguem pro nome novo — eles são indexados por título.
-  Nenhum número de venda muda com isso: só a quebra por linha fica mais fina.
-- `scripts/test/catalogo-loja.test.mjs` executa a composição de verdade e guarda as armadilhas,
-  inclusive a mais silenciosa: se a consulta de pedidos deixar de pedir `variantTitle`, tudo volta
-  a se somar sem erro nenhum.
-
-### Só produto ATIVO da Shopify vira linha em Produtos/Estoque
-- A consulta de catálogo (`fetchProductCatalog`) não filtra status, então traz `ACTIVE`, `DRAFT` e
-  `ARCHIVED` — e isso é de propósito: os índices de tag e de tipo (`catalogTagsIdx`/`catalogTypeIdx`)
-  precisam das tags ATUAIS até de produto arquivado que já vendeu, senão a decisão de ocultar
-  produto volta a depender da tag presa no pedido antigo (ver "Ocultar produtos").
-- Quem separa é o `mergeShopifyCatalog`: **só LISTA produto `ACTIVE`**. Rascunho e arquivado não
-  são catálogo — o dono da loja não vê esses produtos na lista dele, e vê-los aqui é a dashboard
-  inventar produto. O card "Shopify - Coco and Luna BR" aparecia com 11 produtos, dos quais 9 não
-  existem na loja (relatado pelo Luan em 03/09/2026).
-- Produto sem `status` gravado é catálogo salvo antes dessa mudança: conta como ativo até o sync
-  seguinte reescrever (a cada 15 min). Sem essa tolerância a lista encolheria sozinha logo depois
-  do deploy e voltaria minutos depois, sem explicação nenhuma na tela.
-- Produto que JÁ VENDEU nunca é tocado pelo catálogo (`if (products[p.title]) continue`): o
-  catálogo só ACRESCENTA quem não tem venda. Sobrescrever zeraria a venda em silêncio.
-- **"Tag mãe" do grupo** (`kv.productGroupTypes` = `{ [market]: { [nomeDoGrupo]: {type, typeGroup} } }`,
-  campos Tipo/Categoria em cada card do Unificador, 26/08/2026): um grupo unificado é UM produto
-  físico, então tem UM tipo. Antes disso o tipo era INFERIDO em tempo de consulta a partir dos
-  membros que venderam NO PERÍODO, e como só o membro Shopify carrega o campo `productType`
-  (Amazon/Shopee/ML não têm esse conceito), o mesmo produto trocava de tipo conforme a data
-  escolhida: numa janela em que só a listagem Amazon do "Daily" vendeu, o grupo inteiro caía em
-  "Outros"; numa janela maior voltava a ser "Pó". Reportado pelo Luan com dois prints do MESMO
-  produto em períodos diferentes. Três correções anteriores (item sem Type descartado, grupo sem
-  herdar Type de um irmão, Type congelado no pedido em vez do catálogo vivo) atacaram camadas reais
-  mas continuaram sendo inferência, então o resultado continuava variando com o período. Chave
-  SEPARADA de `productGroups` de propósito: aquele blob é `{nome:[títulos]}` e é lido em cinco
-  telas, então mudar o formato exigiria migrar produção e tocar em todas elas.
-- **Dois eixos independentes, decisão do Luan** (26/08/2026, "vamos ter suplementos de diferentes
-  tipos no futuro também, não só o pó"): `type` = forma física, alimenta os pills "Por tipo de
-  produto" em Segmentos; `typeGroup` = macro-categoria, alimenta os cabeçalhos do Top produtos. NÃO
-  unificar os dois num vocabulário só. Tags por mercado, nada compartilhado entre BR e EUA (também
-  pedido explícito) — o formato `{[market]:{...}}` já garante isso.
-- **Precedência do tipo** (`resolveGroupTypes` em `metrics.js`, por eixo, primeiro que resolver
-  vence): 1) tag mãe manual; 2) Type/tags ATUAIS do catálogo Shopify de qualquer membro do grupo,
-  varrendo TODOS os membros cadastrados (tenham vendido ou não — é isso que mata a dependência de
-  período); 3) palavra-chave de "Tipos de produto" no título de qualquer membro (só pro eixo
-  `typeGroup`, é o que salva membro de canal sem catálogo); 4) null, e aí `applyGroupTypes` preserva
-  o valor que veio dos itens do período. `applyGroupTypes` roda DEPOIS de `applyProductGroups` e tem
-  a palavra final, mas só sobrescreve o eixo que o grupo conseguiu resolver. Aplicado em Segmentos
-  (`computeDashboard`), Produtos (`mergeProductRows`) e Estoque (`computeStock`) — as três telas onde
-  uma linha de grupo carrega `type`, pra não discordarem entre si.
-- Os campos são `<datalist>`, não `<select>`: sugerem os Types já presentes no catálogo do mercado
-  e os nomes de "Tipos de produto" cadastrados, mas continuam aceitando um valor novo digitado.
-  Campo vazio = automático (volta pra inferência). Apagar o grupo apaga a tag mãe junto
-  (`deleteProductGroup`), senão um grupo novo com nome repetido herdaria o tipo do antigo.
-
-### Bling ERP (`src/bling.js`)
-- O Bling recebe pedido de TODOS os canais. Ele completa campo de pedido que já existe (o `state`
-  da Shopee, que mascara o endereço) e só vira FONTE de pedido em dois casos, os dois estritamente
-  restritos: o canal do TikTok Shop (ver "TikTok Shop") e as notas de "Saída em bonificação". Ler
-  qualquer outro canal daqui duplicaria venda que a API dele já traz.
-- `KNOWN_CHANNELS` (loja.id do Bling → nosso channel/market) é **hardcoded de propósito**, não
-  descoberto em runtime: a conta tem canais que não são venda nossa (PETLOVE descontinuado,
-  Yucaloo, TikTok Shop), e nenhum deles pode entrar na reconciliação por engano.
-- **TikTok Shop:** captado pelo Bling, ver a seção "TikTok Shop (pelo Bling)".
-- **Token JWT (migração obrigatória até 15/10/2026**, depois disso o Bling recusa requisição fora do
-  padrão; https://developer.bling.com.br/migracao-jwt). Quem pede JWT é o header `enable-jwt: 1`
-  (`JWT_HEADER`), e ele vai nos DOIS únicos pontos de rede do projeto com o Bling: `tokenRequest`
-  (troca do code e renovação) e `apiGet` (toda leitura). Nenhum outro arquivo chama o Bling direto,
-  e `scripts/test/bling-jwt.test.mjs` falha se alguém passar a chamar. O token JWT é bem maior que o opaco
-  (959 caracteres o primeiro, em produção; o Bling avisa que pode chegar a ~3.000) e mora em `kv.blingTokens` (JSONB, sem limite de tamanho): nada a migrar no banco.
-  - **Não precisa reconectar**: a primeira renovação automática depois do deploy (no máximo 6h) já
-    devolve JWT. `GET /api/bling/token` (admin) mostra formato, tamanho e validade, NUNCA o token;
-    `POST /api/bling/token/renovar` (admin) adianta a renovação. Renovar é POST de propósito: troca o
-    token, e ação que troca coisa não pode ser disparada por um link.
-  - **Uma renovação por vez** (`umaPorVez`, src/umaPorVez.js). O Bling troca o refresh token a cada
-    renovação e invalida o anterior; duas leituras encontrando o token vencido ao mesmo tempo
-    renovariam com o MESMO refresh token, uma invalidaria a outra, e a saída passaria a ser
-    reautorizar pelo navegador (`/bling/connect`) — sem volta pro token opaco depois do JWT. Quem
-    chega no meio de uma renovação espera ela e recebe o mesmo resultado.
-  - **Não testar a renovação da máquina local com o token de produção**: ela invalida o refresh token
-    que a produção está usando, e a dashboard para de ler o Bling até alguém reconectar.
-  - **Confirmado em produção em 23/09/2026**: `GET /api/bling/token` respondeu `"formato": "JWT"`
-    depois de uma renovação manual. O quadro de pedidos (projeto irmão) faz a própria migração.
-- **Saída em bonificação (doação para UGC):** a empresa envia produto sem cobrar, e no Bling isso
-  sai com "Natureza de operação: Saída em bonificação", valor R$ 0. A dashboard precisa contar
-  essas UNIDADES sem que elas virem receita (pedido do Luan, 04/09/2026). O bloqueio é o mesmo de
-  sempre: "natureza de operação" é campo de NOTA FISCAL e o que lemos hoje é PEDIDO DE VENDA, então
-  não se sabe ainda onde a marca vive de forma legível pela API. `GET /api/bling/probe-bonificacao
-  ?since=&until=` (admin) tenta as variações da chamada e devolve o esqueleto da resposta mais as
-  naturezas encontradas, contadas — sondar primeiro, mapear depois.
-- **O que a sonda já confirmou ao vivo (04/09/2026), e que muda o desenho da captura:**
-  a natureza "Saída em bonificação" é um ID (`15107248345`), e a nota traz só `{ id }`, sem o nome
-  — o nome vem de `/naturezas-operacoes`; a LISTAGEM de notas não traz os itens, então cada nota
-  precisa de um `GET /nfe/{id}` pra saber produto e quantidade; a doação sai da loja
-  "Vita Pet Life - São Paulo" (`206202176`, tipo LojaFisica); e **a doação NÃO é reconhecível pelos
-  pedidos** (113 notas de bonificação contra 7 pedidos naquela loja no mesmo período), então a
-  captura tem que vir da nota fiscal.
-- **Quem decide é a NATUREZA DE OPERAÇÃO, nunca a loja** (decisão do Luan, 04/09/2026). A loja hoje
-  é "Vita Pet Life - São Paulo", mas pode mudar, e uma regra presa à loja pararia de contar no dia
-  em que mudasse, sem nada acusar. A comparação é pelo NOME, resolvido em tempo de execução via
-  `/naturezas-operacoes` — não pelo id, que é identificador interno da conta e quebraria em
-  silêncio se a natureza fosse recriada.
-- **"Saída em", e não só "bonificação".** A conta tem AS DUAS: "Saída em bonificação" e "Entrada de
-  bonificação". Casar por "bonifica" contaria mercadoria ENTRANDO como doada, que é o número
-  exatamente ao contrário. `ehNaturezaDeBonificacao` (bling.js) é a única regra, e o teste a executa
-  contra as 25 naturezas reais da conta exigindo que exatamente uma case.
-- **Nota de bonificação COM valor existe.** A crença era "doação é sempre R$ 0", e a maioria é —
-  mas a nota 000222 saiu com R$ 129,99 sendo doação confirmada. Duas consequências que não podem
-  ser esquecidas: filtrar doação por "valor zero" PERDE essa nota, e somar o valor dela INVENTA
-  receita. Quem decide é a natureza de operação, e o valor da nota é sempre descartado.
-- **Nota cancelada não é doação enviada**, e a mercadoria só saiu nas autorizadas. Cuidado com um
-  detalhe que o quadro de pedidos mediu: **a listagem de `/nfe` ESCONDE nota cancelada e
-  rejeitada** (a cancelada só aparece pedindo por ela). Então uma doação capturada como Autorizada
-  e cancelada depois simplesmente PARA DE VIR, e ficaria contada pra sempre. `syncBonificacoes`
-  compara o que está gravado com o que a listagem trouxe (`listadas`), pergunta uma a uma pela
-  nota que sumiu (`situacaoDaNota`, teto de 20 por rodada) e retira a que não saiu mais. Só com
-  leitura completa, e com um dia de folga na borda da janela, senão ausência não significa nada.
-- **Contada por LOJA no relatório** (`porLoja`, e com nome na sonda do TikTok). Doação normal sai
-  sem canal (loja 0) ou da loja física; doação ligada a um canal que a dashboard já conta como
-  venda é a mesma unidade chegando por dois caminhos. A loja só é CONTADA: quem decide continua
-  sendo a natureza.
-- **A sonda de bonificação nunca devolve dado de quem recebeu.** A nota fiscal carrega nome, CPF,
-  endereço, e-mail e telefone, e essa resposta é feita pra ser lida e colada numa conversa. O
-  mascaramento é allowlist POSITIVA (campo novo nasce mascarado) e é TESTADO, não só documentado:
-  a sonda da Shopee já vazou o texto livre do comprador contrariando o próprio comentário dela.
-
-### TikTok Shop (pelo Bling) (`src/tiktok.js`, `syncTiktok` em `src/sync.js`)
-- **Lido do Bling, igual ao quadro de pedidos** (projeto irmão, que já recebe o TikTok assim —
-  decisão do Luan, 22/09/2026). A API do TikTok exige gerente de conta designado, que a conta não
-  tem. O canal do TikTok no Bling é o `206279174` (`TIKTOK_LOJA_ID`); os outros três ids de
-  TikTok da conta estão desativados.
-- **Um canal só, "TikTok Shop" (`tiktok`), pras duas marcas.** As duas vendem pelo mesmo canal do
-  Bling (decisão de 03/09/2026), e a dashboard já mostra as duas marcas juntas em Shopee e Mercado
-  Livre. O que separa marca aqui é só a loja Shopify.
-- **Situação do Bling decide se é venda, pelo NOME** (`classificarSituacao`). Os nomes vêm de
-  `/situacoes/modulos/98310` (a conta tem situações próprias, "Aguardando Coleta", "Em
-  devolução"). Venda é ALLOWLIST positiva: o pedido do TikTok só chega no Bling depois de pago, então
-  as situações de trabalho do dia a dia contam. Cancelado e devolvido são testados ANTES da lista.
-  **Situação que ninguém decidiu NÃO conta** e aparece "Em aberto" (`tiktok: ['PENDING']` em
-  `UNPAID_STATUS_BY_CHANNEL`, nos DOIS lugares), e volta no relatório do sync
-  (`tiktok.situacao`). A allowlist foi escrita sem amostra real: **conferir com a sonda** depois
-  dos primeiros dias.
-- **Traduzido pro vocabulário que as telas já conhecem**: venda → `PAID`, cancelado →
-  `CANCELLED`, devolvido → `REFUNDED` com `refunded:'total'` (a unidade e o dinheiro saem pelo
-  mesmo `pedidoLiquido` de todo canal), desconhecida → `PENDING`. O nome original fica em
-  `situacaoBling`. Assim nenhuma tela precisou aprender nome de situação do Bling.
-- **Pedido cuja nota é "Saída em bonificação" não é venda** (amostra pra criador pelo próprio
-  TikTok, por exemplo): a nota já conta a unidade como doação, e contar o pedido também seria a
-  mesma unidade duas vezes, uma delas como venda. Por isso o TikTok roda DEPOIS da bonificação no
-  sync, e um pedido já gravado cuja nota virou doação depois é retirado (`removerPedidos`).
-- **O filtro de alteração vai no horário de SÃO PAULO** (`momentoNoBling`). Lição do quadro: o
-  servidor roda em UTC, e o filtro escrito com `toISOString()` cai três horas no futuro — o Bling
-  responde 200 com lista VAZIA, e a leitura parece funcionar sem trazer nada.
-- **Incremental por cursor** (`kv.tiktokCursor`): lê só o que mudou desde a última leitura, com 10
-  min de sobreposição; sem cursor, os últimos 90 dias (a janela de histórico). **O cursor só anda
-  com a leitura INTEIRA**: listagem no teto, detalhe que falhou ou pedido deixado pra próxima rodada
-  seguram o cursor, senão o que faltou nunca mais seria lido.
-- Cada pedido lido a fundo custa uma chamada (o item só existe no detalhe, ~3 por segundo). Pedido
-  já gravado com a mesma situação e o mesmo total não é relido, e há teto de 150 detalhes por rodada
-  (`TIKTOK_DETALHES_POR_RODADA`): a primeira carga grande termina em algumas rodadas.
-- Data do pedido: o Bling dá só o DIA, então o pedido aparece à meia-noite de Brasília. Receita por
-  item é preço × unidades, e o `itemRevFactor` escala pro total do pedido (desconto e frete).
-- Comissão padrão em Produtos: 0% (`DEFAULT_COMMISSION_PCT` não tem o canal). Editável na tela.
-- Liga/desliga em Integrações (`tiktok_shop`); precisa do Bling autorizado.
-- **Sonda:** `GET /api/bling/probe-tiktok?since=&until=` (admin, padrão 30 dias) mostra quantos
-  pedidos do TikTok há, cada situação encontrada e como ela foi classificada, uma amostra já no
-  formato da dashboard (sem cliente), o detalhe cru mascarado e as notas de doação por loja.
-- `scripts/test/tiktok.test.mjs` executa a regra (situações, datas, itens, devolução, doação que
-  passou por pedido, outro canal) e guarda cursor, horário de SP, ordem no sync e a sonda sem cliente.
-
-### Segmentos de público — "Gato vs Cachorro" (`public/segmentos.html`)
-- Rótulo é **"Cachorro"**, não "Cão" (pedido do Luan, 25/08/2026). As CHAVES internas seguem
-  `cat`/`dog` — é o modelo de dado (`computeSegments`, `metrics.js`), não texto de tela, e mudar
-  isso não traria nada. As palavras-chave de classificação em `SEG_KW` (`metrics.js`) também
-  continuam com `'cão'`/`'cães'`: elas casam com TÍTULO DE PRODUTO real, que segue escrito assim.
-- Cores: gato `#ff002b`, cachorro `#0849e9`. Não são escolha estética avulsa — saem direto dos
-  mascotes da marca (`img/mascotes/luna.svg` é a gata e usa `#FF002B`; `img/mascotes/coco.svg` é o
-  cachorro e usa `#0849E9`). Trocar a cor sem trocar o SVG deixa o card brigando com o mascote que
-  está do lado dele.
-- **Fonte única**: `DEFAULT_SEG`/`CocoColors.seg` em `js/colors.js`, no mesmo formato de
-  `DEFAULT_CH`/`DEFAULT_MKT` (inclui `label` e `text` de contraste, e aceita override salvo em
-  `localStorage('coco_colors')` com chave `seg.<k>`). O `colors.js` também injeta as variáveis CSS
-  `--cat`/`--dog`/`--other` (`segVarsCss()`, dentro do `injectStyle()` que já existia). Antes o hex
-  vivia em DOIS lugares dentro do próprio `segmentos.html` — o `:root` do `<style>` e o objeto JS
-  `SEG_COLORS` do gráfico de rosca — e já estavam divergentes na prática (`--other:#9c9790` no CSS
-  contra `#c4b49a` no JS); quem mexesse em um não tinha como saber do outro.
-- Por isso `segmentos.html` carrega `js/colors.js` no **`<head>`**, e não junto dos outros scripts
-  no começo do `<body>` como as demais páginas: o CSS da própria página usa `--cat`/`--dog` e, se o
-  script chegasse depois, os acentos e as barras dos cards nasceriam sem cor por um instante.
-- O mascote aparece no cabeçalho de cada card de segmento (`.seg-card-mascote`, `SEG_MASCOTE`).
-  `height` fixo com `width:auto` de propósito: os dois SVG têm proporções diferentes e travar os
-  dois no mesmo quadrado achataria um deles.
-
-### Tipos de produto
-- Categorias criadas pela própria UI (Segmentos → botão de gerenciar tipos), não hardcoded.
-  `kv.productTypeGroups` = `{ [market]: { [nomeDoTipo]: [palavraChave,...] } }`. Testa a palavra-
-  chave contra título + productType + tags do item; primeira regra que bater vence; sem regra
-  cadastrada cai em `'Outros'`. Usado no "Top produtos" por segmento em Segmentos.
-
-### Ocultar produtos
-- Palavras-chave testadas só contra TAG do item (`kv.productHiddenTags`, por mercado), geridas no
-  Unificador. Item que bate vira segmento `'hidden'` em vez de cat/dog/other, some de
-  `productGeo`/Segmentos normais e aparece só no card "Ocultos" (Unificador e Segmentos).
-- Filtro vale em toda a dashboard, não só em Segmentos: `computeDashboard` (Top Produtos),
-  `computeProducts` (Produtos) e `computeStock` (Estoque) também excluem o produto (antes só
-  Segmentos respeitava a tag oculta e o produto continuava aparecendo normalmente em
-  Produtos/Estoque/Top Produtos, corrigido 17/08/2026).
-- `isHiddenProduct` (não `isHiddenItem` direto) decide isso nesses três lugares, priorizando a tag
-  ATUAL do catálogo Shopify (`kv.shopifyProductCatalog`, re-sincronizado a cada ciclo) sobre a tag
-  presa no pedido. `it.tags` de um pedido vem do produto na hora em que o pedido foi buscado (ver
-  shopify.js) e nunca é re-sincronizado depois — se uma tag como "Combo"/"Teste" foi removida da
-  Shopify depois, pedidos antigos continuam com ela presa pra sempre, e a união de tags em
-  `aggregateProductsByChannel` carregava esse resíduo pra sempre junto. Sem a prioridade do
-  catálogo, um produto com tags limpas HOJE continuava oculto por causa de uma tag que nem existe
-  mais (reportado pelo Luan, 17/08/2026 — "Lisina para gatos 120g", tags atuais limpas, sumia de
-  Produtos/Estoque mesmo assim). Canal sem catálogo (Shopee/ML/Amazon) cai no fallback de sempre: só
-  a tag do pedido mesmo.
-
-### Geografia (`geografia.html`)
-- Página única com seletor BR/EUA no topo (mesmo padrão `mkt-toggle-wrap`/`setMarket()` de
-  `campanhas.html`) — antes eram duas páginas/rotas separadas (`geografia.html` +
-  `geografia-us.html`, um item de sidebar cada). Unificado 20/08/2026 a pedido do Luan: "temos
-  tudo pronto, é só fazer essa lógica de mudar o país dentro de uma só página". `/geografia-us` e
-  `/geografia-us.html` continuam existindo só como redirect 301 pra `/geografia?market=us`
-  (bookmark antigo), lidos por `geografia.html` via `?market=` na URL na carga inicial.
-- Leaflet 1.9.4, tile CartoDB Voyager. Dois modos: coroplético (polígono colorido por intensidade)
-  e calor (também preenche o polígono, com gradiente — não usa círculos, evita sobreposição).
-- **`public/js/geo.js` (`window.CocoGeo`) é a fonte única de tudo que Geografia e Segmentos
-  compartilham**: as oito tabelas (nome de estado, centróide, sub-região do mapa de calor,
-  códigos do IBGE e FIPS, nome→sigla dos EUA), o carregador de contorno com cache por mercado,
-  o fundo do mapa e a interpolação de cor. Eram ~150 linhas IDÊNTICAS dentro de cada um dos dois
-  HTML (conferido chave a chave antes de extrair, 27/08/2026), e corrigir um lado nunca chegava
-  no outro. Uma tela nova que desenhe mapa carrega esse script em vez de copiar tabela.
-- **Fundo do mapa: Esri "Light Gray Canvas"** (`CocoGeo.addBasemap(map)`), DUAS camadas
-  (`World_Light_Gray_Base` + `World_Light_Gray_Reference`) — a base do Esri não traz nome de
-  cidade nenhum, os rótulos vêm separados. Sem chave de API. Era CartoDB Voyager até 27/08/2026,
-  quando a CARTO passou a exigir chave e começou a devolver o tile com **"API KEY REQUIRED"
-  carimbado por cima do mapa**: HTTP 200, imagem válida, nada falhando no código, só a marca
-  d'água na tela do usuário. Cinza claro também é melhor aqui do que o Voyager colorido — o mapa
-  é fundo pro coroplético e não pode disputar cor com o dado desenhado em cima.
-  `scripts/test/mapa.test.mjs` falha se alguém voltar pra um provedor que exige chave ou se uma
-  página montar o próprio `L.tileLayer` em vez de chamar `addBasemap`.
-- BR: GeoJSON do IBGE em runtime, casa por `codarea`. US: `public/geo/us-states.json`, servido do
-  próprio domínio, casa por `_uf`. Esse arquivo vinha de um repositório de TERCEIROS via jsDelivr
-  (`PublicaMundi/MappingAPI`) até 27/08/2026 — o mapa dos EUA parava de desenhar se aquele
-  repositório fosse apagado ou renomeado, e nada avisava. Mesmo arquivo, mesma estrutura
-  (`properties.name` → `_uf`), só a origem mudou. Não voltar a apontar pra CDN externa.
-  Os dois ficam cacheados em memória (`geojsonDataBR`/`geojsonDataUS`) depois da 1ª carga — trocar
-  de mercado não rebusca o GeoJSON se já visitado nesta sessão. Bounds/centro/zoom do Leaflet
-  (`MAP_VIEW`) e as tabelas de nomes/centróides/sub-regiões (`STATE_NAMES`/`CENTROIDS`/
-  `SUB_REGIONS`) trocam de ponteiro em `setMarket()`, não são reconstruídas.
-- `byState` no mercado US passa por `normalizeUsState`. Endereço fora dos EUA no mercado US vira
-  bucket `'INTL'` (não perde receita, só não vira linha própria por país). Território/militar
-  contam como EUA.
-- Lista de canais por mercado sai de `CocoColors.channelsFor(market)` (ver "Catálogo de canais"),
-  não de constante local — canal novo aparece aqui sozinho. `renderChannelOptions()` remonta as
-  `.csel-opt` a cada troca de mercado (antes eram 2 arquivos com `<div class="csel-opt">`
-  duplicado cada).
-- Formatação (`fmtMoney`/`fmtInt`/`pctStr`/`fmtDM`) lê a variável `market` em cada chamada — BRL/
-  pt-BR no Brasil, USD/en-US nos EUA (mesmo padrão de moeda por mercado do resto do app; texto em
-  pt-BR nos dois — a antiga `geografia-us.html` tinha "order"/"orders" em inglês vazado em dois
-  lugares, corrigido na unificação).
-- Cores do coroplético são as mesmas nos dois mercados; só a cor padrão da pill do mapa de calor
-  difere (laranja `#f97316` no BR, azul `#3b82f6` no EUA) — configuração salva por mercado
-  (`coco_choro_cfg`/`coco_choro_us_cfg`, `coco_heat_cfg`/`coco_heat_us_cfg`), recarregada a cada
-  troca de país.
-
-### Campanhas (`public/campanhas.html`)
-- Os cards de RESUMO por canal (topo) e os cards de CAMPANHA individual (embaixo) precisam vir da
-  MESMA fonte (`/api/campaigns`, ao vivo) — já existiu um bug em que o resumo lia
-  `/api/dashboard` (janela fixa de 60 dias do sync periódico) enquanto os cards de baixo liam
-  `/api/campaigns` (período escolhido na tela), e os dois discordavam. Não reintroduzir essa
-  divergência.
-- KPI do topo ("Vendas Atribuídas Geral") soma Meta + Mercado Livre (Destaque/premium) + Google Ads.
-- Mercado Livre e Meta BR só aparecem no mercado BR; Meta US e Google Ads só no mercado US.
-- KPI "Faturamento Geral" é `kpis.revenue` de `/api/dashboard` (canal `'todos'`) — receita da loja
-  INTEIRA no período (todo canal, orgânico incluso), não soma dos cards de Ads abaixo. Não bate com
-  a soma de Mercado Livre + Meta + Amazon BR por design; confundiu o Luan (18/08/2026, "de onde vem
-  esse R$10k") por ficar ao lado de "Vendas Atribuídas Geral"/"ROAS Geral" (que são soma dos
-  canais de Ads) — sub-label deixado explícito ("todos os canais, não só Ads") pra não repetir.
-- Toggle de tipo de gráfico dos cards de canal (barra × linha, `.chart-type-btn`) fica acima da
-  lista de canais (`.camp-grid-tools`, logo antes de `#campGrid`), não no header — o header é só
-  filtro/config da página inteira, esse toggle controla só os mini-gráficos dos cards abaixo dele.
-  Pedido do Luan, 19/08/2026.
-
-### Produtos (`public/produtos.html`)
-- Catálogo completo por canal, sem limite de top-N. Mescla pedidos do período com catálogo de
-  todo o histórico — produto sem venda no período continua listado (qty/receita zeradas), porque é
-  tela de catálogo, não de vendas.
-- Isso vale por canal só se o canal já teve ALGUM pedido no histórico inteiro — um canal Shopify
-  sem nenhum pedido ainda (ex.: Yucaloo recém-conectada) nem aparecia, porque a chave do canal só
-  nascia a partir de pedido real. Corrigido: `computeProducts`/`computeStock` (`metrics.js`) também
-  mesclam `kv.shopifyProductCatalog` (`mergeShopifyCatalog()`, mesma fonte que já alimentava o
-  Unificador) — canal Shopify (`SHOPIFY_CATALOG_CHANNELS`) sem pedido nenhum ainda mostra seu
-  catálogo real, com vendas zeradas, em vez de card vazio.
-- Colunas financeiras editáveis por produto: COG, Frete, Impostos %, Comissão % → Lucro/Lucro %.
-  `Lucro = Receita − COG×Qtd − Frete×Qtd − Receita×Impostos% − Receita×Comissão%`. Sem COG
-  preenchido (nem override nem padrão), lucro fica `null` ("—"), nunca assume custo zero.
-  Persistido em `kv.productFinance`, chave `canal|||título`.
-  - Impostos padrão: 2,64% fixo (Simples Nacional).
-  - COG padrão: R$ 15,21 (produto com "lisina"/"lysine" no título), R$ 17,32 ("daily"/"taurina"/"espirulina").
-  - Comissão padrão por canal: Shopee 18%, Mercado Livre 14%, Amazon 12%, Shopify 0%.
-  - Linha unificada pelo Unificador (`_grouped`, ver `applyProductGroups`): o campo nasce vazio (não
-    dá pra mostrar UM valor de membros com overrides possivelmente diferentes), mas continua
-    editável — grava o valor digitado em TODOS os membros do grupo dentro daquele canal
-    (`data-grouped`/`data-members` no input, `onFinanceEdit` faz um POST por membro). Antes o campo
-    ficava travado com "—" e a dica dizia pra editar "no produto individual", mas isso não tinha
-    como ser feito (o título individual não aparece mais em lugar nenhum uma vez agrupado) —
-    corrigido 17/08/2026.
-- Combo/bundle (tag `combo` ou Shopify Bundles) mescla no produto-base, não vira linha própria.
-
-### Combo é o MESMO produto repetido; kit é produto diferente junto
-- "Combo de 3 unidades" é combo: três unidades do mesmo produto, e o card mostra "3 un total ·
-  1 combo de 3". Já **"Daily Support + Lysine" é um KIT**: cada componente é UMA unidade avulsa do
-  seu próprio produto. O kit não vira linha no Top produtos (nunca virou — o Shopify manda os
-  componentes como itens e o produto-pai não é item de pedido), e é isso que o Luan pediu em
-  03/09/2026: "não precisa mostrar o combo, apenas contabilize 1 daily e 1 lysine".
-- Tratar o kit como combo tinha um efeito silencioso e feio: a unidade entrava em `comboQty`, mas
-  `comboBySize` ficava vazio (não há "combo de N" no título pra ler), e a tela caía no texto fixo
-  **"0 un" para um produto que tinha acabado de vender uma unidade**. Quem decide agora é
-  `comboSize(it.bundle)`: sem tamanho no título, a unidade é avulsa. Conferido contra o backup de
-  produção: as 36 linhas de bundle existentes têm "Combo de N" no título, então nenhum combo antigo
-  muda de classificação.
-- **A frase de unidades só mostra o detalhamento quando ele FECHA com o total.** Ela dizia
-  "6 un total · 3 avulso, 1 combo de 2", que dá 5, sempre que alguma unidade não tinha tamanho de
-  combo pra exibir. O total é o número que importa, então ele é sempre o que aparece; o
-  detalhamento é opcional.
-- **`currentQuantity` 0 significa que a linha saiu do pedido** (item devolvido, removido numa
-  edição, ou reposto no estoque ao cancelar) — e o `discountedTotalSet` do Shopify **não**
-  acompanha, fica com o valor original. Sem zerar o valor junto, a dashboard guarda o dinheiro de
-  mercadoria que não está mais no pedido e o produto aparece com receita e nenhuma unidade. O
-  próprio `currentTotalPriceSet` do pedido já desconta essas linhas, então manter o valor no item
-  fazia a soma dos itens discordar do total do pedido. Achado no backup de produção (pedido
-  `#19681`, R$ 33,25 de receita fantasma em pedidos válidos).
-- Rede de segurança em `productRevenueRows`: **produto sem uma unidade sequer não entra no "Top
-  produtos"**. Receita sem mercadoria é sempre anomalia de dado, e ali ela mente do jeito mais
-  direto possível — a linha diz que o produto vendeu. As causas conhecidas estão corrigidas na
-  origem; a rede existe pra um canal novo não criar uma linha fantasma sem ninguém ver.
-- `scripts/test/combo.test.mjs` executa a agregação de verdade (kit misto, combo real, pacote
-  contado uma vez só, detalhamento fechando com o total) e guarda as duas regras de dinheiro do
-  `shopify.js` (linha fora do pedido não vale nada; reembolso do item continua descontado).
-- Exportar CSV: só Shopify US por enquanto (`GET /api/products/export`).
-
-### Estoque (`public/estoque.html`)
-- Híbrido: venda real (calculada) + estoque/produção manual. Seletor de período igual ao de
-  Produtos (mesmo componente `.period-pop`); sem `since`/`until` na URL, `computeStock()` cai nos
-  últimos 30 dias corridos (mesmo default de sempre). `windowDays` no retorno da API é o tamanho
-  real do período (`daySpan`), não mais fixo em 30 — usado pra converter vendas do período em
-  vendas/dia. Produto sem venda no período continua listado (mesclado do catálogo bruto Shopify,
-  igual a Produtos, ver 4.13) — pedido do Luan (17/08/2026) ao adicionar o seletor: não pode sumir
-  produto só por não ter vendido no período escolhido.
-- Dois níveis: por canal (`kv.productStock`: só `stock`/`incoming`, editável) e agregado por
-  família de produto somando todos os canais (`kv.productStockAgg`: `orderInProgress`/`orderNew`/
-  `projected`, editável só aqui). Família = grupo manual do Unificador (prioridade) ou
-  `classifyFamily()` por palavra-chave (Lysine/Daily) ou o próprio título.
-  `totalMonthsOfStock = (stock+incoming+projected+orderNew+orderInProgress) / salesMonth`.
-- O card POR CANAL também respeita grupo manual do Unificador (`applyProductGroups`), igual ao
-  Panorama geral — faltava antes: o card por canal listava um título por SKU/listagem mesmo com um
-  grupo já juntando duplicatas do mesmo produto físico (comum em Amazon/Shopee, onde o mesmo
-  produto aparece com título ligeiramente diferente por listagem); corrigido 17/08/2026.
-- Sugestão de reposição: `<3` meses = urgente, `3–7` = atenção, `≥7` = aguardar.
-- Amazon BR sem nenhum item no catálogo recebe uma linha sintética "Produto TESTE" pra permitir
-  cadastro manual de estoque mesmo sem nome de produto real.
-
-### Devoluções descontam da quantidade E da receita (`pedidoLiquido`, src/metrics.js)
-- **Unidade devolvida não foi vendida, e o dinheiro dela não é receita.** Pedido do Luan
-  (01/09/2026): "marca que 3 foram vendidas, mas nós sabemos que 1 foi reembolsada, então devemos
-  atualizar o número". Vale nos quatro canais, não só onde era fácil.
-- **Um lugar só faz esse desconto**, e é o que torna a regra confiável: `metrics.js` importa o
-  `getOrders` do store como `lerPedidosBrutos` e define um `getOrders` local que aplica
-  `pedidoLiquido` em cada pedido. KPI, Top produtos, Segmentos, Produtos, Estoque, Geografia,
-  Insights e a busca recebem o pedido já líquido sem que nenhum deles precise lembrar de
-  descontar. Importar `getOrders` direto do store dentro do metrics.js furaria isso **em
-  silêncio** (os números voltariam ao bruto sem erro nenhum), e é o que
-  `scripts/test/devolucoes.test.mjs` impede: `lerPedidosBrutos` só pode aparecer duas vezes no
-  arquivo, no import e dentro do wrapper.
-- Três campos alimentam o desconto, do mais preciso pro menos:
-  - `items[].refundedQty` — unidades devolvidas DAQUELA linha. Melhor caso: sabemos o produto.
-  - `refundedQty` — unidades devolvidas no pedido, sem saber de qual linha. A baixa é distribuída
-    linha a linha até acabar; pode errar de qual produto saiu num pedido com vários produtos, mas
-    **nunca erra o total de unidades**, e o dinheiro acompanha exatamente as unidades tiradas.
-  - `refundedTotal` — dinheiro devolvido, quando o canal informa o valor exato. Sozinho, desconta
-    só o dinheiro: reembolso parcial sem saber o item não pode chutar qual unidade saiu.
-- Pedido devolvido **continua sendo um pedido** (não vira cancelado): segue na contagem com a
-  receita zerada, exatamente como a Shopify já tratava um `REFUNDED`. Cancelado é outra coisa, é
-  a venda que nunca aconteceu. Isso significa que o ticket médio cai num período com devolução,
-  e é o comportamento certo.
-- `productSales` (toggle "Receita da Amazon") acompanha na mesma proporção. Deixar bruto faria os
-  dois modos de receita discordarem só no pedido devolvido, que é o pior lugar pra discordarem.
-- Pedido devolvido **sem nenhum item conhecido** zera. A Orders API da Amazon não traz item; se a
-  mercadoria voltou e não sabemos o que era, ela não pode continuar valendo o total cheio.
-- **Onde cada canal pega a devolução:**
-  - **Shopify** (BR/US/Yucaloo): já vem líquida da própria API. `currentQuantity` desconta a
-    unidade devolvida, `currentTotalPriceSet` desconta o dinheiro, e o valor do item já sai de
-    `discountedTotalSet` menos `order.refunds`. Por isso pedido Shopify não carrega campo de
-    devolução nenhum, e `pedidoLiquido` o devolve intacto — descontar aqui seria descontar duas
-    vezes.
-  - **Amazon**: relatório de devoluções da FBA, com o ASIN de cada unidade (ver a seção logo
-    abaixo). É o único canal que diz QUAL produto voltou.
-  - **Mercado Livre**: vem dentro do próprio pedido, em `payments[].transaction_amount_refunded`
-    — nenhuma chamada a mais. Um pedido reembolsado costuma continuar com status `paid`, então
-    sem olhar os pagamentos ele seguia contando como venda cheia. Reembolso integral leva as
-    unidades junto; parcial leva só o dinheiro, porque o ML não diz de qual item ele saiu.
-  - **Shopee**: API de devolução própria (`/api/v2/returns/get_return_list`), lida a cada ciclo
-    de sync. Ela diz o produto (por SKU), a quantidade e o valor exato devolvido. Ver "Devoluções
-    da Shopee" logo abaixo.
-- **O sync de 15 min não pode apagar a marca.** A devolução da Amazon chega por reconciliação a
-  cada 12h, e `upsertOrders` substitui o pedido inteiro a cada ciclo. Sem a guarda, a marca era
-  apagada minutos depois de gravada e o pedido devolvido passaria quase todo o tempo contando
-  como venda cheia. Mesma família das guardas que já existiam ali para título de item, `state` e
-  `productSales` — e há uma segunda, que recarrega a marca POR LINHA quando a lista de itens é
-  substituída (um backfill via Reports API traz itens novos e desfaria o desconto por produto).
-
-### Rótulo de status do pedido ("Pedidos recentes" e busca)
-- Quatro rótulos: **Autorizado**, **Em aberto**, **Cancelado** e **Reembolsado** (mais "Reembolso
-  parcial"). Escritos em DOIS lugares — `statusLabelPt` (`src/metrics.js`, alimenta a busca) e
-  `statusTag` (`js/paginas/index.js`, desenha a tag) — e os dois PRECISAM concordar, senão buscar
-  por "reembolsado" não acha o que a tela marca como reembolsado.
-  `scripts/test/status-pedido.test.mjs` executa as duas funções contra os mesmos casos e compara
-  uma com a outra, além de conferir que toda classe de tag usada tem estilo em `index.css`.
-- **Devolvido é estado próprio, não "ainda não pagou".** `REFUNDED` caía no `return 'Em aberto'`
-  do fim das duas funções, e a tela dizia que o cliente não tinha pagado — o oposto do que
-  aconteceu. Cor própria também (`.st-tag.ref`, cinza): nem o verde de autorizado, nem o vermelho
-  de cancelado; a venda existiu e foi desfeita.
-- **O pedido da Amazon não diz que foi devolvido, e nunca vai dizer.** Conferido contra o backup
-  de produção (165 mil pedidos): os únicos status que existem em pedido Amazon são `Shipped`,
-  `Cancelled`/`Canceled`, `Pending` e `Shipping` — não existe `Refunded`. A Orders API e o
-  relatório `GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL` (de onde saem `order-status` e
-  `item-status`) reportam o ciclo do PEDIDO, não o do dinheiro: um pedido devolvido continua
-  `Shipped` pra sempre, com o total cheio. Por isso a devolução da Amazon NÃO chega pelo campo
-  `status` — ela vem de um relatório à parte e é gravada no campo `refunded` (ver a seção
-  "Devoluções da Amazon" abaixo). As duas funções de rótulo leem `refunded` ANTES de olhar o
-  status; a Shopify não precisa disso, ela manda `REFUNDED` no próprio pedido.
-- **A fileira de filtros de status vive em TRÊS lugares**, e o botão "Reembolsado" precisa dos
-  três: o botão no markup (`data-status`, duas fileiras em `index.html` — a do card e a do modal
-  de exportar), o filtro do card, que casa por CLASSE de tag (`EXPORT_STATUS_CLS` em
-  `js/paginas/index.js`), e o filtro do CSV, que casa por RÓTULO no servidor
-  (`EXPORT_STATUS_LABELS` em `metrics.js`). Faltar num deles não dá erro: botão sem entrada no
-  front não filtra nada, e entrada sem rótulo no servidor devolve o CSV inteiro.
-- **"Reembolsado" leva o parcial junto**, de propósito: na tela os dois compartilham a classe
-  `ref`, então um botão só filtra os dois, e a distinção raramente importa na hora de filtrar. Por
-  isso o servidor aceita os DOIS rótulos nessa opção. Aceitar só o exato faria o CSV vir menor que
-  a tela, sem erro e sem ninguém ver. `status-pedido.test.mjs` executa as duas pontas contra a
-  mesma lista de casos e falha se uma opção pegar pedidos diferentes da outra.
-- Ordem que não pode inverter: **cancelado vem antes de devolvido**. Pedido cancelado nunca foi
-  enviado, então não teve o que voltar — se a devolução fosse checada primeiro, um cancelamento
-  apareceria como reembolso.
-
-### Devoluções da Amazon (`reconcileAmazonReturns`, src/sync.js)
-> A regra de negócio é uma só, e é do Luan (01/09/2026): **"o que não podemos ter é um número
-> errado, falar que vendeu 5 mas vendeu 3 na realidade"**. Tudo aqui existe pra isso — o rótulo na
-> tela é secundário, a quantidade certa não é.
-
-- **DUAS fontes, e as duas são necessárias.** Uma sozinha deixa buraco, e buraco aqui é quantidade
-  vendida errada:
-  | | Relatório de devoluções (FBA) | Extrato de repasse (settlement) |
-  |---|---|---|
-  | Tipo | `GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA` | `GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE` |
-  | Enxerga | mercadoria que voltou pro centro de distribuição | o dinheiro que saiu |
-  | Não enxerga | reembolso sem devolução física | nada, mas só depois do repasse fechar |
-  | Velocidade | rápida | lenta (fecha a cada ciclo de repasse) |
-  | Identifica o produto por | ASIN | SKU |
-  | Traz o valor | não | sim, exato |
-- **Por que não é uma só:** o pedido `#701-1986193-1656211` (08/08/2026, "Reembolso aplicado (2)"
-  no Seller Central) **não existe** no relatório de devoluções nem numa janela de 90 dias — o
-  dinheiro voltou e o produto ficou com o cliente. Sem o extrato, aquelas duas unidades continuam
-  contando como vendidas pra sempre. Já o `#702-9546667-8914602` (18/08) está nos dois.
-- **A versão do extrato importa.** O `..._V2` dá **403** com o papel do app; o V1 (sem sufixo)
-  abre. A Finances API (`listFinancialEvents` → `RefundEventList`) seria mais direta, mas exige o
-  papel restrito "Finance and Accounting", a mesma fila que segura o PII há meses.
-- **O extrato não é criado por nós.** Todos os outros relatórios daqui saem de um `createReport`;
-  este a Amazon fecha sozinha a cada ciclo, e a gente só LISTA e baixa o que já existe. É por isso
-  que ele demora a ver um reembolso, e é por isso que o relatório de devoluções continua valendo.
-- **Baixar documento tem cota própria e apertada, ~1 por minuto** (com estouro inicial de uns 15).
-  Descoberto varrendo o histórico de uma vez e tomando 429 no meio: os primeiros vieram, o resto
-  não, e o resultado **parecia completo** — dizia que o período não tinha reembolso quando na
-  verdade nem tinha sido lido. Por isso a fila vai do repasse mais recente pro mais antigo, com
-  limite (`AMAZON_SETTLEMENT_DOCS`, padrão 6) e pausa entre downloads, e **para no 429 avisando
-  que a leitura ficou incompleta** em vez de devolver uma lista curta que parece inteira.
-- **Contar unidade no extrato é contar LINHA `Principal`.** O `quantity-purchased` vem vazio na
-  linha de reembolso; cada unidade devolvida gera a sua própria linha. O pedido de duas unidades
-  aparece com duas linhas `Principal` de -R$ 67,49, idênticas.
-- **Repasse repetido tem que ser pulado no DOCUMENTO inteiro.** O mesmo repasse aparece em mais de
-  um relatório da Amazon, e ler duas vezes descontaria o dobro. Deduplicar por LINHA seria pior
-  ainda no outro sentido: as duas linhas idênticas acima são duas unidades de verdade, e virariam
-  uma. Por isso `reembolsosDoRepasse` recebe os DOCUMENTOS (uma lista de linhas por repasse) e
-  decide ali — é puro, e o teste cobre os dois erros.
-- **A junção das duas fontes não pode concatenar `porProduto`.** As duas descrevem A MESMA unidade
-  de jeitos diferentes (uma por ASIN, a outra por SKU); somar marcaria duas unidades onde só uma
-  voltou. Quando cada lado aponta um único produto e concordam na quantidade,
-  `juntarFontesDeReembolso` (sync.js) junta num registro só carregando os DOIS identificadores.
-  Fora desse caso vale o do extrato, que é o extrato do dinheiro.
-- Por isso o item da Amazon guarda `sku` junto do `asin` (`ordersFromRows` e `fetchOrderItems`):
-  sem os dois, metade dos reembolsos não sabe de qual linha do pedido descontar.
-- Fica de fora, e é bom saber: pedido enviado por você e não pela Amazon (MFN) tem relatório de
-  devolução próprio, não incluído — hoje quase tudo é FBA e o que sai por fora vai pra criador de
-  conteúdo, que praticamente nunca volta. O reembolso desses, no entanto, **aparece no extrato**.
-- **Janela de 60 dias**, contra 2 da reconciliação de nomes, e a diferença é o ponto: a devolução
-  chega DEPOIS da venda. O pedido que originou isso foi vendido em 18/08 e voltou em 30/08 — uma
-  janela curta veria a venda e nunca a volta dela. `AMAZON_RETURNS_DAYS`/`AMAZON_RETURNS_EVERY_HOURS`.
-- **Patch-only, e isso é proteção, não detalhe.** `patchOrderRefunds` (store.js) só marca pedido
-  que JÁ EXISTE — nunca insere, nunca toca em `total`/`status`/`items`. O relatório de devoluções
-  não traz país de entrega, então não dá pra filtrar mercado por linha como o `ordersFromRows`
-  faz; o que segura o vazamento de mercado (CLAUDE.md 4.7.8) é justamente não inserir: um id do
-  outro mercado que venha junto não acha pedido e cai fora sozinho.
-- Grava `refunded` (`'total'`/`'parcial'`), `refundedQty` e `refundedAt`. Total ou parcial sai de
-  comparar as unidades devolvidas com as unidades do pedido; **pedido sem item conhecido cai em
-  `'total'`** — quase todo pedido da Amazon BR é de uma unidade só, então chutar `'parcial'`
-  erraria em praticamente todos, e o número real fica em `refundedQty` de qualquer jeito.
-- Job próprio no agendador (não entra no `runSync`, senão o "Sincronizar agora" ficaria travado
-  os ~1-2 min que a Amazon leva pra montar o relatório), defasado do job de nomes porque criar
-  relatório tem cota de 1/min. Throttle de 12h por mercado via cursor `returns-<market>`.
-  Disparo manual: `POST /api/amazon/sync-returns?market=br|us&days=N&docs=N` (admin).
-- **`days`/`docs` no disparo manual existem pra consertar o passado.** Reembolso mais antigo que a
-  janela padrão nunca foi marcado, e enquanto não for, a quantidade vendida daquele período segue
-  contando a unidade que voltou. A varredura funda é lenta de propósito (cada repasse é um
-  download, ~1/min), então ela não entra no automático — é uma corrida manual, uma vez.
-- A varredura funda não tem mais botão na tela: a busca de histórico da Amazon (que a trazia junto)
-  saiu de Integrações com a janela de 90 dias. Disparo manual só por
-  `POST /api/amazon/sync-returns`, que aparece como job `amazon-returns` no card de processos. O
-  `STALE_AFTER_MS` dele é o maior de todos (90 min) porque esperar a cota da Amazon **é** o
-  trabalho: com o padrão de 30 min, o job apareceria como "interrompido" no meio de uma varredura
-  saudável.
-- O extrato **não derruba o job** se falhar: a fonte mais frágil é ele (cota apertada, e pode
-  simplesmente não haver repasse novo). Falhou, segue com o que o relatório de devoluções trouxe e
-  o erro aparece em `errors` em vez de sumir.
-- **Quem recebe `status` precisa receber a devolução junto.** A tela monta o rótulo a partir de
-  `status` + `cancelled` + `refunded` (`statusTag`), e as listas que o servidor manda são montadas
-  campo a campo. Mandar os dois primeiros e esquecer o terceiro **não dá erro nenhum**: o pedido
-  devolvido aparece "Autorizado" com valor R$ 0,00, que é a pior combinação possível — o número já
-  descontou e o rótulo diz que está tudo bem. Aconteceu no primeiro deploy. A exportação em CSV é
-  a exceção legítima: ela manda `statusLabel` já pronto do servidor. O teste cobre as duas formas.
-- **A marca desconta de verdade**: a unidade devolvida sai da quantidade vendida e o dinheiro sai
-  da receita, em toda a dashboard. Quem aplica isso é `pedidoLiquido` (ver "Devoluções descontam
-  da quantidade E da receita"), não este job — aqui só se grava o que aconteceu. Na primeira
-  versão a marca era só rótulo e o pedido seguia valendo o total cheio; o Luan pediu o desconto no
-  dia seguinte, e é o comportamento atual.
-- O relatório traz `asin`/`sku`/`product-name` de cada unidade devolvida, e é isso que permite
-  descontar do PRODUTO certo: num pedido com areia e suplemento em que só a areia voltou, sem o
-  ASIN a baixa poderia cair no suplemento. `patchOrderRefunds` casa por ASIN e, na falta dele,
-  por título exato; linha que não casa deixa o desconto acontecer pelo total do pedido.
-- `scripts/test/devolucoes.test.mjs` executa o agrupamento e a classificação de verdade, e guarda
-  o patch-only (falha se alguém fizer a reconciliação inserir pedido ou mexer em total/status).
-
-### As colunas de "Pedidos recentes" são um modelo, não markup
-- A tabela do card tem 7 colunas (Pedido, Data/Hora, Cliente, Situação, **Qtd. de itens**, Valor,
-  Canal) e a ordem delas é **arrastável no modo de edição** (pedido do Luan, 03/09/2026). Por isso
-  cabeçalho, células e linha de total saem de UMA lista (`RO_COLUMNS`/`roCols` em
-  `js/paginas/index.js`), e não do markup: escritos à mão em três lugares, o cabeçalho passaria a
-  dizer "Cliente" com o canal embaixo na primeira vez que alguém mexesse na ordem, e a tabela
-  continuaria desenhando normalmente.
-- O RÓTULO de cada coluna vem de `EXPORT_COLUMN_DEFS`, o mesmo do modal de exportar — a mesma
-  coluna com nomes diferentes nas duas telas é divergência que ninguém percebe. Só o desenho da
-  célula é próprio do card (badge de canal, tag de status), porque ali é HTML e no CSV é texto.
-- **A linha de total não usa colspan**: é uma célula por coluna, com o valor embaixo da coluna
-  "Valor" onde quer que ela esteja. Com colspan fixo o total ficava embaixo da coluna errada assim
-  que a ordem mudava, e no celular a linha ficava com mais células do que a tabela tem colunas.
-- **O celular esconde coluna por IDENTIDADE, não por posição.** Era
-  `.tbl th:nth-child(3)`/`(4)` (Cliente e Situação); com a ordem editável isso passou a significar
-  "o que tiver parado no 3º e no 4º lugar", que pode ser o número do pedido e o valor. Hoje é
-  `[data-col="customer"]`/`[data-col="statusLabel"]`, e é por isso que TODA célula gerada carrega
-  o próprio `data-col`.
-- **Numa `<table>` não dá pra reordenar arrastando só o `<th>`.** Foi a primeira tentativa e ela
-  parecia funcionar no código: o cabeçalho recebia o placeholder e o nó do `<th>` mudava de lugar.
-  Na tela, nada se reorganizava (relatado pelo Luan com print) — cabeçalho e corpo DIVIDEM as
-  mesmas colunas, então mexer só no cabeçalho não abre espaço nenhum: o corpo continua na ordem
-  antiga e a tabela ganha uma coluna que nenhuma linha preenche. Vale pra qualquer tabela deste
-  app, não só esta.
-- O que funciona é remontar a tabela INTEIRA a cada troca de posição, a partir de uma ordem
-  provisória (`roDragKey` + `roReordenar`/`roOrdemCompleta`): a coluna se move de verdade, com os
-  dados dela junto, e o lugar de onde ela saiu vira uma coluna tracejada de cima a baixo. O
-  arraste em si é o mesmo por ponteiro de Produtos/Estoque (clone `position:fixed` seguindo o
-  cursor, nunca a API nativa de drag do HTML5), mas é controlador PRÓPRIO: o `makeDragController`
-  compartilhado move o nó do item, que é justamente o que não serve aqui.
-- A etiqueta que segue o cursor é um `<div>` solto no `body`, não o `<th>` clonado: célula
-  arrancada da tabela perde o próprio tamanho e vira texto cru boiando na tela.
-- **Ocultar coluna**: no modo de edição a coluna oculta CONTINUA na tela, apagada e com o botão
-  oferecendo mostrar; fora dele ela some de verdade (`roVisibleCols`). Os dois lados são o
-  recurso: sumir nos dois modos deixaria a coluna inalcançável, e ficar cinza nos dois faria
-  "ocultar" não ocultar nada. A última coluna visível não pode ser ocultada — a tabela ficaria sem
-  coluna nenhuma e ninguém adivinharia que o conserto está em "Editar". Entrar e sair do modo de
-  edição remonta a tabela, senão a alça e o olho ficariam pra trás.
-- Ocultar aqui não mexe no CSV: o modal de exportar tem a própria escolha de colunas.
-- A ordem e as ocultas entram no MESMO `coco_layout_<market>` do resto da página
-  (`colOrder`/`colHidden`), e não numa chave própria: são parte do que o modo de edição arruma,
-  então o botão "Redefinir" desfaz as duas junto. Ordem salva velha é remendada em vez de
-  descartada — coluna que não existe mais sai, coluna que nasceu depois entra no fim. E arrastar
-  uma coluna visível passa por `roOrdemCompleta`, que devolve as ocultas às posições relativas que
-  tinham: sem isso elas caem todas pro fim e reaparecem fora de lugar quando alguém as mostra.
-- `scripts/test/colunas-pedidos.test.mjs` executa o modelo de verdade (célula a célula, ocultar
-  nos dois modos, a conta da reordenação, a linha de total com a coluna "Valor" em três posições,
-  cabeçalho montado) e guarda as armadilhas acima.
-- O teste de rótulo de status varria o arquivo inteiro atrás de `cls: '...'` pra conferir que toda
-  classe de tag tem estilo. Com `RO_COLUMNS` carregando `cls: 'mono'/'dim'/'bold'`, ele passou a
-  exigir um `.st-tag.mono` que nunca deveria existir — hoje ele varre só o corpo do `statusTag`.
-
-### Catálogo de canais (`public/js/colors.js`, `DEFAULT_CH`)
-- **Fonte única de nome, cor, logo e mercado de cada canal.** Canal novo é UMA linha ali e ele
-  aparece em todas as telas — desde que nenhuma tela tenha lista própria. O card "Canais" e o
-  "Orgânico x Campanha" da Visão geral tinham, e o TikTok Shop ficou fora deles sem erro nenhum
-  (22/09/2026). Hoje as duas leem `CocoColors.channelsFor(market)`, e
-  `scripts/test/registro-canais.test.mjs` falha se uma tela voltar a ter lista de canal própria.
-- **O servidor tem a cópia dele**, `CANAIS` em metrics.js (a tela não importa módulo do servidor),
-  e ela alimenta o zero de cada canal em `channelSplit`. O mesmo teste exige que as duas tenham as
-  mesmas chaves, nomes e mercados, e que as duas listas de "não pago" (store.js e Visão geral)
-  sejam idênticas. Canal novo = uma linha em cada catálogo; o teste diz se faltou uma. Antes disso a mesma informação vivia em cinco tabelas
-  (`CH_META` em Produtos e Estoque, `CHAN`/`MARKET_CHANNELS` na Visão geral,
-  `CHAN_COLORS_MAP`/`CHAN_LABELS_MAP` na Geografia, `CH_BY_MARKET` em Segmentos) e as cópias já
-  discordavam: Shopify verde numa tela e vermelha na outra, Amazon BR preta em quase tudo e
-  laranja na Geografia e nos mini-gráficos de Campanhas. Pior: só quem lia daqui enxergava a cor
-  que o usuário salva no seletor de cores, então mudar a cor de um canal não mexia em Produtos,
-  Estoque nem Geografia (27/08/2026).
-- Cores confirmadas pelo Luan na mesma data, a partir do que a Visão geral BR já mostrava:
-  Shopify Coco and Luna verde (`#95BF47` BR / `#7EAD3C` EUA), Yucaloo azul `#4466FF`,
-  Amazon BR preto `#111111`, Amazon EUA laranja `#FF9900`, Shopee `#EE4D2D`, Mercado Livre
-  `#FFE600`. A ORDEM das chaves no objeto é a ordem em que os canais aparecem em toda tela.
-- API: `CocoColors.channelsFor(market, {comTodos})` monta seletor de canal;
-  `CocoColors.chLabel(chave)` dá o nome (trata `'todos'` e chave desconhecida sem quebrar);
-  `CocoColors.setChannelColor(k, hex)` troca a cor E persiste. **Nunca escrever
-  `CocoColors.ch[k] = {...}` na mão** — era o que as quatro telas com seletor de cor faziam, e
-  isso agora apagaria `logo`/`logoFill`/`market` do canal: a logo sumiria do card e o canal
-  deixaria de aparecer no seletor do próprio mercado, logo depois de alguém escolher uma cor.
-- Só a COR é personalizável. Nome, logo e mercado vêm sempre do catálogo, nunca do que está
-  salvo no navegador — senão uma cópia antiga no `localStorage` de alguém mostraria o nome velho.
-- `'todos'` não está no catálogo de propósito: não é um canal, é a ausência de filtro.
-- `scripts/test/canais.test.mjs` guarda tudo isso: falha se uma tela redeclarar qualquer das
-  tabelas antigas, se um hex de canal aparecer solto numa página, se um logo apontar pra arquivo
-  inexistente, se dois canais tiverem o mesmo nome — e executa o `colors.js` de verdade (com
-  dublês de window/localStorage/document) pra testar o comportamento, não só o texto do arquivo.
-
-### Animação de abrir e fechar (`public/css/anim.css`)
-- **Tudo que abre e fecha na dashboard entra e sai suave** (pedido do Luan, 27/08/2026: "tudo que
-  acontecesse na dashboard tivesse uma animação suave"). Cobre as 20 caixas do app: menus
-  (`.csel-pop`, `.period-pop`, `.fp-pop`, `.chan-pop`, `.bulk-pop`, `.ccp-pop`), os fundos
-  escurecidos, os modais centralizados (`.sp-panel`, `.smd-modal`, `.geo-modal`, `.exp-modal`,
-  `.tr-modal`) e os blocos que surgem na própria página (`.card-bank`, `.select-bar`,
-  `.pop-chan-detail`).
-- Nenhuma linha de JavaScript de tela foi tocada: o padrão de todas elas é `display:none` na base
-  e `display:flex` com a classe `open`, e os handlers continuam só pondo e tirando essa classe.
-  Quem anima é `transition-behavior: allow-discrete` (segura o display até a saída terminar) mais
-  `@starting-style` (dá o estado de onde a entrada parte).
-- **O `@supports` em volta de tudo é o que impede um estrago.** Sem ele, num navegador sem
-  suporte o `opacity:0` da regra base valeria e TODO menu do app abriria invisível. Não remover.
-- **Modal centralizado usa `transform` pra se centralizar.** A escala precisa vir composta
-  (`translate(-50%,-50%) scale(.97)`); escrever só `scale()` joga o modal pro canto inferior
-  direito da tela. `scripts/test/animacao.test.mjs` falha se isso acontecer.
-- **Card que expande** (Tendência e Tráfego, `index.html`): muda altura E largura, e a largura vem
-  de `grid-column`, que não é animável. Quem cobre é uma **View Transition**
-  (`comAnimacao()`), disparada só no CLIQUE — no carregamento não existe estado anterior pra
-  interpolar. Se uma segunda página precisar do mesmo, `comAnimacao` sai do `index.html` pra um
-  arquivo compartilhado.
-- Ao criar uma caixa nova que abre e fecha, acrescentar o seletor ao grupo certo em `anim.css`:
-  o teste varre todas as regras `.x.open{display:` do app e falha se alguma ficou de fora, e
-  falha de novo se ela não tiver estado de entrada declarado (sairia suave e entraria seca).
-
-### Botão "Sincronizar" (`public/js/sync-btn.js`, `CocoSync`)
-- **`POST /api/sync` é síncrono**: ele espera a sincronização INTEIRA terminar antes de responder,
-  e isso leva minutos. Qualquer botão ligado nele PRECISA dizer que está trabalhando, senão o
-  clique não muda nada na tela por vários minutos e a única leitura possível é "não funciona".
-- Eram seis handlers copiados, com quatro comportamentos: Visão geral e Geografia mexiam no "Ao
-  vivo" do topo, o Unificador desabilitava e dava um toast, e **Produtos, Estoque e Campanhas não
-  davam retorno nenhum** — foi o que o Luan relatou em 03/09/2026 ("clico e nada acontece").
-- **Os seis engoliam o erro** (`catch (e) {}`), o que a última linha das convenções proíbe. E como
-  o endpoint tem limite de chamadas (`syncLimiter`), o reflexo natural de clicar de novo rende um
-  429 — o segundo clique era justamente o que sumia calado. O Unificador era o pior: dizia
-  "Sincronizado." mesmo quando tinha falhado.
-- Hoje o estado aparece **no próprio botão** (trava, ícone girando, "Sincronizando…", e a falha
-  vira texto ali mesmo por 5s). É o único canal que serve às 6 telas: nem toda página tem toast, e
-  erro que só vai pro console é erro que ninguém vê. 429 e 401 ganham frase própria, porque
-  "aguarde" e "sua sessão caiu" são coisas que a pessoa consegue resolver.
-- **Falhou, não recarrega.** Recarregar depois de erro redesenha os mesmos números e faz parecer
-  que sincronizou.
-- `CocoSync.ligar(recarregar, { aoIniciar })`: `recarregar` é o que a página faz pra reler os
-  dados, `aoIniciar` é opcional e serve às duas telas que também mexem no indicador "Ao vivo".
-  Passar a função como VALOR só é seguro porque `load`/`loadData` são `function` declarada em todas
-  as páginas (içamento) — se alguma virar `const`, a chamada precisa virar `() => load()`.
-- `scripts/test/sync-btn.test.mjs` executa o botão contra um DOM e um `fetch` falsos (estado
-  durante, clique duplo, cada código de erro, rede fora) e falha se uma página voltar a chamar
-  `/api/sync` por conta própria ou esquecer o `<script>`.
-
-### Dinheiro sempre com centavos (`public/js/moeda.js`, `CocoMoeda`)
-- **Fonte única do formato de valor**, nas 6 telas que mostram dinheiro (Visão geral, Geografia,
-  Campanhas, Produtos, Segmentos, Unificador). Estoque não entra: aquela tela não mostra valor
-  nenhum. Eram SEIS implementações independentes, uma por página, que tinham divergido em duas
-  coisas ao mesmo tempo.
-- **Casas decimais.** Visão geral, Geografia, Campanhas e Produtos mostravam SEM centavos; um
-  pedido de R$ 119,90 aparecia como "R$ 120" nelas e como "R$ 119,90" em Segmentos, Unificador e na
-  exportação em CSV — o mesmo pedido, dois números. Decisão do Luan (03/09/2026): **tudo com
-  centavos, sem arredondar**, porque o valor precisa bater com o que a Shopify e o Bling mostram.
-- **O arredondamento NUNCA esteve no cálculo.** No servidor só existe arredondamento pra CENTAVO
-  (`Math.round(x * 100) / 100`), que é obrigatório: sem ele, somar dinheiro em ponto flutuante
-  produz 119,90000000000002. O valor gravado sempre foi o exato. O que arredondava era a tela.
-- Exibição arredondada tem um efeito ruim próprio, e é o argumento que decidiu: três produtos de
-  R$ 0,40 apareciam como "R$ 0" cada, com o total dizendo "R$ 1". Nada errado por baixo, e mesmo
-  assim a coluna não fechava.
-- **O símbolo sai do `Intl`**, não escrito à mão. Antes eram três grafias pro dólar ("U$", "US$",
-  "$") dependendo da página. BRL em pt-BR dá "R$ 119,90", idêntico ao que quatro páginas já
-  montavam; USD em en-US dá "$119.90", que é o que Campanhas, Produtos e Segmentos já mostravam —
-  as outras três convergiram pro mesmo.
-- `CocoMoeda.curto()` é a ÚNICA exceção e serve só a **rótulo de eixo de gráfico**: cinco marcas
-  de "R$ 651.487,32" empilhadas ficam ilegíveis e empurram o gráfico pra fora do card, e ali o
-  número é régua, não valor a conferir. Abaixo de mil ela devolve o valor cheio, com centavos.
-- O `fmtMoney` de cada página virou repasse de uma linha, e o segundo parâmetro que algumas tinham
-  (`dec`) não decide mais nada — ficou só pra não mexer nas chamadas existentes. `scripts/test/
-  moeda.test.mjs` executa o módulo de verdade e falha se uma tela voltar a montar moeda por conta
-  própria, se esquecer o `<script>` ou se carregá-lo depois do script da página.
-
-### Rótulo de período (`public/js/periodo.js`, `CocoPeriodo`)
-- **Fonte única do texto que aparece na pill de período**, nas 6 telas que têm seletor (Visão
-  geral, Geografia, Segmentos, Produtos, Campanhas, Estoque). Eram sete implementações
-  independentes, com formatos diferentes entre si (umas com `–`, outras com `.`) e **nenhuma
-  mostrava o ano**.
-- **O ano só aparece quando o período NÃO é do ano corrente.** No uso normal a pill continua
-  curta ("01/08 – 28/08"); num período de outro ano ela vira "01/08 – 28/08/2025". Numa virada
-  de ano cada ponta leva o seu ("20/12/2025 – 05/01/2026"), senão "20/12 – 05/01" não diz qual
-  dezembro. Esconder o ano sempre é o que fez um período de agosto/2025 abrir a dashboard
-  inteira zerada com o cabeçalho parecendo o mês corrente (28/08/2026).
-- `rotulo(since, until, { hoje, mercado })` monta a pill; `data(iso, { mercado })` formata UMA
-  data **sempre com o ano**, pra frase que fala de limite de histórico (onde esconder o ano
-  seria esconder justamente o que importa). `mercado:'us'` inverte pra MM/DD, comportamento que
-  a Geografia já tinha e foi preservado.
-- `scripts/test/periodo.test.mjs` executa o módulo de verdade (em `node:vm`) e falha se uma
-  tela voltar a montar o rótulo na mão ou deixar de carregar o script. Foi ele que achou uma
-  sétima cópia escondida no seletor de período do Estoque, que a busca manual tinha deixado passar.
-
-### Período de comparação ("Trocar", card de Insights)
-- A dashboard sempre compara o período escolhido com **a janela imediatamente anterior, do mesmo
-  tamanho** (`janelaDeComparacao` em metrics.js). O botão **"Trocar"** no cabeçalho do card de
-  Insights deixa escolher outra janela. Pedido do Luan, 04/09/2026.
-- **A escolha vale pra comparação INTEIRA**, não só pros Insights: os deltas da faixa de
-  Indicadores leem o mesmo `prev`. Se só um dos dois mudasse, a faixa de cima e o card logo abaixo
-  diriam coisas diferentes sobre o mesmo período — que é exatamente o tipo de divergência que o
-  CLAUDE.md já proíbe em Campanhas.
-- **"Período anterior" agora vem com as datas entre parênteses**, na barra do insight e no rodapé
-  de cada indicador. O rótulo sozinho não diz com o quê o número está sendo comparado, e essa era
-  justamente a dúvida. O texto do intervalo sai do `CocoPeriodo` (ver "Rótulo de período"), não de
-  uma formatação nova: duas formatações do mesmo intervalo acabam discordando.
-- **Só as barras que comparam PERÍODO recebem a data.** Três regras usam as mesmas duas barras pra
-  comparar outra coisa (um produto contra "Todo o resto", uma etapa do funil contra a anterior,
-  receita atribuída contra o "Investido"). Quem decide é o `chart()` em insights.js: a linha só
-  ganha `periodo: 'cur'|'prev'` quando os rótulos são os padrão. Sem isso, a tela escreveria uma
-  data ao lado de "Todo o resto", que não é período nenhum.
-- **Escolhida a janela, o texto deixa de dizer "anterior"** e passa a "período escolhido": a pessoa
-  pode comparar com um intervalo que nem vem antes, e continuar chamando de anterior seria falso.
-- **Trocar o período ATUAL desfaz a comparação escolhida.** Sem isso, escolher "7 dias" depois de
-  ter fixado uma comparação de 90 dias mostraria uma queda enorme que é só a diferença de tamanho
-  das janelas, sem nada na tela explicando. Vale nas duas portas que mudam o período (presets e
-  intervalo personalizado), e o teste confere as duas separadamente — contar as chamadas no arquivo
-  não serve, porque sobra chamada suficiente pra conta bater com uma das portas furada.
-- **Meia escolha cai no automático.** Só uma das pontas compararia com um intervalo que ninguém
-  pediu. O servidor também valida o FORMATO da data e endireita um intervalo invertido, em vez de
-  deixar a tela inteira falhar por causa de um parâmetro.
-- A escolha vive em `sessionStorage` (`coco_comp_since`/`coco_comp_until`), não em
-  `localStorage`: precisa sobreviver ao refresh automático e à navegação na aba, mas não pra
-  sempre — uma comparação esquecida de semanas atrás faria a dashboard mentir sem ninguém lembrar
-  por quê. Mesmo raciocínio já usado no widget de processos.
-- `scripts/test/comparacao.test.mjs` executa a janela de verdade (inclusive virada de mês e de
-  ano, e o erro de um dia que faria os dois períodos se sobreporem) e guarda as armadilhas acima.
-
-### Janela de histórico de 90 dias (`src/retencao.js`)
-- **Todo canal, nos dois mercados, guarda só os últimos 90 dias, e a cada dia o mais antigo sai.**
-  Decisão do Luan (22/09/2026), pela conta do Railway: 97% dela era MEMÓRIA (medido no painel de uso,
-  ~470 MB no servidor e ~430 MB no Postgres, linha plana, sem vazamento), e o servidor guarda todo
-  pedido na memória o tempo inteiro. CPU, rede e disco somados davam centavos.
-- **Regra fixa, não número na tela.** Os campos de "dias de histórico" da Amazon e da Shopify saíram
-  de Integrações junto (pedido explícito). Um campo prometeria um alcance que o sync desfaria no
-  ciclo seguinte.
-- **Um dia de folga além dos 90.** O corte é meia-noite UTC e o dia da loja não é (03:00 UTC no
-  Brasil, 04:00 a 08:00 nos EUA). Sem a folga, "últimos 90 dias" abriria com o primeiro dia pela
-  metade, e o que faltasse pareceria venda que não aconteceu.
-- **O corte é o mesmo o dia inteiro** (meia-noite, não "agora menos 90 dias"): senão cada sync de
-  15 min apagaria um pedaço diferente do dia da beira.
-- **Pedido antigo nem entra na memória.** O `SELECT` do `initStore` já filtra pelo corte; ler tudo
-  pra descartar depois faria o servidor subir com o pico que a regra existe pra evitar.
-- **Memória e banco cortam no MESMO ponto**, por comparação de TEXTO do `createdAt` nos dois lados
-  (`foraDaJanela` e o `DELETE`). Se cada lado comparasse de um jeito, um pedido da beira sairia de
-  um e ficaria no outro, e a tela mudaria sozinha depois de um reinício.
-- **Pedido sem data não é apagado**: sem data não há como saber se é velho.
-- **O banco apaga em lotes de 2000, um de cada vez** (`pgPodarPedidos`). A primeira poda apaga a
-  maior parte da tabela, e escrita gigante num comando só já encheu o disco do Postgres uma vez.
-  Quem escolhe o que apagar é o próprio banco, pela condição oposta à da leitura: os pedidos antigos
-  não estão na memória, então não daria pra listar por id daqui. Roda a cada sync, depois da última
-  busca do ciclo.
-- **As séries diárias seguem a mesma janela**: sessões (inclusive as chaves `us:AAAA-MM-DD`),
-  sessões da Yucaloo, gasto de Meta BR/EUA e de Mercado Ads. Senão o card de tráfego mostraria visita
-  num período em que a dashboard diz que não houve venda. Cada blob do kv só é regravado se algum dia
-  saiu dele.
-- **Backfill manual continua, com teto de 90 dias** (`POST /api/amazon/backfill` e
-  `POST /api/shopify/backfill`, só por API): serve pra consertar buraco dentro da janela. Buscar
-  além disso traria pedido que o sync seguinte apagaria.
-- **O que se perde, e foi aceito:** período personalizado anterior a 90 dias abre vazio (o card de
-  Insights já diz "período anterior ao histórico", ver abaixo), e comparação com o mesmo mês do ano
-  passado deixa de existir. Os atalhos das telas (hoje, 7 dias, 30 dias, mês) cabem todos na
-  janela. O backup diário do B2 guarda 30 dias, então pedido mais velho que 90 dias some de vez
-  quando o último backup que o contém expira.
-- `PEDIDOS_RETENCAO_DIAS` troca o 90 sem mexer em código.
-- `scripts/test/retencao.test.mjs` executa a regra (corte, folga, virada de ano, pedido sem data,
-  chave dos EUA) e confere que leitura, `DELETE` e memória usam a mesma condição.
-
-### Consumo do servidor (o que a conta do Railway cobra)
-- A conta é quase toda MEMÓRIA (97%, medido em 22/09/2026). CPU, rede e disco somados dão centavos.
-  O que reduz a conta é a janela de 90 dias (acima). Os quatro ajustes abaixo são cuidado com o
-  sistema, não economia visível, e cada um guarda uma armadilha:
-- **Aba escondida não consulta o servidor** (`js/visivel.js`, `CocoVisivel.agendar`). As cinco telas
-  com "Atualizar a cada N min" e o card de processos (que consultava a cada 3s em toda aba) pulam a
-  rodada com a aba em segundo plano. Ao voltar, atualizam NA HORA se perderam alguma rodada: sem
-  isso a pessoa veria número de uma hora atrás até o próximo intervalo, sem nada avisando.
-- **O cache de Campanhas esvazia** (`src/cache.js`): era um `Map` que só crescia, cada período
-  consultado ficava até o próximo deploy. Era o único vazamento real de memória do servidor. Agora
-  cada gravação varre o vencido, com teto de 50.
-- **O sync só grava no banco o pedido que MUDOU** (`mesmoPedido`, `src/comparar.js`). Ele baixa a
-  janela inteira a cada 15 min e quase tudo volta igual; regravar enchia o Postgres de versões
-  mortas e refazia o índice em memória do zero várias vezes por ciclo. Três cuidados que não podem
-  sair:
-  - a comparação **ignora a ordem das chaves e chave `undefined`**: o Postgres reordena as chaves do
-    JSONB e descarta `undefined`, e comparar texto marcaria todo pedido como mudado depois de cada
-    reinício;
-  - **o MESMO objeto da memória nunca é pulado** (`existing !== o`): quem altera um pedido no lugar e
-    o manda gravar teria a comparação "igual consigo mesmo", e a alteração nunca chegaria ao banco;
-  - **gravação que falha é repescada** (`pendentesNoBanco`): antes, regravar tudo curava sozinho uma
-    falha no ciclo seguinte. Sem a repescagem, um pedido que não muda mais ficaria com a versão velha
-    no banco pra sempre, e só se descobriria no próximo reinício.
-- **O backup é montado em partes** (`src/snapshot.js`): cada pedido vai sozinho pro compressor, e o
-  servidor volta a atender a cada lote. Antes o banco inteiro virava um texto só (três cópias ao
-  mesmo tempo) com o servidor parado ~1s. O texto gerado é IDÊNTICO ao `JSON.stringify` de antes,
-  e o teste compara caractere a caractere, inclusive com os dados locais reais: a restauração só faz
-  `JSON.parse`, e um backup que não restaura só é descoberto no dia em que se precisa dele.
-- `scripts/test/economia.test.mjs` executa os quatro (comparação, backup, cache, pausa da aba).
-
-### Período sem dado nenhum (card de Insights)
-- `computeDashboard` devolve `historyStart`: a data do pedido mais antigo daquele mercado
-  (`getOldestOrderDate` em store.js, O(1) em cima do índice por mercado que já existia).
-- O card de Insights tinha UMA frase pra duas ausências bem diferentes: período estável e
-  período sem pedido nenhum. Dizer "Nada fora do normal neste período" quando não existe pedido
-  é enganoso, porque não é que nada mudou, é que não há o que comparar. Agora são três textos:
-  período anterior ao histórico (diz qual é a data do primeiro pedido registrado), período sem
-  pedido, e período de fato estável.
-- **O histórico começa 90 dias atrás**, em todo canal (ver "Janela de histórico de 90 dias"). Antes
-  disso ele começava quando o sync começou, e a mensagem de "período anterior ao histórico" existia
-  por isso; hoje ela aparece pra qualquer período personalizado mais antigo que a janela.
-
-### Backfill histórico das lojas Shopify (`src/backfill.js`)
-- Recupera pedido anterior à primeira sincronização, nas quatro lojas Shopify (Coco and Luna
-  BR/EUA + Yucaloo BR/EUA). A Admin API serve o histórico inteiro; o que faltava era alguém pedir
-  fora da janela móvel de 60 dias.
-- **Só soma, nunca apaga.** Não tem mais painel na tela: com o histórico fixo em 90 dias ele virou
-  ferramenta pra recuperar buraco DENTRO da janela, disparada por API.
-- Percorre a janela em blocos de 30 dias (`CHUNK_DAYS`), do mais antigo pro mais novo, e grava
-  bloco a bloco (`onChunk` → `upsertOrders`) em vez de tudo no fim — uma interrupção no meio
-  preserva o que já veio, e como o upsert é por id, repetir um bloco não duplica. Mesmo princípio
-  do backfill da Amazon.
-- Uma janela que falha NÃO derruba o backfill inteiro: as outras continuam, e as falhas voltam em
-  `falhas[]` e vão pro log. Elas precisam aparecer — um buraco silencioso no histórico passa por
-  "não teve venda nesse período", que é exatamente a confusão que este backfill existe pra
-  desfazer.
-- `lojasDoMercado(market)` respeita `isIntegrationEnabled`, e a Yucaloo devolve `[]` sozinha
-  quando a loja ainda não foi conectada (mesmo comportamento do sync normal).
-- Endpoint: `POST /api/shopify/backfill?market=br|us&days=N` (admin, máx. 90 dias). O
-  `GET /api/shopify/history` servia só ao painel e saiu com ele.
-- Job `shopify-backfill` no widget de processos, cancelável, com estado em `kv.shopifyBackfill`
-  (chave separada do `amazonBackfill` de propósito: os dois podem rodar ao mesmo tempo, APIs e
-  cotas diferentes, e um não pode sobrescrever o progresso do outro).
-
-### Tela de Integrações sem histórico
-- **Não há campo de "dias de histórico" nem botão de buscar histórico.** O histórico é a janela fixa
-  de 90 dias. Houve um painel com quatro linhas (Amazon BR/EUA, Shopify BR/EUA) que buscavam os
-  últimos N dias; ele saiu em 22/09/2026 junto da decisão da janela, com as rotas que só serviam a
-  ele (`GET/POST /api/amazon/history`, `GET /api/shopify/history`).
-- O que ficou de lição dele e vale pra qualquer acompanhamento de job novo: o poll **sempre devolve
-  o botão**. A versão que desistia calada quando o job sumia de `/api/jobs` (`if (!j) return`)
-  deixava o botão travado sem uma palavra, e virou o relato "cliquei e não funcionou".
-- **Lista de backups: três linhas, a quarta se apagando, e um botão pra abrir.** Ela cresce um
-  arquivo por dia (retenção de 30 dias), então mostrar tudo deixava o painel enorme. A quarta
-  linha apagada é o que diz "tem mais embaixo" sem precisar de texto.
-  - A altura recolhida é MEDIDA do DOM, não calculada a partir de uma altura de linha fixa no
-    CSS: a fonte pode chegar depois do primeiro desenho e mudar a altura da linha, e um número
-    fixo cortaria no meio de uma linha ou deixaria um vão.
-  - **A medida sai de `getBoundingClientRect`, NUNCA de `offsetTop`.** `offsetTop` é relativo ao
-    ancestral POSICIONADO mais próximo, e nem a lista nem as linhas têm `position` — na tela real
-    ele devolvia a distância até um ancestral lá em cima da página, o `max-height` saía grande
-    demais e não recortava nada: a quarta linha aparecia apagada com a lista inteira embaixo dela.
-    Os dois rects são relativos à janela, então a subtração dá a distância real dentro da lista,
-    com `position` ou sem. Vale como regra pra qualquer medida de posição relativa neste app.
-  - O primeiro teste desse recolhimento passou COM esse defeito, porque o DOM falso repetia a
-    mesma suposição errada sobre `offsetTop`. Agora as linhas falsas não expõem `offsetTop` nem
-    `offsetHeight`, e a lista falsa fica a 900px do topo: quem voltar a medir por offset quebra o
-    teste em vez de quebrar só a tela. Fingir DOM só protege se o fingimento seguir a semântica
-    de verdade da propriedade.
-  - **`#backupFilesList` precisa de `min-height:0`.** É item de uma coluna flex (`.ret-panel`),
-    e `min-height:auto` vale mais que `max-height` — sem isso o recolhimento simplesmente não
-    acontece, e sem erro nenhum. Mesma armadilha do `.main` documentada acima.
-  - Com quatro backups ou menos NÃO recolhe e o botão some: apagar a quarta linha quando não há
-    uma quinta sugeriria um backup que não existe. `scripts/test/integracoes.test.mjs` executa as
-    funções de verdade contra um DOM falso e guarda os dois erros (recolher à toa e não recolher
-    quando precisa), porque nenhum dos dois dá erro — só mente na tela.
-  - A renderização não corta mais a lista (`slice(0, 10)`): quem limita é o recolhimento. Cortar
-    escondia backup sem dizer que existia mais.
-- O seletor de visualização (Cards/Colunas/Linhas/Compacto) vive junto da lista que ele controla,
-  logo acima de `#listArea`, e não no cabeçalho da página. Compacto de propósito: é ajuste de
-  exibição, não o controle principal da tela. A variante `pill-switch--full` saiu do componente
-  junto — ninguém mais a usava, e o teste de seletores acusa regra apontando pra classe que não
-  existe no markup.
-
-### Invisível não é intangível: `opacity:0` continua comendo clique
-- O card de processos é `position:fixed` no canto inferior direito de TODA página e ficava
-  escondido só com `opacity:0`. Um elemento invisível continua recebendo o clique: na prática
-  havia um retângulo de 280px por até 400px colado naquele canto engolindo tudo que caísse ali, e
-  os botões do ÚLTIMO card de Produtos/Estoque (que ficam justamente no fim da página) não
-  respondiam ao mouse. Não há nada na tela pra explicar isso — o clique só não acontece.
-  Relatado pelo Luan em 03/09/2026; corrigido com `pointer-events:none` na base e
-  `pointer-events:auto` no `.jw-show`.
-- `display:none` também resolveria, mas mataria a transição de entrada — por isso a dupla
-  `opacity` + `pointer-events`.
-- Todo o resto do app já fazia certo (toast, overlay da sidebar, balão de rótulo do menu
-  colapsado): quem esconde por opacidade sempre acompanha de `pointer-events:none`.
-  `scripts/test/jobs-widget.test.mjs` varre o CSS das páginas e o injetado pelos componentes e
-  falha em qualquer regra posicionada, invisível e sem `pointer-events:none` (ignora `display:none`
-  e caixa de tamanho zero, que já são intangíveis).
-
-### Imagem precisa declarar o próprio tamanho
-- **`<img>` dimensionado só por CSS que um script injeta aparece no tamanho do ARQUIVO até o
-  script rodar.** A bandeira dos EUA do seletor Brasil/EUA piscava ocupando a tela inteira a cada
-  troca de página: `.mkt-flag-img` é dimensionada dentro do `pill-switch.js`, e
-  `bandeira_eua.svg` declara 1235x650. A do Brasil tem o mesmo defeito e nunca apareceu, porque
-  é um `.webp` pequeno — o que faz a diferença é o tamanho natural do arquivo, não a página.
-- Corrigido com `width`/`height` como ATRIBUTO nas 14 tags: atributo vale já na análise do HTML,
-  antes de qualquer CSS ou JS. A regra do `pill-switch.js` continua valendo depois e diz o mesmo,
-  então nada muda visualmente. Vale como regra pra qualquer imagem nova cujo tamanho venha de um
-  componente IIFE.
-- Folha de estilo de verdade no `<head>` não tem esse problema (ela bloqueia o desenho); só o
-  CSS injetado por script tem. `scripts/test/imagens.test.mjs` cruza as duas listas e falha se
-  uma imagem cair nesse caso sem declarar o próprio tamanho.
-
-### Escapar texto (`public/js/escape.js`, `window.escapeHtml`)
-- **Uma implementação só, e ela vale pra texto de elemento E pra valor de atributo.** Eram OITO
-  cópias: cinco idênticas (sidebar, Configurações, Integrações, Unificador e Segmentos, essa com
-  o nome `escHtml`), uma só pra atributo na Visão geral (`escapeHtmlAttr`) e **duas pela metade** —
-  o `escAttr` de Produtos e Estoque tratava só `&` e `"`, deixando `<` passar.
-- As duas pela metade não eram bug ainda, porque só apareciam dentro de atributo entre aspas. O
-  problema é o próximo que reaproveitasse a função pra montar texto de elemento: abriria um
-  buraco sem que nada acusasse. Escapar é o tipo de coisa em que nenhuma cópia pode ser "quase
-  igual".
-- Trata os cinco caracteres que importam (`& < > " '`). O `&` precisa vir junto, senão um texto
-  que já contenha `&lt;` seria decodificado de volta pra `<` pelo navegador.
-- Serve pros dois contextos porque o navegador decodifica a entidade ao ler de volta: `dataset.x`
-  e `JSON.parse` continuam recebendo o valor original (é o caso do `data-members` em Produtos,
-  que carrega JSON).
-- **O script carrega ANTES do `sidebar.js` em toda página que tem sidebar**, e não tem plano B em
-  lugar nenhum: quem esquecer o `<script>` quebra o teste, em vez de cair numa cópia local que
-  volta a divergir. O `sidebar.js` deixou de exportar o global e o `jobs-widget.js` perdeu a
-  cópia de emergência que tinha. `login.html` fica de fora porque não usa.
-- `scripts/test/escape.test.mjs` executa a função de verdade (entidades, `null`, ida e volta em
-  atributo), falha se alguém escrever outra implementação em `public/`, e confere a ordem de
-  carregamento.
-
-### CSS compartilhado entre Produtos e Estoque (`public/css/catalogo.css`)
-- As duas telas são a mesma tela com colunas diferentes, e o Estoque nasceu de uma cópia do
-  Produtos: **135 regras estavam escritas nos dois arquivos, idênticas**. Corrigir uma nunca
-  chegava na outra. Hoje `produtos.css` tem 10 regras próprias e `estoque.css`, 12.
-- **O risco de mexer aqui é a CASCATA, não o arquivo.** `catalogo.css` carrega antes da folha da
-  página; se um seletor voltar a existir nos dois lugares, quem vence um empate de especificidade
-  passa a ser decidido pela ordem dos arquivos. A extração só foi feita depois de conferir que
-  nenhum seletor movido continuava na folha da página, e `scripts/test/catalogo.test.mjs` mantém
-  isso.
-- A casca das telas (`:root`, `body`, `.topbar`, `.content`) NÃO foi centralizada, e é
-  deliberado: medindo as 11 folhas, só 5 regras são idênticas em 8+ páginas — as outras
-  divergiram ao longo do tempo. Unificar exigiria escolher qual versão vence, o que é mudança de
-  aparência, não faxina. O par Produtos/Estoque é a exceção justamente por ser cópia direta.
-- Ao extrair, comentário anda junto com a regra que ele documenta, e quando as duas folhas
-  documentavam a mesma regra com palavras diferentes ficou a explicação mais completa. Uma
-  primeira tentativa contava `{`/`}` dentro de comentário e partiu ao meio um que cita
-  `body{display:flex}` — as regras nunca correram risco, mas o texto que as explica é justamente
-  o que este projeto não pode perder. Qualquer varredura de CSS por chave precisa pular
-  comentário.
-
-### Seletor de opção (`public/js/pill-switch.js`, `.pill-switch`)
-- **Padrão único de todo seletor de duas ou mais opções mutuamente exclusivas**: moldura discreta
-  e um pill claro que DESLIZA até a opção ativa. Pedido do Luan (27/08/2026) a partir do
-  Colunas/Linhas de Integrações, que era o único com esse visual. Antes eram quatro aparências
-  pra mesma decisão de interface — `.mkt-btn` (Brasil/EUA, 7 telas), `.chart-type-btn` (tipo de
-  gráfico, 2 telas), `.mode-btn` (Coropleto/Calor) e `.vs-btn` — e três delas marcavam o ativo
-  com fundo escuro em vez do pill.
-- **O componente é PURA APRESENTAÇÃO.** Ele não trata clique, não muda estado, não decide nada:
-  observa (`MutationObserver`) qual botão tem a classe `active` e leva o pill até lá. É o que
-  permitiu converter 9 telas mexendo só em CSS e markup, sem tocar em um handler sequer — cada
-  página continua sendo a única fonte da verdade sobre o que está selecionado. Se um clique for
-  recusado pela lógica da tela, o pill não anda, em vez de mentir e se corrigir depois.
-- Markup: `<div class="pill-switch">` + `<span class="ps-pill">` como PRIMEIRO filho (ele fica
-  atrás e, vindo depois, cobriria o texto) + um `<button class="ps-opt">` por opção. As classes
-  antigas (`mkt-btn`, `vs-btn`, `chart-type-btn`, `mode-btn`) seguem nos botões de propósito:
-  são o gancho dos handlers de cada página, não têm mais CSS de aparência.
-- Variante: `pill-switch--sm` (só ícone, pro cabeçalho de card). Ocupar a linha toda no celular
-  ficou por conta da página que precisa disso, não do componente.
-- **A opção padrão precisa nascer com `active` no HTML.** Quatro seletores marcavam o ativo só
-  via JS, e antes do script rodar o controle aparecia sem nada selecionado.
-- Nome NÃO é `seg`: nesse projeto `seg` já quer dizer segmento de público (gato/cachorro), em
-  `segmentos.html`, em vinte classes `.seg-*` e em `DEFAULT_SEG`/`CocoColors.seg`.
-- `scripts/test/seletores.test.mjs` guarda a estrutura (pill presente e em primeiro, pelo menos
-  duas opções, exatamente uma ativa, script carregado, aparência antiga não ressuscitada) e
-  confere que toda classe citada no CSS do componente existe mesmo no markup — regra apontando
-  pra classe inexistente não dá erro, só deixa de se aplicar, e foi assim que um rename quase
-  devolveu o pill deslizando da borda a cada carga de página.
-- O `.ios-switch` (liga/desliga, `public/css/switch.css`) é outro controle e continua como está:
-  ele não escolhe entre opções, ele liga ou desliga uma coisa.
-
-### Dois `margin-left:auto` na mesma linha flex partem o espaço no meio
-- No cabeçalho do Unificador, o botão "Sincronizar" e o nome de quem está logado tinham CADA UM o
-  seu `margin-left:auto` (um inline no botão, outro no `.live-dot-wrap`). Com dois, o espaço livre
-  se divide entre eles: o botão não vai pra direita, ele para no MEIO do cabeçalho, longe dos dois
-  cantos. Parece bug de posicionamento e é só aritmética de flexbox.
-- Regra: num grupo encostado numa borda, só o PRIMEIRO elemento do grupo leva o empurrão; os
-  outros vêm atrás dele. Corrigido movendo o `margin-left:auto` do `.live-dot-wrap` pro `#syncBtn`
-  (e de quebra o `style=` inline saiu do markup, que é dívida de CSP, ver "Cabeçalhos de
-  segurança").
-
-### Padrões de UI compartilhados
-- Sidebar (`sidebar.js`), sistema de cores (`colors.js`) e o widget de processos em segundo plano
-  (`jobs-widget.js`) e o pop-up de confirmação (`confirm-modal.js`) são componentes injetados via
-  IIFE — nunca duplicar CSS/markup deles numa página nova, sempre incluir o script
-  (`confirm-modal.js` logo depois de `sidebar.js`, `jobs-widget.js` logo depois desse, em toda
-  página exceto `login.html`).
-- **"Financeiro" na sidebar é um item de página que ainda não existe, e FICA** (decisão explícita
-  do Luan, 27/08/2026, ao revisar o código: "não tire a seção de financeiro da sidebar"). Ele
-  sinaliza o que vem por aí. Só não pode fingir que é clicável: leva `.nav-soon` (sem hover,
-  cursor normal, opacidade menor) e o selo "em breve". Quando a página existir, tirar a classe e o
-  selo e dar a ele `href` + `data-page` como os outros — **sem `data-page` o item escapa do
-  controle de permissão** e aparece pra usuário `padrao` que não teria acesso a ele.
-- **Cabeçalho da sidebar** (logo + texto no topo, `.brand`): layout/tamanho igual ao da sidebar de
-  `dashboard-social-media` (projeto irmão) — ícone pequeno (34px) à esquerda + nome/subtítulo à
-  direita, em vez do logo grande empilhado em cima do texto. Pedido do Luan, 21/08/2026. Só o
-  TAMANHO/LAYOUT veio de lá — a paleta (`--side-bg`/`--side-text`/`--side-muted`/`--side-hover`/
-  `--side-active`) continua a mesma de sempre (fundo escuro sólido). Uma primeira tentativa (PR
-  #159, `da753ee`) mudou também a cor de fundo pra um gradiente pastel claro nos 9 `:root` de cada
-  página, sem que isso tivesse sido pedido — e foi mesclada **direto em `master`, sem passar por
-  `dev`** (bypass do fluxo normal, produção ficou com a cor errada). Revertido: a paleta nunca
-  chegou a existir em `dev`, então o conserto foi implementar o layout certo direto aqui; falta só
-  a mesclagem chegar em `master` pra sobrescrever o commit `da753ee` que está lá. `favicon.png`
-  (ícone quadrado) no lugar de `Logo2.png` (faixa larga, não cabe em 34px) — mesma imagem que já
-  era usada no estado colapsado, então não precisa mais trocar de logo ao colapsar a sidebar, só
-  esconder o bloco de texto (`.brand-text`).
-- **Sidebar colapsada = faixa de ícones (64px), não mais some da tela** (pedido do Luan,
-  19/08/2026, a partir de uma referência visual). Antes "esconder" fazia `transform:translateX(
-  -100%)` — a sidebar sumia por completo e um botão flutuante fora dela (`.sidebar-open-btn`)
-  reaparecia sobre o conteúdo da página pra reabrir; no `campanhas.html` ele ficava literalmente
-  em cima dos botões Brasil/EUA (bug relatado pelo Luan, mesmo dia). Agora colapsa via
-  `width:180px→64px` (`body.sidebar-hidden .sidebar`), sempre visível — o botão de
-  abrir/fechar (`#sidebarToggle`) mora DENTRO da sidebar nos dois estados, nunca mais um elemento
-  solto por cima da página; `.sidebar-open-btn` só existe pro caso mobile (sidebar de verdade some
-  via `transform`, overlay). Colapsada: texto de cada item (`.nav-text`) some, ícone fica
-  centralizado, hover mostra um balão com o rótulo (`content:attr(data-label)`, sem JS pra montar
-  tooltip — cada `.nav-item`/`#sideUser` carrega `data-label` já pronto). Logo vira só o ícone
-  (`favicon.png`, quadrado, no lugar do `Logo2.png` que é uma faixa larga). **Os 64px do rail
-  precisam bater com `body.sidebar-hidden .main{margin-left:64px}` em CADA página** (12 arquivos,
-  não centralizado) — as duas medidas são independentes e nada as amarra automaticamente; um canal
-  novo de layout ou uma página nova precisa lembrar de repetir esse valor, senão o conteúdo desliza
-  por baixo do rail (ou sobra um vão vazio de 64px quando expandida).
-  - **Mobile**: `.sidebar-open-btn` (o botão que abre a sidebar no celular, já que lá ela some de
-    verdade via overlay) é `position:fixed`, fora do fluxo de qualquer página — sem reservar
-    espaço pra ele, ficava sobreposto aos primeiros pills do topbar (seletor de país, por
-    exemplo). Em vez de mexer nas 12 páginas, a regra mora centralizada no próprio `sidebar.js`:
-    `@media(max-width:768px){.topbar{padding-left:56px!important}}` — o `!important` é porque o
-    `.topbar{padding:...}` de cada página tem a mesma especificidade; sem ele dependeria da ordem
-    de carregamento dos `<style>` no `<head>`, frágil. Bug relatado pelo Luan, 19/08/2026.
-- **`.main{min-width:0}` evita rolagem horizontal da página inteira** — regra idêntica em `.main`
-  (sidebar fixa + `margin-left:180px`) repetida nas 10 páginas com sidebar, nenhuma tinha
-  `min-width:0`. `.main` é item flex de `body{display:flex}`; sem `min-width:0`, o navegador usa o
-  `min-content` do descendente mais largo como largura mínima automática do item, em vez de
-  encolher pra caber no espaço disponível — se QUALQUER conteúdo lá dentro (tabela com muitas
-  colunas, nome de produto comprido) for mais largo que o espaço, a página inteira alarga e o
-  scroll horizontal aparece no rodapé do navegador. Bug real: Estoque (card "Panorama geral" de 11
-  colunas) alargava a página, mas Produtos "funcionava" só porque o card mais largo de lá cabia —
-  não porque tivesse alguma proteção que faltava em Estoque (reportado pelo Luan, 21/08/2026, "deve
-  ser igual a produtos, que fixa corretamente" — a causa real não era a página em si, era a mesma
-  falha latente em todas, só que sem conteúdo largo o bastante pra aparecer). Confirmado ao vivo via
-  DevTools antes de mexer no código: injetar `min-width:0` no `.main` de produção zerava o
-  `scrollWidth` extra na hora. Corrigido nas 10 páginas de uma vez (mesma regra, mesmo bug latente
-  em todas). `.prod-table-wrap{overflow-x:auto}` (Produtos/Estoque) continua como segunda camada de
-  proteção pra quando uma tabela específica for mesmo mais larga que o card — as duas coisas
-  resolvem problemas diferentes, uma não substitui a outra.
-- **Pop-up de confirmação** (`confirm-modal.js`, pedido do Luan 19/08/2026: o `confirm()` nativo
-  do navegador — a barra cinza "site diz" — "não poderia acontecer"). `window.cocoConfirm(msg,
-  {title, confirmText, cancelText, danger}) → Promise<boolean>` substitui todo `confirm()` nativo
-  usado pra ações destrutivas/importantes (desativar integração, apagar histórico Amazon, excluir
-  usuário/tipo/grupo, cancelar um job). `danger:true` deixa o botão de confirmar vermelho (ações
-  que realmente apagam dado). Sempre `await` — a função que chama precisa ser `async` (todos os
-  callers já eram).
-- **Widget de processos** (`jobs-widget.js`, pedido do Luan 18/08/2026): card flutuante,
-  arrastável e redimensionável pelas bordas/cantos (posição e tamanho em `localStorage`) que
-  aparece sozinho quando algo está rodando em segundo plano (backfill/imagens/itens da Amazon,
-  geografia via Bling, backup) e **some sozinho 3s depois de tudo concluir** (`HIDE_AFTER_DONE_MS`,
-  pedido do Luan em 03/09/2026; igual ao `POLL_MS`, então o card não vive mais que uma leitura
-  depois de não ter mais nada a contar). Consome `GET /api/jobs`
-  (server.js, agrega os status já existentes de cada job — não duplica lógica) a cada 3s. Mostra
-  quem disparou cada processo (`startedBy`, capturado no handler do POST que iniciou via
-  `req.authUser`; jobs automáticos/agendados ficam `null` → aparece como "automático"). Continua
-  visível ao trocar de página porque toda página recarrega o mesmo script — a posição/tamanho
-  arrastados e se está minimizado ficam salvos, não o estado do job em si (isso vem sempre fresco
-  do servidor).
-  - **Quem decide se o card fica na tela é `planoDoCard`, e ela é pura** — a regra já errou de dois
-    jeitos, e nenhum dos dois dá erro nenhum, só teima na tela:
-    - o card **reacendia 3s depois de ter sumido**: o `render` roda a cada volta do poll e fazia
-      `add('jw-show')` sem saber que o sumiço tinha sido deliberado, então ele piscava de volta até
-      o servidor esquecer o job (15 min). Quem segura isso é a marca `autoHidden`, esquecida assim
-      que aparece qualquer job rodando (senão um processo novo nasceria escondido);
-    - o card **ficava parado pra sempre** pra quem trocava de página logo depois do processo
-      terminar: o cronômetro só era armado ao VER a transição de rodando pra concluído, e nessa
-      tela não havia transição nenhuma pra ver. Hoje ele arma sempre que não há nada rodando — mas
-      só se ainda não estiver armado, senão o poll de 3s empurraria o prazo pra frente pra sempre.
-  - `scripts/test/jobs-widget.test.mjs` executa `planoDoCard` de verdade e guarda os dois erros.
-  - Barra de progresso: cheia e sólida em concluído/erro/cancelado; só fica "correndo" (indeterminada)
-    enquanto o processo está rodando sem uma % conhecida ainda (iniciando) — bug relatado pelo Luan
-    19/08/2026, job já concluído aparecia com a barra animada e parcialmente cheia, parecendo travado.
-  - `destaleJob(jobId, raw)` (server.js): um status `running` sem atualização há mais de
-    `STALE_AFTER_MS[jobId]` (10–45min por tipo) vira `error` com mensagem de "interrompido" em vez
-    de aparecer preso em "iniciando" pra sempre — sintoma real de um deploy/reinício no meio do
-    processo (a flag `*Running` em memória zera sozinha ao reiniciar, mas o status persistido em
-    `kv` não é tocado por ninguém). Usado tanto por `GET /api/jobs` (`normalizeJob`) quanto por
-    `GET /api/status` — os dois PRECISAM concordar, mesmo princípio já documentado em "Campanhas"
-    (nunca ter duas fontes pro mesmo dado). Bug real já causado por isso (19/08/2026): só
-    `/api/jobs` tinha a checagem, então o botão "Aplicar" do histórico Amazon EUA em Integrações
-    (que lê `/api/status`) ficava travado pra sempre olhando pro mesmo job fantasma que o widget já
-    mostrava como erro. `GET /api/jobs` também esquece job concluído/erro/cancelado sozinho 15min
-    depois de terminar, pra uma execução de teste antiga não continuar aparecendo em toda página pra
-    sempre (o Luan relatou isso como "fica criando tarefa nova sem eu pedir", 19/08/2026 — na real
-    eram jobs fantasmas/antigos nunca limpos, não jobs novos de verdade).
-  - Botão × por job: em job rodando, cancela (com `confirm()`) — só nos três com ponto seguro pra
-    checar a flag no meio do loop: `amazon-backfill`, `amazon-images`, `amazon-items`
-    (`CANCELABLE_JOB_IDS`, server.js). Cancelamento cooperativo via
-    `JobCancelledError`/`checkCancelled(jobId)`: a callback de progresso de cada um checa a flag e
-    lança, o que sobe até o catch do job e vira status `cancelled` — o que já foi processado até
-    ali fica salvo (upsert incremental, mesmo princípio de sempre). `bling-geo` e `backup` não
-    entram (terminam em segundos, não vale o risco de interromper no meio de um upload/gravação).
-    Em job já concluído/erro/cancelado, o mesmo × vira "fechar" (sem `confirm()` — só some da lista
-    no navegador, `dismissedJobKeys` client-side por `id+finishedAt`, uma execução nova do mesmo
-    job volta a aparecer). O cabeçalho do widget também ganhou um × pra fechar o card inteiro
-    (`dismissed`/`dismissedKnownIds`, jobs-widget.js) — diferente de minimizar, só volta a aparecer
-    sozinho quando surge um job rodando que não existia no momento do fechamento. Pedido do Luan,
-    19/08/2026: "não consigo simplesmente fechar ela ou a tarefa que eu deu erro". Os dois estados
-    de fechado (`dismissedJobKeys` e `dismissed`/`dismissedKnownIds`) ficam em `sessionStorage`
-    (`coco_jobs_widget_dismissed_jobs`/`_all`), não em variável de memória — senão sumia de volta
-    sozinho ao trocar de página, porque cada página reexecuta o script do zero (bug real relatado
-    pelo Luan, 19/08/2026, no dia seguinte ao ship). `sessionStorage` e não `localStorage` de
-    propósito: precisa sobreviver à navegação dentro da mesma aba, mas não pode durar pra sempre —
-    um fechamento permanente esconderia silenciosamente uma execução nova e genuína do mesmo tipo
-    de job dias depois (mesmo `id`, execução diferente); fechar a aba/navegador já limpa sozinho.
-  - Painel "Amazon — Histórico" (Integrações): logo da Amazon (`Amazon_logo.png`) ao lado do rótulo
-    BR/EUA em cada linha, mesmo padrão de logo já usado no card de Tráfego & conversão.
-  - `.jw-head`/`.jw-resize` precisam de `touch-action:none` — sem isso, no celular o navegador
-    interpreta o toque como início de scroll da página em vez de entregar os eventos de pointer
-    pro nosso drag (arrastar/redimensionar funcionava só no desktop com mouse, não no touch). Vale
-    como regra geral pra qualquer drag customizado via Pointer Events nesse app, não só aqui — se
-    um novo componente precisar de arraste, lembrar do `touch-action`. Bug relatado pelo Luan,
-    19/08/2026.
-- **Clique num gráfico ECharts pra abrir um drilldown** (ex.: clicar na Tendência mostra o
-  detalhamento por canal daquele dia): usar `chart.getZr().on('click', ...)` +
-  `chart.convertFromPixel({seriesIndex}, [offsetX, offsetY])`, NÃO `chart.on('click', ...)` — o
-  `click` de série do ECharts só dispara em cima do traço/ponto exatos (o Chart.js antigo reagia a
-  clique em qualquer lugar da coluna, `getElementsAtEventForMode(...,'index',...)`); num gráfico de
-  linha com área preenchida, um dia de valor baixo deixa bastante espaço em branco por cima da
-  curva que não conta como "em cima da série" — parecia quebrado (clique não fazia nada na maior
-  parte do card), só funcionava acertando o pixel exato do traço. Bug relatado pelo Luan,
-  19/08/2026, depois da migração Chart.js → ECharts (index.html, toggle "Mostrar canais ao clicar
-  no gráfico de tendência"). `showTrendDrilldown()` termina com `el.scrollIntoView({behavior:
-  'smooth', block:'nearest'})` — no mobile os cards empilham em largura total, e o card de
-  Tendência é alto o bastante pra clicar no gráfico (lá em cima) e o resultado do drilldown
-  aparecer fora da tela (embaixo, depois da legenda), parecendo que nada aconteceu. `block:
-  'nearest'` não mexe em nada se já estiver visível (desktop já vê sem rolar). Bug relatado pelo
-  Luan, 19/08/2026: "eu clico no gráfico lá em cima, e o card aparece lá embaixo".
-- **Selo de variação (`.delta-val`, ex.: "↑ 106%") no mobile**: `.kc-delta` é `display:flex` numa
-  linha só (selo + "vs. período anterior"); no mobile a faixa de Indicadores vira 2 colunas
-  (`.kpi-strip-grid` em 768px) e a frase não cabia mais ao lado do selo — quebrava no meio, com o
-  selo boiando sozinho ao lado de um parágrafo de 2 linhas ("pills verdes estranhos", relatado
-  pelo Luan 19/08/2026). Fix: `@media(max-width:768px){.kc-delta{flex-direction:column;
-  align-items:flex-start}}` — empilha em vez de quebrar no meio da frase.
-- **Card Tendência (index.html) — "Geral" × "Por canal"**: toggle (`trendView`,
-  `localStorage('coco_trend_view')`) que troca a linha única (com área preenchida + "Custo ads")
-  por uma linha por canal, sem área nem "Custo ads" (com vários canais ao mesmo tempo a área
-  sobreposta fica ilegível — decisão combinada com o Luan antes de implementar, 19/08/2026). Usa o
-  mesmo `t.byChannel` que já alimentava só o drilldown de clique — nenhuma mudança no backend. Só
-  aparece com canal="todos" selecionado (`#trendViewToggle` some sozinho pra um canal específico,
-  que não tem o que quebrar em mais linhas); o drilldown de clique (ver item acima) também só roda
-  na visão "Geral" — na "Por canal" seria redundante, cada linha já é o próprio canal.
-  - Botão "Expandir" (`trendExpanded`, `localStorage('coco_trend_expanded')`): dobra a altura do
-    gráfico (`.ch220`→`.ch380`) e o card passa a ocupar a largura toda (`grid-column:span 12`). O
-    resize do ECharts acontece sozinho (o `ResizeObserver` compartilhado, `echartsRO`, já observa
-    `#trendChart`). Importante: `updateCardVisibility()` já mexia no `grid-column` do card de
-    Tendência por outro motivo (ocupar a linha toda quando o card de Canais ao lado está escondido
-    pelo canal selecionado) — as duas fontes de verdade precisam concordar, senão um refresh de
-    dado desfazia o expandido no ciclo seguinte; a condição virou `trendExpanded ||
-    !channelSplitVisible`.
-- **Card Tráfego & conversão (index.html) — mesmo padrão "Geral" × "Por canal" + expandir do
-  card Tendência** (pedido do Luan, 19/08/2026), mas aqui "por canal" é sempre Coco and Luna ×
-  Yucaloo (as duas únicas marcas com dado de sessão — Shopee/ML/Amazon não têm nenhum) em vez da
-  lista de canais de venda. `aggregateSessions()` (metrics.js) já calculava `rCoco`/`rYuc` por dia
-  separadamente só pra somar; passou a devolver também `seriesCoco`/`seriesYucaloo` (mesmo formato
-  de `series`) no objeto de retorno, sempre calculado (não só quando channel="todos" — custa quase
-  nada por cima do que já era somado). `computeDashboard` repassa os dois em `traffic.seriesCoco`/
-  `traffic.seriesYucaloo`. No "Por canal" o eixo secundário de Conversão some (fica só sessões, uma
-  linha por marca) — mesma decisão de simplificar tomada pro Tendência (vários eixos/séries ao
-  mesmo tempo vira poluição). Cores reaproveitadas do mapeamento por canal já usado no card
-  "Canais" (`CocoColors.ch.shopify`/`shopify_us` pra Coco and Luna, `.yucaloo_br`/`yucaloo_us` pra
-  Yucaloo — market-dependent), nada novo. Toggle some sozinho fora de canal="todos", igual ao da
-  Tendência (um canal específico já filtrado zeraria a outra marca o tempo todo).
-- Seletores de Métrica/Canal/Período/Atualizar são dropdowns customizados (`.csel`), não `<select>`
-  nativo. Frequência de atualização (`localStorage('coco_refresh')`) é compartilhada entre todas
-  as páginas. Estado ativo do item é fundo escuro (`background:var(--ink)`), não checkmark — era
-  inconsistente (segmentos.html usava um `.chan-pop` próprio com esse visual, as outras 6 páginas
-  com `.csel-opt` usavam `✓`); padronizado no visual do segmentos.html (preferência do Luan,
-  18/08/2026) mantendo o nome de classe `.csel-opt` nas 6 páginas pra não mexer em handler de
-  clique. `segmentos.html` continua com sua própria implementação (`.chan-pop`) por baixo — só
-  igualado visualmente, não o código; um canal novo em `.csel-opt` não precisa de checkmark.
-- **Texto de última sincronização no header** (`#lastUpdate`, ao lado da bolinha `.ldot`): padrão é
-  `"Ao vivo · HH:MM"` (`Atualizando…`/`Erro` enquanto carrega/falha, `Carregando…` como texto
-  inicial antes do primeiro load) — já era assim em index.html/geografia.html/segmentos.html.
-  `campanhas.html`/`estoque.html`/`produtos.html` ainda mostravam
-  `"sync: DD/MM/AAAA, HH:MM:SS"` (cru, sem estado de loading/erro) — igualado ao padrão dos outros
-  4 (só o texto/formato; não ganharam a máquina de estado completa da bolinha, que era um trabalho
-  maior). Pedido do Luan, 19/08/2026: "deve ser um padrão entre todos os headers". O rodapé
-  (`#footerDate`) continua com data/hora completa — só o header precisa ser curto.
-- Arrastar para reordenar cards (Produtos/Estoque/Visão geral): a API nativa de Drag and Drop do
-  HTML5 causou vários bugs (arraste não iniciava, duas cópias visuais do card) — foi trocada por
-  um arraste customizado por ponteiro (`mousedown`/`mousemove`/`mouseup` + clone `position:fixed`
-  seguindo o cursor). Se for implementar reordenação em alguma tela nova, seguir esse padrão em
-  vez da API nativa de drag and drop. O modo de edição da Visão geral (`index.html`,
-  `makeDragController`) ainda usava a API nativa apesar do próprio comentário do código dizer
-  "mesmo mecanismo já validado em produtos.html/estoque.html" — nunca tinha sido migrado de
-  verdade, só o comentário mentia; o espaço vago dinâmico esperado ao arrastar não acontecia
-  (reportado pelo Luan, 21/08/2026). Migrado pro mesmo padrão de ponteiro dos outros dois, tanto
-  pro grid principal (`#editGrid`) quanto pra faixa interna de KPIs (`#kpiStripGrid`).
-- **Banco de cards** (Visão geral, modo de edição): cada card oculto mostra uma prévia real do seu
-  conteúdo, não só o nome (pedido do Luan, 21/08/2026 — antes era uma pill sem nenhuma pista
-  visual). `capturePreview()` clona o elemento no instante em que ele é ocultado — `cloneNode` não
-  copia o bitmap desenhado num `<canvas>`, então todo `<canvas>` do clone (gráficos ECharts) é
-  trocado por um `<img>` com `toDataURL()` do canvas original antes de descartar a referência.
-  Encolhido no banco via `transform:scale`. Card que já veio oculto de uma sessão anterior (nunca
-  esteve visível nesta carga de página) não tem captura disponível — cai num ícone genérico
-  (`CB_ICON_BY_ID`/`CB_ICON_KPI`) até ser mostrado e ocultado de novo uma vez; não vale a pena
-  forçar uma captura de um card que nunca renderizou dado real. O clone tem todo `id` removido
-  antes de entrar no DOM (`clone.removeAttribute('id')` + `querySelectorAll('[id]')`) — sem isso,
-  a prévia de "Tendência" ficaria com um segundo elemento `id="trendChart"` no documento, e como
-  `#cardBank` aparece ANTES de `#editGrid` no HTML, um `document.querySelector` desprotegido pegaria
-  a cópia inerte em vez do card de verdade. Por isso `updateCardVisibility()` (que já tinha esse
-  padrão pra `trendWrap`/`topProdWrap`/`ALWAYS_VISIBLE_CARD_IDS`) foi escopado em `editGrid` em vez
-  de `document` — vale como regra geral: nunca usar `document.querySelector` pra achar um
-  `.edit-card`/`.kpi-mini` por `data-card-id`/`data-kpi-id`, sempre escopar em `editGrid`/
-  `kpiStripGrid`.
-- **Cards da Visão geral esticam pra preencher a linha do grid** (`.edit-grid`, `align-items:
-  stretch` em vez do antigo `start`): dois cards na mesma linha (Tendência×Canais, Tráfego×Funil,
-  Top produtos×Marketing por origem) quase nunca têm o mesmo tanto de conteúdo — o mais curto
-  ficava boiando no topo, com o fundo da página aparecendo como uma faixa em branco antes da
-  próxima linha começar (reportado pelo Luan, 24/08/2026, com print). Só esticar o card (borda/
-  fundo) não bastava — pedido explícito de preencher com conteúdo de verdade em vez de deixar vão:
-  `.card-pad` virou coluna flex ocupando 100% da altura esticada, e cada elemento "de crescer"
-  dentro dela usa `flex:1` com um `min-height` como piso (mesmo tamanho de sempre quando não sobra
-  espaço nenhum):
-  - `.ch220`/`.ch180` (Tendência/Tráfego): o gráfico ECharts cresce de verdade, não só a moldura —
-    o `ResizeObserver` único (`echartsRO`) já observava o container e redesenha sozinho, nenhum
-    código de gráfico precisou mudar;
-  - `.donut-center-wrap` (Canais/Marketing por origem): o anel fica maior, mesma lógica;
-  - **Container de gráfico usa `flex:1 1 0` (base ZERO), NUNCA `flex:1 1 auto`.** Com base `auto` o
-    tamanho base do item vira a altura do próprio conteúdo — e o conteúdo é um canvas que o ECharts
-    desenha no tamanho do container, então fecha um laço infinito: canvas cresce → conteúdo cresce
-    → item cresce → `echartsRO` dispara → ECharts redesenha maior → repete. Foi exatamente o que
-    aconteceu na 1ª versão dessa mudança (PR #172): o gráfico da Tendência chegou a 1651px e
-    continuava subindo, com o anel de Canais junto (o laço se realimenta pelos dois cards da linha,
-    via altura da linha do grid). Pego pelo Luan no mesmo dia, corrigido no PR seguinte. Com base 0
-    a altura sai só da divisão do espaço livre, o conteúdo não realimenta nada, e o `min-height`
-    segura o piso. Vale pra qualquer container de gráfico flexível daqui pra frente;
-  - `.funnel-list` (Funil de conversão, já era flex-column): ganhou `flex:1` +
-    `justify-content:space-between` — os passos se espalham em vez de empilhar no topo;
-  - `#topProducts`: virou coluna flex própria, e quem absorve a sobra são as próprias linhas
-    (`.tp-row{flex:1 1 auto}`) — ficam mais espaçadas, preenchendo o card. Deixar só o
-    `.tp-summary{margin-top:auto}` absorver (1ª tentativa, PR #172) apenas MUDOU o vão de lugar:
-    as 4 linhas amontoadas em cima, um bloco em branco no meio e o total lá embaixo (Luan, mesmo
-    dia: "não podemos deixar esse espaço em branco desse jeito"). O `margin-top:auto` continua no
-    total, mas só serve pro modo "Ver todos", onde as linhas ficam presas dentro do
-    `.tp-list-scroll` (altura travada em 420px, não cresce). `.tp-row` NÃO leva `max-height` pra
-    limitar o crescimento: ela não tem `overflow:hidden`, então um nome comprido que quebre em duas
-    linhas vazaria por cima da borda seguinte — linha espaçosa demais é bem menos ruim que texto
-    vazando.
-  Cards sozinhos numa linha (span 12: Mercado Livre · Detalhe, Orgânico x Campanha, Pedidos
-  recentes, Indicadores) não têm vizinho pra comparar altura, então não mudam visualmente. Mobile
-  também não é afetado — `.edit-grid>.edit-card{grid-column:1/-1!important}` já força um card por
-  linha ali, sem par pra esticar contra.
-- Nunca engolir erro de integração silenciosamente (`.catch(() => [])` sem log/propagação) — já
-  escondeu um bug real (Amazon US com pedidos zerados) por semanas.
-
-## 5. Modelo de dados (pedido normalizado)
-
-```js
-{
-  id, channel,             // 'shopify' | 'shopify_us' | 'yucaloo_br' | 'yucaloo_us' |
-                            // 'shopee' | 'mercadolivre' | 'amazon' | 'amazon_us'
-  market,                  // 'br' | 'us'
-  name, createdAt,         // ISO (UTC)
-  status, cancelled,
-  total,                   // BRL (BR) ou USD (US)
-  source,                  // origem de marketing ('Instagram' | 'Facebook' | 'Google' | ...)
-  customer,
-  state,                   // UF/estado de entrega
-  listingType,             // ML: 'organic' | 'premium' | null
-  items: [{ title, qty, amount, asin?, tags? }],
-}
-```
-
-## 6. Configuração (.env)
-
-Todos os valores reais ficam só no `.env` local (git-ignored) e nas variáveis de ambiente do
-Railway — nunca colar valor aqui, só o nome da variável e pra que serve.
-
-| Variável | Descrição |
+| Arquivo | Papel |
 |---|---|
-| `PORT` | Porta (Railway injeta) |
-| `SYNC_INTERVAL_MINUTES` | Frequência do sync automático (padrão 15) |
-| `STORE_OFFSET_MINUTES` | Fuso da loja BR em minutos (Brasil = -180) |
-| `SHOPIFY_STORE` / `SHOPIFY_ADMIN_TOKEN` | Loja e token BR (escopos: read_orders, read_products, read_reports, read_analytics, read_customers) |
-| `SHOPIFY_API_VERSION` | `2026-04` ou posterior |
-| `SHOPIFY_US_STORE` / `SHOPIFY_US_ADMIN_TOKEN` | Loja e token US |
-| `YUCALOO_BR_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URL` | App Yucaloo BR (Dev Dashboard) |
-| `YUCALOO_US_*` | Idem, Yucaloo EUA |
-| `SHOPEE_PARTNER_ID` / `_KEY` / `_SHOP_ID` | Credenciais Shopee de produção |
-| `SHOPEE_REDIRECT_URL` | Callback OAuth Shopee |
-| `ML_CLIENT_ID` / `_CLIENT_SECRET` / `ML_REDIRECT_URL` | App Mercado Livre |
-| `META_APP_ID` / `_APP_SECRET` / `META_ACCESS_TOKEN` | App Meta + token de sistema (único p/ BR e US) |
-| `META_AD_ACCOUNT_ID` | Conta BR (sem prefixo `act_`) |
-| `META_US_AD_ACCOUNT_ID` | Conta US |
-| `AMAZON_CLIENT_ID` / `_CLIENT_SECRET` / `AMAZON_REFRESH_TOKEN` | App SP-API EUA (conta VITA PET LIFE) |
-| `AMAZON_BR_CLIENT_ID` / `_CLIENT_SECRET` / `AMAZON_BR_REFRESH_TOKEN` | App SP-API BR (conta CocoandLuna) — nunca reusar o token do EUA |
-| `AMAZON_BACKFILL_DAYS` | Janela da 1ª carga antes de existir cursor (padrão 2) |
-| `AMAZON_FETCH_PII` | `1` liga busca de nome do comprador (exige papel PII aprovado) |
-| `AMAZON_NAMES_EVERY_HOURS` / `AMAZON_NAMES_DAYS` | Reconciliação de nome de produto (padrão 12h / 2 dias) |
-| `AMAZON_RETURNS_EVERY_HOURS` / `AMAZON_RETURNS_DAYS` | Devoluções da Amazon (padrão 12h / 60 dias) — janela longa de propósito, a devolução chega semanas depois da venda |
-| `AMAZON_SETTLEMENT_DOCS` | Quantos extratos de repasse baixar por rodada (padrão 6) — baixar documento tem cota de ~1/min |
-| `PEDIDOS_RETENCAO_DIAS` | Janela de histórico de TODO canal, nos dois mercados (padrão 90). `AMAZON_RETENTION_DAYS` não é mais lida |
-| `AMAZON_ROLE_ARN` / `AMAZON_AWS_ACCESS_KEY` / `_SECRET_KEY` | IAM Role + credenciais do IAM User (compartilhados BR/US) |
-| `GOOGLE_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URL` | OAuth do projeto Google Cloud |
-| `GOOGLE_ADS_DEVELOPER_TOKEN` | Precisa de aprovação "Basic access" |
-| `GOOGLE_ADS_CUSTOMER_ID` | Só EUA |
-| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Só se o developer token foi gerado sob uma MCC |
-| `META_API_VERSION` | Versão da Graph API do Meta (padrão `v20.0`) |
-| `DATABASE_URL` | Postgres — Railway NÃO injeta sozinho, setar `${{Postgres.DATABASE_URL}}` |
-| `ADMIN_SEED_PASSWORD` | Senha do admin criado quando a lista de usuários está vazia (opcional; sem ela, é sorteada e sai no log) |
-| `SYNC_SECRET` | Token que deixa um agendador EXTERNO chamar `POST /api/sync` sem login (header `x-sync-token`). Opcional |
-| `B2_KEY_ID` / `B2_APPLICATION_KEY` / `B2_BUCKET_NAME` | Backup diário do banco (Backblaze B2) — ver `src/backup.js` |
-| `BACKUP_RETENTION_DAYS` | Quantos backups diários manter no B2 (padrão 30) |
-| `BACKUP_EVERY_HOURS` | Intervalo mínimo entre backups automáticos (padrão 24) |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Alerta quando um canal fica travado sem sincronizar — ver `src/alerts.js` |
-| `ALERT_STALE_HOURS` | Horas de falha seguida antes do primeiro alerta (padrão 6) |
+| `server.js` | Express: páginas, API, portão de login, agendador do sync |
+| `src/store.js` | Postgres em produção (`DATABASE_URL`), `data/db.json` local. Tudo carregado em memória |
+| `src/sync.js` | Orquestra a busca de todos os canais, a cada `SYNC_INTERVAL_MINUTES` (15) |
+| `src/metrics.js` | Monta o payload de cada tela. `CANAIS` = catálogo de canais do servidor |
+| `src/shopify.js` · `shopifyYucaloo.js` | Pedidos (GraphQL), sessões (ShopifyQL), catálogo; OAuth da Yucaloo |
+| `src/shopee.js` · `mercadolivre.js` · `amazon.js` | Cada marketplace (Amazon: LWA + SigV4 + STS, BR e EUA) |
+| `src/bling.js` · `src/tiktok.js` | ERP Bling: TikTok Shop, doações, estado da Shopee |
+| `src/meta.js` · `googleads.js` | Gasto de anúncio |
+| `src/insights.js` · `historico.js` · `retencao.js` · `comparar.js` · `cache.js` · `snapshot.js` · `umaPorVez.js` | Regras PURAS (sem banco/rede), testadas direto |
+| `src/auth.js` · `autor.js` | Login, usuários, permissão por página; quem está editando (Histórico) |
+| `src/backup.js` · `alerts.js` · `backfill.js` | Backup diário no B2, alerta no Telegram, backfill das lojas Shopify |
+| `scripts/restore-backup.mjs` | Restaura o banco a partir do B2 (destrutivo, pede "RESTAURAR") |
+| `public/*.html` | 12 páginas; código de cada uma em `js/paginas/<p>.js` e `css/paginas/<p>.css` |
+| `public/js/*.js` | Componentes compartilhados (IIFE), ver seção 7 |
 
-Armadilhas conhecidas: `read_analytics` ausente faz `shopifyqlQuery` sumir do schema sem erro.
-Amazon `CreatedBefore` precisa ficar ≥2min no passado. IAM User precisa de `sts:AssumeRole` no
-Role E o Role precisa ter o User no trust policy. Mercado Ads exige escopo `write:product_ads`
-no OAuth do ML, reautorizar via `/mercadolivre/connect` se faltar.
+### Banco (`store.js`)
+- Tabelas: `orders` (id, data JSONB), `sessions_daily`, `kv` (key, value JSONB), `historico`.
+- Tudo fica em memória (`initStore()` antes do `listen`); interface síncrona, gravação no Postgres
+  em segundo plano. `getOrders` usa índice por mercado ordenado por data (busca binária),
+  refeito só quando algo mudou.
+- Gravação em LOTES de 500 (`pgUpsertOrders`). Um INSERT por pedido já encheu o disco do Postgres.
+- **O sync só grava o pedido que MUDOU** (`mesmoPedido`, `comparar.js`): a comparação ignora ordem de
+  chave e `undefined` (o Postgres reordena JSONB), nunca pula o MESMO objeto da memória (alterado no
+  lugar) e **repesca gravação que falhou** (`pendentesNoBanco`).
+- `kv` guarda blobs inteiros (tokens, configs, séries diárias). Lista que só cresce NÃO vai pro kv
+  (cada gravação reescreve o blob): por isso o Histórico tem tabela própria.
+- Chave nova no kv precisa entrar em `EMPTY` **e** na leitura do `initStore`, senão some no reinício.
+- Pedido sem `market` gravado é tratado como `br`, exceto canal `shopify_us`/`amazon_us` (→ `us`).
 
-## 7. Rodar / endpoints principais
+### Janela de 90 dias (`retencao.js`) — decisão do Luan, 22/09/2026
+- **Todo canal, nos dois mercados, guarda só os últimos 90 dias**; todo dia o mais antigo sai. Motivo:
+  97% da conta do Railway é memória, e tudo mora em memória. `PEDIDOS_RETENCAO_DIAS` troca o 90.
+- Corte = meia-noite UTC de 91 dias atrás (1 dia de folga pro fuso), igual o dia inteiro.
+- Pedido antigo nem entra na memória (filtro no `SELECT` do `initStore`). O banco apaga em lotes de
+  2000 (`pgPodarPedidos`). **Memória e banco comparam `createdAt` como TEXTO, pela mesma condição** —
+  senão a tela muda sozinha depois de um reinício. Pedido sem data não é apagado.
+- Sessões, sessões da Yucaloo e gasto de Meta/Mercado Ads seguem a mesma janela.
+- Não existe mais campo de "dias de histórico" em lugar nenhum. Backfill manual (Amazon e Shopify,
+  só por API) tem teto de 90 dias: serve pra tapar buraco dentro da janela.
+- Consequência aceita: período anterior a 90 dias abre vazio (Insights avisa "anterior ao
+  histórico"); o backup do B2 guarda 30 dias, então o que passa de 90 some de vez.
 
-`npm install` → `npm start` (porta 3000, sync roda ao subir e a cada `SYNC_INTERVAL_MINUTES`).
-`npm run sync` faz uma sincronização única.
+## 3. Regras de negócio
 
-### Testes (`npm test`, `scripts/test/`)
-- Runner próprio (`run.mjs`), sem framework: o projeto não tem etapa de build nem dependência de
-  desenvolvimento, e 40 linhas cobrem o que precisamos. Cada `*.test.mjs` roda no seu processo,
-  código de saída 0 passou / 1 falhou / **2 pulado** (teste que precisa de rede não vira falha
-  numa máquina offline, mas também não se declara aprovado). `npm test -- mapa` roda só um.
-- Cobre hoje o que **falha em silêncio**, que é onde este projeto machuca: `csp` (todo host
-  externo de `public/` autorizado na CSP), `mapa` (nenhuma página volta pra provedor de tile com
-  chave, e as duas telas usam o mesmo), `geojson` (o arquivo dos EUA é local, servido e no formato
-  certo), `paginas` (sintaxe de cada `js/paginas/*.js`, mais os blocos inline que sobrem ou voltem, e se
-  todo `js|css/paginas/` apontado pelo HTML existe em disco), `assets` (caminho de arquivo local
-  existe),
-  `imagens` (nenhuma imagem depende de CSS injetado por script pra ter tamanho),
-  `escape` (uma função de escape só, correta, e carregada antes de quem usa),
-  `status-pedido` (servidor e tela dão o mesmo rótulo, devolvido não vira "em aberto", e cada
-  opção do filtro de status pega os mesmos pedidos no card e no CSV),
-  `devolucoes` (o relatório de devoluções da Amazon vira marca de pedido sem inserir pedido nenhum,
-  e a unidade devolvida sai mesmo da quantidade e da receita, em todo canal),
-  `shopee-devolucoes` (a devolução da Shopee é lida da resposta real: quantidade não é dinheiro,
-  só reembolso aceito desconta venda, e status novo aparece contado em vez de sumir),
-  `colunas-pedidos` (a tabela de "Pedidos recentes" sai de um modelo de colunas, o total segue a
-  coluna "Valor" e o celular esconde coluna por identidade),
-  `combo` (kit de produtos diferentes conta unidade avulsa, combo de verdade conta pacote, e
-  linha que saiu do pedido não carrega dinheiro),
-  `jobs-widget` (o card de processos some 3s depois de tudo concluir, não reacende sozinho, volta
-  quando surge processo novo, e nenhum elemento invisível do app intercepta clique),
-  `catalogo-loja` (só produto ativo da Shopify entra na lista de Produtos/Estoque, e o catálogo
-  nunca zera a venda de quem já vendeu),
-  `moeda` (valor sempre com centavos, símbolo vindo do Intl, e nenhuma tela formatando por conta
-  própria),
-  `sync-btn` (o botão avisa que está sincronizando, não aceita clique duplo, mostra o erro na tela
-  e não recarrega depois de falhar),
-  `historico` (toda função de gravação editável registra quem mudou o quê, salvar sem mudar nada
-  não vira linha, senha nunca entra, e a tela não reformata valor por conta própria),
-  `comparacao` (a janela comparada tem o mesmo tamanho e termina no dia anterior, meia escolha cai
-  no automático, e só barra de período leva data),
-  `bling-sonda` (a sonda de bonificação mostra a natureza e o produto, e nunca o nome, CPF,
-  endereço, e-mail ou telefone de quem recebeu),
-  `bonificacao` (doação conta unidade e nunca dinheiro, é identificada pela natureza de operação,
-  sai da conta numa porta só, e produto só doado não some do card),
-  `catalogo` (o CSS comum de Produtos/Estoque carrega antes e ninguém redeclara seletor dele),
-  `integracoes` (quando a lista de backups recolhe e quando não pode recolher, e que a tela não
-  tem campo de dias de histórico),
-  `registro-canais` (catálogo da tela e do cálculo concordam, e nenhuma tela tem lista própria de
-  canal),
-  `bling-jwt` (header `enable-jwt` nos dois pontos de rede, ninguém chama o Bling por fora, uma
-  renovação por vez, e a conferência nunca devolve o token),
-  `seguranca` (toda rota que grava diz quem pode chamá-la, conectar conta é só de admin, sync exige
-  login, senha semente não está no código),
-  `tiktok` (situação do Bling decide venda por allowlist, doação que passou por pedido não vira
-  venda, cursor só anda com leitura inteira, filtro no horário de São Paulo),
-  `economia` (aba escondida não consulta, cache que esvazia, sync que só grava o que mudou sem
-  perder gravação, e backup em partes idêntico ao de antes),
-  `retencao` (a janela de 90 dias: corte, folga de fuso, pedido sem data, e leitura, `DELETE` e
-  memória cortando no mesmo ponto),
-  `insights` (as regras do card, incluindo os pisos anti-ruído), `backfill` (a divisão da janela
-  em blocos, sem buraco nem dia repetido, mais o teto de 90 dias dos disparos por API) e `periodo` (o ano aparece no
-  rótulo quando o período é de outro ano, e nenhuma tela remonta esse texto por conta própria).
-- **Nenhum teste sobe o `server.js` nem toca no banco.** `geojson.test.mjs` levanta só um
-  `express.static` sobre `public/`. Isso é regra, não detalhe: subir o servidor de verdade dispara
-  o sync, e a cota da Amazon é por CONTA, não por processo — teste local competindo com o sync de
-  produção já quebrou o BR uma vez.
-- Testes de `metrics.js`/`store.js` (tag mãe, tipo de produto, catálogo) ainda estão de fora: eles
-  gravam no store e precisam de um banco temporário próprio antes de entrar aqui, senão `npm test`
-  suja o `data/db.json` de quem estiver desenvolvendo.
-- Ao escrever um teste novo, conferir que ele FALHA com o defeito reintroduzido. Teste que nunca
-  falha não protege nada — os seis atuais foram validados assim, um bug real de cada vez.
+### O que conta como venda
+**Só pedido com pagamento recebido.** `cancelled: true` cobre cancelado E não pago, decidido na
+origem por canal; `metrics.js` só lê `o.cancelled`.
 
-- `GET /api/dashboard?channel=&metric=&since=&until=&market=br|us` — payload principal.
-  `prevSince`/`prevUntil` (opcionais) trocam a janela de comparação, ver "Período de comparação"
-- `GET /api/campaigns?market=&since=&until=` — campanha a campanha, ao vivo, cache 5min
-- `GET /api/products?market=&since=&until=` / `GET /api/stock?market=&since=&until=`
-- `GET /api/orders/search?market=&q=` / `GET /api/orders/export?...`
-- `POST /api/sync` / `GET /api/status` / `GET /api/jobs` — status agregado dos jobs em segundo
-  plano, alimenta o widget flutuante (`jobs-widget.js`)
-- `POST /api/jobs/:id/cancel` — cancela um job em segundo plano (só os cancelable, ver acima)
-- `POST /api/amazon/{reset-backoff,force-sync,backfill,images,sync-names,cleanup-market-leak}`
-- `POST /api/amazon/sync-returns?market=br|us&days=N&docs=N` (admin) — lê as duas fontes de
-  reembolso da Amazon e marca os pedidos; roda sozinho a cada 12h, ver "Devoluções da Amazon".
-  `days`/`docs` servem pra varredura funda (consertar quantidade de período antigo)
-- `GET /api/amazon/settlement-probe` (admin) — diagnóstico do extrato de repasse (sem PII)
-- `POST /api/shopify/backfill?market=&days=` (admin) — recupera buraco das lojas Shopify dentro da
-  janela de 90 dias (teto), só por API
-- `GET /api/backup/status` (admin) · `POST /api/backup/run` (admin) — backup manual/status do B2
-- `POST /api/alerts/test` (admin) — manda uma mensagem de teste no Telegram, ver `src/alerts.js`
-- `GET /api/bling/probe-bonificacao?since=&until=` (admin) — naturezas de operação encontradas e
-  o esqueleto da nota, pra mapear a saída em bonificação sobre dado real (sem dado do destinatário)
-- `GET /api/bling/token` (admin) · `POST /api/bling/token/renovar` (admin) — formato e tamanho do
-  token do Bling (nunca o token) e renovação manual, pra conferir a migração JWT
-- `GET /api/bling/probe-tiktok?since=&until=` (admin) — o que a captura do TikTok decide sobre os
-  pedidos reais, e as notas de doação por loja (sem dado de cliente)
-- `GET /api/shopee/probe-returns?days=N` (admin) — esqueleto da resposta da API de devolução da
-  Shopee, pra escrever o mapeamento em cima de dado real
-- `POST /api/shopee/sync-returns` (admin) — relê as devoluções da Shopee agora e marca os pedidos;
-  o sync normal já faz isso a cada ciclo. Devolve `porStatus`, o resumo do que ficou de fora
-- `GET /shopee/connect` · `GET /mercadolivre/connect` · `GET /googleads/connect`
-- `GET /shopify-yucaloo/:mkt(br|us)/{connect,callback}` — chamadas pela própria Shopify
-- `POST /api/login` / `POST /api/logout` / `GET /api/me`
-- `GET/POST /api/product-groups*` (Unificador, admin; `POST /api/product-groups/type` grava a
-  "tag mãe" Tipo/Categoria de um grupo) · `GET/POST /api/product-types*` ·
-  `GET/POST /api/product-hidden-tags*` (admin)
-- `GET /api/integrations` / `POST /api/integrations/:key/toggle` (admin)
-- `GET /api/history?page=&market=&since=&until=` (admin) · `GET /api/history/paginas` (admin) —
-  histórico de edições, ver tela Histórico
-- `GET /health`
-
-## 8. Status das integrações
-
-| Canal | Estado |
+| Canal | Não conta (`cancelled`) |
 |---|---|
-| Shopify BR/US | Ativo |
-| Shopify Yucaloo BR/EUA | Ativo, mesclado no market da Coco and Luna |
-| Shopee | Ativo — sem analytics, endereço via Bling, devolução descontada |
-| Mercado Livre | Ativo — pedidos + Mercado Ads |
-| Amazon BR | Ativo — app próprio, corrigido de um token de conta errada |
-| Amazon US | Ativo — cursor incremental + backfill via Reports API |
-| Meta Ads BR/US | Ativo |
-| Google Ads | Ativo, só EUA |
-| TikTok Shop | Ativo — pedidos pelo Bling; conferir a allowlist de situação com a sonda |
-| Amazon Ads | Planejado, sem código ainda |
+| Shopify (todas as lojas) | `EXPIRED`, `VOIDED`, `CANCELLED`, `PENDING`, `AUTHORIZED` (cartão não capturado), ou `cancelledAt` |
+| Shopee | `CANCELLED`, `UNPAID`, `INVOICE_PENDING` |
+| Mercado Livre | `cancelled`, `invalid`, `confirmed`, `payment_required`, `payment_in_process` |
+| Amazon | `Canceled`/`Cancelled`, `Pending`, `PendingAvailability` |
+| TikTok (Bling) | situação fora da allowlist de venda (ver "TikTok Shop") |
 
-## 9. A fazer
+- `UNPAID_STATUS_BY_CHANNEL` (em `store.js` **e** na Visão geral — as duas cópias precisam ser
+  iguais, teste `registro-canais`) só separa o rótulo "Em aberto" de "Cancelado"; não muda cálculo.
+- Receita/pedidos/produtos vêm da API de pedidos, nunca do ShopifyQL (que conta cancelado).
 
-- **Amazon — nome do comprador (PII):** bloqueado até a Amazon aprovar o papel PII no Solution
-  Provider Portal. Código já pronto, só precisa de `AMAZON_FETCH_PII=1`.
-- **Amazon US — imagem de produto (403):** Catalog Items API bloqueada porque o app dos EUA não
-  tem o role "Product Listing". Habilitar no portal + re-autorizar (novo refresh token). O app do
-  BR já nasceu com esse role, então BR já não tem esse problema.
-  Código pronto (`POST /api/amazon/images`).
-- **Amazon Ads:** integração ainda não construída, aparece só como "Planejada" na tela de
-  Integrações.
-- **TikTok Shop — conferir a sonda** (`GET /api/bling/probe-tiktok`) depois dos primeiros dias em
-  produção: se aparecer situação "NÃO CONTA (desconhecida)" que na prática é venda, ela entra na
-  allowlist de `src/tiktok.js`; e se a doação aparecer ligada a um canal de venda que não seja o
-  TikTok, a mesma unidade está sendo contada duas vezes.
-- ~~Toggle "Incluir Mercado Ads" no dashboard principal não respeita o período selecionado~~ —
-  feito (19/08/2026). O toggle em si já não existia mais (virou obrigatório a pedido do Luan, ver
-  Marketing abaixo); o que sobrava era a causa raiz: `mlBreakdown.adCost` lia um valor único preso
-  na janela fixa de 60 dias do sync periódico. Resolvido com série diária (`kv.mlAdCostsDaily`,
-  mesmo padrão do `metaInsightsDaily`) em vez de quebrar o princípio de `/api/dashboard` nunca
-  chamar API externa na hora — ver seção "Mercado Livre" (`fetchAdCostsForDays`) mais abaixo.
-- **Shopee — vocabulário de `status` da devolução:** o mapeamento conta só `ACCEPTED`, e os
-  demais status voltam contados em `porStatus`. Depois das primeiras devoluções reais, conferir
-  esse resumo: se aparecer volume preso em `CLOSED` (ou num status novo) que na prática é
-  reembolso, ele precisa entrar na allowlist. Ver "Devoluções da Shopee".
-- **Yucaloo sem conta de Ads própria:** não tem card em Campanhas nem ROAS calculado. Revisitar
-  quando a marca tiver conta de anúncios própria.
-- **Microsoft Clarity:** o Luan tem Clarity conectado nos 4 sites (Coco BR/EUA, Yucaloo BR/EUA) e
-  quer avaliar trazer os dados pra uma página própria da dashboard. Ainda não iniciado — falta
-  decidir os project ID/token de cada site. Limitação já identificada: a API pública do Clarity só
-  devolve métricas agregadas dos últimos 1–3 dias (sem histórico longo) e não expõe heatmaps nem
-  gravações de sessão — isso continua só no painel deles.
-- **Village (programa de assinatura, Shopify EUA) — página/gestão dedicada:** o Luan quer uma
-  tela própria pra gerenciar as inscrições do programa "Village". Ainda não iniciado — falta
-  pesquisar o que a API do app **Seal Subscriptions** (o app que eles usam hoje no Shopify EUA
-  pra gerenciar assinatura) expõe de útil pra essa tela (provavelmente dá pra ler contrato,
-  status, próxima cobrança etc. direto da API deles, em vez de só inferir pelos pedidos). Domínio
-  já investigado e confirmado contra pedidos reais (21/08/2026):
-  - Cada item de pedido com assinatura vem com `lineItem.sellingPlan.name` (Shopify Admin
-    GraphQL) — hoje NÃO pedido em `fetchOrders` (`src/shopify.js`), precisa ser adicionado à
-    query.
-  - `VIL-XXXX` (tag do PEDIDO, não do produto — também precisa ser adicionada à query, hoje só
-    pedimos `product.tags` por item) é o número do contrato do programa Village. Confirmado que
-    a tag se REPETE em todo pedido de renovação do mesmo contrato (não é "só aparece na primeira
-    vez") — ex.: mesmo cliente com 3 pedidos em datas diferentes, os 3 com a mesma tag
-    `VIL-1562`. Pedido com mais de um produto em assinatura pode ter mais de uma tag VIL (uma por
-    contrato) no mesmo pedido.
-  - Nem todo pedido de assinatura tem tag VIL: uma parte tem `appstle_subscription_first_order`
-    no lugar — indício de contratos mais antigos de um app diferente (Appstle Subscriptions),
-    provavelmente de antes da troca pro Seal Subscriptions. Vale confirmar com o Luan se isso é
-    esperado antes de tratar como "sem contrato".
+### Devolução desconta quantidade E receita
+- **Um lugar só desconta**: `pedidoLiquido` dentro do `getOrders` local do `metrics.js` (que importa o
+  do store como `lerPedidosBrutos`, e esse nome só pode aparecer 2 vezes no arquivo). Importar o
+  `getOrders` do store direto no metrics.js voltaria tudo ao bruto sem erro.
+- Campos: `items[].refundedQty` (sabe o produto) → `refundedQty` (sabe só quantas) → `refundedTotal`
+  (só dinheiro). Pedido devolvido continua pedido, com receita zerada; sem item conhecido, zera.
+- Por canal: **Shopify** já vem líquido (não descontar de novo). **Mercado Livre**: no próprio pedido
+  (`payments[].transaction_amount_refunded`; continua `paid`). **Shopee**: API de devolução, a cada
+  ciclo. **Amazon**: relatório de devoluções FBA + extrato de repasse. **TikTok**: situação do Bling.
+- Reconciliações de devolução são **patch-only** (`patchOrderRefunds`): só marcam pedido existente,
+  nunca inserem, nunca tocam `total`/`status`/`items`.
+- `upsertOrders` tem guardas que impedem o sync de 15 min de APAGAR o que uma reconciliação
+  preencheu: título de item, `state`, `productSales`, marca de devolução (inclusive por linha).
 
-### Confiabilidade operacional (não é checklist de site público — SEO/CTA/meta description não se
-### aplicam aqui, a dashboard é interna e atrás de login; pedido do Luan em 17/08/2026)
-- ~~Página de erro 404~~ — feito (`public/404.html`, ilustração `404.png`, trocada de
-  `Feno_no_deserto.svg` a pedido do Luan em 18/08/2026).
-- ~~Alerta quando um sync falha silenciosamente~~ — feito (19/08/2026). `src/alerts.js`: Telegram
-  via `fetch` direto (sem SDK, mesma regra do B2/SigV4 da Amazon). Só entra no sync AUTOMÁTICO
-  (`setInterval` em server.js) — um "Sincronizar agora" manual já mostra o erro na hora pra quem
-  clicou. Não alerta na primeira falha isolada (rate limit passageiro, blip de rede): agrupa os
-  erros de `report.errors` (sync.js) pelo prefixo antes do primeiro `.` — um canal com 3
-  sub-operações falhando (orders/sessions/catalog) vira UM alerta, não três — e só dispara depois
-  de `ALERT_STALE_HOURS` (padrão 6h) falhando sem parar (`kv.channelHealth`, `failingSince`/
-  `alerted` por canal). Manda um segundo aviso quando o canal volta a sincronizar (só se o
-  primeiro alerta de problema já tinha saído, senão fica calado). Canal desligado pela tela
-  Integrações não conta como falha. Painel em Integrações (mesmo padrão do card de Backup): status
-  configurado/não + botão "Enviar teste" (`POST /api/alerts/test`), pra confirmar
-  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` sem esperar um canal ficar horas travado de verdade.
-- ~~Log de auditoria de edição~~ — feito (04/09/2026), virou a tela **Histórico**. Cobre campos
-  financeiros de Produtos, estoque manual, grupos e tags do Unificador, tipos de produto,
-  liga/desliga de integração, retenção da Amazon e cadastro de usuários. Ver "Histórico de edições".
-- ~~Rotina de backup do Postgres~~ — feito (18/08/2026). Confirmado com o Luan: sem plano Pro no
-  Railway não existe backup/PITR automático (só um manual antigo, 1 mês). `src/backup.js`: snapshot
-  diário do store inteiro (mesmo formato JSON do `data/db.json` local, gzip) pra **Backblaze B2**
-  (10GB grátis, ~$0,005/GB/mês depois disso — com retenção de 30 dias o uso fica bem abaixo do
-  grátis). API nativa do B2 direto via `fetch` (sem SDK, mesma regra do resto do projeto — igual o
-  SigV4 feito à mão da Amazon). Roda sozinho 1x/dia (`runBackupIfDue()`, mesmo padrão de
-  auto-throttle do `reconcileAmazonNames`) + botão manual em Integrações → "Backup do banco".
-  Restauração testada de ponta a ponta (`scripts/restore-backup.mjs`, baixa do B2 + `TRUNCATE`
-  + reinsere tudo — pede confirmação digitada "RESTAURAR", é destrutivo por design). `authSessions`
-  fica de fora do snapshot de propósito (token efêmero, restaurar só exige login de novo).
-- **Teste em tela de celular:** a dashboard já tem CSS responsivo em várias telas, mas nunca foi
-  formalmente conferida ponta a ponta num celular de verdade.
+### Rótulo de status ("Pedidos recentes" e busca)
+- Autorizado · Em aberto · Cancelado · Reembolsado/Reembolso parcial · Bonificação.
+- Escrito em DOIS lugares que precisam concordar: `statusLabelPt` (metrics.js) e `statusTag`
+  (js/paginas/index.js). Ordem: bonificação → cancelado → `refunded` → status.
+- O filtro "Reembolsado" vive em três lugares (botão no markup, `EXPORT_STATUS_CLS` na tela,
+  `EXPORT_STATUS_LABELS` no servidor) e leva o parcial junto.
+- Toda lista que o servidor manda com `status` precisa mandar `refunded` junto, senão o devolvido
+  aparece "Autorizado" com R$ 0,00.
 
-## 10. Convenções
+### Saída em bonificação (doação pra criador de conteúdo)
+- Vem de **nota fiscal** do Bling com natureza "Saída em bonificação". Conta UNIDADE, nunca dinheiro
+  (`total` e `amount` sempre 0, mesmo quando a nota tem valor).
+- **Quem decide é a NATUREZA, pelo nome** (`ehNaturezaDeBonificacao`): exige "saída" (existe
+  "Entrada de bonificação", que é o contrário). Nunca pelo valor, nunca pela loja.
+- Situação da nota: allowlist 5 (Autorizada) e 6 (Emitida DANFE).
+- **A listagem de `/nfe` esconde nota cancelada.** Doação capturada e cancelada depois para de vir:
+  o sync confere uma a uma a que sumiu (`situacaoDaNota`) e retira (`removerPedidos`).
+- Sai de todo cálculo numa porta só: `getOrders` do metrics.js filtra `bonificacao`; quem precisa
+  pede `incluirBonificacao`. Aparece em Top produtos (coluna própria, sem preço), em Pedidos recentes
+  (valor "—", fora da contagem e do total) e nunca como canal escolhível.
+- `bonificacao` não está no catálogo de canais; o rótulo vem de `NAO_CANAIS` (colors.js). Toda chave
+  que pode chegar na tela precisa de rótulo, senão aparece a chave crua ("bonificacao").
+- Nenhum dado de quem recebeu (nome, CPF, endereço) é gravado ou devolvido por sonda.
+- Janela curta no sync (`BLING_BONIFICACAO_DAYS`, 7); histórico por `POST /api/bling/sync-bonificacao`.
 
-- ES Modules (`"type": "module"`), Node 18+ (usa `fetch` nativo).
-- Dependências mínimas: `express`, `dotenv`, `pg`, `express-rate-limit`. Sem aws-sdk, sem axios —
-  B2, Telegram e o SigV4 da Amazon são feitos à mão com `fetch`.
-- UI e textos em pt-BR. Valores em BRL/USD via `Intl`/`toLocaleString`.
-- `.gitignore`: `node_modules/`, `.env`, `data/db.json`, `*.log`, `.claude/`.
-- Repositório é público — nunca commitar `.env`, token, secret ou qualquer credencial real. Revisar
-  o diff antes de commitar se algo parecer um valor sensível, mesmo em arquivo aparentemente inócuo.
+### TikTok Shop (lido pelo Bling, `tiktok.js` + `syncTiktok`)
+- A API do TikTok exige gerente de conta, que não temos: os pedidos vêm do canal do TikTok no Bling
+  (`TIKTOK_LOJA_ID`), igual ao quadro de pedidos. Um canal só (`tiktok`) pras duas marcas.
+- **Situação decide venda, pelo NOME** (de `/situacoes/modulos/98310`): allowlist de venda;
+  cancelado e devolvido testados antes; desconhecida não conta ("Em aberto") e vai pro relatório
+  `tiktok.situacao`. Traduzido pra `PAID`/`CANCELLED`/`REFUNDED`/`PENDING`, que as telas já entendem.
+- **Pedido cuja nota é bonificação não é venda** (a nota já conta a unidade). Por isso o TikTok roda
+  DEPOIS da bonificação no sync, e pedido que vira doação depois é retirado.
+- Incremental por cursor (`kv.tiktokCursor`) que **só anda com leitura inteira**. Filtro de alteração
+  no horário de **São Paulo** (`momentoNoBling`): em UTC o Bling devolve lista vazia sem erro.
+- O Bling só dá o DIA do pedido (aparece 00:00). Comissão padrão 0%.
+- Sonda: `GET /api/bling/probe-tiktok` (situações encontradas e como foram classificadas, sem cliente).
+
+### Produto
+- **Variante da Shopify é produto próprio** (`tituloDoItem`: "Produto - Variante"; "Default Title"
+  nunca entra no nome). Catálogo por variante (`productVariants`). Mudar nome de produto desliga
+  custo/estoque/grupo salvos sob o nome antigo (tudo é indexado por `canal|||título`).
+- **Combo × kit**: "Combo de 3" = 3 unidades do mesmo produto; kit de produtos diferentes = uma
+  unidade avulsa de cada (`comboSize(it.bundle)`). O detalhamento de unidades só aparece se fechar
+  com o total.
+- Shopify: `currentQuantity` (não `quantity`); linha com `currentQuantity` 0 não carrega dinheiro.
+- Produto sem unidade nenhuma não entra no Top produtos (receita sem mercadoria é anomalia).
+- `itemRevFactor`: a receita dos itens é escalada pro `total` do pedido (pendente → 0).
+- **Só produto ATIVO da Shopify vira linha** em Produtos/Estoque; o catálogo guarda todos (as tags
+  atuais decidem "Ocultar"), mas só ACRESCENTA produto sem venda, nunca sobrescreve quem vendeu.
+- **Unificador** (`kv.productGroups`, por mercado): junta títulos num produto; aplicado no servidor.
+  "Tag mãe" do grupo (`kv.productGroupTypes`): `type` (forma física, Segmentos) e `typeGroup`
+  (categoria, Top produtos) — eixos independentes. Precedência: manual → catálogo Shopify de
+  qualquer membro → palavra-chave de "Tipos de produto" → valor do período.
+- **Ocultar produto** (por tag, Unificador): vale em toda a dashboard, pela tag ATUAL do catálogo
+  (`isHiddenProduct`), não a presa no pedido antigo.
+- Tipos de produto: criados na tela de Segmentos (`kv.productTypeGroups`), primeira regra vence.
+- Segmentos: "Gato"/"Cachorro" (chaves `cat`/`dog`), cores dos mascotes (`#ff002b`/`#0849e9`).
+
+### Produtos e Estoque (telas)
+- Produtos: catálogo completo com vendas do período; custo editável (`kv.productFinance`).
+  `Lucro = Receita − COG×Qtd − Frete×Qtd − Receita×Imposto% − Receita×Comissão%`; sem COG, "—".
+  Padrões provisórios (o Luan vai preencher os reais): imposto 2,64%; COG 15,21 (lisina) e 17,32
+  (daily); comissão Shopee 18%, ML 14%, Amazon 12%, Shopify e TikTok 0%. **Hoje os padrões valem
+  também pros EUA** (em dólar) — conhecido e aceito até o preenchimento.
+- Linha unificada: campo nasce vazio e grava em todos os membros.
+- Estoque: venda real + estoque manual (`kv.productStock` por canal, `kv.productStockAgg` por família).
+  Família = grupo do Unificador → Lysine/Daily por palavra-chave → título. Reposição: <3 meses
+  urgente, 3–7 atenção. Amazon sem produto nenhum ganha a linha "Produto TESTE" (placeholder).
+
+### Insights e comparação (Visão geral)
+- Sem IA, de propósito: número exibido é número calculado, sem custo por acesso, testável.
+- `insights.js` é puro e recebe dois retratos (atual e anterior). Pisos anti-ruído: valor absoluto
+  (R$200 / US$50), 8% do total e 15% de variação, AO MESMO TEMPO; ordena por impacto em dinheiro.
+  Até 10 itens, 2 por dimensão. Cor (`bom`/`medio`/`ruim`) decidida pela regra no servidor.
+- Frases e números saem prontos do servidor; a tela nunca reformata.
+- Comparação padrão = janela anterior do mesmo tamanho (`janelaDeComparacao`). "Trocar" escolhe
+  outra (vale pra faixa de Indicadores também), fica em `sessionStorage` e é desfeita ao mudar o
+  período atual. Só barra que compara PERÍODO leva data.
+
+### Histórico de edições (tela Histórico, admin)
+- Quem editou o quê, **de quanto pra quanto**. Registrado DENTRO das funções de gravação do store
+  (é onde o valor antigo existe); autor via `AsyncLocalStorage` (`autor.js`); autor `null` = "O sistema".
+- Só o que mudou vira linha. Senha nunca entra. Tabela própria, retenção `HISTORICO_DIAS` (180).
+- Frase montada no servidor em pedaços (`partes`), nome do campo em negrito. Com país "Todos", cada
+  linha mostra a bandeira. O filtro de país só descarta linha que TEM país e é de outro (edição de
+  usuário não tem país e aparece sempre).
+- `INTEGRACOES` (historico.js) é cópia da lista de Integrações; o teste compara as duas.
+- Não entra no backup do B2 (limitação conhecida).
+
+## 4. Integrações — o essencial de cada uma
+
+**Shopify** (BR/EUA, Admin API `2026-04`+): sessões por ShopifyQL precisam de `read_analytics` +
+`read_reports` (sem `read_analytics` a consulta some do schema, sem erro). `parseErrors` pode ser `[]`
+(checar `.length`). Sessões da Yucaloo em balde separado (`kv.yucalooSessionsDaily`). Backfill:
+`POST /api/shopify/backfill` (máx. 90 dias, em blocos de 30, grava bloco a bloco).
+
+**Yucaloo** (Dev Dashboard): OAuth de verdade; `/shopify-yucaloo/:mkt/connect` é chamado pela Shopify
+com HMAC (`verifyRequest` lê `req.originalUrl`, porque o Express troca `+` por espaço).
+
+**Shopee**: HMAC-SHA256; sem analytics. Mascara endereço (`****`): o estado vem do Bling
+(`reconcileGeoFromBling`). Devolução: `item[].amount` é QUANTIDADE (dinheiro é `refund_amount`);
+status allowlist `ACCEPTED`; a chamada com janela de tempo falha, lê-se a lista toda com teto de
+páginas (bateu no teto = leitura incompleta, declarada).
+
+**Mercado Livre**: `listingType` premium só `gold_pro`/`gold_premium`. Mercado Ads exige header
+`Api-Version: 1` e escopo `write:product_ads`; gasto diário dia a dia (`kv.mlAdCostsDaily`).
+Reautorizar em `/mercadolivre/connect` depois de deploy. **O Bling devolve o `pack_id` do ML, não o
+`order.id`** (resolver pelo pack).
+
+**Amazon** (SP-API, região NA, contas BR e EUA separadas):
+- **Nunca o mesmo refresh token nos dois mercados**: ativa `SAME_TOKEN` e um deles para de receber
+  pedido calado (já aconteceu). Diagnóstico: `GET /api/amazon/whoami`. IAM: o User precisa de
+  `sts:AssumeRole` no Role, e o Role precisa do User na trust policy.
+- `/orders` tem cota de 1/min (burst 20): páginas em sequência, espera 61s só no 429 real
+  (`RateLimitError`, 3 tentativas), página lida já é gravada. Backoff crescente depois disso
+  (`POST /api/amazon/{reset-backoff,force-sync}`).
+- Cursor incremental (`LastUpdatedAfter`); `CreatedBefore` ≥ 2 min no passado. O cursor anda até com
+  zero resultado: token errado por um tempo deixa buraco, tapado por `POST /api/amazon/backfill`
+  (Reports API, janelas de 30 dias, roda no processo do servidor — deploy no meio mata, é só repetir).
+- A Orders API não traz nome de produto: vem da Reports API (`reconcileAmazonNames`, `patchOrderItems`
+  só mexe em `items` e nunca insere pedido). Linha com `product-name` "-" é frete, descartada.
+  `Pending` vem com total 0.
+- Relatório pode misturar os dois mercados: validar por `ship-country` (`ordersFromRows`), nunca por
+  moeda nem `ship-state` (siglas de UF colidem com estados dos EUA).
+- Estado dos EUA vem em grafias variadas: `normalizeUsState` (us-states.js) na leitura e na gravação;
+  endereço fora dos EUA vira `INTL`.
+- "Receita da Amazon" (Configurações): "Total cobrado" (`total`, padrão) × "Vendas de produto"
+  (`productSales`, só de pedido que passou pela Reports API — pode ficar bem abaixo, é limitação).
+- **Devolução** nunca aparece no pedido (fica `Shipped` pra sempre). Duas fontes, as duas
+  necessárias: relatório de devoluções FBA (mercadoria que voltou, por ASIN) e extrato de repasse V1
+  (dinheiro, por SKU; o V2 dá 403). Extrato: contar linha `Principal`, pular repasse repetido pelo
+  DOCUMENTO inteiro, download ~1/min (parar no 429 declarando leitura incompleta). Juntar as fontes
+  sem somar a mesma unidade (`juntarFontesDeReembolso`). Job a cada 12h, janela 60 dias.
+- Imagem de produto EUA: 403 até o app ganhar o role "Product Listing". Nome do comprador: exige
+  papel PII (`AMAZON_FETCH_PII=1`). Portal: `solutionproviderportal.amazon.com`.
+
+**Meta Ads**: Graph API (`META_API_VERSION`, padrão `v20.0` — trocar por uma mais nova é mudar a
+variável). Conta sem o prefixo `act_`. Gasto diário em `kv.metaInsightsDaily`/`metaUSInsightsDaily`.
+ROAS = receita com origem Instagram/Facebook ÷ gasto. Receita "de campanha" = origem Meta OU anúncio
+premium do ML; o resto é orgânico. Origem do pedido é atribuição, não custo.
+
+**Google Ads**: só EUA, só na tela de Campanhas.
+
+**Bling** (ERP que recebe pedido de todos os canais):
+- Só é FONTE de pedido em dois casos restritos: canal do TikTok e notas de bonificação. Ler qualquer
+  outro canal duplicaria venda. `KNOWN_CHANNELS` (estado da Shopee) é fixo no código de propósito.
+- Relógio do Bling é o de São Paulo (`momentoNoBling`). Data sem fuso = Brasília (`-03:00`).
+- ~3 req/s: `apiGet` espaça as chamadas. Nota não traz itens na listagem (1 chamada por nota).
+- **Token JWT** (obrigatório a partir de 15/10/2026): header `enable-jwt: 1` nos dois únicos pontos de
+  rede (`tokenRequest` e `apiGet`); nenhum outro arquivo chama o Bling. **Uma renovação por vez**
+  (`umaPorVez`): duas simultâneas gastariam o mesmo refresh token e obrigariam a reconectar.
+  Conferência: `GET /api/bling/token` (formato e tamanho, nunca o token). Confirmado em 23/09/2026.
+- Dois canais novos do Mercado Livre no Bling ainda não estão em `KNOWN_CHANNELS` (decisão pendente).
+
+**Backup** (B2, diário, 30 dias): montado em partes (`snapshot.js`), texto idêntico ao
+`JSON.stringify` de antes (o restore faz `JSON.parse`). Sessões de login ficam de fora.
+
+**Alertas** (Telegram): só no sync automático; um alerta por canal depois de `ALERT_STALE_HOURS`
+falhando; avisa quando volta.
+
+**Integrações (tela, admin)**: o liga/desliga (`kv.integrationsConfig`, `TOGGLEABLE_KEYS`) tem efeito
+real: o sync checa `isIntegrationEnabled()` antes de cada canal. Sem registro salvo = ligada. A Amazon
+busca os dois mercados numa chamada só: desligar um filtra o que é gravado, não a chamada.
+
+## 5. Segurança
+
+- Login: scrypt+salt, cookie `coco_session` (HttpOnly, SameSite=Lax), 30 dias. Níveis `admin` e
+  `padrao` (páginas em `pages[]`).
+- **Portão** (antes do `express.static`): sem login só passam health, login, assets, o fluxo da
+  Yucaloo e `/api/sync` com o token de `SYNC_SECRET` (header `x-sync-token`). Páginas de admin
+  (Configurações, Integrações, Unificador, Histórico) só abrem pra admin.
+- **Toda rota que grava declara quem pode**: `requireAdmin` ou `requirePage('<pagina>.html')`. Exceções
+  nomeadas no teste: login, logout, troca da própria senha, `/api/sync`. Rota nova sem dono quebra o
+  teste `seguranca`.
+- Conectar conta (Bling, Shopee, ML, Google Ads) é só de admin — o `state` no cookie não impede um
+  estranho de autorizar a PRÓPRIA conta no lugar da nossa. Sondas e rotas de manutenção: só admin.
+- Senha do admin semente: `ADMIN_SEED_PASSWORD` ou sorteada e mostrada uma vez no log.
+- Recuperação: no Postgres, `UPDATE kv SET value='{"enabled":false}' WHERE key='authConfig'` reabre
+  sem login; apagar a linha `key='users'` recria o admin.
+- Cabeçalhos à mão (CSP, HSTS etc.). **Domínio que falta na CSP é bloqueado sem erro visível** (a
+  fonte Inter ficou semanas bloqueada). Recurso externo novo → diretiva certa (`script-src`,
+  `style-src`, `font-src`, `connect-src`). `'unsafe-inline'` ainda é exigido pelos `onclick=`/`style=`
+  no markup.
+- Todo recurso de CDN tem `integrity` + `crossorigin` (SRI); trocar a versão = recalcular o hash
+  (teste `sri`). Google Fonts fica de fora (o CSS varia por navegador).
+
+## 6. Consumo (conta do Railway)
+- 97% da conta é memória (servidor ~470 MB + Postgres ~430 MB antes da janela de 90 dias). CPU, rede e
+  disco dão centavos. O que reduz a conta é guardar menos (seção 2).
+- Aba escondida não consulta o servidor (`CocoVisivel.agendar`, e o card de processos); ao voltar,
+  atualiza se perdeu rodada. Cache de Campanhas vence e tem teto (`cache.js`).
+
+## 7. Frontend — padrões compartilhados
+
+| Componente | Regra |
+|---|---|
+| `js/colors.js` (`DEFAULT_CH`) | **Catálogo de canais**: nome, cor, logo, mercado, ordem. Tela nenhuma tem lista própria de canal: usa `CocoColors.channelsFor(market)`. O servidor tem a cópia `CANAIS` (metrics.js); as duas precisam bater (teste `registro-canais`). Canal novo = uma linha em cada. Só a cor é personalizável; trocar por `setChannelColor`, nunca `CocoColors.ch[k] = …` |
+| `js/sidebar.js` · `confirm-modal.js` · `jobs-widget.js` | Injetados via IIFE em toda página (menos login). Nunca copiar CSS/markup deles. `cocoConfirm` substitui o `confirm()` nativo |
+| `js/moeda.js` (`CocoMoeda`) | Dinheiro sempre com centavos, símbolo do `Intl`. Só eixo de gráfico abrevia (`curto`) |
+| `js/periodo.js` (`CocoPeriodo`) | Texto da pill de período; ano só aparece fora do ano corrente |
+| `js/pill-switch.js` | Todo seletor de opções. Só apresentação (segue a classe `active`); a opção padrão nasce `active` no HTML |
+| `js/escape.js` | A única função de escape (texto e atributo), carregada antes do sidebar |
+| `js/visivel.js` | Atualização periódica que pausa com a aba escondida |
+| `js/sync-btn.js` (`CocoSync`) | Botão Sincronizar: mostra que está trabalhando e o erro; falhou, não recarrega |
+| `css/anim.css` | Toda caixa que abre/fecha anima (`allow-discrete` + `@starting-style`, dentro de `@supports`). Caixa nova entra no grupo certo |
+| `css/catalogo.css` | CSS comum de Produtos e Estoque; nenhum seletor dele pode ser redeclarado na folha da página |
+
+- Script de página é CLÁSSICO, no fim do `<body>`, sem `defer`: os `onclick="foo()"` dependem disso.
+- Caminho relativo dentro de um `.js` resolve pela PÁGINA, não pelo arquivo do script.
+- Teste que lê tela usa `fontePagina(nome).tudo` (markup + js + css).
+- "Financeiro" na sidebar fica ("em breve", `.nav-soon`), decisão do Luan. Quando virar página, precisa
+  de `data-page` (senão escapa da permissão).
+- Sidebar colapsada = 64px, e cada página repete `body.sidebar-hidden .main{margin-left:64px}`.
+- Reordenar arrastando: sempre por ponteiro (clone `position:fixed`), nunca a API nativa de drag.
+  Colunas de "Pedidos recentes" saem de um modelo (`RO_COLUMNS`) e a tabela é remontada a cada troca.
+- Gráficos: ECharts; clique em qualquer ponto da área via `getZr().on('click')`. Container de gráfico
+  flexível usa `flex:1 1 0` (base zero), nunca `auto` (vira laço infinito de crescimento).
+- `public/`: só `.html` e `favicon.png` na raiz (URLs limpas, `SLUG_TO_FILE`); imagens em
+  `img/{marca,bandeiras,canais,integracoes,mascotes,ilustracoes}`. Na tela de Integrações o servidor
+  manda o NOME do logo e a tela prefixa `LOGO_BASE`; logo começando com `/` é caminho absoluto.
+
+### Particularidades de cada tela
+- **Visão geral**: cards da mesma linha esticam e preenchem (conteúdo cresce, não sobra vão). Modo de
+  edição reordena/oculta cards e colunas, salvo em `coco_layout_<market>`. Tendência e Tráfego têm
+  "Geral × Por canal" e "Expandir". Card de tráfego/funil só pras lojas Shopify (Coco and Luna +
+  Yucaloo, via `aggregateSessions`).
+- **Campanhas**: resumo e cards de campanha saem da MESMA fonte (`/api/campaigns`, período da tela).
+  "Faturamento Geral" é a loja inteira (todos os canais), não a soma dos cards de anúncio.
+- **Geografia**: uma página com seletor BR/EUA (`/geografia-us` redireciona). Tudo que ela divide com
+  Segmentos vem de `js/geo.js` (`CocoGeo`), fundo Esri sem chave (`addBasemap`). BR: GeoJSON do IBGE
+  (`codarea`); EUA: `public/geo/us-states.json` local (`_uf`).
+- **Produtos**: exportar CSV só da Shopify EUA. **Estoque**: sem período escolhido, últimos 30 dias;
+  `windowDays` é o tamanho real do período.
+- **Card de processos** (`jobs-widget.js`, toda página): aparece quando há job rodando e some 3s depois
+  de tudo acabar; quem decide é `planoDoCard` (puro), com `autoHidden` pra não reacender. Status
+  `running` parado demais vira erro (`destaleJob`, usado por `/api/jobs` E `/api/status` — os dois
+  precisam concordar). Cancelar só nos jobs de `CANCELABLE_JOB_IDS` (cooperativo, `checkCancelled`).
+  Fechar um job fica em `sessionStorage`. Cabeçalho e alça de redimensionar com `touch-action:none`.
+- **`POST /api/sync` é síncrono** (leva minutos): qualquer botão ligado nele precisa mostrar que está
+  trabalhando (`CocoSync`).
+
+## 8. Erros conhecidos (e como não repetir)
+
+- **Invisível não é intangível**: `opacity:0` continua recebendo clique. Esconder por opacidade exige
+  `pointer-events:none` (o card de processos comia os botões do canto da tela).
+- **Imagem dimensionada só por CSS injetado por script** aparece no tamanho do arquivo até o script
+  rodar: declarar `width`/`height` no atributo.
+- **`min-height:auto` vence `max-height`** num item flex: precisa `min-height:0` (lista que não recolhe).
+  `.main{min-width:0}` pelo mesmo motivo (senão a página inteira ganha rolagem lateral).
+- **`offsetTop` é relativo ao ancestral posicionado**: medir posição dentro de lista com
+  `getBoundingClientRect`. DOM falso de teste precisa seguir a semântica real.
+- **`behavior:'smooth'` pode ser ignorado em silêncio**: rolagem programática tenta suave e, se não
+  andou em 250 ms, aplica direto.
+- **Dois `margin-left:auto` na mesma linha flex** dividem o espaço: só o primeiro do grupo empurra.
+- **`touch-action:none`** em todo elemento de arraste por ponteiro, senão o celular rola a página.
+- **`document.querySelector` por `data-card-id`** pode achar a cópia no banco de cards: escopar em
+  `editGrid`/`kpiStripGrid`.
+- **Getter que devolve a referência viva do store** esconde edição do Histórico (o setter recebe o
+  objeto já alterado): devolver cópia.
+- **Poll que desiste calado** (`if (!j) return`) deixa botão travado: acompanhamento sempre devolve o
+  botão e diz o que aconteceu.
+- **Lista curta que parece inteira**: toda paginação com teto declara `incompleta`, e cursor/ausência
+  só valem com leitura completa.
+- **Fuso**: servidor em UTC; Bling e lojas BR em -03. Data sem fuso do Bling leva `-03:00`; filtro de
+  data-hora pro Bling vai em horário de São Paulo.
+- **Provedor que muda sem erro**: CARTO passou a carimbar "API KEY REQUIRED" no mapa (hoje Esri, sem
+  chave); o contorno dos EUA vinha de repositório de terceiro (hoje local, `public/geo/`).
+- **Texto interno vazando**: rótulo que falta cai na chave crua (`chLabel`). Toda chave nova precisa de
+  rótulo.
+- **Tabela não se reordena arrastando só o `<th>`**: cabeçalho e corpo dividem a coluna; remontar a
+  tabela inteira. Esconder coluna no celular por identidade (`[data-col="…"]`), nunca `nth-child`, e
+  linha de total sem `colspan`.
+- **Modal centralizado por `transform`**: a animação precisa compor `translate(-50%,-50%) scale(.97)`;
+  só `scale()` joga o modal pro canto.
+- **Clone de card com `id`** duplica o id no documento: remover os ids do clone.
+- **Dado preso no pedido antigo** (tag, tipo de produto): decidir pelo catálogo ATUAL da Shopify, não
+  pelo que ficou gravado no pedido.
+
+## 9. Rodar e convenções
+- `npm install` → `npm start` (porta 3000; o sync roda ao subir — ver regra de ouro 3). `npm run sync`
+  faz uma sincronização só.
+- ES Modules, Node 18+ (`fetch` nativo). **Dependências mínimas**: `express`, `dotenv`, `pg`,
+  `express-rate-limit`. Sem aws-sdk, sem axios: B2, Telegram e a assinatura da Amazon são feitos à mão.
+- Dinheiro via `Intl` (BRL no Brasil, USD nos EUA), sempre com centavos.
+
+## 10. Testes (`npm test`, `scripts/test/`)
+- Runner próprio (`run.mjs`), um processo por arquivo; saída 0 passou, 1 falhou, 2 pulado (rede).
+  `npm test -- <nome>` roda um só.
+- Cobrem o que falha em silêncio: CSP, SRI, mapa, assets, imagens, escape, moeda, período, seletores,
+  animação, catálogo de canais (`canais`, `registro-canais`), status de pedido, colunas, combo,
+  devoluções (Amazon e Shopee), bonificação, TikTok, Bling (sonda e JWT), histórico, comparação,
+  insights, retenção, consumo (`economia`), segurança, backfill, integrações, jobs-widget, sync-btn.
+- Testes de `metrics.js`/`store.js` que gravam ainda estão de fora (precisariam de banco temporário).
+
+## 11. Variáveis de ambiente
+| Variável | Para quê |
+|---|---|
+| `PORT`, `DATABASE_URL` | Porta; Postgres (no Railway: `${{Postgres.DATABASE_URL}}`) |
+| `SYNC_INTERVAL_MINUTES` (15) · `STORE_OFFSET_MINUTES` (-180) | Frequência do sync; fuso da loja BR |
+| `PEDIDOS_RETENCAO_DIAS` (90) | Janela de histórico |
+| `SHOPIFY_STORE` / `_ADMIN_TOKEN` / `SHOPIFY_API_VERSION` · `SHOPIFY_US_STORE` / `_ADMIN_TOKEN` | Lojas Coco and Luna |
+| `YUCALOO_BR_*` / `YUCALOO_US_*` (`CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URL`) | Apps da Yucaloo |
+| `SHOPEE_PARTNER_ID` / `_KEY` / `_SHOP_ID` / `_REDIRECT_URL` | Shopee |
+| `ML_CLIENT_ID` / `_CLIENT_SECRET` / `ML_REDIRECT_URL` | Mercado Livre |
+| `AMAZON_CLIENT_ID` / `_CLIENT_SECRET` / `AMAZON_REFRESH_TOKEN` · `AMAZON_BR_*` | Apps SP-API EUA e BR (tokens nunca iguais) |
+| `AMAZON_ROLE_ARN` / `AMAZON_AWS_ACCESS_KEY` / `_SECRET_KEY` | IAM (compartilhado BR/EUA) |
+| `AMAZON_BACKFILL_DAYS` · `AMAZON_FETCH_PII` · `AMAZON_NAMES_*` · `AMAZON_RETURNS_*` · `AMAZON_SETTLEMENT_DOCS` | Ajustes da Amazon |
+| `BLING_CLIENT_ID` / `_CLIENT_SECRET` / `BLING_REDIRECT_URL` · `BLING_BONIFICACAO_DAYS` · `TIKTOK_DETALHES_POR_RODADA` | Bling, doações, TikTok |
+| `META_APP_ID` / `_APP_SECRET` / `META_ACCESS_TOKEN` / `META_AD_ACCOUNT_ID` / `META_US_AD_ACCOUNT_ID` / `META_API_VERSION` | Meta Ads |
+| `GOOGLE_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URL` / `_DEVELOPER_TOKEN` / `_CUSTOMER_ID` / `_LOGIN_CUSTOMER_ID` | Google Ads |
+| `ADMIN_SEED_PASSWORD` · `SYNC_SECRET` | Senha do admin semente; token de agendador externo pro `/api/sync` |
+| `B2_KEY_ID` / `B2_APPLICATION_KEY` / `B2_BUCKET_NAME` · `BACKUP_RETENTION_DAYS` · `BACKUP_EVERY_HOURS` | Backup |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` · `ALERT_STALE_HOURS` | Alertas |
+
+## 12. Rotas mais usadas
+- Telas: `GET /api/dashboard` (`prevSince`/`prevUntil` trocam a comparação), `/api/campaigns`,
+  `/api/products`, `/api/stock`, `/api/orders/search`, `/api/orders/export`.
+- Operação: `POST /api/sync`, `GET /api/status`, `GET /api/jobs`, `POST /api/jobs/:id/cancel` (admin).
+- Diagnóstico (admin): `/api/amazon/whoami`, `/api/amazon/settlement-probe`, `/api/shopee/probe-returns`,
+  `/api/bling/probe-bonificacao`, `/api/bling/probe-tiktok`, `/api/bling/probe-channel`,
+  `/api/bling/token`.
+- Manual (admin): `POST /api/amazon/{backfill,sync-names,sync-returns,force-sync,reset-backoff}`,
+  `/api/shopee/sync-returns`, `/api/bling/{sync-bonificacao,sync-geo,token/renovar}`,
+  `/api/shopify/backfill`, `/api/backup/run`, `/api/alerts/test`.
+- Conectar conta (admin): `/bling/connect`, `/shopee/connect`, `/mercadolivre/connect`, `/googleads/connect`.
+
+## 13. A fazer
+- **TikTok**: conferir `/api/bling/probe-tiktok` depois dos primeiros dias; situação "NÃO CONTA" que é
+  venda entra na allowlist; doação ligada a canal de venda que não seja o TikTok = unidade contada 2x.
+- **Shopee**: conferir `porStatus` das devoluções reais (volume em `CLOSED` pode ser reembolso).
+- **Custos de Produtos**: o Luan vai preencher COG/imposto reais (os padrões valem pros EUA hoje).
+- **Mercado Livre**: incluir os dois canais novos do Bling em `KNOWN_CHANNELS` (usar `probe-channel`).
+- **Amazon**: PII e imagem dos EUA bloqueados por papel no portal (código pronto).
+- **Planejado**: Amazon Ads; Microsoft Clarity (API só tem 1–3 dias agregados); tela do programa
+  Village (assinatura Shopify EUA: `sellingPlan.name` por item e tag de pedido `VIL-XXXX`, que se
+  repete nas renovações; pedidos antigos têm `appstle_subscription_first_order`).
+- Conferir a dashboard num celular de verdade.
+- `cleanup-market-leak` pode sair quando o vazamento de julho passar da janela de 90 dias.
