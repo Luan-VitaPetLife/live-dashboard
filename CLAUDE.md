@@ -425,6 +425,12 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 - **Clone de card com `id`** duplica o id no documento: remover os ids do clone.
 - **Dado preso no pedido antigo** (tag, tipo de produto): decidir pelo catálogo ATUAL da Shopify, não
   pelo que ficou gravado no pedido.
+- **Remover código "até a próxima função exportada" leva o vizinho junto.** Em 22/09/2026 tirar
+  `fixUnpaidOrders` levou `usOffsetForDate` (não exportada, logo abaixo): a sintaxe continuou válida e
+  os EUA inteiros passaram a dar "is not defined" em produção. Remover função = apagar só o bloco
+  dela e rodar `npm test` (o teste `referencias` confere que toda função chamada no servidor existe).
+- **Mercado EUA corta o dia no horário do Pacífico** (`usOffsetForDate`, com horário de verão), não em
+  UTC nem no de Brasília: é o fuso do Seller Central da Amazon EUA.
 
 ## 9. Rodar e convenções
 - `npm install` → `npm start` (porta 3000; o sync roda ao subir — ver regra de ouro 3). `npm run sync`
@@ -439,7 +445,8 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 - Cobrem o que falha em silêncio: CSP, SRI, mapa, assets, imagens, escape, moeda, período, seletores,
   animação, catálogo de canais (`canais`, `registro-canais`), status de pedido, colunas, combo,
   devoluções (Amazon e Shopee), bonificação, TikTok, Bling (sonda e JWT), histórico, comparação,
-  insights, retenção, consumo (`economia`), segurança, esqueci a senha (`recuperacao`), backfill, integrações, jobs-widget, sync-btn.
+  insights, retenção, consumo (`economia`), segurança, esqueci a senha (`recuperacao`), toda função
+  chamada no servidor existe (`referencias`), backfill, integrações, jobs-widget, sync-btn.
 - Testes de `metrics.js`/`store.js` que gravam ainda estão de fora (precisariam de banco temporário).
 
 ## 11. Variáveis de ambiente
