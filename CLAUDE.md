@@ -302,7 +302,7 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
   Yucaloo e `/api/sync` com o token de `SYNC_SECRET` (header `x-sync-token`). Páginas de admin
   (Configurações, Integrações, Unificador, Histórico) só abrem pra admin.
 - **Toda rota que grava declara quem pode**: `requireAdmin` ou `requirePage('<pagina>.html')`. Exceções
-  nomeadas no teste: login, logout, troca da própria senha, `/api/sync`. Rota nova sem dono quebra o
+  nomeadas no teste: login, logout, troca da própria senha, `/api/sync`, `/api/senha/{esqueci,redefinir}`. Rota nova sem dono quebra o
   teste `seguranca`.
 - Conectar conta (Bling, Shopee, ML, Google Ads) é só de admin — o `state` no cookie não impede um
   estranho de autorizar a PRÓPRIA conta no lugar da nossa. Sondas e rotas de manutenção: só admin.
