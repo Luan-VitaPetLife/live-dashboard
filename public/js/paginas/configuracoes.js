@@ -204,7 +204,8 @@ function userInfoEl(u){
     `<div class="user-name">${escapeHtml(u.name || u.username)}
        <span class="tag ${isAdmin?'tag-admin':'tag-padrao'}">${isAdmin?'Admin':'Padrão'}</span>
      </div>
-     <div class="user-pages"><i class="bi bi-window-stack"></i> ${escapeHtml(pagesSummary(u))}</div>`;
+     <div class="user-pages"><i class="bi bi-window-stack"></i> ${escapeHtml(pagesSummary(u))}</div>
+     <div class="user-pages"><i class="bi bi-envelope"></i> ${u.email ? escapeHtml(u.email) : 'sem e-mail: não consegue usar "Esqueci a senha"'}</div>`;
   return info;
 }
 
@@ -290,6 +291,8 @@ function openModal(user){
   $('modalErr').textContent = '';
   $('fName').value = user ? (user.name || '') : '';
   $('fUsername').value = user ? (user.username || '') : '';
+  $('fEmail').value = user ? (user.email || '') : '';
+  $('fPhone').value = user ? (user.phone || '') : '';
   $('fPassword').value = '';
   $('fPassword').placeholder = user ? '••••••••' : 'Senha de acesso';
   $('pwdHint').style.display = user ? 'block' : 'none';
@@ -319,7 +322,9 @@ async function saveUser(){
     ? Array.from($('pagesBox').querySelectorAll('input:checked')).map(c => c.value)
     : [];
 
-  const body = { name, username, role, pages };
+  // E-mail e telefone vão sempre (vazio apaga): quem valida é o servidor, que também recusa e-mail
+  // repetido em outro usuário.
+  const body = { name, username, role, pages, email: $('fEmail').value.trim(), phone: $('fPhone').value.trim() };
   if(password) body.password = password;
 
   const url = EDIT_ID ? '/api/users/' + encodeURIComponent(EDIT_ID) : '/api/users';

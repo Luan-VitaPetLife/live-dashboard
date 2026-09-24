@@ -145,6 +145,8 @@ export function publicUser(u) {
     username: u.username,
     name: u.name,
     role: u.role,
+    email: u.email || '',
+    phone: u.phone || '',
     pages: u.role === 'admin' ? [...PAGE_FILES] : u.pages || [],
   };
 }
@@ -294,10 +296,11 @@ export function listUsers() {
 }
 
 // Cria um usuário validando obrigatoriedade/unicidade do username e a senha.
-export function createUser({ username, name, password, role, pages }) {
+export function createUser({ username, name, password, role, pages, email, phone }) {
   const uname = String(username || '').trim();
   if (!uname) throw new Error('Nome de usuário obrigatório.');
   if (usernameTaken(uname, null)) throw new Error('Usuário já existe.');
+  const contato = validarContato({ email, phone }, null);
   if (!password || String(password).length < 8) throw new Error('A senha precisa ter pelo menos 8 caracteres.');
 
   const finalRole = role === 'admin' ? 'admin' : 'padrao';
@@ -310,6 +313,8 @@ export function createUser({ username, name, password, role, pages }) {
     username: uname,
     name: String(name || uname),
     role: finalRole,
+    email: contato.email,
+    phone: contato.phone,
     salt,
     hash,
     pages: finalPages,
@@ -343,6 +348,15 @@ export function updateUser(id, patch = {}) {
     user.username = uname;
   }
   if (patch.name != null) user.name = String(patch.name);
+  const emailAntes = user.email || '', phoneAntes = user.phone || '';
+  if (patch.email != null || patch.phone != null) {
+    const contato = validarContato({
+      email: patch.email != null ? patch.email : user.email,
+      phone: patch.phone != null ? patch.phone : user.phone,
+    }, user.id);
+    user.email = contato.email;
+    user.phone = contato.phone;
+  }
   if (patch.role != null) user.role = patch.role === 'admin' ? 'admin' : 'padrao';
 
   // pages depende do role final: admin => todas; padrao => filtra o catálogo.
@@ -375,6 +389,10 @@ export function updateUser(id, patch = {}) {
     registrarEdicao({ pagina: 'configuracoes', acao: 'editou', alvo: user.name,
       campo: 'Senha', de: null, para: null });
   }
+  // E-mail e telefone são dado pessoal: o Histórico registra QUE mudou, sem o valor (mesma regra da
+  // senha). Quem precisar do valor atual vê no cadastro.
+  if ((user.email || '') !== emailAntes) registrarEdicao({ pagina: 'configuracoes', acao: 'editou', alvo: user.name, campo: 'E-mail', de: null, para: null });
+  if ((user.phone || '') !== phoneAntes) registrarEdicao({ pagina: 'configuracoes', acao: 'editou', alvo: user.name, campo: 'Telefone', de: null, para: null });
   return publicUser(user);
 }
 
@@ -437,6 +455,33 @@ function usernameTaken(uname, ignoreId) {
       u.id !== ignoreId &&
       String(u.username || '').trim().toLowerCase() === target
   );
+}
+
+// E-mail e telefone do usuário, pro "Esqueci a senha" (src/recuperacao.js). Os dois são opcionais.
+// O e-mail precisa ser ÚNICO: dá pra pedir o código digitando o e-mail no lugar do usuário, e dois
+// usuários com o mesmo e-mail tornariam ambíguo de quem é a senha trocada. O telefone é guardado só
+// com dígitos (e o "+" do código do país), pro SMS que vem depois.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function validarContato({ email, phone }, ignoreId) {
+  const e = String(email || '').trim().toLowerCase();
+  if (e && !EMAIL_RE.test(e)) throw new Error('E-mail inválido.');
+  if (e && getUsers().some(u => u.id !== ignoreId && String(u.email || '').toLowerCase() === e)) {
+    throw new Error('Esse e-mail já está em outro usuário.');
+  }
+  const bruto = String(phone || '').trim();
+  const digitos = bruto.replace(/\D/g, '');
+  if (bruto && (digitos.length < 10 || digitos.length > 15)) throw new Error('Telefone inválido (use DDD e número).');
+  return { email: e, phone: digitos ? (bruto.startsWith('+') ? '+' : '') + digitos : '' };
+}
+
+// Usuário pelo nome de usuário OU pelo e-mail, pro "Esqueci a senha". Quem esquece a senha às vezes
+// esquece o usuário também, e o e-mail é o que a pessoa lembra.
+export function acharPorUsuarioOuEmail(login) {
+  const l = String(login || '').trim().toLowerCase();
+  if (!l) return null;
+  return getUsers().find(u =>
+    String(u.username || '').trim().toLowerCase() === l ||
+    (u.email && String(u.email).toLowerCase() === l)) || null;
 }
 
 // Mantém só páginas que existem no catálogo (evita liberar página inválida).

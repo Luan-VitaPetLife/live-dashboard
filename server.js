@@ -9,6 +9,8 @@ import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeR
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import { comAutor } from './src/autor.js';
+import { criarRecuperacao } from './src/recuperacao.js';
+import { emailConfigurado, enviarEmail } from './src/email.js';
 import { PAGINAS as PAGINAS_HISTORICO, montar as montarHistorico } from './src/historico.js';
 import * as ml from './src/mercadolivre.js';
 import * as amazon from './src/amazon.js';
@@ -162,6 +164,54 @@ app.post('/api/login', (req, res) => {
   registerLoginSuccess(req.ip);
   res.setHeader('Set-Cookie', auth.buildSessionCookie(result.token, { secure: isHttps(req) }));
   res.json({ ok: true, user: result.user });
+});
+
+// ── Esqueci a senha (src/recuperacao.js, src/email.js) ──
+// Rotas SEM login (quem usa é justamente quem não consegue entrar), com limite próprio por IP.
+// A resposta de pedir código é sempre a mesma, e o e-mail sai em segundo plano: esperar o envio
+// faria a resposta demorar só quando o usuário existe, e o tempo de resposta contaria o segredo.
+const recuperacao = criarRecuperacao({
+  acharUsuario: login => auth.acharPorUsuarioOuEmail(login),
+  trocarSenha: (u, senha) => comAutor(u.name || u.username, () => auth.changePassword(u.id, senha)),
+  derrubarSessoes: id => auth.invalidateUserSessions(id),
+});
+const senhaLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
+});
+const RESPOSTA_PEDIDO = 'Se esse usuário existir e tiver e-mail cadastrado, o código chega em instantes. Ele vale por 10 minutos.';
+
+app.get('/api/senha/canais', (_req, res) => res.json({ email: emailConfigurado() }));
+
+app.post('/api/senha/esqueci', senhaLimiter, (req, res) => {
+  if (!emailConfigurado()) {
+    return res.status(503).json({ error: 'A recuperação por e-mail ainda não está configurada. Fale com um administrador.' });
+  }
+  const pedido = recuperacao.pedir(req.body?.login);
+  if (pedido) {
+    enviarEmail({
+      para: pedido.usuario.email,
+      assunto: 'Código para redefinir sua senha',
+      texto: `Olá, ${pedido.usuario.name || pedido.usuario.username}.\n\n` +
+        `Seu código para redefinir a senha da dashboard é: ${pedido.codigo}\n\n` +
+        `Ele vale por 10 minutos e serve uma vez só.\n` +
+        `Se não foi você que pediu, ignore este e-mail: sua senha continua a mesma.`,
+    }).catch(e => console.error(`Esqueci a senha: o e-mail pro usuário "${pedido.usuario.username}" não saiu:`, e.message));
+  }
+  res.json({ ok: true, message: RESPOSTA_PEDIDO });
+});
+
+app.post('/api/senha/redefinir', senhaLimiter, (req, res) => {
+  try {
+    const { login, codigo, senha } = req.body || {};
+    recuperacao.redefinir(login, codigo, senha);
+    res.json({ ok: true, message: 'Senha redefinida. Entre com a senha nova.' });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 app.post('/api/logout', (req, res) => {

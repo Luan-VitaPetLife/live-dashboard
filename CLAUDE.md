@@ -302,12 +302,22 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
   Yucaloo e `/api/sync` com o token de `SYNC_SECRET` (header `x-sync-token`). Páginas de admin
   (Configurações, Integrações, Unificador, Histórico) só abrem pra admin.
 - **Toda rota que grava declara quem pode**: `requireAdmin` ou `requirePage('<pagina>.html')`. Exceções
-  nomeadas no teste: login, logout, troca da própria senha, `/api/sync`. Rota nova sem dono quebra o
+  nomeadas no teste: login, logout, troca da própria senha, `/api/sync`, `/api/senha/{esqueci,redefinir}`. Rota nova sem dono quebra o
   teste `seguranca`.
 - Conectar conta (Bling, Shopee, ML, Google Ads) é só de admin — o `state` no cookie não impede um
   estranho de autorizar a PRÓPRIA conta no lugar da nossa. Sondas e rotas de manutenção: só admin.
 - Senha do admin semente: `ADMIN_SEED_PASSWORD` ou sorteada e mostrada uma vez no log.
-- Esqueceu a senha: outro admin troca em Configurações. Sem outro admin, trocar o `salt`/`hash` do
+- **"Esqueci minha senha"** (tela de login; `recuperacao.js` + `email.js`): código de 6 dígitos pro
+  e-mail cadastrado do usuário, enviado pela Brevo (`BREVO_*`). Vale 10 min, uma vez só, 5
+  tentativas; reenvio 1/min e 5/hora; guarda só o HASH do código, em memória. Pedir código responde
+  SEMPRE igual e o e-mail sai em segundo plano (resposta ou tempo diferente diria quais usuários
+  existem). Redefinir derruba todas as sessões; o Histórico registra como feito pelo próprio usuário.
+  Rotas `/api/senha/*` ficam ANTES do portão, sem login, com limite próprio (`senhaLimiter`).
+  Usuário sem e-mail não consegue usar (Configurações mostra isso na lista). Telefone já é guardado;
+  SMS fica pra depois (a Brevo também envia).
+- E-mail e telefone do usuário: opcionais, e-mail ÚNICO (dá pra pedir o código pelo e-mail). No
+  Histórico entra que mudou, sem o valor.
+- Esqueceu a senha e não tem e-mail: outro admin troca em Configurações. Sem outro admin, trocar o `salt`/`hash` do
   usuário direto no `kv.users` (scrypt, 64 bytes, salt hex de 16 bytes — `hashPassword`) e **reiniciar o
   serviço**. Preferir isso a desligar o login: com login desligado, `requireAdmin` libera tudo pra
   qualquer um na internet (inclusive conectar conta e rotas que apagam dado).
@@ -426,7 +436,7 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 - Cobrem o que falha em silêncio: CSP, SRI, mapa, assets, imagens, escape, moeda, período, seletores,
   animação, catálogo de canais (`canais`, `registro-canais`), status de pedido, colunas, combo,
   devoluções (Amazon e Shopee), bonificação, TikTok, Bling (sonda e JWT), histórico, comparação,
-  insights, retenção, consumo (`economia`), segurança, backfill, integrações, jobs-widget, sync-btn.
+  insights, retenção, consumo (`economia`), segurança, esqueci a senha (`recuperacao`), backfill, integrações, jobs-widget, sync-btn.
 - Testes de `metrics.js`/`store.js` que gravam ainda estão de fora (precisariam de banco temporário).
 
 ## 11. Variáveis de ambiente
@@ -445,6 +455,7 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 | `BLING_CLIENT_ID` / `_CLIENT_SECRET` / `BLING_REDIRECT_URL` · `BLING_BONIFICACAO_DAYS` · `TIKTOK_DETALHES_POR_RODADA` | Bling, doações, TikTok |
 | `META_APP_ID` / `_APP_SECRET` / `META_ACCESS_TOKEN` / `META_AD_ACCOUNT_ID` / `META_US_AD_ACCOUNT_ID` / `META_API_VERSION` | Meta Ads |
 | `GOOGLE_ADS_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URL` / `_DEVELOPER_TOKEN` / `_CUSTOMER_ID` / `_LOGIN_CUSTOMER_ID` | Google Ads |
+| `BREVO_API_KEY` · `BREVO_SENDER_EMAIL` · `BREVO_SENDER_NAME` | E-mail do "Esqueci a senha" (remetente confirmado na Brevo; sem as duas primeiras, a opção avisa que não está configurada) |
 | `ADMIN_SEED_PASSWORD` · `SYNC_SECRET` | Senha do admin semente; token de agendador externo pro `/api/sync` |
 | `B2_KEY_ID` / `B2_APPLICATION_KEY` / `B2_BUCKET_NAME` · `BACKUP_RETENTION_DAYS` · `BACKUP_EVERY_HOURS` | Backup |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` · `ALERT_STALE_HOURS` | Alertas |
@@ -452,6 +463,8 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 ## 12. Rotas mais usadas
 - Telas: `GET /api/dashboard` (`prevSince`/`prevUntil` trocam a comparação), `/api/campaigns`,
   `/api/products`, `/api/stock`, `/api/orders/search`, `/api/orders/export`.
+- Login: `POST /api/login`, `/api/logout`, `GET /api/me`; recuperação `GET /api/senha/canais`,
+  `POST /api/senha/{esqueci,redefinir}` (sem login, com limite).
 - Operação: `POST /api/sync`, `GET /api/status`, `GET /api/jobs`, `POST /api/jobs/:id/cancel` (admin).
 - Diagnóstico (admin): `/api/amazon/whoami`, `/api/amazon/settlement-probe`, `/api/shopee/probe-returns`,
   `/api/bling/probe-bonificacao`, `/api/bling/probe-tiktok`, `/api/bling/probe-channel`,
@@ -471,5 +484,7 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 - **Planejado**: Amazon Ads; Microsoft Clarity (API só tem 1–3 dias agregados); tela do programa
   Village (assinatura Shopify EUA: `sellingPlan.name` por item e tag de pedido `VIL-XXXX`, que se
   repete nas renovações; pedidos antigos têm `appstle_subscription_first_order`).
+- **Esqueci a senha**: configurar `BREVO_API_KEY`/`BREVO_SENDER_EMAIL` no Railway e cadastrar o e-mail
+  de cada usuário. SMS pelo telefone quando o Luan decidir (Brevo, pago por mensagem).
 - Conferir a dashboard num celular de verdade.
 - `cleanup-market-leak` pode sair quando o vazamento de julho passar da janela de 90 dias.
