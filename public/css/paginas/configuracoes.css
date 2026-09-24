@@ -68,7 +68,11 @@
 
   .avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;letter-spacing:.5px}
   .user-name{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .user-pages{font-size:11px;color:var(--sub);margin-top:3px}
+  /* Ícone e texto na MESMA linha; texto longo sem espaço (um e-mail) termina em "…" em vez de
+     vazar do card ou empurrar o texto pra linha de baixo do ícone. O endereço inteiro fica no title. */
+  .user-pages{font-size:11px;color:var(--sub);margin-top:3px;display:flex;align-items:center;gap:5px;min-width:0}
+  .user-pages > i{flex-shrink:0}
+  .user-pages > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tag{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:3px 8px;border-radius:20px}
   .tag-admin{background:var(--rust);color:#fff}
   .tag-padrao{background:var(--surface);border:1px solid var(--border2);color:var(--sub)}
