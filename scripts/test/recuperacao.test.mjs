@@ -125,6 +125,11 @@ const AUTH = ler('src/auth.js');
 t.ok(/email: u\.email \|\| '',\s*phone: u\.phone \|\| '',/.test(AUTH), 'o cadastro expõe e-mail e telefone');
 t.ok(/Esse e-mail já está em outro usuário\./.test(AUTH), 'e-mail é único (senão, de quem seria a senha trocada?)');
 t.ok(/campo: 'E-mail', de: null, para: null/.test(AUTH), 'o Histórico registra que o e-mail mudou, sem o valor');
+// O login aceita o que o "Esqueci a senha" aceita. Sem isso, quem redefiniu a senha pelo e-mail
+// digitava o e-mail no login e levava "usuário ou senha inválidos" com a senha certa (aconteceu).
+const fnLogin = AUTH.slice(AUTH.indexOf('export function login('), AUTH.indexOf('export function verifyCredentials'));
+t.ok(/const user = acharPorUsuarioOuEmail\(username\);/.test(fnLogin), 'o login aceita usuário OU e-mail, igual à recuperação');
+t.ok(/Usuário ou e-mail<\/label>/.test(ler('public/login.html')), 'e a tela de login diz isso');
 
 // ── Envio (sem rede) ──
 delete process.env.BREVO_API_KEY; delete process.env.BREVO_SENDER_EMAIL;

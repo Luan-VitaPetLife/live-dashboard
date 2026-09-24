@@ -164,14 +164,12 @@ function pruneSessions(sessions) {
   return sessions;
 }
 
-// Autentica: match de username case-insensitive (com trim) e senha correta.
+// Autentica pelo nome de usuário OU pelo e-mail (sem diferenciar maiúscula), com a senha correta.
+// O e-mail vale aqui porque vale no "Esqueci a senha": quem acabou de redefinir a senha pelo e-mail
+// digitava o e-mail no login e recebia "usuário ou senha inválidos" com a senha certa.
 // Cria uma sessão nova e devolve { token, user: publicUser }; senão null.
 export function login(username, password) {
-  const uname = String(username || '').trim().toLowerCase();
-  if (!uname) return null;
-  const user = getUsers().find(
-    (u) => String(u.username || '').trim().toLowerCase() === uname
-  );
+  const user = acharPorUsuarioOuEmail(username);
   if (!user) return null;
   if (!verifyPassword(password, user.salt, user.hash)) return null;
 
