@@ -9,7 +9,7 @@ import { runSync, reconcileAmazonNames, reconcileAmazonReturns, reconcileShopeeR
 import { initStore, getAmazonBackoff, setAmazonBackoff, getAmazonBRBackoff, setAmazonBRBackoff, setAmazonBackoffCount, setAmazonBRBackoffCount, setProductFinance, setProductStock, setProductStockAgg, setAmazonBackfill, getAmazonBackfill, getAmazonProductImages, setAmazonProductImages, getAmazonImagesJob, setAmazonImagesJob, getOrders, upsertOrders, load, removeAmazonMarketLeak, getProductGroups, upsertProductGroup, deleteProductGroup, removeFromProductGroup, getProductGroupsEnabled, setProductGroupsEnabled, getProductGroupTypes, setProductGroupType, getProductTypeGroups, upsertProductTypeGroup, removeProductTypeKeyword, deleteProductTypeGroup, getAmazonCursor, getShopeeTokens, getMlTokens, getIntegrationsConfig, setIntegrationEnabled, isIntegrationEnabled, getYucalooTokens, getProductHiddenTags, upsertProductHiddenTags, removeProductHiddenTag, getBackupStatus, setShopifyBackfill, getShopifyBackfill, lerHistorico } from './src/store.js';
 import * as shopee from './src/shopee.js';
 import { comAutor } from './src/autor.js';
-import { criarRecuperacao } from './src/recuperacao.js';
+import { criarRecuperacao, mascararEmail, MENSAGENS as MENSAGENS_RECUPERACAO } from './src/recuperacao.js';
 import { emailConfigurado, enviarEmail } from './src/email.js';
 import { PAGINAS as PAGINAS_HISTORICO, montar as montarHistorico } from './src/historico.js';
 import * as ml from './src/mercadolivre.js';
@@ -167,9 +167,10 @@ app.post('/api/login', (req, res) => {
 });
 
 // ── Esqueci a senha (src/recuperacao.js, src/email.js) ──
-// Rotas SEM login (quem usa é justamente quem não consegue entrar), com limite próprio por IP.
-// A resposta de pedir código é sempre a mesma, e o e-mail sai em segundo plano: esperar o envio
-// faria a resposta demorar só quando o usuário existe, e o tempo de resposta contaria o segredo.
+// Rotas SEM login (quem usa é justamente quem não consegue entrar), com limite próprio por IP — é esse
+// limite que segura quem tentar descobrir usuários, já que a tela diz com clareza se o usuário existe
+// (decisão do Luan, ver src/recuperacao.js). O e-mail é ESPERADO: a tela só diz "enviado" depois que
+// a Brevo aceitou, e uma falha no envio aparece como falha.
 const recuperacao = criarRecuperacao({
   acharUsuario: login => auth.acharPorUsuarioOuEmail(login),
   trocarSenha: (u, senha) => comAutor(u.name || u.username, () => auth.changePassword(u.id, senha)),
@@ -182,26 +183,32 @@ const senhaLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
 });
-const RESPOSTA_PEDIDO = 'Se esse usuário existir e tiver e-mail cadastrado, o código chega em instantes. Ele vale por 10 minutos.';
-
 app.get('/api/senha/canais', (_req, res) => res.json({ email: emailConfigurado() }));
 
-app.post('/api/senha/esqueci', senhaLimiter, (req, res) => {
+app.post('/api/senha/esqueci', senhaLimiter, async (req, res) => {
   if (!emailConfigurado()) {
     return res.status(503).json({ error: 'A recuperação por e-mail ainda não está configurada. Fale com um administrador.' });
   }
-  const pedido = recuperacao.pedir(req.body?.login);
-  if (pedido) {
-    enviarEmail({
-      para: pedido.usuario.email,
+  const p = recuperacao.pedir(req.body?.login);
+  if (p.status === 'naoEncontrado') return res.status(404).json({ error: MENSAGENS_RECUPERACAO.naoEncontrado });
+  if (p.status === 'semEmail') return res.status(409).json({ error: MENSAGENS_RECUPERACAO.semEmail });
+  if (p.status === 'aguarde') return res.status(429).json({ error: `Um código acabou de ser enviado. Aguarde ${p.segundos} segundos pra pedir outro.` });
+  if (p.status === 'limiteHora') return res.status(429).json({ error: MENSAGENS_RECUPERACAO.limiteHora });
+  try {
+    await enviarEmail({
+      para: p.usuario.email,
       assunto: 'Código para redefinir sua senha',
-      texto: `Olá, ${pedido.usuario.name || pedido.usuario.username}.\n\n` +
-        `Seu código para redefinir a senha da dashboard é: ${pedido.codigo}\n\n` +
+      texto: `Olá, ${p.usuario.name || p.usuario.username}.\n\n` +
+        `Seu código para redefinir a senha da dashboard é: ${p.codigo}\n\n` +
         `Ele vale por 10 minutos e serve uma vez só.\n` +
         `Se não foi você que pediu, ignore este e-mail: sua senha continua a mesma.`,
-    }).catch(e => console.error(`Esqueci a senha: o e-mail pro usuário "${pedido.usuario.username}" não saiu:`, e.message));
+    });
+  } catch (e) {
+    recuperacao.desfazer(p.usuario.id);
+    console.error(`Esqueci a senha: o e-mail pro usuário "${p.usuario.username}" não saiu:`, e.message);
+    return res.status(502).json({ error: 'Não conseguimos enviar o e-mail agora. Tente de novo em instantes.' });
   }
-  res.json({ ok: true, message: RESPOSTA_PEDIDO });
+  res.json({ ok: true, message: `Código enviado para ${mascararEmail(p.usuario.email)}. Ele vale por 10 minutos (se não aparecer, olhe o spam).` });
 });
 
 app.post('/api/senha/redefinir', senhaLimiter, (req, res) => {

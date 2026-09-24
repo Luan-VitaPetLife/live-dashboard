@@ -62,8 +62,9 @@
       });
 
       // ── Esqueci a senha ──────────────────────────────────────────────────────
-      // Passo 1 pede o código (a resposta é sempre a mesma, exista o usuário ou não). Passo 2 manda
-      // código + senha nova. Deu certo, volta pro login com o usuário preenchido.
+      // Passo 1 pede o código; o servidor diz com clareza o que aconteceu (usuário não encontrado, sem
+      // e-mail, enviado pra qual e-mail). Passo 2 manda código + senha nova. Deu certo, volta pro login
+      // com o usuário preenchido. Erro fica na tela, e o passo 2 só abre se o código saiu.
       const loginOk = document.getElementById('loginOk');
       const forgotForm = document.getElementById('forgotForm');
       const forgotBtn = document.getElementById('forgotBtn');
@@ -124,7 +125,7 @@
         const login = fLogin.value.trim();
         if(!login){ mostrar(forgotErr, 'Digite seu usuário ou e-mail.'); return; }
         const d = await postar('/api/senha/esqueci', { login });
-        mostrar(forgotOk, d.message || 'Se o usuário existir, o código chega em instantes.');
+        mostrar(forgotOk, d.message || 'Código enviado pro seu e-mail.');
         etapa = 'redefinir';
         stepCode.hidden = false; resendLink.hidden = false;
         forgotBtn.textContent = 'Redefinir senha';
