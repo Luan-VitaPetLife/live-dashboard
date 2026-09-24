@@ -38,9 +38,49 @@
         </div>
       </div>
 
+      <div class="ok" id="loginOk"></div>
       <div class="err" id="err"></div>
 
       <button type="submit" id="submitBtn">Entrar</button>
+      <button type="button" class="link-btn" id="forgotLink">Esqueci minha senha</button>
+    </form>
+
+    <!-- "Esqueci a senha": passo 1 pede o código, passo 2 (stepCode) troca a senha. -->
+    <form id="forgotForm" hidden novalidate>
+      <p class="help" id="forgotHelp">Digite seu usuário ou e-mail. Enviamos um código pro e-mail cadastrado.</p>
+      <div class="field">
+        <label for="fLogin">Usuário ou e-mail</label>
+        <div class="input-wrap">
+          <input type="text" id="fLogin" autocomplete="username">
+        </div>
+      </div>
+      <div id="stepCode" class="step" hidden>
+        <div class="field">
+          <label for="fCode">Código</label>
+          <div class="input-wrap">
+            <input type="text" id="fCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+          </div>
+        </div>
+        <div class="field">
+          <label for="fNew">Senha nova</label>
+          <div class="input-wrap">
+            <input type="password" id="fNew" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="field">
+          <label for="fNew2">Repita a senha nova</label>
+          <div class="input-wrap">
+            <input type="password" id="fNew2" autocomplete="new-password">
+          </div>
+        </div>
+      </div>
+
+      <div class="ok" id="forgotOk"></div>
+      <div class="err" id="forgotErr"></div>
+
+      <button type="submit" id="forgotBtn">Enviar código</button>
+      <button type="button" class="link-btn" id="resendLink" hidden>Não chegou? Enviar de novo</button>
+      <button type="button" class="link-btn" id="backLink">Voltar pro login</button>
     </form>
   </div>
 

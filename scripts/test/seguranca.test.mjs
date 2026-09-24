@@ -45,7 +45,18 @@ const EXCECOES = new Map([
   ["post /api/logout", 'sair não precisa de permissão'],
   ["post /api/sync", 'botão Sincronizar de toda página; o portão já exige login ou token'],
   ["post /api/me/password", 'cada pessoa troca a própria senha'],
+  // "Esqueci a senha": quem usa é justamente quem NÃO consegue entrar. A proteção delas é outra:
+  // limite próprio por IP (conferido logo abaixo) e as regras de src/recuperacao.js.
+  ["post /api/senha/esqueci", 'pedir código sem login (resposta sempre igual)'],
+  ["post /api/senha/redefinir", 'trocar a senha com o código do e-mail'],
 ]);
+for (const rota of ['/api/senha/esqueci', '/api/senha/redefinir']) {
+  t.ok(SERVER.includes(`app.post('${rota}', senhaLimiter,`), `${rota} tem limite de tentativas por IP`);
+}
+// Estas rotas ficam ANTES do portão de login; se forem parar depois dele, param de funcionar
+// (o portão exige login) e ninguém mais consegue recuperar a senha.
+t.ok(SERVER.indexOf("app.post('/api/senha/esqueci'") < SERVER.indexOf('const STATIC_ASSET_RE'),
+  'as rotas de recuperação vêm antes do portão de login');
 const rotas = [...SERVER.matchAll(/^app\.(post|put|delete|patch)\('([^']+)',([^\n]*)/gm)];
 t.ok(rotas.length > 30, `achou as rotas de escrita (${rotas.length})`);
 for (const [, metodo, rota, resto] of rotas) {
