@@ -307,8 +307,13 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 - Conectar conta (Bling, Shopee, ML, Google Ads) é só de admin — o `state` no cookie não impede um
   estranho de autorizar a PRÓPRIA conta no lugar da nossa. Sondas e rotas de manutenção: só admin.
 - Senha do admin semente: `ADMIN_SEED_PASSWORD` ou sorteada e mostrada uma vez no log.
-- Recuperação: no Postgres, `UPDATE kv SET value='{"enabled":false}' WHERE key='authConfig'` reabre
-  sem login; apagar a linha `key='users'` recria o admin.
+- Esqueceu a senha: outro admin troca em Configurações. Sem outro admin, trocar o `salt`/`hash` do
+  usuário direto no `kv.users` (scrypt, 64 bytes, salt hex de 16 bytes — `hashPassword`) e **reiniciar o
+  serviço**. Preferir isso a desligar o login: com login desligado, `requireAdmin` libera tudo pra
+  qualquer um na internet (inclusive conectar conta e rotas que apagam dado).
+- Último recurso: `UPDATE kv SET value='{"enabled":false}' WHERE key='authConfig'` reabre sem login;
+  apagar a linha `key='users'` recria o admin (perde os outros usuários). **Qualquer mudança feita
+  direto no banco só vale depois de reiniciar o serviço**: usuários e config ficam em memória.
 - Cabeçalhos à mão (CSP, HSTS etc.). **Domínio que falta na CSP é bloqueado sem erro visível** (a
   fonte Inter ficou semanas bloqueada). Recurso externo novo → diretiva certa (`script-src`,
   `style-src`, `font-src`, `connect-src`). `'unsafe-inline'` ainda é exigido pelos `onclick=`/`style=`
