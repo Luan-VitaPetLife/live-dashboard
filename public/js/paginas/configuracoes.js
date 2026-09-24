@@ -204,8 +204,8 @@ function userInfoEl(u){
     `<div class="user-name">${escapeHtml(u.name || u.username)}
        <span class="tag ${isAdmin?'tag-admin':'tag-padrao'}">${isAdmin?'Admin':'Padrão'}</span>
      </div>
-     <div class="user-pages"><i class="bi bi-window-stack"></i> ${escapeHtml(pagesSummary(u))}</div>
-     <div class="user-pages"><i class="bi bi-envelope"></i> ${u.email ? escapeHtml(u.email) : 'sem e-mail: não consegue usar "Esqueci a senha"'}</div>`;
+     <div class="user-pages"><i class="bi bi-window-stack"></i><span title="${escapeHtml(pagesSummary(u))}">${escapeHtml(pagesSummary(u))}</span></div>
+     <div class="user-pages"><i class="bi bi-envelope"></i><span title="${escapeHtml(u.email || '')}">${u.email ? escapeHtml(u.email) : 'sem e-mail: não usa "Esqueci a senha"'}</span></div>`;
   return info;
 }
 
