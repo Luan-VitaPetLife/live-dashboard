@@ -309,9 +309,12 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 - Senha do admin semente: `ADMIN_SEED_PASSWORD` ou sorteada e mostrada uma vez no log.
 - **"Esqueci minha senha"** (tela de login; `recuperacao.js` + `email.js`): código de 6 dígitos pro
   e-mail cadastrado do usuário, enviado pela Brevo (`BREVO_*`). Vale 10 min, uma vez só, 5
-  tentativas; reenvio 1/min e 5/hora; guarda só o HASH do código, em memória. Pedir código responde
-  SEMPRE igual e o e-mail sai em segundo plano (resposta ou tempo diferente diria quais usuários
-  existem). Redefinir derruba todas as sessões; o Histórico registra como feito pelo próprio usuário.
+  tentativas; reenvio 1/min e 5/hora; guarda só o HASH do código, em memória. **A tela diz com clareza
+  o que aconteceu** (usuário não encontrado, sem e-mail, "enviado para m***@…", código errado com as
+  tentativas que restam, vencido) — decisão do Luan, 24/09/2026: "não adianta enganar o usuário". O
+  preço aceito é dar pra testar se um usuário existe; quem segura isso é o limite por IP. O e-mail é
+  ESPERADO: só diz "enviado" depois que a Brevo aceitou; falha desfaz o pedido e aparece como falha.
+  Redefinir derruba todas as sessões; o Histórico registra como feito pelo próprio usuário.
   Rotas `/api/senha/*` ficam ANTES do portão, sem login, com limite próprio (`senhaLimiter`).
   Usuário sem e-mail não consegue usar (Configurações mostra isso na lista). Telefone já é guardado;
   SMS fica pra depois (a Brevo também envia).
