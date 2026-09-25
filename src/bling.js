@@ -390,13 +390,17 @@ export async function probeChannelOrders(sinceISO, untilISO, lojaId, limit = 5) 
   }
 }
 
-// UF de entrega de um pedido, extraído do detalhe (transporte.etiqueta —  só
-// vem no detalhe, a listagem não traz). Retorna null se o pedido não tiver
-// bloco de transporte (retirada em loja, etc.) — o chamador decide o que fazer.
+// Lugar de entrega de um pedido, extraído do detalhe (transporte.etiqueta: só vem no detalhe, a
+// listagem não traz): { uf, city, zip }, cada um null se faltar (retirada em loja etc.). Só isso:
+// nome, rua e número do cliente nunca saem daqui.
 export async function fetchOrderAddress(idPedidoVenda) {
   const d = await fetchOrderDetail(idPedidoVenda);
-  const data = d.data || d;
-  return data?.transporte?.etiqueta?.uf || null;
+  const e = (d.data || d)?.transporte?.etiqueta || {};
+  return {
+    uf:   e.uf ? String(e.uf).toUpperCase() : null,
+    city: e.municipio ? String(e.municipio).trim() : null,
+    zip:  e.cep ? String(e.cep).trim() : null,
+  };
 }
 
 // ── Sonda das saídas em bonificação (doação para UGC) ────────────────────────

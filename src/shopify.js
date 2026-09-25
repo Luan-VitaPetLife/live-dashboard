@@ -2,6 +2,7 @@
 // fetchOrders e fetchSessionsDaily aceitam cfg opcional
 // para suportar múltiplas lojas (BR + US).
 import 'dotenv/config';
+import { geoDoCanal } from './localizacao.js';
 
 const STORE   = process.env.SHOPIFY_STORE;
 const TOKEN   = process.env.SHOPIFY_ADMIN_TOKEN;
@@ -47,7 +48,7 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
             currentTotalPriceSet { shopMoney { amount } }
             customerJourneySummary { lastVisit { source } }
             customer { displayName }
-            shippingAddress { provinceCode }
+            shippingAddress { provinceCode city zip latitude longitude }
             lineItems(first: 20) { edges { node { id title variantTitle currentQuantity discountedTotalSet { shopMoney { amount } } product { tags productType } lineItemGroup { id title quantity } image { url } } } }
             refunds { refundLineItems(first: 20) { edges { node { lineItem { id } subtotalSet { shopMoney { amount } } } } } }
           } }
@@ -79,6 +80,11 @@ export async function fetchOrders(sinceISO, untilISO, cfg = {}) {
         source:    n.customerJourneySummary?.lastVisit?.source || '',
         customer:  n.customer?.displayName || '',
         state:     n.shippingAddress?.provinceCode || null,
+        // Cidade/CEP/coordenada: pro mapa de calor (localizacao.js). A coordenada é arredondada
+        // a ~1 km na captura: o mapa só precisa da cidade.
+        city:      n.shippingAddress?.city || null,
+        zip:       n.shippingAddress?.zip || null,
+        geo:       geoDoCanal(market, n.shippingAddress?.latitude, n.shippingAddress?.longitude),
         items:     (n.lineItems?.edges || []).map(x => ({
           title:       tituloDoItem(x.node.title, x.node.variantTitle),
           qty:         x.node.currentQuantity,

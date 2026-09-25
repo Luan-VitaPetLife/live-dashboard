@@ -774,6 +774,10 @@ export async function reconcileGeoFromBling({ market = 'br', force = false, days
       localMaps[info.channel] = new Map(getOrders({ channel: info.channel, market: info.market }).map(o => [o.id, o]));
     }
   }
+  // TikTok: o pedido já vem do Bling com a cidade, mas o sync dele é incremental e pedido gravado
+  // antes de a cidade ser capturada (25/09/2026) nunca voltaria. Aqui só completa o lugar
+  // (patchOrderState nunca insere), então não existe risco de duplicar venda.
+  const tiktokLocal = new Map(getOrders({ channel: 'tiktok', market: 'br' }).map(o => [o.id, o]));
 
   const today = new Date();
   const since = new Date(today); since.setDate(since.getDate() - days);
@@ -786,6 +790,11 @@ export async function reconcileGeoFromBling({ market = 'br', force = false, days
     const orders = page.data || [];
     for (const o of orders) {
       out.seen++;
+      if (String(o.loja?.id) === TIKTOK_LOJA_ID) {
+        const local = tiktokLocal.get('tiktok:' + o.id);
+        if (local && !local.city && !local.lugarConsultado) queue.push({ blingId: o.id, localId: local.id });
+        continue;
+      }
       const info = bling.KNOWN_CHANNELS[o.loja?.id];
       if (!info) {
         out.unmapped++;
@@ -815,7 +824,10 @@ export async function reconcileGeoFromBling({ market = 'br', force = false, days
         }
         continue;
       }
-      if (localOrder.state) { out.alreadyHadState++; continue; }
+      // Pede o detalhe só quando falta o estado, ou a cidade (mapa de calor) e o Bling ainda não foi
+      // perguntado sobre este pedido. Sem a marca, pedido sem cidade no Bling seria pedido de novo
+      // a cada rodada.
+      if (localOrder.state && (localOrder.city || localOrder.lugarConsultado)) { out.alreadyHadState++; continue; }
       queue.push({ blingId: o.id, localId });
     }
     if (orders.length < 100) break;
@@ -826,8 +838,9 @@ export async function reconcileGeoFromBling({ market = 'br', force = false, days
   let consecFails = 0;
   for (const item of queue) {
     try {
-      const state = await bling.fetchOrderAddress(item.blingId);
-      if (state) { patches.push({ id: item.localId, state }); out.addressFetched++; }
+      const lugar = await bling.fetchOrderAddress(item.blingId);
+      patches.push({ id: item.localId, state: lugar.uf, city: lugar.city, zip: lugar.zip, lugarConsultado: true });
+      if (lugar.uf || lugar.city) out.addressFetched++;
       consecFails = 0;
     } catch (e) {
       out.errors.push(`${item.blingId}: ${e.message}`);

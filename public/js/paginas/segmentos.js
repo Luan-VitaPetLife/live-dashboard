@@ -289,9 +289,8 @@ const MAP_BOUNDS = {
 };
 
 
-// Coordenadas pro modo Calor do modal ampliado (mesmas tabelas de geografia.html —
-// ver drawModalHeat). CENTROIDS = posição da pill de rótulo; SUB_REGIONS = pontos onde as manchas de
-// calor são desenhadas (1º ponto = centróide); estado sem entrada usa só o centróide como mancha única.
+// Modo Calor do modal ampliado: CENTROIDS (js/geo.js) = posição da pill de cada estado; os focos
+// vêm das cidades do próprio produto (ver drawModalHeat).
 // Rampas de cor: interpolação em js/geo.js, as mesmas cores usadas na tela de Geografia.
 const geoChoroColor = t => CocoGeo.heatColor(t, ['#e8e3d8', '#c49568', '#8c3a20']);
 const geoHeatColor  = t => CocoGeo.heatColor(t);
@@ -487,37 +486,39 @@ function drawGeoPolygons(map, geo, p, interactive) {
   }).addTo(map);
 }
 
-// Desenha o modo Calor no MESMO estilo das páginas de Geografia completas (geografia.html/-us.html):
-// bordas finas dos estados + manchas de calor (círculos dispersos por sub-região, não o polígono
-// inteiro pintado) + pill com UF+unidades no centroide. Usa as mesmas tabelas CENTROIDS/SUB_REGIONS.
+// Desenha o modo Calor no MESMO estilo da tela de Geografia: bordas finas dos estados, um FOCO POR
+// CIDADE onde o produto vendeu de verdade (`p.byCity`, do tamanho das unidades dela) e a pill com
+// UF + unidades no centro do estado. Até 25/09/2026 cada estado era pintado em 3 a 5 pontos fixos
+// inventados (um deles bem atrás da pill): uma venda só virava vários focos, e a cidade da venda
+// nunca aparecia. Venda cuja cidade não se sabe fica só na pill, e o popup do estado diz quantas.
 const HEAT_PILL_COLOR = '#f97316', HEAT_TEXT_COLOR = '#ffffff', HEAT_BORDER_COLOR = '#555544', HEAT_BORDER_WEIGHT = 1.5;
+function geoCityPopupHtml(c, totalQty) {
+  return `
+    <div style="font-size:13px;font-weight:600;margin-bottom:6px;border-bottom:1px solid rgba(30,28,24,.1);padding-bottom:5px">📍 ${escapeHtml(c.cidade || 'Cidade sem nome')} · ${escapeHtml(c.state)}</div>
+    <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6b6760"><span>Unidades</span><strong style="color:#1a1916">${c.qty.toLocaleString('pt-BR')}</strong></div>
+    <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6b6760"><span>Pedidos</span><strong style="color:#1a1916">${c.orders.toLocaleString('pt-BR')}</strong></div>
+    <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6b6760"><span>Receita</span><strong style="color:#1a1916">${fmtMoney(c.revenue)}</strong></div>
+    <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6b6760"><span>% do produto</span><strong style="color:#1a1916">${(c.qty / totalQty * 100).toFixed(1)}%</strong></div>`;
+}
 function drawModalHeat(map, geo, p) {
   const group = L.layerGroup();
-  const stateMap = {};
-  p.byState.forEach(s => { stateMap[s.state] = s; });
-  const maxQty = Math.max(1, ...p.byState.map(s => s.qty));
   const totalQty = p.qty || 1;
   const CENT = CocoGeo.CENTROIDS[market];
-  const SUBR = CocoGeo.SUB_REGIONS[market];
+  const cidades = p.byCity || [];
+  const semCidade = CocoGeo.semCidade(p.byState, cidades, 'qty');
 
   L.geoJSON(geo, { style: { fillOpacity: 0, color: HEAT_BORDER_COLOR, weight: HEAT_BORDER_WEIGHT, opacity: 0.5 }, interactive: false }).addTo(group);
 
-  const MAX_R = 60000, MIN_R = 12000; // metros — mesmo raio base das páginas de Geografia
-  for (const [uf, s] of Object.entries(stateMap)) {
-    const t = s.qty / maxQty;
-    const base = MIN_R + (MAX_R - MIN_R) * Math.sqrt(t);
-    const fill = geoHeatColor(t);
-    const pts = SUBR[uf] || [CENT[uf]];
-    const subR = base / Math.sqrt(pts.length);
-    for (const pt of pts) {
-      if (!pt) continue;
-      L.circle(pt, { radius: subR, fillColor: fill, fillOpacity: 0.30 + t * 0.38, color: 'none', weight: 0 })
-        .on('click', function () { L.popup().setLatLng(pt).setContent(geoStatePopupHtml(uf, s, totalQty)).openOn(map); })
-        .addTo(group);
-    }
+  // Maiores primeiro: o foco pequeno fica por cima e continua clicável.
+  const maxCidade = Math.max(1, ...cidades.map(c => c.qty));
+  for (const c of [...cidades].sort((a, b) => b.qty - a.qty)) {
+    const t = c.qty / maxCidade;
+    L.circle([c.lat, c.lng], { radius: CocoGeo.raioDoFoco(t, market), fillColor: geoHeatColor(t), fillOpacity: 0.45 + t * 0.35, color: geoHeatColor(t), weight: 1, opacity: 0.8 })
+      .on('click', function () { L.popup().setLatLng([c.lat, c.lng]).setContent(geoCityPopupHtml(c, totalQty)).openOn(map); })
+      .addTo(group);
   }
-  for (const [uf, s] of Object.entries(stateMap)) {
-    const centroid = CENT[uf];
+  for (const s of p.byState) {
+    const uf = s.state, centroid = CENT[uf];
     if (!centroid) continue; // território/militar/INTL sem coordenada de centróide — some do calor, aparece no ranking/tabela
     const text = `${uf}: ${s.qty.toLocaleString('pt-BR')} un`;
     const pillW = Math.max(70, text.length * 7 + 24);
@@ -525,8 +526,10 @@ function drawModalHeat(map, geo, p) {
       html: `<div style="width:${pillW}px;text-align:center;background:${HEAT_PILL_COLOR};color:${HEAT_TEXT_COLOR};padding:4px 0;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.28);cursor:pointer">${text}</div>`,
       className: '', iconSize: [pillW, 22], iconAnchor: [pillW / 2, 11],
     });
+    const sem = semCidade[uf] || 0;
+    const nota = sem ? `<div style="margin-top:6px;font-size:11px;color:#8a857c">${sem.toLocaleString('pt-BR')} un sem cidade conhecida (contadas só no estado)</div>` : '';
     L.marker(centroid, { icon })
-      .on('click', function () { L.popup().setLatLng(centroid).setContent(geoStatePopupHtml(uf, s, totalQty)).openOn(map); })
+      .on('click', function () { L.popup().setLatLng(centroid).setContent(geoStatePopupHtml(uf, s, totalQty) + nota).openOn(map); })
       .addTo(group);
   }
   return group.addTo(map);

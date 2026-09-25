@@ -9,6 +9,7 @@
 //  Depois disso, fetchOrders() funciona e o token se renova sozinho.
 import 'dotenv/config';
 import { getMlTokens, setMlTokens } from './store.js';
+import { geoDoCanal } from './localizacao.js';
 
 const CLIENT_ID     = process.env.ML_CLIENT_ID;
 const CLIENT_SECRET = process.env.ML_CLIENT_SECRET;
@@ -178,19 +179,27 @@ export async function fetchOrders(sinceISO, untilISO) {
   // Resolve endereço de entrega em lotes para popular o campo state
   const shipIds = [...new Set(out.filter(o => o._sid).map(o => o._sid))];
   if (shipIds.length > 0) {
-    const stateMap = {};
+    const stateMap = {}, lugarMap = {};
     const BATCH = 15;
     for (let i = 0; i < shipIds.length; i += BATCH) {
       const batch = shipIds.slice(i, i + BATCH);
       await Promise.all(batch.map(async sid => {
         try {
           const sh = await apiGet(`/shipments/${sid}`);
-          const stId = sh.receiver_address?.state?.id; // ex: "BR-SP"
+          const ra = sh.receiver_address || {};
+          const stId = ra.state?.id; // ex: "BR-SP"
           if (stId) stateMap[sid] = stId.includes('-') ? stId.split('-').pop() : stId;
+          // Cidade/CEP/coordenada: pro mapa de calor (localizacao.js).
+          lugarMap[sid] = { city: ra.city?.name || null, zip: ra.zip_code || null, geo: geoDoCanal('br', ra.latitude, ra.longitude) };
         } catch { /* sem endereço — state fica null */ }
       }));
     }
-    out.forEach(o => { o.state = stateMap[o._sid] || null; delete o._sid; });
+    out.forEach(o => {
+      o.state = stateMap[o._sid] || null;
+      const l = lugarMap[o._sid];
+      if (l) { o.city = l.city; o.zip = l.zip; o.geo = l.geo; }
+      delete o._sid;
+    });
   } else {
     out.forEach(o => { delete o._sid; });
   }

@@ -1,7 +1,6 @@
 // ── State data — Brasil ──
 // IBGE 2-digit code → UF abbreviation
-// Centroid coordinates [lat, lng] for labels and heatmap bubbles — Brasil
-// Sub-region points for heatmap dispersion [centroid, sub1, sub2, ...] (1st = centroid = label position) — Brasil
+// Centroid coordinates [lat, lng] for labels — Brasil
 // ── State data — EUA ──
 // Os 50 estados de fato (para o contador "de 50 estados") — exclui DC, territórios,
 // militar e o bucket INTL, que aparecem no ranking mas não contam como estado.
@@ -151,7 +150,6 @@ function loadChannel(m) {
 let CHAN         = CocoColors.channelsFor(market, { comTodos: true });
 let STATE_NAMES  = CocoGeo.STATE_NAMES[market];
 let CENTROIDS    = CocoGeo.CENTROIDS[market];
-let SUB_REGIONS  = CocoGeo.SUB_REGIONS[market];
 let channel      = loadChannel(market);
 let choroConfig  = loadChoroConfig(market);
 let heatConfig   = loadHeatConfig(market);
@@ -200,6 +198,7 @@ setTileLayer();
 
 let geojsonData   = null;  // GeoJSON do mercado ativo (o cache por mercado é do CocoGeo)
 let stateData     = {};    // { UF: { revenue, orders } }
+let cityData      = [];    // [{ state, cidade, lat, lng, revenue, orders, byChannel }] (modo Calor)
 let mapLayers     = [];    // active Leaflet layers
 let lastApiData   = null;  // last /api/dashboard response for local re-renders
 
@@ -343,36 +342,33 @@ function drawHeatmap(isMoney, getValue, maxVal) {
   }).addTo(map);
   mapLayers.push(borders);
 
-  // Manchas de calor: múltiplos círculos por estado usando SUB_REGIONS,
-  // raio base pequeno dividido por √(nº de pontos) → manchas dispersas pelo estado.
-  const MAX_R = market === 'us' ? 70000 : 60000, MIN_R = 12000; // metros — base total por estado
-  for (const [uf, s] of Object.entries(stateData)) {
-    const val  = getValue(s);
-    const t    = val / maxVal;
-    const base = MIN_R + (MAX_R - MIN_R) * Math.sqrt(t);
-    const fill = heatGradientColor(t);
-    const pts  = SUB_REGIONS[uf] || [CENTROIDS[uf]];
-    const subR = base / Math.sqrt(pts.length); // cada ponto fica menor quando há mais pontos
-    for (const pt of pts) {
-      if (!pt) continue;
-      const circle = L.circle([pt[0], pt[1]], {
-        radius: subR,
-        fillColor: fill, fillOpacity: 0.30 + t * 0.38,
-        color: 'none', weight: 0,
-      }).addTo(map);
-      circle.on('click', () => {
-        L.popup().setLatLng([pts[0][0], pts[0][1]]).setContent(`
-          <div class="pop-title">📍 ${STATE_NAMES[uf] || uf} · ${uf}</div>
-          <div class="pop-row"><span>Receita</span><strong>${fmtMoney(s.revenue, 2)}</strong></div>
-          <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(s.orders)}</strong></div>
-          <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtMoney(s.revenue / s.orders, 2) : '—'}</strong></div>
-          <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
-          ${popupChanHTML(s.byChannel)}
-        `).openOn(map);
-      });
-      mapLayers.push(circle);
-    }
+  // Um foco por CIDADE onde houve venda (`byCity` do servidor), do tamanho do valor dela. Até
+  // 25/09/2026 cada estado era pintado em 3 a 5 pontos fixos inventados, um deles atrás da pill:
+  // uma venda virava vários focos e a cidade da venda nunca aparecia. Venda sem cidade conhecida
+  // fica só na pill do estado, e o popup do estado diz quantas.
+  const maxCidade = Math.max(1, ...cityData.map(getValue));
+  for (const c of [...cityData].sort((a, b) => getValue(b) - getValue(a))) { // pequeno por cima, clicável
+    const val = getValue(c);
+    const t   = val / maxCidade;
+    const cor = heatGradientColor(t);
+    const circle = L.circle([c.lat, c.lng], {
+      radius: CocoGeo.raioDoFoco(t, market),
+      fillColor: cor, fillOpacity: 0.45 + t * 0.35,
+      color: cor, weight: 1, opacity: 0.8,
+    }).addTo(map);
+    circle.on('click', () => {
+      L.popup().setLatLng([c.lat, c.lng]).setContent(`
+        <div class="pop-title">📍 ${escapeHtml(c.cidade || 'Cidade sem nome')} · ${escapeHtml(c.state)}</div>
+        <div class="pop-row"><span>Receita</span><strong>${fmtMoney(c.revenue, 2)}</strong></div>
+        <div class="pop-row"><span>Pedidos</span><strong>${fmtInt(c.orders)}</strong></div>
+        <div class="pop-row"><span>Ticket médio</span><strong>${c.orders ? fmtMoney(c.revenue / c.orders, 2) : '—'}</strong></div>
+        <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
+        ${popupChanHTML(c.byChannel)}
+      `).openOn(map);
+    });
+    mapLayers.push(circle);
   }
+  const semCidade = CocoGeo.semCidade(stateData, cityData, 'orders');
 
   // Pill labels no centroide de cada estado
   for (const [uf, s] of Object.entries(stateData)) {
@@ -394,6 +390,7 @@ function drawHeatmap(isMoney, getValue, maxVal) {
         <div class="pop-row"><span>Ticket médio</span><strong>${s.orders ? fmtMoney(s.revenue / s.orders, 2) : '—'}</strong></div>
         <div class="pop-row"><span>% do total</span><strong>${pctStr(val / Math.max(1, totalAll) * 100)}</strong></div>
         ${popupChanHTML(s.byChannel)}
+        ${semCidade[uf] ? `<div style="margin-top:6px;font-size:11px;color:#8a857c">${fmtInt(semCidade[uf])} ${semCidade[uf] === 1 ? 'pedido' : 'pedidos'} sem cidade conhecida (contados só no estado)</div>` : ''}
       `).openOn(map);
     });
     mapLayers.push(marker);
@@ -408,6 +405,7 @@ function drawHeatmap(isMoney, getValue, maxVal) {
 function render(d) {
   lastApiData = d;
   stateData = d.byState || {};
+  cityData  = d.byCity || [];
   const isMoney = metric === 'receita';
   const label   = rangeLabel(d.period.since, d.period.until);
   const marketLabel = market === 'us' ? 'EUA' : 'Brasil';
@@ -780,7 +778,6 @@ async function setMarket(m) {
   CHAN        = CocoColors.channelsFor(m, { comTodos: true });
   STATE_NAMES = CocoGeo.STATE_NAMES[m];
   CENTROIDS   = CocoGeo.CENTROIDS[m];
-  SUB_REGIONS = CocoGeo.SUB_REGIONS[m];
   channel     = loadChannel(m);
   choroConfig = loadChoroConfig(m);
   heatConfig  = loadHeatConfig(m);
