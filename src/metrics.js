@@ -361,6 +361,50 @@ function activeProductGroups(market) {
 // ex: canais presentes no grupo). `pickFirst` usa o primeiro valor não-nulo entre os membros
 // (imagem, tipo, segmento). Produto fora de qualquer grupo passa direto, sem alteração. Função
 // pura e genérica — cada chamador descreve seu próprio formato de linha via `opts`.
+// Imagem de produto NÃO pode depender do período escolhido. As telas montam a linha a partir dos
+// pedidos da janela, e a imagem vinha só deles — num período em que um produto unificado só vendeu
+// pelas listagens da Amazon (que quase nunca trazem imagem), o grupo aparecia sem foto em Segmentos,
+// mesmo tendo membros com foto no Mercado Livre, na Shopee e na Shopify (relatado pelo Luan com as
+// areias da Yucaloo, 25/09/2026). O Unificador sempre mostrou a foto porque olha o histórico inteiro.
+//
+// Este índice é o do Unificador: título → imagem, de todo pedido guardado (90 dias), do cache de
+// imagem da Amazon por ASIN e do catálogo da Shopify. Mesmo princípio da "tag mãe" (resolveGroupTypes):
+// o que descreve o produto físico vem de TODOS os membros cadastrados, não de quem vendeu no período.
+function indiceDeImagens(market) {
+  const catalogo = getShopifyProductCatalog();
+  return montarIndiceDeImagens({
+    pedidos: getOrders({ channel: 'todos', market, incluirBonificacao: true }),
+    imagensAmazon: getAmazonProductImages(),
+    catalogoShopify: (SHOPIFY_CATALOG_CHANNELS[market] || []).flatMap(ch => catalogo[ch] || []),
+  });
+}
+
+// A parte pura do índice (o teste executa esta). A primeira imagem encontrada por título vale.
+export function montarIndiceDeImagens({ pedidos = [], imagensAmazon = {}, catalogoShopify = [] }) {
+  const idx = {};
+  for (const o of pedidos) {
+    for (const it of o.items || []) {
+      if (!it?.title || idx[it.title]) continue;
+      const img = it.image || (it.asin && imagensAmazon[it.asin]) || null;
+      if (img) idx[it.title] = img;
+    }
+  }
+  for (const p of catalogoShopify) if (p?.title && p.image && !idx[p.title]) idx[p.title] = p.image;
+  return idx;
+}
+
+// Completa a imagem da linha que ficou sem. Linha unificada procura em QUALQUER membro cadastrado no
+// grupo (`grupos[nome]`), não só nos que venderam no período; linha comum procura pelo próprio título.
+// Nunca troca uma imagem que a linha já tem.
+export function completarImagens(rows, idx, grupos = {}) {
+  return rows.map(r => {
+    if (r.image) return r;
+    const nomes = r._grouped ? [...(grupos[r.title] || []), ...(r._members || [])] : [r.title];
+    const img = nomes.map(t => idx[t]).find(Boolean);
+    return img ? { ...r, image: img } : r;
+  });
+}
+
 function applyProductGroups(list, groups, opts = {}) {
   if (!groups || !Object.keys(groups).length || !list.length) return list;
   const {
@@ -902,14 +946,14 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     }));
   // Unificador (Configurações) — junta produtos do mesmo grupo manual entre canais/segmentos.
   // Mesmo mecanismo que antes vivia só em Segmentos (client-side); agora é global e server-side.
-  productGeo = applyProductGroups(productGeo, productGroupsMkt, {
+  productGeo = completarImagens(applyProductGroups(productGeo, productGroupsMkt, {
     sumKeys: ['qty', 'revenue'],
     pickFirst: ['image', 'seg'],
     arrayKeys: [
       { key: 'byChannel', idKey: 'channel', sumKeys: ['qty', 'revenue'] },
       { key: 'byState', idKey: 'state', sumKeys: ['qty', 'revenue', 'orders'] },
     ],
-  })
+  }), indiceDeImagens(market), productGroupsMkt)
     .sort((a, b) => b.qty - a.qty);
   // "hidden" fica fora do denominador — não é uma fatia real da distribuição Gato/Cachorro/Outros,
   // é só onde produtos explicitamente ocultados (ver isHiddenItem) vão parar.
@@ -1358,6 +1402,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
   const productGroupsMkt = activeProductGroups(market); // Unificador (Configurações)
   const groupTypeIdx = resolveGroupTypes(market, productGroupsMkt);
   const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
+  const imagens = indiceDeImagens(market); // uma vez só, fora do laço de canais
   const channels = {};
   const chKeys = new Set([...Object.keys(byChannel), ...Object.keys(catalogByChannel)]);
   for (const ch of chKeys) {
@@ -1397,7 +1442,7 @@ export function computeProducts({ market = 'br', since, until } = {}) {
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
-    products = mergeProductRows(products, productGroupsMkt, groupTypeIdx);
+    products = completarImagens(mergeProductRows(products, productGroupsMkt, groupTypeIdx), imagens, productGroupsMkt);
 
     const withProfit = products.filter(p => p.profit != null);
     const totalProfit = withProfit.reduce((a, p) => a + p.profit, 0);
@@ -1466,6 +1511,7 @@ export function computeStock({ market = 'br', since, until } = {}) {
   // de sempre). titleToGroup é o inverso de productGroupsMkt: título → nome do grupo.
   const productGroupsMkt = activeProductGroups(market);
   const groupTypeIdx = resolveGroupTypes(market, productGroupsMkt);
+  const imagens = indiceDeImagens(market); // uma vez só, fora do laço de canais
   const titleToGroup = {};
   for (const [name, members] of Object.entries(productGroupsMkt)) for (const m of members) titleToGroup[m] = name;
   const catalogTagsIdx = shopifyCatalogTagsByChannel(market);
@@ -1501,11 +1547,11 @@ export function computeStock({ market = 'br', since, until } = {}) {
     // ligeiramente diferente por listagem). Só o "Panorama geral" (cross-canal) respeitava o grupo;
     // o card por canal, não (reportado em produção). monthsOfStock é recalculado depois do merge
     // porque é uma razão, não soma diretamente.
-    products = applyGroupTypes(applyProductGroups(products, productGroupsMkt, {
+    products = completarImagens(applyGroupTypes(applyProductGroups(products, productGroupsMkt, {
       sumKeys: ['avulsoQty', 'comboQty', 'salesDaily', 'salesMonth', 'stock', 'incoming'],
       objSumKeys: ['comboBySize'],
       pickFirst: ['type', 'image'],
-    }), groupTypeIdx, ['type'])
+    }), groupTypeIdx, ['type']), imagens, productGroupsMkt)
       .map(p => ({ ...p, monthsOfStock: p.salesMonth > 0 ? (p.stock + p.incoming) / p.salesMonth : null }))
       .sort((a, b) => b.salesMonth - a.salesMonth);
 
@@ -1539,7 +1585,7 @@ export function computeStock({ market = 'br', since, until } = {}) {
   }
 
   const stockAggData = getProductStockAgg();
-  const aggProducts = Object.entries(aggMap).map(([family, a]) => {
+  let aggProducts = Object.entries(aggMap).map(([family, a]) => {
     const salesMonth = a.avulsoQty + a.comboQty;
     const salesDaily = salesMonth / windowDays;
     const ov = stockAggData[`${market}|||${family}`] || {};
@@ -1560,6 +1606,7 @@ export function computeStock({ market = 'br', since, until } = {}) {
       ...(isManualGroup ? { _grouped: true, _members: productGroupsMkt[family] } : {}),
     };
   }).sort((a, b) => b.salesMonth - a.salesMonth);
+  aggProducts = completarImagens(aggProducts, imagens, productGroupsMkt);
 
   const aggTotals = aggProducts.reduce((acc, p) => ({
     salesDaily: acc.salesDaily + p.salesDaily,

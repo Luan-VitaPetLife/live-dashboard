@@ -183,6 +183,11 @@ origem por canal; `metrics.js` só lê `o.cancelled`.
   "Tag mãe" do grupo (`kv.productGroupTypes`): `type` (forma física, Segmentos) e `typeGroup`
   (categoria, Top produtos) — eixos independentes. Precedência: manual → catálogo Shopify de
   qualquer membro → palavra-chave de "Tipos de produto" → valor do período.
+- **Imagem do produto não depende do período** (`indiceDeImagens` + `completarImagens`): linha sem foto
+  procura no histórico inteiro (pedidos, cache da Amazon, catálogo Shopify); linha unificada procura em
+  QUALQUER membro cadastrado no grupo. Sem isso, grupo que no período só vendeu pela Amazon (que não
+  traz imagem) aparecia sem foto em Segmentos/Produtos/Estoque, com foto no Unificador. Nunca troca uma
+  imagem que a linha já tem.
 - **Ocultar produto** (por tag, Unificador): vale em toda a dashboard, pela tag ATUAL do catálogo
   (`isHiddenProduct`), não a presa no pedido antigo.
 - Tipos de produto: criados na tela de Segmentos (`kv.productTypeGroups`), primeira regra vence.
@@ -446,7 +451,8 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
   animação, catálogo de canais (`canais`, `registro-canais`), status de pedido, colunas, combo,
   devoluções (Amazon e Shopee), bonificação, TikTok, Bling (sonda e JWT), histórico, comparação,
   insights, retenção, consumo (`economia`), segurança, esqueci a senha (`recuperacao`), toda função
-  chamada no servidor existe (`referencias`), backfill, integrações, jobs-widget, sync-btn.
+  chamada no servidor existe (`referencias`), imagem que não depende do período (`imagens-produto`),
+  backfill, integrações, jobs-widget, sync-btn.
 - Testes de `metrics.js`/`store.js` que gravam ainda estão de fora (precisariam de banco temporário).
 
 ## 11. Variáveis de ambiente
