@@ -5,6 +5,7 @@ import { getOrders as lerPedidosBrutos, getSessionsDaily, getYucalooSessionsDail
 import { normalizeUsState, isUsRegionCode, US_STATE_NAMES } from './us-states.js';
 import { normalizeBrState, BR_STATE_NAMES } from './br-states.js';
 import { buildInsights } from './insights.js';
+import { lugarDoPedido } from './localizacao.js';
 
 // ── Devolução vira desconto de verdade ────────────────────────────────────────
 // Unidade devolvida não foi vendida, e o dinheiro dela não é receita. Quem já resolve isso na
@@ -450,7 +451,10 @@ function applyProductGroups(list, groups, opts = {}) {
       const acc = {};
       found.forEach(p => (p[ak.key] || []).forEach(entry => {
         const id = entry[ak.idKey];
-        if (!acc[id]) acc[id] = { [ak.idKey]: id };
+        if (!acc[id]) {
+          acc[id] = { [ak.idKey]: id };
+          for (const kk of ak.keepKeys || []) acc[id][kk] = entry[kk]; // ex.: nome e coordenada da cidade
+        }
         for (const sk of ak.sumKeys) acc[id][sk] = (acc[id][sk] || 0) + (entry[sk] || 0);
       }));
       row[ak.key] = Object.values(acc).sort((a, b) => (b[ak.sumKeys[0]] || 0) - (a[ak.sumKeys[0]] || 0));
@@ -722,6 +726,26 @@ function revenueByState(validOrders, market) {
   return byState;
 }
 
+// Receita/pedidos por CIDADE, pro modo Calor da Geografia. Mesmo filtro e mesma normalização de
+// estado do revenueByState (a soma das cidades de um estado nunca passa do estado); pedido sem
+// cidade conhecida fica só no estado, e a tela conta quantos.
+export function revenueByCity(validOrders, market) {
+  const byCity = {};
+  validOrders.forEach(o => {
+    let s = o.state;
+    if (market === 'us') { s = normalizeUsState(s); if (s && !isUsRegionCode(s)) s = 'INTL'; }
+    else if (market === 'br') { s = normalizeBrState(s); }
+    if (!s || !(o.total > 0)) return;
+    const l = lugarDoPedido(o, s);
+    if (!l) return;
+    const c = byCity[l.chave] ||= { chave: l.chave, state: s, cidade: l.cidade, lat: l.lat, lng: l.lng, revenue: 0, orders: 0, byChannel: {} };
+    c.revenue += o.total;
+    c.orders += 1;
+    c.byChannel[o.channel] = (c.byChannel[o.channel] || 0) + o.total;
+  });
+  return Object.values(byCity).sort((a, b) => b.revenue - a.revenue);
+}
+
 // Soma um balde diário (metaInsightsDaily / mlAdCostsDaily) dentro de um intervalo de datas.
 // Mesmo laço que já existia solto em dois lugares do computeDashboard; virou função porque o
 // card de Insights precisa do mesmo número no período ANTERIOR pra comparar eficiência de anúncio.
@@ -871,6 +895,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     let geoState = o.state;
     if (market === 'us') { geoState = normalizeUsState(geoState); if (geoState && !isUsRegionCode(geoState)) geoState = 'INTL'; }
     else if (market === 'br') { geoState = normalizeBrState(geoState); }
+    const lugar = geoState ? lugarDoPedido(o, geoState) : null; // cidade no mapa de calor (localizacao.js)
     o.items.forEach(it => {
       if (!it.title || it.title.trim() === '-') return; // placeholder de frete/serviço da Amazon, ver amazon.js ordersFromRows
       const hidden = isHiddenItem(it, market);
@@ -920,7 +945,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
 
       // geografia + canal por produto — produto oculto não entra em "Onde os produtos vendem"
       if (!hidden) {
-        if (!productGeoAcc[title]) productGeoAcc[title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {}, image: null };
+        if (!productGeoAcc[title]) productGeoAcc[title] = { seg, qty: 0, revenue: 0, byChannel: {}, byState: {}, byCity: {}, image: null };
         const g = productGeoAcc[title];
         g.qty += qty;
         g.revenue += amount;
@@ -934,6 +959,13 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
           g.byState[geoState].qty += qty;
           g.byState[geoState].revenue += amount;
           g.byState[geoState].orderIds.add(o.id);
+          if (lugar) {
+            if (!g.byCity[lugar.chave]) g.byCity[lugar.chave] = { state: geoState, cidade: lugar.cidade, lat: lugar.lat, lng: lugar.lng, qty: 0, revenue: 0, orderIds: new Set() };
+            const c = g.byCity[lugar.chave];
+            c.qty += qty;
+            c.revenue += amount;
+            c.orderIds.add(o.id);
+          }
         }
       }
     });
@@ -943,6 +975,9 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
       title, seg: g.seg, qty: g.qty, revenue: g.revenue, image: g.image,
       byChannel: Object.entries(g.byChannel).map(([channel, c]) => ({ channel, qty: c.qty, revenue: c.revenue })).sort((a, b) => b.qty - a.qty),
       byState: Object.entries(g.byState).map(([state, s]) => ({ state, qty: s.qty, revenue: s.revenue, orders: s.orderIds.size })).sort((a, b) => b.qty - a.qty),
+      // Um foco por cidade de verdade. Venda do estado que não está aqui ficou sem cidade conhecida
+      // (a tela mostra quantas): nunca vira foco inventado.
+      byCity: Object.entries(g.byCity).map(([chave, c]) => ({ chave, state: c.state, cidade: c.cidade, lat: c.lat, lng: c.lng, qty: c.qty, revenue: c.revenue, orders: c.orderIds.size })).sort((a, b) => b.qty - a.qty),
     }));
   // Unificador (Configurações) — junta produtos do mesmo grupo manual entre canais/segmentos.
   // Mesmo mecanismo que antes vivia só em Segmentos (client-side); agora é global e server-side.
@@ -952,6 +987,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     arrayKeys: [
       { key: 'byChannel', idKey: 'channel', sumKeys: ['qty', 'revenue'] },
       { key: 'byState', idKey: 'state', sumKeys: ['qty', 'revenue', 'orders'] },
+      { key: 'byCity', idKey: 'chave', sumKeys: ['qty', 'revenue', 'orders'], keepKeys: ['state', 'cidade', 'lat', 'lng'] },
     ],
   }), indiceDeImagens(market), productGroupsMkt)
     .sort((a, b) => b.qty - a.qty);
@@ -1148,6 +1184,7 @@ export function computeDashboard({ channel = 'todos', since, until, metric = 're
     segments,
     productGeo,
     byState,
+    byCity: revenueByCity(valid, market),
     recentOrders: recent,
     mlBreakdown,
     updatedAt: load().lastSync,

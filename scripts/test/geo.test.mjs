@@ -1,4 +1,4 @@
-// As tabelas de mapa (nome de estado, centróide, sub-região, códigos do IBGE e FIPS) eram
+// As tabelas de mapa (nome de estado, centróide, códigos do IBGE e FIPS) eram
 // cópias iguais dentro de geografia.html e segmentos.html, cerca de 150 linhas em cada. Uma
 // correção num lado nunca chegava no outro. Agora vivem em js/geo.js, e este teste executa o
 // módulo de verdade para conferir os dados, não só a presença do arquivo.
@@ -23,7 +23,7 @@ const G = janela.CocoGeo;
 if (t.ok(!!G, 'geo.js expõe window.CocoGeo')) {
   // Quantidades: se uma tabela perder linhas numa edição, o estado some do mapa em silêncio.
   const esperado = {
-    'STATE_NAMES.br': 27, 'CENTROIDS.br': 27, 'SUB_REGIONS.br': 27, 'IBGE_UF': 27,
+    'STATE_NAMES.br': 27, 'CENTROIDS.br': 27, 'IBGE_UF': 27,
     'STATE_NAMES.us': 60, 'CENTROIDS.us': 51, 'FIPS_UF': 51,
   };
   for (const [caminho, n] of Object.entries(esperado)) {
@@ -31,14 +31,25 @@ if (t.ok(!!G, 'geo.js expõe window.CocoGeo')) {
     t.ok(Object.keys(obj || {}).length === n, `${caminho}: ${n} entradas (veio ${Object.keys(obj || {}).length})`);
   }
 
-  // Todo estado do Brasil precisa de nome, centróide e sub-região, senão o mapa desenha o
-  // polígono e não consegue posicionar a pill de rótulo.
+  // Todo estado do Brasil precisa de nome e centróide, senão o mapa desenha o polígono e não
+  // consegue posicionar a pill de rótulo.
   for (const uf of Object.keys(G.STATE_NAMES.br)) {
     if (!G.CENTROIDS.br[uf]) t.ok(false, `BR ${uf}: sem centróide`);
-    if (!G.SUB_REGIONS.br[uf]) t.ok(false, `BR ${uf}: sem sub-região`);
   }
-  t.ok(Object.keys(G.STATE_NAMES.br).every(uf => G.CENTROIDS.br[uf] && G.SUB_REGIONS.br[uf]),
-    'todo estado do Brasil tem nome, centróide e sub-região');
+  t.ok(Object.keys(G.STATE_NAMES.br).every(uf => G.CENTROIDS.br[uf]), 'todo estado do Brasil tem nome e centróide');
+
+  // Modo Calor (25/09/2026): um foco por cidade de verdade. Os pontos fixos inventados por estado
+  // (SUB_REGIONS) saíram: uma venda virava vários focos, um deles atrás da pill.
+  t.ok(!('SUB_REGIONS' in G), 'não existem mais pontos fixos inventados por estado');
+  const sem = G.semCidade([{ state: 'BA', qty: 5 }, { state: 'SP', qty: 3 }, { state: 'RJ', qty: 2 }],
+    [{ state: 'BA', qty: 2 }, { state: 'BA', qty: 1 }, { state: 'SP', qty: 3 }], 'qty');
+  t.eq(JSON.stringify(sem), JSON.stringify({ BA: 2, RJ: 2 }), 'semCidade: estado menos a soma das cidades dele (SP completo não aparece)');
+  t.eq(JSON.stringify(G.semCidade({ BA: { orders: 4 } }, [{ state: 'BA', orders: 1 }], 'orders')), JSON.stringify({ BA: 3 }),
+    'semCidade aceita o byState da Geografia (objeto por UF)');
+  t.ok(G.raioDoFoco(1, 'br') > G.raioDoFoco(0.25, 'br') && G.raioDoFoco(0.25, 'br') > G.raioDoFoco(0, 'br'),
+    'foco maior pra cidade que vendeu mais');
+  t.ok(G.raioDoFoco(9, 'br') === G.raioDoFoco(1, 'br') && G.raioDoFoco(-1, 'br') === G.raioDoFoco(0, 'br'),
+    'raio do foco não passa dos limites');
 
   // Coordenada fora de faixa aponta latitude e longitude trocadas, erro fácil de cometer e
   // difícil de ver: o estado simplesmente aparece no meio do oceano.
@@ -71,6 +82,16 @@ for (const nome of paginas()) {
   const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
   const repetidos = COMPARTILHADO.filter(c => new RegExp(`(const|let|var)\\s+${c}\\s*=`).test(s));
   t.ok(repetidos.length === 0, `${nome} não redeclara tabela de mapa${repetidos.length ? ' (' + repetidos.join(', ') + ')' : ''}`);
+}
+
+// As duas telas desenham o calor pelas cidades do servidor, nunca por ponto inventado.
+for (const [nome, campo] of [['js/paginas/segmentos.js', 'p.byCity'], ['js/paginas/geografia.js', 'd.byCity']]) {
+  const s = fs.readFileSync(path.join(PUB, nome), 'utf8');
+  t.ok(s.includes(campo) && s.includes('CocoGeo.raioDoFoco(') && s.includes('CocoGeo.semCidade('),
+    `${nome}: foco por cidade (${campo}) e contagem do que ficou sem cidade`);
+  t.ok(!/SUB_REGIONS/.test(s), `${nome}: nada de pontos fixos por estado`);
+  // Cidade é texto digitado pelo cliente: sempre escapada no popup.
+  t.ok(/escapeHtml\(c\.cidade/.test(s), `${nome}: nome da cidade escapado no popup`);
 }
 
 // Quem desenha mapa precisa carregar o módulo.

@@ -356,6 +356,9 @@ async function fetchMarketplaceOrders({ getLwa, marketplaceId, sinceISO, untilIS
           state:     market === 'us'
                        ? (normalizeUsState(o.ShippingAddress?.StateOrRegion) || null)
                        : ((o.ShippingAddress?.StateOrRegion || '').trim().toUpperCase() || null),
+          // Cidade/CEP: pro mapa de calor (localizacao.js). Vêm sem o papel de dado pessoal.
+          city:      o.ShippingAddress?.City || null,
+          zip:       o.ShippingAddress?.PostalCode || null,
           items:     Array.from(
             { length: Number(o.NumberOfItemsShipped || 0) + Number(o.NumberOfItemsUnshipped || 0) },
             () => ({ title: '', qty: 1, amount: 0 })
@@ -564,6 +567,8 @@ function ordersFromRows(rows, marketplaceId) {
         state:     market === 'us'
                      ? (normalizeUsState(r['ship-state']) || null)
                      : ((r['ship-state'] || '').trim().toUpperCase() || null),
+        city:      r['ship-city'] || null,
+        zip:       r['ship-postal-code'] || null,
         items:     [],
       });
     }

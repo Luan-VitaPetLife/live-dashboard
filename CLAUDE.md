@@ -384,6 +384,17 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 - **Geografia**: uma página com seletor BR/EUA (`/geografia-us` redireciona). Tudo que ela divide com
   Segmentos vem de `js/geo.js` (`CocoGeo`), fundo Esri sem chave (`addBasemap`). BR: GeoJSON do IBGE
   (`codarea`); EUA: `public/geo/us-states.json` local (`_uf`).
+- **Modo Calor (Geografia e Segmentos) = um foco por CIDADE de verdade** (`byCity`), do tamanho do valor
+  dela; a pill do estado fica no centróide com o total. Venda sem cidade conhecida NÃO vira foco: fica
+  só na pill, e o popup do estado diz quantas (`CocoGeo.semCidade`). Até 25/09/2026 eram 3 a 5 pontos
+  fixos inventados por estado (um atrás da pill): uma venda virava vários focos e a cidade nunca aparecia.
+- **Cidade do pedido** (`localizacao.js`): cada canal grava `city`/`zip`, e a Shopify e o ML também
+  `geo` (arredondado a ~1 km, validado pela caixa do país). Coordenada: tabela de municípios do IBGE
+  (`src/geo-dados/municipios-br.json`, MIT) por UF+nome, com socorro por nome único no país; EUA pela
+  tabela de CEP do Censo (`cep-us.json`, domínio público). **A chave do foco é a cidade, não a
+  coordenada** (senão cada casa vira um foco). Shopee mascara o endereço: a cidade vem do Bling na
+  reconciliação de estado, que também completa TikTok antigo; `lugarConsultado` impede perguntar de novo.
+  `upsertOrders` não apaga `city`/`zip`/`geo`. Nenhum dado além de cidade/CEP é gravado.
 - **Produtos**: exportar CSV só da Shopify EUA. **Estoque**: sem período escolhido, últimos 30 dias;
   `windowDays` é o tamanho real do período.
 - **Card de processos** (`jobs-widget.js`, toda página): aparece quando há job rodando e some 3s depois
@@ -451,7 +462,7 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
   animação, catálogo de canais (`canais`, `registro-canais`), status de pedido, colunas, combo,
   devoluções (Amazon e Shopee), bonificação, TikTok, Bling (sonda e JWT), histórico, comparação,
   insights, retenção, consumo (`economia`), segurança, esqueci a senha (`recuperacao`), toda função
-  chamada no servidor existe (`referencias`), imagem que não depende do período (`imagens-produto`),
+  chamada no servidor existe (`referencias`), imagem que não depende do período (`imagens-produto`), mapa de calor por cidade (`mapa-cidades`),
   backfill, integrações, jobs-widget, sync-btn.
 - Testes de `metrics.js`/`store.js` que gravam ainda estão de fora (precisariam de banco temporário).
 
@@ -503,4 +514,7 @@ busca os dois mercados numa chamada só: desligar um filtra o que é gravado, n�
 - **Esqueci a senha**: configurar `BREVO_API_KEY`/`BREVO_SENDER_EMAIL` no Railway e cadastrar o e-mail
   de cada usuário. SMS pelo telefone quando o Luan decidir (Brevo, pago por mensagem).
 - Conferir a dashboard num celular de verdade.
+- **Mapa por cidade**: pedido gravado antes de 25/09/2026 só ganha cidade quando é relido. Shopify e ML
+  se completam sozinhos pelo sync; rodar uma vez `POST /api/bling/sync-geo` com `days=90` (Shopee e
+  TikTok) e `POST /api/amazon/backfill` com 90 dias (Amazon).
 - `cleanup-market-leak` pode sair quando o vazamento de julho passar da janela de 90 dias.

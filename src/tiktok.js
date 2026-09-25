@@ -114,6 +114,9 @@ export function pedidoDoTiktok(d, { situacoes = {}, notasBonificacao = new Set()
     source:    'TikTok Shop',
     customer:  d.contato?.nome || '',
     state:     d.transporte?.etiqueta?.uf ? String(d.transporte.etiqueta.uf).toUpperCase() : null,
+    // Cidade/CEP: pro mapa de calor (localizacao.js). Rua e número ficam de fora.
+    city:      d.transporte?.etiqueta?.municipio ? String(d.transporte.etiqueta.municipio).trim() : null,
+    zip:       d.transporte?.etiqueta?.cep ? String(d.transporte.etiqueta.cep).trim() : null,
     listingType: null,
     notaFiscalId: notaId,
     items,

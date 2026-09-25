@@ -269,6 +269,14 @@ export function upsertOrders(orders) {
     if (existing && !o.state && existing.state) {
       o.state = existing.state;
     }
+    // Cidade/CEP/coordenada (mapa de calor): a Shopee mascara o endereço e a cidade vem do Bling
+    // depois; nenhum canal pode apagar o lugar de entrega que já se sabe.
+    if (existing && !o.city && existing.city) {
+      o.city = existing.city;
+      if (!o.zip && existing.zip) o.zip = existing.zip;
+    }
+    if (existing && !o.geo && existing.geo) o.geo = existing.geo;
+    if (existing && !o.lugarConsultado && existing.lugarConsultado) o.lugarConsultado = existing.lugarConsultado;
     if (existing && o.productSales == null && existing.productSales != null) {
       o.productSales = existing.productSales;
     }
@@ -540,8 +548,15 @@ export function patchOrderState(patches) {
   const toPersist = [];
   for (const p of patches) {
     const existing = db.orders[p.id];
-    if (!existing || existing.state || !p.state) { skipped++; continue; }
-    existing.state = p.state;
+    if (!existing) { skipped++; continue; }
+    // Só preenche o que falta; nunca troca o que o próprio canal mandou.
+    let mudou = false;
+    if (!existing.state && p.state) { existing.state = p.state; mudou = true; }
+    if (!existing.city && p.city) { existing.city = p.city; mudou = true; }
+    if (!existing.zip && p.zip) { existing.zip = p.zip; mudou = true; }
+    // Já perguntado ao Bling: não pergunta de novo a cada rodada (tendo ou não cidade lá).
+    if (p.lugarConsultado && !existing.lugarConsultado) { existing.lugarConsultado = true; mudou = true; }
+    if (!mudou) { skipped++; continue; }
     patched++;
     toPersist.push(existing);
   }
